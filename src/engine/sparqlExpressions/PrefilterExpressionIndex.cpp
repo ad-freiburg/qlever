@@ -14,6 +14,13 @@ namespace prefilterExpressions {
 
 // HELPER FUNCTIONS
 //______________________________________________________________________________
+// Create and return `std::unique_ptr<PrefilterExpression>(args...)`.
+template <typename PrefilterT, typename... Args>
+std::unique_ptr<PrefilterExpression> make(Args&&... args) {
+  return std::make_unique<PrefilterT>(std::forward<Args>(args)...);
+}
+
+//______________________________________________________________________________
 // Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
 static Id getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
                                size_t columnIndex) {
@@ -51,6 +58,14 @@ static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
       // ignoreIndex out of bounds
       AD_FAIL();
   }
+};
+
+//______________________________________________________________________________
+// Helper for `getSetDifference` and `getSetUnion`.
+// Returns the evaluation result of `b1.blockIndex_ < b2.blockIndex_`.
+static bool blockLessThanBlock(const BlockMetadata& b1,
+                               const BlockMetadata& b2) {
+  return b1.blockIndex_ < b2.blockIndex_;
 };
 
 //______________________________________________________________________________
@@ -119,10 +134,6 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
                         const std::vector<BlockMetadata>& blocks2) {
   std::vector<BlockMetadata> mergedVectors;
   mergedVectors.reserve(blocks1.size() + blocks2.size());
-  const auto blockLessThanBlock = [](const BlockMetadata& b1,
-                                     const BlockMetadata& b2) {
-    return b1.blockIndex_ < b2.blockIndex_;
-  };
   // Given that we have vectors with sorted (BlockMedata) values, we can
   // use ql::ranges::set_union. Thus the complexity is O(n + m).
   ql::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
@@ -393,13 +404,47 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
   }
 }
 
+//______________________________________________________________________________
+// Given the arguments `std::span<const BlockMetadata> input` and
+// `evaluationColumn`, this function retrieves the `Id`s of column index
+// `evaluationColumn` from BlockMetadata and optionally the `BlockMetadata`
+// values containing mixed datatypes (if `getMixedDatatypeBlocks` is `true`).
+template <bool getMixedDatatypeBlocks>
+static std::pair<std::vector<ValueId>, std::vector<BlockMetadata>>
+getValueIdsAndMixedDatatypeBlocks(std::span<const BlockMetadata> input,
+                                  size_t evaluationColumn) {
+  std::vector<ValueId> idVector;
+  // For each BlockMetadata value in vector input, we have a respective Id for
+  // firstTriple and lastTriple
+  idVector.reserve(2 * input.size());
+  std::vector<BlockMetadata> mixedDatatypeBlocks;
+
+  ql::ranges::for_each(input, [&](const BlockMetadata& block) {
+    const auto firstId =
+        getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
+    const auto secondId =
+        getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
+
+    idVector.push_back(firstId);
+    idVector.push_back(secondId);
+
+    if (getMixedDatatypeBlocks) {
+      if (firstId.getDatatype() != secondId.getDatatype()) {
+        mixedDatatypeBlocks.push_back(block);
+      }
+    }
+  });
+  return {idVector, mixedDatatypeBlocks};
+}
+
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
     std::span<const BlockMetadata> input, size_t evaluationColumn,
-    bool stripIncompleteBlocks) const {
+    const bool addBlocksMixedDatatype, const bool stripIncompleteBlocks) const {
   if (!stripIncompleteBlocks) {
-    return evaluateAndCheckImpl(input, evaluationColumn);
+    return evaluateAndCheckImpl(input, evaluationColumn,
+                                addBlocksMixedDatatype);
   }
   if (input.size() < 3) {
     return std::vector<BlockMetadata>(input.begin(), input.end());
@@ -416,7 +461,8 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     input = input.subspan(0, input.size() - 1);
   }
 
-  auto result = evaluateAndCheckImpl(input, evaluationColumn);
+  auto result =
+      evaluateAndCheckImpl(input, evaluationColumn, addBlocksMixedDatatype);
   if (firstBlock.has_value()) {
     result.insert(result.begin(), firstBlock.value());
   }
@@ -428,9 +474,11 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
 
 // _____________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    const bool addBlocksMixedDatatype) const {
   checkEvalRequirements(input, evaluationColumn);
-  const auto& relevantBlocks = evaluateImpl(input, evaluationColumn);
+  const auto& relevantBlocks =
+      evaluateImpl(input, evaluationColumn, addBlocksMixedDatatype);
   checkEvalRequirements(relevantBlocks, evaluationColumn);
   return relevantBlocks;
 }
@@ -464,36 +512,18 @@ RelationalExpression<Comparison>::logicalComplement() const {
   // (6) ?var != referenceValue -> ?var = referenceValue
   constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
       {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
-  return std::make_unique<RelationalExpression<complementMap.at(Comparison)>>(
+  return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    const bool addBlocksMixedDatatype) const {
   using namespace valueIdComparators;
-  std::vector<ValueId> idVector;
-  // For each BlockMetadata value in vector input, we have a respective Id for
-  // firstTriple and lastTriple
-  idVector.reserve(2 * input.size());
-  std::vector<BlockMetadata> mixedDatatypeBlocks;
-
-  ql::ranges::for_each(
-      input, [&evaluationColumn, &idVector,
-              &mixedDatatypeBlocks](const BlockMetadata& block) {
-        const auto firstId =
-            getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
-        const auto secondId =
-            getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
-
-        idVector.push_back(firstId);
-        idVector.push_back(secondId);
-
-        if (firstId.getDatatype() != secondId.getDatatype()) {
-          mixedDatatypeBlocks.push_back(block);
-        }
-      });
+  auto [idVector, mixedDatatypeBlocks] =
+      getValueIdsAndMixedDatatypeBlocks<true>(input, evaluationColumn);
 
   LocalVocab vocab{};
   auto referenceId =
@@ -509,10 +539,18 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
                                                referenceId, Comparison)
                               : getRangesForId(idVector.begin(), idVector.end(),
                                                referenceId, Comparison, false);
+  const auto& relevantBlocks = getRelevantBlocksFromIdRanges(
+      relevantIdRanges, input, idVector.begin(), false);
 
-  return getSetUnion(getRelevantBlocksFromIdRanges(relevantIdRanges, input,
-                                                   idVector.begin(), false),
-                     mixedDatatypeBlocks);
+  if (!addBlocksMixedDatatype) {
+    // Don't add BlockMetadata values with bounding ValueIds refering to
+    // different datatypes.
+    // Not adding those values is relevant when calculating the complement
+    // for isIri (!isIri) and isLiteral (!isLiteral).
+    return relevantBlocks;
+  }
+  // By default, add the BlockMetadata values containing mixed datatypes.
+  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
 };
 
 //______________________________________________________________________________
@@ -531,8 +569,7 @@ bool RelationalExpression<Comparison>::operator==(
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
     const {
-  return std::make_unique<RelationalExpression<Comparison>>(
-      rightSideReferenceValue_);
+  return make<RelationalExpression<Comparison>>(rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
@@ -566,14 +603,14 @@ std::string RelationalExpression<Comparison>::asString(
 template <IsDatatype Datatype>
 std::unique_ptr<PrefilterExpression>
 IsDatatypeExpression<Datatype>::logicalComplement() const {
-  return std::make_unique<IsDatatypeExpression<Datatype>>(!isNegated_);
+  return make<IsDatatypeExpression<Datatype>>(!isNegated_);
 };
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
 std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
     const {
-  return std::make_unique<IsDatatypeExpression<Datatype>>(*this);
+  return make<IsDatatypeExpression<Datatype>>(*this);
 };
 
 //______________________________________________________________________________
@@ -599,30 +636,117 @@ std::string IsDatatypeExpression<Datatype>::asString(
 };
 
 //______________________________________________________________________________
+// Return the (relational) `PrefilterExpression` that enables precise filtering
+// for the expression `isIri` or `isLiteral`.
+// For more information see comments within the function.
 template <IsDatatype Datatype>
-std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+requires(Datatype == IsDatatype::IRI || Datatype == IsDatatype::LITERAL)
+static std::unique_ptr<PrefilterExpression> getPrefilterExprForIsIriOrIsLit() {
+  using enum IsDatatype;
+  LocalVocab localVocab{};
+  // Retrieve the bound (`LocalVocab`) `ValueId` for the given reference (bound)
+  // `std::string` value over `LocalVocab`.
+  const auto getValueIdForStr = [&localVocab](const std::string& referenceStr) {
+    return PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
+        LocalVocabEntry::fromStringRepresentation(referenceStr), localVocab);
+  };
+
+  // Remark: Ids containing LITERAL values precede IRI related Ids in order.
+  return Datatype == IRI
+             // The smallest possible IRI is represented by "<>", we use its
+             // corresponding ValueId as a lower bound.
+             ? make<GreaterThanExpression>(getValueIdForStr("<>"))
+             // For pre-filtering LITERAL related ValueIds we use the empty
+             // literal '""' as a lower bound, and the ValueId that represents
+             // the beginning of IRI values as an upper bound.
+             : make<AndExpression>(
+                   make<GreaterEqualExpression>(getValueIdForStr("\"\"")),
+                   make<LessThanExpression>(getValueIdForStr("<")));
+}
+
+// _____________________________________________________________________________
+// Retrieve the set difference `set{input} \ set{other[1, other.size() - 1]}`.
+// Or `set{input} - set{other[1, other.size() - 1]}`.
+// For more details see comments within the function.
+static std::vector<BlockMetadata> getSetDifference(
+    std::span<const BlockMetadata> input,
+    const std::vector<BlockMetadata>& other) {
+  if (input.empty()) return {};
+  if (other.size() <= 2) {
+    // Given that we ignore the first and last element of other w.r.t. the set
+    // difference operation, we can directly return input here.
+    return {std::make_move_iterator(input.begin()),
+            std::make_move_iterator(input.end())};
+  }
+  std::vector<BlockMetadata> result;
+  // Mask the first and last BlockMetadata value of other.
+  // This is necessary because we don't want to remove the bounding (but not
+  // mixed datatype) BlockMetadata value containing the Id range [(last)
+  // VocabId(literalVal), (first) VocabId(IriVal)] from input when evaluating
+  // the actual complement for !isIri or !isLiteral. In all other cases
+  // other.begin() and other.end() refer to BlockMetadata values which contain
+  // mixed datatypes. Thus we want to always add them to vector result. This is
+  // the reason why we apply std::prev and std::next w.r.t. other.
+  ql::ranges::set_difference(input.begin(), input.end(),
+                             std::next(other.begin()), std::prev(other.end()),
+                             std::back_inserter(result), blockLessThanBlock);
+  return result;
+}
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+requires(Datatype == IsDatatype::IRI || Datatype == IsDatatype::LITERAL)
+std::vector<BlockMetadata> evaluateIsIriOrIsLiteral(
+    std::span<const BlockMetadata> input, const bool isNegated,
+    size_t evaluationColumn) {
+  std::unique_ptr<PrefilterExpression> expr =
+      getPrefilterExprForIsIriOrIsLit<Datatype>();
+  // If IsDatatypeExpression<Datatype> is negated (!isDatatype(?var)), use
+  // getSetDifference to retrieve the complementing blocks.
+  return isNegated
+             ? getSetDifference(
+                   // Remark: For computing the correct complement here, it is
+                   // necessary to set the flag addBlocksMixedDatatype for
+                   // evaluate to false. If we would add the values refering to
+                   // a mixed datatype range, the BlockMetadata value
+                   // representing the Id range [(last) VocabId(literalVal),
+                   // (first) VocabId(IriVal)] would be hidden within the added
+                   // mixed-datatype blocks. To ensure that this value is always
+                   // the first or last element in the vector returned by
+                   // evaluate, we discard the mixed datatpye blocks (they will
+                   // be implicitly added again with the application of
+                   // getSetDifference).
+                   // The visibility of BlockMetadata value representing the Id
+                   // range [(last) VocabId(literalVal), (first)
+                   // VocabId(IriVal)] at the first or last position is
+                   // necessary because we mask it out when calculating the set
+                   // difference. This masking is required because it is a
+                   // relevant result value w.r.t. !isLiteral and !isIri, hence
+                   // should always be returned.
+                   input, expr->evaluate(input, evaluationColumn, false))
+             : expr->evaluate(input, evaluationColumn);
+}
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+requires(Datatype == IsDatatype::BLANK || Datatype == IsDatatype::NUMERIC)
+std::vector<BlockMetadata> evaluateIsBlankOrIsNumeric(
+    std::span<const BlockMetadata> input, const bool isNegated,
+    size_t evaluationColumn) {
   using enum IsDatatype;
 
-  // Vector for storing bounding ValueIds to the BlockMetadata values.
-  std::vector<ValueId> idVector;
-  idVector.reserve(2 * input.size());
-
-  ql::ranges::for_each(
-      input, [&idVector, evaluationColumn](const BlockMetadata& block) {
-        idVector.push_back(
-            getIdFromColumnIndex(block.firstTriple_, evaluationColumn));
-        idVector.push_back(
-            getIdFromColumnIndex(block.lastTriple_, evaluationColumn));
-      });
+  auto [idVector, _] =
+      getValueIdsAndMixedDatatypeBlocks<false>(input, evaluationColumn);
+  if (idVector.empty()) return {};
 
   auto idsBegin = idVector.begin();
   auto idsEnd = idVector.end();
   std::vector<RandomItPair> relevantRanges;
+
   if constexpr (Datatype == BLANK) {
     relevantRanges.push_back(valueIdComparators::getRangeForDatatype(
         idsBegin, idsEnd, Datatype::BlankNodeIndex));
-  } else if constexpr (Datatype == NUMERIC) {
+  } else {
     // Remark: Swapping the defined relational order for Datatype::Int to
     // Datatype::Double ValueIds (in ValueId.h) might affect the correctness of
     // the following lines!
@@ -632,7 +756,7 @@ std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
         idsBegin, idsEnd, Datatype::Int);
     const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
         idsBegin, idsEnd, Datatype::Double);
-    // Differention here regarding the adjacency of Int and Double datatype
+    // Differentiate here regarding the adjacency of Int and Double datatype
     // values.
     // This is relevant w.r.t. getRelevantBlocksFromIdRanges(), because we
     // technically add to .second + 1 for the first datatype range. If we simply
@@ -649,24 +773,54 @@ std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
       relevantRanges.push_back(rangeInt);
       relevantRanges.push_back(rangeDouble);
     }
-  } else {
-    static_assert(Datatype == IRI || Datatype == LITERAL);
-    // Not implemented yet, i assume the prefiltering can be even more precise
-    // by making use of `transformToFirstPossibleBiggerValue`.
-    return std::vector<BlockMetadata>{input.begin(), input.end()};
   }
 
   // Sort and remove overlaps w.r.t. relevant ranges.
   valueIdComparators::detail::simplifyRanges(relevantRanges);
+  if (relevantRanges.empty()) return {};
+  if (!isNegated) {
+    return getRelevantBlocksFromIdRanges(relevantRanges, input,
+                                         idVector.begin(), false);
+  }
   // If this IsDatatypeExpression<Datatype> expression is negated, retrieve the
   // corresponding complementing ranges.
-  if (isNegated_) {
-    // Set complement flag `true`
-    return getRelevantBlocksFromIdRanges(relevantRanges, input,
-                                         idVector.begin(), true);
-  }
+  return getSetDifference(
+      input, getRelevantBlocksFromIdRanges(relevantRanges, input,
+                                           idVector.begin(), false));
+  // Alternative approach for retrieving the complementing blocks.
+  // Instead of computing the complement directly on BlockMetadata value sets
+  // (set{input} - set{getRelevantBlocksFromIdRanges(...)}), the following
+  // approach would calculate the complement over relevant-range indices (see
+  // mapRandomItToBlockSpanItComplemented) w.r.t. idVector and retrive the
+  // corresponding blocks from input.
+  //
+  // Given a decision against the use of the following snippet,
+  // mapRandomItToBlockSpanItComplemented can be removed and
+  // getRelevantBlocksFromIdRanges simplified.
+  // As a result, computing the complemented IsDatatypeExpression<Datatype>
+  // (!isDatatype) requires only getSetDifference (for !isIri and !isLiteral it
+  // should already be the logical best approach regarding robustness and
+  // maintainability).
+  /*
   return getRelevantBlocksFromIdRanges(relevantRanges, input, idVector.begin(),
                                        false);
+  */
+}
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    [[maybe_unused]] const bool addBlocksMixedDatatype) const {
+  using enum IsDatatype;
+  if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
+    return evaluateIsBlankOrIsNumeric<Datatype>(input, isNegated_,
+                                                evaluationColumn);
+  } else {
+    static_assert(Datatype == IRI || Datatype == LITERAL);
+    return evaluateIsIriOrIsLiteral<Datatype>(input, isNegated_,
+                                              evaluationColumn);
+  }
 };
 
 // SECTION LOGICAL OPERATIONS
@@ -679,28 +833,33 @@ LogicalExpression<Operation>::logicalComplement() const {
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
     // De Morgan's law: not (A or B) = (not A) and (not B)
-    return std::make_unique<AndExpression>(child1_->logicalComplement(),
-                                           child2_->logicalComplement());
+    return make<AndExpression>(child1_->logicalComplement(),
+                               child2_->logicalComplement());
   } else {
     static_assert(Operation == AND);
     // De Morgan's law: not (A and B) = (not A) or (not B)
-    return std::make_unique<OrExpression>(child1_->logicalComplement(),
-                                          child2_->logicalComplement());
+    return make<OrExpression>(child1_->logicalComplement(),
+                              child2_->logicalComplement());
   }
 };
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    [[maybe_unused]] const bool addBlocksMixedDatatype) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
-    auto resultChild1 = child1_->evaluate(input, evaluationColumn, false);
-    return child2_->evaluate(resultChild1, evaluationColumn, false);
+    auto resultChild1 = child1_->evaluate(input, evaluationColumn,
+                                          addBlocksMixedDatatype, false);
+    return child2_->evaluate(resultChild1, evaluationColumn,
+                             addBlocksMixedDatatype, false);
   } else {
     static_assert(Operation == OR);
-    return getSetUnion(child1_->evaluate(input, evaluationColumn, false),
-                       child2_->evaluate(input, evaluationColumn, false));
+    return getSetUnion(child1_->evaluate(input, evaluationColumn,
+                                         addBlocksMixedDatatype, false),
+                       child2_->evaluate(input, evaluationColumn,
+                                         addBlocksMixedDatatype, false));
   }
 };
 
@@ -721,8 +880,7 @@ bool LogicalExpression<Operation>::operator==(
 template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
     const {
-  return std::make_unique<LogicalExpression<Operation>>(child1_->clone(),
-                                                        child2_->clone());
+  return make<LogicalExpression<Operation>>(child1_->clone(), child2_->clone());
 };
 
 //______________________________________________________________________________
@@ -751,8 +909,10 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
-  return child_->evaluate(input, evaluationColumn, false);
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    const bool addBlocksMixedDatatype) const {
+  return child_->evaluate(input, evaluationColumn, addBlocksMixedDatatype,
+                          false);
 };
 
 //______________________________________________________________________________
@@ -766,7 +926,7 @@ bool NotExpression::operator==(const PrefilterExpression& other) const {
 
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
-  return std::make_unique<NotExpression>((child_->clone()), true);
+  return make<NotExpression>((child_->clone()), true);
 };
 
 //______________________________________________________________________________
@@ -811,8 +971,7 @@ static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
   using P = std::pair<CompOp, CompOp>;
   constexpr ConstexprMap<CompOp, CompOp, 6> mirrorMap(
       {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
-  return std::make_unique<RelationalExpression<mirrorMap.at(comparison)>>(
-      referenceValue);
+  return make<RelationalExpression<mirrorMap.at(comparison)>>(referenceValue);
 }
 
 //______________________________________________________________________________
@@ -821,7 +980,8 @@ void checkPropertiesForPrefilterConstruction(
   auto viewVariable = vec | ql::views::values;
   if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
-        "The vector must contain the <PrefilterExpression, Variable> pairs in "
+        "The vector must contain the <PrefilterExpression, "
+        "Variable> pairs in "
         "sorted order w.r.t. Variable value.");
   }
   if (auto it = ql::ranges::adjacent_find(viewVariable);
@@ -839,9 +999,8 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const bool mirrored) {
   std::vector<PrefilterExprVariablePair> resVec{};
   resVec.emplace_back(
-      mirrored
-          ? makeMirroredExpression<comparison>(referenceValue)
-          : std::make_unique<RelationalExpression<comparison>>(referenceValue),
+      mirrored ? makeMirroredExpression<comparison>(referenceValue)
+               : make<RelationalExpression<comparison>>(referenceValue),
       variable);
   return resVec;
 }

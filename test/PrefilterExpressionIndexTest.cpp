@@ -52,8 +52,8 @@ const Id GraphId = VocabId(0);
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
-  // Not directly used. However, given that we depend on LocalVocab values
-  // during evaluation an active Index + global vocabulary is required.
+  // Given that we depend on LocalVocab and Vocab values during evaluation an
+  // active Index + global vocabulary is required.
   QueryExecutionContext* qet = ad_utility::testing::getQec();
   LocalVocab vocab{};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
@@ -70,6 +70,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const LocalVocabEntry köln = LVE("\"Köln\"");
   const LocalVocabEntry münchen = LVE("\"München\"");
   const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"");
+  const LocalVocabEntry iri0 = LVE("<a>");
+  const LocalVocabEntry iri1 = LVE("<iri>");
+  const LocalVocabEntry iri2 = LVE("<iri>");
+  const LocalVocabEntry iri3 = LVE("<randomiriref>");
+  const LocalVocabEntry iri4 = LVE("<someiri>");
+  const LocalVocabEntry iri5 = LVE("<www-iri.de>");
+  const LocalVocabEntry iriBegin = LVE("<");
   const Id idAugsburg = getId(augsburg, vocab);
   const Id idBerlin = getId(berlin, vocab);
   const Id idDüsseldorf = getId(düsseldorf, vocab);
@@ -78,6 +85,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idKöln = getId(köln, vocab);
   const Id idMünchen = getId(münchen, vocab);
   const Id idStuttgart = getId(stuttgart, vocab);
+  const Id idIri0 = getId(iri0, vocab);
+  const Id idIri1 = getId(iri1, vocab);
+  const Id idIri2 = getId(iri2, vocab);
+  const Id idIri3 = getId(iri3, vocab);
+  const Id idIri4 = getId(iri4, vocab);
+  const Id idIri5 = getId(iri5, vocab);
+  const Id iriStart = getId(iriBegin, vocab);
 
   // Define BlockMetadata
   const BlockMetadata b1 = makeBlock(undef, undef);
@@ -105,14 +119,20 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const BlockMetadata b16 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
   const BlockMetadata b17 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
   const BlockMetadata b18 = makeBlock(DoubleId(-14.01), idAugsburg);
+  const BlockMetadata b18GapIriAndLiteral =
+      makeBlock(DoubleId(-14.01), DateId(DateParser, "1999-01-01"));
   const BlockMetadata b19 = makeBlock(idDüsseldorf, idHamburg);
   const BlockMetadata b20 = makeBlock(idHamburg, idHamburg);
   const BlockMetadata b21 = makeBlock(idHamburg, idMünchen);
-  const BlockMetadata b22 =
+  const BlockMetadata b22 = makeBlock(idStuttgart, idIri0);
+  const BlockMetadata b23 = makeBlock(idIri1, idIri2);
+  const BlockMetadata b24 = makeBlock(idIri3, idIri4);
+  const BlockMetadata b25 = makeBlock(idIri5, DateId(DateParser, "1999-01-01"));
+  const BlockMetadata b26 =
       makeBlock(idStuttgart, DateId(DateParser, "1999-12-12"));
-  const BlockMetadata b23 = makeBlock(DateId(DateParser, "2000-01-01"),
+  const BlockMetadata b27 = makeBlock(DateId(DateParser, "2000-01-01"),
                                       DateId(DateParser, "2000-01-01"));
-  const BlockMetadata b24 =
+  const BlockMetadata b28 =
       makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
   const BlockMetadata bLastIncomplete = makeBlock(
       DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
@@ -120,17 +140,25 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // All blocks that contain mixed (ValueId) types over column 2,
   // or possibly incomplete ones.
-  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
+  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b26, b28};
 
   // All blocks that contain mixed types over column 2 + the first and last
   // incomplete block.
   const std::vector<BlockMetadata> mixedAndIncompleteBlocks = {
-      bFirstIncomplete, b2, b4, b11, b18, b22, bLastIncomplete};
+      bFirstIncomplete, b2, b4, b11, b18, b26, bLastIncomplete};
 
-  // Ordered and unique vector with BlockMetadata
+  // Vector containing unique and odered BlockMetadata values.
   const std::vector<BlockMetadata> blocks = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28};
+
+  // Vector containing unique and odered BlockMetadata values.
+  const std::vector<BlockMetadata> allTestBlocksIsDatatype = {
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13, b14,
+      b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b25, b27, b28};
+
+  const std::vector<BlockMetadata> mixedBlocksTestIsDatatype = {b2,  b4,  b11,
+                                                                b18, b25, b28};
 
   const std::vector<BlockMetadata> blocksIncomplete = {bFirstIncomplete,
                                                        b2,
@@ -153,23 +181,23 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                                                        b19,
                                                        b20,
                                                        b21,
-                                                       b22,
-                                                       b23,
+                                                       b26,
+                                                       b27,
                                                        bLastIncomplete};
 
   const std::vector<BlockMetadata> blocksInvalidOrder1 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b24, b23};
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b28, b27};
 
   const std::vector<BlockMetadata> blocksInvalidOrder2 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b14, b10, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+      b14, b10, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28};
 
   const std::vector<BlockMetadata> blocksWithDuplicate1 = {b1, b1, b2,
                                                            b3, b4, b5};
 
   const std::vector<BlockMetadata> blocksWithDuplicate2 = {b1,  b2,  b3,
-                                                           b23, b24, b24};
+                                                           b27, b28, b28};
 
   const std::vector<BlockMetadata> blocksInconsistent1 = {
       b1, b2, b3, b4Incomplete, b5, b6, b7};
@@ -196,6 +224,18 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
             blockIdx};
   }
 
+  // Helper function for adding blocks containing mixed datatypes.
+  auto addBlocksMixedDatatype(const std::vector<BlockMetadata> expected,
+                              const std::vector<BlockMetadata> mixedBlocks) {
+    std::vector<BlockMetadata> expectedAdjusted;
+    ql::ranges::set_union(expected, mixedBlocks,
+                          std::back_inserter(expectedAdjusted),
+                          [](const BlockMetadata& b1, const BlockMetadata& b2) {
+                            return b1.blockIndex_ < b2.blockIndex_;
+                          });
+    return expectedAdjusted;
+  }
+
   // Check if expected error is thrown.
   auto makeTestErrorCheck(std::unique_ptr<PrefilterExpression> expr,
                           const std::vector<BlockMetadata>& input,
@@ -215,29 +255,41 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected,
-                bool useBlocksIncomplete = false, bool addMixedBlocks = true,
-                std::vector<BlockMetadata>&& specificInput = {}) {
-    // Simple check if expr returns expected for specificInput.
-    if (!specificInput.empty()) {
-      ASSERT_EQ(expr->evaluate(specificInput, 2), expected);
-      return;  // return, no further tests
-    }
+                bool useBlocksIncomplete = false, bool addMixedBlocks = true) {
     std::vector<BlockMetadata> expectedAdjusted;
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
     if (addMixedBlocks) {
-      ql::ranges::set_union(
+      expectedAdjusted = addBlocksMixedDatatype(
           expected,
-          useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks,
-          std::back_inserter(expectedAdjusted),
-          [](const BlockMetadata& b1, const BlockMetadata& b2) {
-            return b1.blockIndex_ < b2.blockIndex_;
-          });
+          useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks);
     }
     std::vector<BlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
     ASSERT_EQ(expr->evaluate(testBlocks, 2),
               addMixedBlocks ? expectedAdjusted : expected);
+  }
+
+  // Helper for testing `isLiteral`, `isIri`, `isNum` and `isBlank`.
+  // We define this additional test-helper-function for convenience given that
+  // we had to extend `blocks` by `BlockMetadata` values containing `LITERAL`
+  // and `IRI` datatypes. `allTestBlocksIsDatatype` contains exactly this
+  // necessary wider range of `BlockMetadata` values (compared to `blocks`)
+  // which are relevant for testing the expressions `isIri` and `isLiteral`.
+  auto makeTestIsDatatype(std::unique_ptr<PrefilterExpression> expr,
+                          std::vector<BlockMetadata>&& expected,
+                          bool testIsIriOrIsLit = false,
+                          std::vector<BlockMetadata>&& input = {}) {
+    // The evaluation implementation of `isLiteral()` and `isIri()` uses two
+    // conjuncted relational `PrefilterExpression`s. Thus we have to add all
+    // BlockMetadata values containing mixed datatypes.
+    std::vector<BlockMetadata> adjustedExpected =
+        testIsIriOrIsLit
+            ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
+            : expected;
+    ASSERT_EQ(
+        expr->evaluate(input.empty() ? allTestBlocksIsDatatype : input, 2),
+        adjustedExpected);
   }
 };
 
@@ -295,9 +347,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessThanExpressions) {
   makeTest(lt(falseId), {}, true);
   makeTest(lt(trueId), {b2, b3});
   makeTest(lt(referenceDate1), {});
-  makeTest(lt(referenceDateEqual), {b22}, true);
-  makeTest(lt(referenceDate2), {b22, b23, b24});
-  makeTest(lt(BlankNodeId(11)), {b24});
+  makeTest(lt(referenceDateEqual), {b26}, true);
+  makeTest(lt(referenceDate2), {b26, b27, b28});
+  makeTest(lt(BlankNodeId(11)), {b28});
 }
 
 //______________________________________________________________________________
@@ -322,8 +374,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
   makeTest(le(undef), {});
   makeTest(le(falseId), {b2, b3});
   makeTest(le(trueId), {b2, b3, b4}, true);
-  makeTest(le(referenceDateEqual), {b22, b23});
-  makeTest(le(BlankNodeId(11)), {b24});
+  makeTest(le(referenceDateEqual), {b26, b27});
+  makeTest(le(BlankNodeId(11)), {b28});
 }
 
 //______________________________________________________________________________
@@ -343,14 +395,14 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(IntId(4)), {b6, b7, b8, b11, b14});
   makeTest(gt(IntId(-4)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
   makeTest(gt(IntId(33)), {});
-  makeTest(gt(stuttgart), {b22});
-  makeTest(gt(hamburg), {b21, b22}, true);
-  makeTest(gt(berlin), {b19, b20, b21, b22});
+  makeTest(gt(stuttgart), {b26});
+  makeTest(gt(hamburg), {b21, b26}, true);
+  makeTest(gt(berlin), {b19, b20, b21, b26});
   makeTest(gt(undef), {}, true);
   makeTest(gt(falseId), {b4}, true);
   makeTest(gt(trueId), {});
-  makeTest(gt(referenceDateEqual), {b24});
-  makeTest(gt(referenceDate1), {b22, b23, bLastIncomplete}, true);
+  makeTest(gt(referenceDateEqual), {b28});
+  makeTest(gt(referenceDate1), {b26, b27, bLastIncomplete}, true);
   makeTest(gt(referenceDate2), {bLastIncomplete}, true);
 }
 
@@ -373,13 +425,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(ge(DoubleId(7.999999)), {b8, b11, b14});
   makeTest(ge(DoubleId(10.0001)), {});
-  makeTest(ge(hamburg), {b18, b19, b20, b21, b22}, true);
-  makeTest(ge(düsseldorf), {b18, b19, b20, b21, b22});
-  makeTest(ge(münchen), {b18, b21, b22});
+  makeTest(ge(hamburg), {b18, b19, b20, b21, b26}, true);
+  makeTest(ge(düsseldorf), {b18, b19, b20, b21, b26});
+  makeTest(ge(münchen), {b18, b21, b26});
   makeTest(ge(undef), {}, true);
   makeTest(ge(falseId), {b2, b3, b4}, true);
   makeTest(ge(trueId), {b4});
-  makeTest(ge(referenceDateEqual), {b23, b24});
+  makeTest(ge(referenceDateEqual), {b27, b28});
 }
 
 //______________________________________________________________________________
@@ -405,8 +457,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
   makeTest(eq(köln), {b18, b21});
   makeTest(eq(IntId(-4)), {b10, b11, b15}, true);
   makeTest(eq(trueId), {b4});
-  makeTest(eq(referenceDate1), {b22});
-  makeTest(eq(referenceDateEqual), {b23}, true);
+  makeTest(eq(referenceDate1), {b26});
+  makeTest(eq(referenceDateEqual), {b27}, true);
   makeTest(eq(referenceDate2), {});
 }
 
@@ -432,55 +484,111 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(DoubleId(-101.23)),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
            true);
-  makeTest(neq(augsburg), {b19, b20, b21, b22});
-  makeTest(neq(berlin), {b18, b19, b20, b21, b22}, true);
-  makeTest(neq(hamburg), {b18, b19, b21, b22});
-  makeTest(neq(münchen), {b18, b19, b20, b21, b22});
+  makeTest(neq(augsburg), {b19, b20, b21, b26});
+  makeTest(neq(berlin), {b18, b19, b20, b21, b26}, true);
+  makeTest(neq(hamburg), {b18, b19, b21, b26});
+  makeTest(neq(münchen), {b18, b19, b20, b21, b26});
   makeTest(neq(undef), {});
   makeTest(neq(falseId), {b4}, true);
-  makeTest(neq(referenceDateEqual), {b22, b24});
-  makeTest(neq(referenceDate1), {b22, b23, b24});
+  makeTest(neq(referenceDateEqual), {b26, b28});
+  makeTest(neq(referenceDate1), {b26, b27, b28});
 }
 
 // Test IsDatatype Expressions
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
-  // Test isIri
   // Test isLiteral
-  // Currently no pre-filtering for the expressions above is applied. Thus,
-  // those expressions yield all given blocks.
-  makeTest(isIri(), std::vector<BlockMetadata>{blocks}, false, false);
-  makeTest(isLit(), std::vector<BlockMetadata>{blocks}, false, false);
+  // Blocks b18 - b22 contain LITERAL values.
+  makeTestIsDatatype(isLit(), {b18, b19, b20, b21, b22}, true);
+  // Block b18GapiriAndLiteral contains possibly hidden literal values.
+  // Remark: b28 is a block holding mixed datatypes, this block should also be
+  // returned with the current implementation of getSetDifference (see
+  // PrefilterExpressionIndex.cpp).
+  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
+                     {b16, b17, b18GapIriAndLiteral, b27, b28});
+  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
+                     {b18GapIriAndLiteral});
+  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral, b28}, false,
+                     {b18GapIriAndLiteral, b28});
+  makeTestIsDatatype(isLit(), {b18GapIriAndLiteral}, false,
+                     {b14, b15, b16, b18GapIriAndLiteral});
 
-  // Test isNumeric
-  makeTest(
+  // Test isIri
+  // Blocks b22 - b25 contain IRI values.
+  makeTestIsDatatype(isIri(), {b22, b23, b24, b25}, true);
+  makeTestIsDatatype(isIri(), {b18GapIriAndLiteral}, false,
+                     {b18GapIriAndLiteral});
+  makeTestIsDatatype(isIri(), {b18GapIriAndLiteral}, false,
+                     {b17, b18GapIriAndLiteral, b27});
+
+  // Test isNum
+  // Blocks b4 - b18 contain numeric values.
+  makeTestIsDatatype(
       isNum(),
       {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
-      false, false);
-  makeTest(isNum(), {b4GapNumeric}, false, false,
-           {b1, b2, b3, b4GapNumeric, b22, b23, b24});
-  makeTest(isNum(), {b4GapNumeric}, false, false,
-           {b4GapNumeric, b22, b23, b24});
-  makeTest(isNum(), {b4GapNumeric}, false, false, {b2, b3, b4GapNumeric});
-  makeTest(isNum(), {}, false, false,
-           {b1, b2, b3, b19, b20, b21, b22, b23, b24});
-  // Test isBlank.
-  makeTest(isBlank(), {b24}, false, false);
+      false);
+  // Test case with b4GapNumeric. b4GapNumeric contains potentially hidden
+  // numeric values (Its bounding ValueIds are not of type INT or DOUBLE).
+  makeTestIsDatatype(isNum(), {b4GapNumeric}, false, {b4GapNumeric});
+  makeTestIsDatatype(isNum(), {b4GapNumeric}, false,
+                     {b1, b2, b3, b4GapNumeric, b27, b28});
+  makeTestIsDatatype(isNum(), {b4GapNumeric}, false,
+                     {b4GapNumeric, b25, b27, b28});
+  makeTestIsDatatype(isNum(), {b4GapNumeric}, false, {b2, b3, b4GapNumeric});
+  makeTestIsDatatype(isNum(), {}, false, {b1, b2, b3, b19, b21, b22, b23, b24});
+  makeTestIsDatatype(isNum(), {b18}, false,
+                     {b1, b2, b3, b18, b19, b21, b22, b23, b24});
 
-  // Test the negated expressions (should yield the full complement)
-  // Remark: The bounding mixed-datatype blocks must be also contained.
-  makeTest(notExpr(isNum()),
-           {b1, b2, b3, b4, b18, b19, b20, b21, b22, b23, b24}, false, false);
-  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric, b22, b23, b24}, false,
-           false, {b1, b2, b3, b4GapNumeric, b22, b23, b24});
-  makeTest(notExpr(isNum()), {b4GapNumeric, b22, b23, b24}, false, false,
-           {b4GapNumeric, b22, b23, b24});
-  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric}, false, false,
-           {b1, b2, b3, b4GapNumeric});
-  makeTest(notExpr(isBlank()),
-           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-            b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24},
-           false, false);
+  // Test isBlank
+  makeTestIsDatatype(isBlank(), {b28}, false);
+
+  // Test implicitly the complementing procedure defined in
+  // PrefilterExpressionIndex.cpp.
+
+  // Test !isBlank.
+  // All blocks are relevant given that even b28 is partially relevant here.
+  makeTestIsDatatype(notExpr(isBlank()),
+                     std::vector<BlockMetadata>(allTestBlocksIsDatatype),
+                     false);
+
+  // Test !isNum
+  makeTestIsDatatype(notExpr(isNum()),
+                     {b1, b2, b3, b4GapNumeric, b25, b27, b28}, false,
+                     {b1, b2, b3, b4GapNumeric, b25, b27, b28});
+  makeTestIsDatatype(notExpr(isNum()), {b4GapNumeric, b25, b27, b28}, false,
+                     {b4GapNumeric, b25, b27, b28});
+  makeTestIsDatatype(notExpr(isNum()), {b1, b2, b3, b4GapNumeric}, false,
+                     {b1, b2, b3, b4GapNumeric});
+
+  // Test !isLiteral
+  // Blocks b19 - b21 contain only IRI related Ids (not contained in expected)
+  makeTestIsDatatype(notExpr(isLit()), {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,
+                                        b9,  b10, b11, b12, b13, b14, b15, b16,
+                                        b17, b18, b22, b23, b24, b25, b27, b28},
+                     true);
+  // b18GapIriAndLiteral should be considered relevant when evaluating
+  // expression !isLit.
+  makeTestIsDatatype(notExpr(isLit()), {b18GapIriAndLiteral}, false,
+                     {b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b3, b17, b18GapIriAndLiteral},
+                     false, {b1, b2, b3, b17, b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isLit()),
+                     {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28}, false,
+                     {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28});
+
+  // Test !isIri
+  // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
+  makeTestIsDatatype(
+      notExpr(isIri()),
+      {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13,
+       b14, b15, b16, b17, b18, b19, b20, b21, b22, b25, b27, b28},
+      true);
+  makeTestIsDatatype(notExpr(isIri()), {b18GapIriAndLiteral}, false,
+                     {b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isIri()), {b1, b2, b3, b17, b18GapIriAndLiteral},
+                     false, {b1, b2, b3, b17, b18GapIriAndLiteral});
+  makeTestIsDatatype(notExpr(isIri()), {b18GapIriAndLiteral, b27, b28}, false,
+                     {b18GapIriAndLiteral, b27, b28});
 }
 
 // Test Logical Expressions
@@ -489,10 +597,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
-  makeTest(andExpr(ge(düsseldorf), gt(düsseldorf)), {b19, b20, b21, b22});
-  makeTest(andExpr(ge(düsseldorf), ge(düsseldorf)), {b19, b20, b21, b22}, true);
-  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b22});
-  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b22}, true);
+  makeTest(andExpr(ge(düsseldorf), gt(düsseldorf)), {b19, b20, b21, b26});
+  makeTest(andExpr(ge(düsseldorf), ge(düsseldorf)), {b19, b20, b21, b26}, true);
+  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b26});
+  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b26}, true);
   makeTest(andExpr(ge(düsseldorf), lt(hamburg)), {b19}, true);
   makeTest(andExpr(le(augsburg), lt(düsseldorf)), {b18});
   makeTest(andExpr(le(münchen), lt(münchen)), {b18, b19, b20, b21});
@@ -529,8 +637,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(lt(stuttgart), le(augsburg)), {b18, b19, b20, b21});
-  makeTest(orExpr(le(augsburg), ge(köln)), {b18, b21, b22});
-  makeTest(orExpr(gt(münchen), ge(münchen)), {b21, b22});
+  makeTest(orExpr(le(augsburg), ge(köln)), {b18, b21, b26});
+  makeTest(orExpr(gt(münchen), ge(münchen)), {b21, b26});
   makeTest(orExpr(lt(DoubleId(-5.95)), eq(hamburg)),
            {b9, b15, b16, b17, b18, b19, b20, b21});
   makeTest(orExpr(eq(DoubleId(0)), neq(hamburg)), {b5, b6, b11, b18, b19, b21},
@@ -538,19 +646,19 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(eq(DoubleId(0)), eq(DoubleId(-6.25))),
            {b5, b6, b11, b15, b16, b18}, true);
   makeTest(orExpr(gt(undef), le(IntId(-6))), {b9, b15, b16, b17, b18});
-  makeTest(orExpr(le(trueId), gt(referenceDate1)), {b2, b3, b4, b22, b23, b24});
+  makeTest(orExpr(le(trueId), gt(referenceDate1)), {b2, b3, b4, b26, b27, b28});
   makeTest(orExpr(eq(IntId(0)), orExpr(lt(IntId(-10)), gt(IntId(8)))),
            {b5, b6, b8, b11, b14, b17, b18}, true);
   makeTest(orExpr(gt(referenceDate2), eq(trueId)), {b4});
-  makeTest(orExpr(eq(münchen), orExpr(lt(augsburg), gt(stuttgart))), {b21, b22},
+  makeTest(orExpr(eq(münchen), orExpr(lt(augsburg), gt(stuttgart))), {b21, b26},
            true);
-  makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b24});
+  makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b28});
   makeTest(orExpr(gt(IntId(8)), gt(DoubleId(22.1))), {b8, b14});
   makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18}, true);
   makeTest(orExpr(eq(IntId(0)), neq(DoubleId(0.25))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(orExpr(gt(referenceDate1), orExpr(gt(trueId), eq(IntId(0)))),
-           {b4, b5, b6, b11, b22, b23, b24});
+           {b4, b5, b6, b11, b26, b27, b28});
   makeTest(orExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
   makeTest(orExpr(orExpr(eq(IntId(0)), eq(IntId(5))),
@@ -565,8 +673,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
-  makeTest(notExpr(eq(berlin)), {b18, b19, b20, b21, b22}, true);
-  makeTest(notExpr(eq(hamburg)), {b18, b19, b21, b22});
+  makeTest(notExpr(eq(berlin)), {b18, b19, b20, b21, b26}, true);
+  makeTest(notExpr(eq(hamburg)), {b18, b19, b21, b26});
   makeTest(notExpr(neq(hamburg)), {b19, b20, b21}, true);
   makeTest(notExpr(gt(berlin)), {b18});
   makeTest(notExpr(lt(DoubleId(-14.01))),
@@ -575,7 +683,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
   makeTest(notExpr(gt(DoubleId(-4.00))), {b9, b10, b11, b15, b16, b17, b18},
            true);
   makeTest(notExpr(ge(DoubleId(-24.4))), {b18});
-  makeTest(notExpr(gt(referenceDate2)), {b22, b23});
+  makeTest(notExpr(gt(referenceDate2)), {b26, b27});
   makeTest(notExpr(le(trueId)), {});
   makeTest(notExpr(le(IntId(0))), {b6, b7, b8, b11, b12, b13, b14}, true);
   makeTest(notExpr(gt(undef)), {});
@@ -635,9 +743,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
            {});
   makeTest(orExpr(andExpr(gt(köln), ge(münchen)), gt(DoubleId(7.25))),
-           {b8, b14, b18, b21, b22});
+           {b8, b14, b18, b21, b26});
   makeTest(orExpr(eq(trueId), andExpr(gt(referenceDate1), lt(referenceDate2))),
-           {b4, b22, b23}, true);
+           {b4, b26, b27}, true);
 }
 
 //______________________________________________________________________________

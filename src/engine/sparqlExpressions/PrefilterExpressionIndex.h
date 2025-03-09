@@ -92,9 +92,10 @@ class PrefilterExpression {
   // The flag value shouldn't be changed in general, because `evaluate()` only
   // removes the respective block if it is conditionally (inconsistent columns)
   // necessary.
-  std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn,
-                                      bool stripIncompleteBlocks = true) const;
+  std::vector<BlockMetadata> evaluate(
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks = true,
+      const bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -119,10 +120,12 @@ class PrefilterExpression {
   // is violated, the function performing the checks will throw a
   // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const;
 
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const = 0;
 };
 
 //______________________________________________________________________________
@@ -157,8 +160,8 @@ class RelationalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -187,8 +190,8 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -215,8 +218,8 @@ class IsDatatypeExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -240,8 +243,8 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
