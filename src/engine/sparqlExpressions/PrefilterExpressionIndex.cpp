@@ -543,7 +543,7 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
       relevantIdRanges, input, idVector.begin(), false);
 
   if (!addBlocksMixedDatatype) {
-    // Don't add BlockMetadata values with bounding ValueIds refering to
+    // Don't add BlockMetadata values with bounding ValueIds referring to
     // different datatypes.
     // Not adding those values is relevant when calculating the complement
     // for isIri (!isIri) and isLiteral (!isLiteral).
@@ -707,13 +707,13 @@ std::vector<BlockMetadata> evaluateIsIriOrIsLiteral(
              ? getSetDifference(
                    // Remark: For computing the correct complement here, it is
                    // necessary to set the flag addBlocksMixedDatatype for
-                   // evaluate to false. If we would add the values refering to
+                   // evaluate to false. If we would add the values referring to
                    // a mixed datatype range, the BlockMetadata value
                    // representing the Id range [(last) VocabId(literalVal),
                    // (first) VocabId(IriVal)] would be hidden within the added
                    // mixed-datatype blocks. To ensure that this value is always
                    // the first or last element in the vector returned by
-                   // evaluate, we discard the mixed datatpye blocks (they will
+                   // evaluate, we discard the mixed datatype blocks (they will
                    // be implicitly added again with the application of
                    // getSetDifference).
                    // The visibility of BlockMetadata value representing the Id
@@ -791,7 +791,7 @@ std::vector<BlockMetadata> evaluateIsBlankOrIsNumeric(
   // Instead of computing the complement directly on BlockMetadata value sets
   // (set{input} - set{getRelevantBlocksFromIdRanges(...)}), the following
   // approach would calculate the complement over relevant-range indices (see
-  // mapRandomItToBlockSpanItComplemented) w.r.t. idVector and retrive the
+  // mapRandomItToBlockSpanItComplemented) w.r.t. idVector and retrieve the
   // corresponding blocks from input.
   //
   // Given a decision against the use of the following snippet,

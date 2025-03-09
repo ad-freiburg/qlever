@@ -147,12 +147,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const std::vector<BlockMetadata> mixedAndIncompleteBlocks = {
       bFirstIncomplete, b2, b4, b11, b18, b26, bLastIncomplete};
 
-  // Vector containing unique and odered BlockMetadata values.
+  // Vector containing unique and ordered BlockMetadata values.
   const std::vector<BlockMetadata> blocks = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28};
 
-  // Vector containing unique and odered BlockMetadata values.
+  // Vector containing unique and ordered BlockMetadata values.
   const std::vector<BlockMetadata> allTestBlocksIsDatatype = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13, b14,
       b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b25, b27, b28};
