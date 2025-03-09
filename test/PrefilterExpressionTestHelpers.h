@@ -114,11 +114,15 @@ using namespace sparqlExpression;
 namespace {
 using Literal = ad_utility::triple_component::Literal;
 using Iri = ad_utility::triple_component::Iri;
-using RelValues = std::variant<Variable, ValueId, Iri, Literal>;
+using SparqlPtr = std::unique_ptr<SparqlExpression>;
+using VariantArgs = std::variant<Variable, ValueId, Iri, Literal, SparqlPtr>;
 
 //______________________________________________________________________________
-const auto makeLiteralSparqlExpr =
-    [](const auto& child) -> std::unique_ptr<SparqlExpression> {
+// If value `child` is not already a `SparqlExpression` pointer, try to create
+// the respective leaf `SparqlExpression` (`LiteralExpression`) for the given
+// value.
+const auto makeOptLiteralSparqlExpr =
+    [](auto child) -> std::unique_ptr<SparqlExpression> {
   using T = std::decay_t<decltype(child)>;
   if constexpr (std::is_same_v<T, ValueId>) {
     return std::make_unique<IdExpression>(child);
@@ -128,30 +132,40 @@ const auto makeLiteralSparqlExpr =
     return std::make_unique<StringLiteralExpression>(child);
   } else if constexpr (std::is_same_v<T, Iri>) {
     return std::make_unique<IriExpression>(child);
+  } else if constexpr (std::is_same_v<T, SparqlPtr>) {
+    return child;
   } else {
     throw std::runtime_error(
-        "Can't create a LiteralExpression from provided (input) type.");
+        "Can't create a LiteralExpression from provided (input) type, and a "
+        "SparqlExpression wasn't provided either. Please provide a suitable "
+        "value type.");
   }
 };
 
 //______________________________________________________________________________
-auto getExpr = [](const auto& variantVal) -> std::unique_ptr<SparqlExpression> {
-  return makeLiteralSparqlExpr(variantVal);
+auto getExpr = [](auto variantVal) -> std::unique_ptr<SparqlExpression> {
+  return makeOptLiteralSparqlExpr(std::move(variantVal));
 };
 
 //______________________________________________________________________________
 template <typename RelExpr>
 std::unique_ptr<SparqlExpression> makeRelationalSparqlExprImpl(
-    const RelValues& child0, const RelValues& child1) {
+    VariantArgs child0, VariantArgs child1) {
   return std::make_unique<RelExpr>(std::array<SparqlExpression::Ptr, 2>{
-      std::visit(getExpr, child0), std::visit(getExpr, child1)});
+      std::visit(getExpr, std::move(child0)),
+      std::visit(getExpr, std::move(child1))});
 };
 
 //______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makeStringStartsWithSparqlExpression(
-    const RelValues& child0, const RelValues& child1) {
-  return makeStrStartsExpression(std::visit(getExpr, child0),
-                                 std::visit(getExpr, child1));
+    VariantArgs child0, VariantArgs child1) {
+  return makeStrStartsExpression(std::visit(getExpr, std::move(child0)),
+                                 std::visit(getExpr, std::move(child1)));
+};
+
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
+  return makeYearExpression(std::visit(getExpr, std::move(child)));
 };
 }  // namespace
 
@@ -184,5 +198,9 @@ constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
+
+//______________________________________________________________________________
+// Create SparqlExpression `YEAR`.
+constexpr auto yearSprqlExpr = &makeYearSparqlExpression;
 
 }  // namespace makeSparqlExpression

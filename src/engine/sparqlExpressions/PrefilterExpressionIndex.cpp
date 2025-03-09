@@ -14,6 +14,13 @@ namespace prefilterExpressions {
 
 // HELPER FUNCTIONS
 //______________________________________________________________________________
+// Create and return `std::unique_ptr<PrefilterExpression>(args...)`.
+template <typename PrefilterT, typename... Args>
+std::unique_ptr<PrefilterExpression> make(Args&&... args) {
+  return std::make_unique<PrefilterT>(std::forward<Args>(args)...);
+}
+
+//______________________________________________________________________________
 // Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
 static Id getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
                                size_t columnIndex) {
@@ -149,7 +156,8 @@ static std::string getRelationalOpStr(const CompOp relOp) {
     case GT:
       return "GT(>)";
     default:
-      AD_FAIL();
+      return absl::StrCat("Undefined CompOp value: ", static_cast<int>(relOp),
+                          ".");
   }
 }
 
@@ -238,7 +246,7 @@ RelationalExpression<Comparison>::logicalComplement() const {
   // (6) ?var != referenceValue -> ?var = referenceValue
   constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
       {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
-  return std::make_unique<RelationalExpression<complementMap.at(Comparison)>>(
+  return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
 };
 
@@ -327,8 +335,7 @@ bool RelationalExpression<Comparison>::operator==(
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
     const {
-  return std::make_unique<RelationalExpression<Comparison>>(
-      rightSideReferenceValue_);
+  return make<RelationalExpression<Comparison>>(rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
@@ -364,13 +371,13 @@ LogicalExpression<Operation>::logicalComplement() const {
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
     // De Morgan's law: not (A or B) = (not A) and (not B)
-    return std::make_unique<AndExpression>(child1_->logicalComplement(),
-                                           child2_->logicalComplement());
+    return make<AndExpression>(child1_->logicalComplement(),
+                               child2_->logicalComplement());
   } else {
     static_assert(Operation == AND);
     // De Morgan's law: not (A and B) = (not A) or (not B)
-    return std::make_unique<OrExpression>(child1_->logicalComplement(),
-                                          child2_->logicalComplement());
+    return make<OrExpression>(child1_->logicalComplement(),
+                              child2_->logicalComplement());
   }
 };
 
@@ -406,8 +413,7 @@ bool LogicalExpression<Operation>::operator==(
 template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
     const {
-  return std::make_unique<LogicalExpression<Operation>>(child1_->clone(),
-                                                        child2_->clone());
+  return make<LogicalExpression<Operation>>(child1_->clone(), child2_->clone());
 };
 
 //______________________________________________________________________________
@@ -451,7 +457,7 @@ bool NotExpression::operator==(const PrefilterExpression& other) const {
 
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
-  return std::make_unique<NotExpression>((child_->clone()), true);
+  return make<NotExpression>((child_->clone()), true);
 };
 
 //______________________________________________________________________________
@@ -479,23 +485,6 @@ template class LogicalExpression<LogicalOperator::OR>;
 namespace detail {
 
 //______________________________________________________________________________
-// Returns the corresponding mirrored `RelationalExpression<mirrored
-// comparison>` for the given `CompOp comparison` template argument. For
-// example, the mirroring procedure will transform the relational expression
-// `referenceValue > ?var` into `?var < referenceValue`.
-template <CompOp comparison>
-static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
-    const IdOrLocalVocabEntry& referenceValue) {
-  using enum CompOp;
-  using namespace ad_utility;
-  using P = std::pair<CompOp, CompOp>;
-  constexpr ConstexprMap<CompOp, CompOp, 6> mirrorMap(
-      {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
-  return std::make_unique<RelationalExpression<mirrorMap.at(comparison)>>(
-      referenceValue);
-}
-
-//______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
   auto viewVariable = vec | ql::views::values;
@@ -513,16 +502,117 @@ void checkPropertiesForPrefilterConstruction(
 }
 
 //______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, const int year) {
+  using GeExpr = GreaterEqualExpression;
+  using LtExpr = LessThanExpression;
+
+  // `getDateId` returns an `Id` containing the smallest possible `Date`
+  // (`xsd::date`) for which `YEAR(Id) == adjustedYear` is valid. This `Id` acts
+  // as a reference bound for the actual `DateYearOrDuration` prefiltering
+  // procedure.
+  const auto getDateId = [](const int adjustedYear) {
+    return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
+  };
+  using enum CompOp;
+  switch (comparison) {
+    case EQ:
+      return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
+                                 make<GeExpr>(getDateId(year)));
+    case LT:
+      return make<LtExpr>(getDateId(year));
+    case LE:
+      return make<LtExpr>(getDateId(year + 1));
+    case GE:
+      return make<GeExpr>(getDateId(year));
+    case GT:
+      return make<GeExpr>(getDateId(year + 1));
+    case NE:
+      return make<OrExpression>(make<LtExpr>(getDateId(year)),
+                                make<GeExpr>(getDateId(year + 1)));
+    default:
+      throw std::runtime_error(
+          absl::StrCat("Set unknown (relational) comparison operator for "
+                       "the creation of PrefilterExpression on date-values: ",
+                       getRelationalOpStr(comparison)));
+  }
+};
+
+//______________________________________________________________________________
+template <CompOp comparison>
+static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
+    const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
+  using enum Datatype;
+  // Standard pre-filtering procedure.
+  if (!prefilterDateByYear) {
+    return make<RelationalExpression<comparison>>(referenceValue);
+  }
+  // Helper to safely retrieve `ValueId/Id` values from the provided
+  // `IdOrLocalVocabEntry referenceValue` if contained. Given no `ValueId` is
+  // contained, a explanatory message per `std::runtime_error` is thrown.
+  const auto retrieveValueIdOrThrowErr =
+      [](const IdOrLocalVocabEntry& referenceValue) {
+        return std::visit(
+            []<typename T>(const T& value) -> ValueId {
+              if constexpr (ad_utility::isSimilar<T, ValueId>) {
+                return value;
+              } else {
+                static_assert(ad_utility::isSimilar<T, LocalVocabEntry>);
+                throw std::runtime_error(absl::StrCat(
+                    "Provided Literal or Iri with value: ",
+                    value.asLiteralOrIri().toStringRepresentation(),
+                    ". This is an invalid reference value for filtering date "
+                    "values over expression YEAR. Please provide an integer "
+                    "value as reference year."));
+              }
+              throw std::runtime_error(
+                  "Reference value IdOrLocalVocabEntry contains unknown type.");
+            },
+            referenceValue);
+      };
+  // Handle year extraction and return a date-value adjusted
+  // `PrefilterExpression` if possible. Given an unsuitable reference value was
+  // provided, throw a std::runtime_error with an explanatory message.
+  const auto retrieveYearIntOrThrowErr =
+      [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
+        const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
+        if (valueId.getDatatype() == Int) {
+          return valueId.getInt();
+        }
+        throw std::runtime_error(absl::StrCat(
+            "Reference value for filtering date values over "
+            "expression YEAR is of invalid datatype: ",
+            toString(valueId.getDatatype()),
+            ".\nPlease provide an integer value as reference year."));
+      };
+  return makePrefilterExpressionYearImpl(
+      comparison, retrieveYearIntOrThrowErr(referenceValue));
+};
+
+//______________________________________________________________________________
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    const bool mirrored) {
+    bool mirrored, bool prefilterDateByYear) {
+  using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
-  resVec.emplace_back(
-      mirrored
-          ? makeMirroredExpression<comparison>(referenceValue)
-          : std::make_unique<RelationalExpression<comparison>>(referenceValue),
-      variable);
+  if (mirrored) {
+    using P = std::pair<CompOp, CompOp>;
+    // Retrieve by map the corresponding mirrored `CompOp` value for the given
+    // `CompOp comparison` template argument. E.g., this procedure will
+    // transform the relational expression `referenceValue > ?var` into `?var
+    // < referenceValue`.
+    constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
+        {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
+    resVec.emplace_back(
+        makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
+            referenceValue, prefilterDateByYear),
+        variable);
+  } else {
+    resVec.emplace_back(makePrefilterExpressionVecImpl<comparison>(
+                            referenceValue, prefilterDateByYear),
+                        variable);
+  }
   return resVec;
 }
 
@@ -530,7 +620,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 #define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
   template std::vector<PrefilterExprVariablePair>                    \
   makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
-                                         const Variable&, const bool);
+                                         const Variable&, bool, bool);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
 INSTANTIATE_MAKE_PREFILTER(CompOp::GE);

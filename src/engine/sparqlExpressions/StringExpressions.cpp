@@ -266,8 +266,8 @@ CPP_template(typename NaryOperation)(
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 2);
-    const SparqlExpression* child0 = this->getNthChild(0).value();
-    const SparqlExpression* child1 = this->getNthChild(1).value();
+    const SparqlExpression* child0 = this->getChildAtIndex(0).value();
+    const SparqlExpression* child1 = this->getChildAtIndex(1).value();
 
     const auto getPrefilterExprVariableVec =
         [](const SparqlExpression* child0, const SparqlExpression* child1,

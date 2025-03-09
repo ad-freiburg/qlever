@@ -97,7 +97,6 @@ constexpr auto extractSeconds =
     extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
 //______________________________________________________________________________
-NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
 NARY_EXPRESSION(MonthExpression, 1,
                 FV<decltype(extractMonth), DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
@@ -112,8 +111,24 @@ NARY_EXPRESSION(MinutesExpression, 1,
 NARY_EXPRESSION(SecondsExpression, 1,
                 FV<decltype(extractSeconds), DateValueGetter>);
 
+//______________________________________________________________________________
+// `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
+// provided as a `SparqlExpression*` object.
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class YearExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+  bool isYearExpression() const override { return true; }
+};
+
+using YearExpression = YearExpressionImpl<
+    Operation<1, FV<decltype(extractYear), DateValueGetter>>>;
+
 }  // namespace detail
 using namespace detail;
+
+//______________________________________________________________________________
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child) {
   return std::make_unique<YearExpression>(std::move(child));
 }

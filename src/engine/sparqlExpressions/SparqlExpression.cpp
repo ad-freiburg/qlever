@@ -90,6 +90,9 @@ bool SparqlExpression::containsLangExpression() const {
 }
 
 // _____________________________________________________________________________
+bool SparqlExpression::isYearExpression() const { return false; }
+
+// _____________________________________________________________________________
 using LangFilterData = SparqlExpressionPimpl::LangFilterData;
 std::optional<LangFilterData> SparqlExpression::getLanguageFilterExpression()
     const {
