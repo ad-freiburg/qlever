@@ -253,11 +253,10 @@ void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
 
 //______________________________________________________________________________
-// Use for testing only. The definition here is necessary to call
-// `makePrefilterYearImpl` with an invalid `CompOp` argument given that it is
-// internally in use over the `CompOp` save template instantiated
-// `makePrefilterExpressionVec`. Use `makePrefilterExpressionVec` to retrieve
-// the actual `PrefilterExpression` (with corresponding `Variable`).
+// This function is public s.t. we can test the corner case by providing an
+// invalid/unknown `CompOp comparison` value.
+// Use `makePrefilterExpressionVec` to retrieve the actual `PrefilterExpression`
+// (with corresponding `Variable`).
 std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
     CompOp comparison, const int year);
 

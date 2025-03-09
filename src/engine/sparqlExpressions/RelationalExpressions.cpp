@@ -435,18 +435,20 @@ ExpressionResult InExpression::evaluate(
 // needs to be applied for the creation of `PrefilterExpression`.
 static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
     const SparqlExpression* child) {
-  // (1) The direct child already contains the Variable.
-  if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
-    return std::make_pair(optVariable.value(), false);
+  bool isYear = false;
+  if (child->isYearExpression()) {
+    // The direct child is an expression YEAR();
+    isYear = true;
+    const auto& grandChild = child->children();
+    // The expression YEAR() should by definition hold a single child.
+    AD_CORRECTNESS_CHECK(grandChild.size() == 1);
+    child = grandChild[0].get();
   }
-  if (!child->isYearExpression()) return std::nullopt;
-  // (2) The direct child is an expression YEAR();
-  // If possible retrieve the Variable related to YEAR().
-  const auto& grandChild = child->children();
-  // The expression YEAR() should by definition hold a single child.
-  AD_CORRECTNESS_CHECK(grandChild.size() == 1);
-  if (auto optVariable = grandChild[0]->getVariableOrNullopt(); optVariable) {
-    return std::make_pair(optVariable.value(), true);
+  if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
+    // (1) isYear is false: The direct child is already a Variable (expression).
+    // (2) isYear is true: The direct child is expression YEAR(). The actual
+    // pre-filter reference Variable is the child of expression YEAR().
+    return std::make_pair(optVariable.value(), isYear);
   }
   // No Variable for pre-filtering available.
   return std::nullopt;

@@ -554,10 +554,10 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
       [](const IdOrLocalVocabEntry& referenceValue) {
         return std::visit(
             []<typename T>(const T& value) -> ValueId {
-              if constexpr (std::is_same_v<std::decay_t<T>, ValueId>) {
+              if constexpr (ad_utility::isSimilar<T, ValueId>) {
                 return value;
-              } else if constexpr (std::is_same_v<std::decay_t<T>,
-                                                  LocalVocabEntry>) {
+              } else {
+                static_assert(ad_utility::isSimilar<T, LocalVocabEntry>);
                 throw std::runtime_error(absl::StrCat(
                     "Provided Literal or Iri with value: ",
                     value.asLiteralOrIri().toStringRepresentation(),
