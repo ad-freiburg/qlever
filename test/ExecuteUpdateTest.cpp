@@ -93,62 +93,65 @@ TEST(ExecuteUpdate, executeUpdate) {
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, computeGraphUpdateQuads) {
+  // For each test suite the `qec` and the `defaultGraphId` have to be set
+  // according to the current index. They must be set before any test can be
+  // run.
+  QueryExecutionContext* qec = nullptr;
+  Id defaultGraphId = Id::makeUndefined();
+
+  using namespace ::testing;
+  auto IdTriple = [&defaultGraphId](const Id s, const Id p, const Id o,
+                                    const std::optional<Id> graph =
+                                        std::nullopt) -> ::IdTriple<> {
+    return ::IdTriple({s, p, o, graph.value_or(defaultGraphId)});
+  };
+
+  auto executeComputeGraphUpdateQuads = [&qec](const std::string& update) {
+    const auto sharedHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    const std::vector<DatasetClause> datasets = {};
+    auto pq = SparqlParser::parseQuery(update);
+    QueryPlanner qp{qec, sharedHandle};
+    const auto qet = qp.createExecutionTree(pq);
+    UpdateMetadata metadata;
+    return ExecuteUpdate::computeGraphUpdateQuads(qec->getIndex(), pq, qet,
+                                                  sharedHandle, metadata);
+  };
+  auto expectComputeGraphUpdateQuads =
+      [&executeComputeGraphUpdateQuads](
+          const std::string& update,
+          const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
+          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
+        EXPECT_THAT(executeComputeGraphUpdateQuads(update),
+                    Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
+                                  idTriples_, toInsertMatcher),
+                         AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
+                                  idTriples_, toDeleteMatcher)));
+      };
+  auto expectComputeGraphUpdateQuadsFails =
+      [&executeComputeGraphUpdateQuads](
+          const std::string& update,
+          const Matcher<const std::string&>& messageMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
+        AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
+                                     messageMatcher);
+      };
   {
     // These tests run on the default dataset defined in
     // `IndexTestHelpers::makeTestIndex`.
-    QueryExecutionContext* qec = ad_utility::testing::getQec(std::nullopt);
-    const Index& index = qec->getIndex();
-    const auto Id = ad_utility::testing::makeGetId(index);
-    auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
+    qec = ad_utility::testing::getQec(std::nullopt);
+    auto Id = ad_utility::testing::makeGetId(qec->getIndex());
+    defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
-    using namespace ::testing;
     LocalVocab localVocab;
     auto LVI = [&localVocab](const std::string& iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
               ad_utility::triple_component::Iri::fromIriref(iri))));
     };
-
-    auto IdTriple = [defaultGraphId](const ::Id s, const ::Id p, const ::Id o,
-                                     const std::optional<::Id> graph =
-                                         std::nullopt) -> ::IdTriple<> {
-      return ::IdTriple({s, p, o, graph.value_or(defaultGraphId)});
-    };
-
-    auto executeComputeGraphUpdateQuads = [&qec,
-                                           &index](const std::string& update) {
-      const auto sharedHandle =
-          std::make_shared<ad_utility::CancellationHandle<>>();
-      const std::vector<DatasetClause> datasets = {};
-      auto pq = SparqlParser::parseQuery(update);
-      QueryPlanner qp{qec, sharedHandle};
-      const auto qet = qp.createExecutionTree(pq);
-      UpdateMetadata metadata;
-      return ExecuteUpdate::computeGraphUpdateQuads(index, pq, qet,
-                                                    sharedHandle, metadata);
-    };
-    auto expectComputeGraphUpdateQuads =
-        [&executeComputeGraphUpdateQuads](
-            const std::string& update,
-            const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
-            const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
-            source_location sourceLocation = source_location::current()) {
-          auto l = generateLocationTrace(sourceLocation);
-          EXPECT_THAT(executeComputeGraphUpdateQuads(update),
-                      Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, toInsertMatcher),
-                           AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, toDeleteMatcher)));
-        };
-    auto expectComputeGraphUpdateQuadsFails =
-        [&executeComputeGraphUpdateQuads](
-            const std::string& update,
-            const Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
-          auto l = generateLocationTrace(sourceLocation);
-          AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
-                                       messageMatcher);
-        };
 
     expectComputeGraphUpdateQuads(
         "INSERT DATA { <s> <p> <o> . }",
@@ -193,65 +196,34 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
             "Only INSERT/DELETE update operations are currently supported."));
   }
   {
-    QueryExecutionContext* qec = ad_utility::testing::getQec(
-        "<a> <a> <a> <a> . <b> <b> <b> <b> .", true, true, true, 16_B, false,
-        true, std::nullopt, 1_kB, qlever::Filetype::NQuad);
-    const Index& index = qec->getIndex();
-    const auto Id = ad_utility::testing::makeGetId(index);
-    auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
-
-    using namespace ::testing;
-    LocalVocab localVocab;
-    auto LVI = [&localVocab](const std::string& iri) {
-      return Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(LocalVocabEntry(
-              ad_utility::triple_component::Iri::fromIriref(iri))));
+    // An Index with Quads/triples that are not in the default graph.
+    qec = ad_utility::testing::getQec(
+        "<a> <a> <a> <a> . <b> <b> <b> <b> . <c> <c> <c> <c> . <d> <d> <d> .",
+        true, true, true, 16_B, false, true, std::nullopt, 1_kB,
+        qlever::Filetype::NQuad);
+    auto Id = ad_utility::testing::makeGetId(qec->getIndex());
+    auto QuadFrom = [&IdTriple](const ::Id& id) {
+      return IdTriple(id, id, id, id);
     };
+    defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
-    auto IdTriple = [defaultGraphId](const ::Id s, const ::Id p, const ::Id o,
-                                     const std::optional<::Id> graph =
-                                         std::nullopt) -> ::IdTriple<> {
-      return ::IdTriple({s, p, o, graph.value_or(defaultGraphId)});
-    };
-
-    auto executeComputeGraphUpdateQuads = [&qec,
-                                           &index](const std::string& update) {
-      const auto sharedHandle =
-          std::make_shared<ad_utility::CancellationHandle<>>();
-      const std::vector<DatasetClause> datasets = {};
-      auto pq = SparqlParser::parseQuery(update);
-      QueryPlanner qp{qec, sharedHandle};
-      const auto qet = qp.createExecutionTree(pq);
-      UpdateMetadata metadata;
-      return ExecuteUpdate::computeGraphUpdateQuads(index, pq, qet,
-                                                    sharedHandle, metadata);
-    };
-    auto expectComputeGraphUpdateQuads =
-        [&executeComputeGraphUpdateQuads](
-            const std::string& update,
-            const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
-            const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
-            source_location sourceLocation = source_location::current()) {
-          auto l = generateLocationTrace(sourceLocation);
-          EXPECT_THAT(executeComputeGraphUpdateQuads(update),
-                      Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, toInsertMatcher),
-                           AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                    idTriples_, toDeleteMatcher)));
-        };
-    auto expectComputeGraphUpdateQuadsFails =
-        [&executeComputeGraphUpdateQuads](
-            const std::string& update,
-            const Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
-          auto l = generateLocationTrace(sourceLocation);
-          AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
-                                       messageMatcher);
-        };
+    expectComputeGraphUpdateQuads("DELETE WHERE { GRAPH <a> { ?s ?p ?o } }",
+                                  IsEmpty(),
+                                  ElementsAreArray({QuadFrom(Id("<a>"))}));
+    expectComputeGraphUpdateQuads("DELETE WHERE { GRAPH ?g { <a> <a> <a> } }",
+                                  IsEmpty(),
+                                  ElementsAreArray({QuadFrom(Id("<a>"))}));
     expectComputeGraphUpdateQuads(
-        "DELETE WHERE { GRAPH <a> { ?s ?p ?o } }", IsEmpty(),
+        "DELETE WHERE { GRAPH ?g { ?s ?p ?o } }", IsEmpty(),
         ElementsAreArray(
-            {IdTriple(Id("<a>"), Id("<a>"), Id("<a>"), Id("<a>"))}));
+            {QuadFrom(Id("<a>")), QuadFrom(Id("<b>")), QuadFrom(Id("<c>")),
+             IdTriple(Id("<d>"), Id("<d>"), Id("<d>"), defaultGraphId)}));
+    // TODO<qup42>: the second triple is technically not correct. the funky
+    // behaviour is caused by the default query graph being the union graph.
+    expectComputeGraphUpdateQuads(
+        "DELETE WHERE { GRAPH <a> { ?s ?p ?o } . ?s ?p ?o }", IsEmpty(),
+        ElementsAreArray(
+            {QuadFrom(Id("<a>")), IdTriple(Id("<a>"), Id("<a>"), Id("<a>"))}));
   }
 }
 
