@@ -759,6 +759,11 @@ TEST(SparqlParser, propertyPaths) {
   }
   expectPathOrVar("a:a{1,3}", ModMinMax({Iri("<http://www.example.com/a>")},1,3),
                   {{"a", "<http://www.example.com/>"}});
+  {
+    PropertyPath expected = ModMinMax({Iri("<http://www.example.com/a>")},0,4);
+    expected.canBeNull_ = true;
+    expectPathOrVar("a:a{0,4}", expected, {{"a", "<http://www.example.com/>"}});
+  }
   // Test a bigger example that contains everything.
   {
     PropertyPath expected =
