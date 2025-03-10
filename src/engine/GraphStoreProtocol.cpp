@@ -49,7 +49,7 @@ std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
     const GraphOrDefault& graph, std::vector<TurtleTriple> triples) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
-    tripleGraph = Iri(std::get<GraphRef>(graph).toStringRepresentation());
+    tripleGraph = std::get<GraphRef>(graph);
   }
   auto transformTurtleTriple = [&tripleGraph](TurtleTriple&& triple) {
     AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&

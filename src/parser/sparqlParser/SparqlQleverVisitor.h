@@ -15,6 +15,7 @@
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
+#include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
 
@@ -236,19 +237,13 @@ class SparqlQleverVisitor {
 
   GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadPatternContext* ctx);
+  Quads visit(Parser::QuadPatternContext* ctx);
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
 
-  // Parse the triples and set the graph for all of them.
-  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx,
-      const SparqlTripleSimpleWithGraph::Graph& graph);
+  Quads visit(Parser::QuadsContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
-
-  vector<SparqlTripleSimpleWithGraph> visit(
-      Parser::QuadsNotTriplesContext* ctx);
+  Quads::GraphBlock visit(Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
 
