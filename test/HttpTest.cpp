@@ -344,10 +344,11 @@ TEST(HttpServer, RequestBodySizeLimit) {
     // if it couldn't send the request fully in that case.
     expectRequestHelper(
         requestBodySize,
-        R"({"error": "Request body size exceeds the allowed size ()" +
+        "Request body size exceeds the allowed size (" +
             currentLimit.asString() +
-            R"(). Send a smaller request or set the allowed size via the "request-body-limit" run-time parameter."})",
-        ResponseMetadata(status::payload_too_large, "application/json"));
+            "), send a smaller request or set the allowed size via the runtime "
+            "parameter `request-body-limit`",
+        ResponseMetadata(status::payload_too_large, "text/plain"));
   };
   auto expectRequestSucceeds =
       [&expectRequestHelper,
