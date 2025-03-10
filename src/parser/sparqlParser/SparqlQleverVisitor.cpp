@@ -225,6 +225,8 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
 
+  query.postQueryValuesClause_ = visit(ctx->valuesClause());
+
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
