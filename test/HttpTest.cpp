@@ -316,9 +316,10 @@ TEST(HttpServer, RequestBodySizeLimit) {
         AD_FIELD(HttpOrHttpsResponse, status_, testing::Eq(status)),
         AD_FIELD(HttpOrHttpsResponse, contentType_, testing::Eq(content_type)));
   };
-  auto expect_ = [&httpServer](const ad_utility::MemorySize& requestBodySize,
-                               const std::string& expectedBody,
-                               const auto& responseMatcher) {
+  auto expectRequestHelper = [&httpServer](
+                                 const ad_utility::MemorySize& requestBodySize,
+                                 const std::string& expectedBody,
+                                 const auto& responseMatcher) {
     ad_utility::SharedCancellationHandle handle =
         std::make_shared<ad_utility::CancellationHandle<>>();
 
@@ -333,7 +334,7 @@ TEST(HttpServer, RequestBodySizeLimit) {
     EXPECT_THAT(toString(std::move(response.body_)), expectedBody);
   };
 
-  auto expectRequestFails = [&ResponseMetadata, &expect_](
+  auto expectRequestFails = [&ResponseMetadata, &expectRequestHelper](
                                 const ad_utility::MemorySize& requestBodySize) {
     const ad_utility::MemorySize currentLimit =
         RuntimeParameters().get<"request-body-limit">();
@@ -341,26 +342,27 @@ TEST(HttpServer, RequestBodySizeLimit) {
     // stream when going over the limit. For small requests we get the response
     // normally. We would need the HttpClient to return the response even
     // if it couldn't send the request fully in that case.
-    expect_(
+    expectRequestHelper(
         requestBodySize,
         R"({"error": "Request body size exceeds the allowed size ()" +
             currentLimit.asString() +
             R"(). Send a smaller request or set the allowed size via the "request-body-limit" run-time parameter."})",
         ResponseMetadata(status::payload_too_large, "application/json"));
   };
-  auto expectRequest = [&expect_, &ResponseMetadata](
-                           const ad_utility::MemorySize requestBodySize) {
-    expect_(requestBodySize, "POST\ntarget",
-            ResponseMetadata(status::ok, "text/plain"));
-  };
+  auto expectRequestSucceeds =
+      [&expectRequestHelper,
+       &ResponseMetadata](const ad_utility::MemorySize requestBodySize) {
+        expectRequestHelper(requestBodySize, "POST\ntarget",
+                            ResponseMetadata(status::ok, "text/plain"));
+      };
   constexpr auto testingRequestBodyLimit = 50_kB;
 
   // Set a smaller limit for testing. The default of 100 MB is quite large.
   RuntimeParameters().set("request-body-limit", 50_kB .asString());
   // Requests with bodies smaller than the request body limit are processed.
-  expectRequest(3_B);
+  expectRequestSucceeds(3_B);
   // Exactly the limit is allowed.
-  expectRequest(testingRequestBodyLimit);
+  expectRequestSucceeds(testingRequestBodyLimit);
   // Larger than the limit is forbidden.
   expectRequestFails(testingRequestBodyLimit + 1_B);
 
@@ -369,11 +371,11 @@ TEST(HttpServer, RequestBodySizeLimit) {
   expectRequestFails(3_B);
   // Only the request body size counts. The empty body is allowed even if the
   // body is limited to 1 byte.
-  expectRequest(0_B);
+  expectRequestSucceeds(0_B);
 
   // Disable the request body limit, by setting it to 0.
   RuntimeParameters().set("request-body-limit", 0_B .asString());
   // Arbitrarily large requests are now allowed.
-  expectRequest(10_kB);
-  expectRequest(5_MB);
+  expectRequestSucceeds(10_kB);
+  expectRequestSucceeds(5_MB);
 }
