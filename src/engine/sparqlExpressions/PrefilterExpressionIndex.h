@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
@@ -92,9 +92,10 @@ class PrefilterExpression {
   // The flag value shouldn't be changed in general, because `evaluate()` only
   // removes the respective block if it is conditionally (inconsistent columns)
   // necessary.
-  std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn,
-                                      bool stripIncompleteBlocks = true) const;
+  std::vector<BlockMetadata> evaluate(
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks = true,
+      const bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -119,10 +120,12 @@ class PrefilterExpression {
   // is violated, the function performing the checks will throw a
   // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const;
 
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const = 0;
 };
 
 //______________________________________________________________________________
@@ -157,8 +160,8 @@ class RelationalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -187,8 +190,36 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
+};
+
+//______________________________________________________________________________
+// Values to differentiate `PrefilterExpression` for the respective `isDatatype`
+// SPARQL expressions. Supported by the following prefilter
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+
+//______________________________________________________________________________
+// The specialized `PrefilterExpression` class that actually applies the
+// pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
+template <IsDatatype Datatype>
+class IsDatatypeExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+
+ public:
+  explicit IsDatatypeExpression(bool isNegated = false)
+      : isNegated_(isNegated){};
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -212,8 +243,8 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      const bool addMixedDatatypeBlocks) const override;
 };
 
 //______________________________________________________________________________
@@ -230,6 +261,17 @@ using GreaterEqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GE>;
 using GreaterThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GT>;
+
+//______________________________________________________________________________
+// Define convenient names for the templated `IsDatatypeExpression`s.
+using IsIriExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::IRI>;
+using IsBlankExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::BLANK>;
+using IsLiteralExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::LITERAL>;
+using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::NUMERIC>;
 
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.
