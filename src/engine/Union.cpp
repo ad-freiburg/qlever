@@ -66,6 +66,8 @@ Union::Union(QueryExecutionContext* qec,
 
     // Swap children to get cheaper computation
     if (_columnOrigins.at(targetOrder_.at(0)).at(1) == NO_COLUMN) {
+      // Make sure variables are computed before swapping.
+      (void)getExternallyVisibleVariableColumns();
       std::swap(_subtrees[0], _subtrees[1]);
       ql::ranges::for_each(_columnOrigins,
                            [](auto& el) { std::swap(el[0], el[1]); });
