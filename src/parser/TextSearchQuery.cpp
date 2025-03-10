@@ -9,46 +9,6 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
-std::ostream& operator<<(std::ostream& os,
-                         const TextIndexScanForEntityConfiguration& conf) {
-  // This is due to SonarQube not accepting nested ternary operators
-  std::string varOrFixedOut;
-  if (!conf.varOrFixed_.has_value()) {
-    varOrFixedOut = "not set";
-  } else {
-    if (conf.varOrFixed_.value().hasFixedEntity()) {
-      varOrFixedOut =
-          std::get<FixedEntity>(conf.varOrFixed_.value().entity_).first;
-    } else {
-      varOrFixedOut =
-          std::get<Variable>(conf.varOrFixed_.value().entity_).name();
-    }
-  }
-  os << "varToBindText_: " << conf.varToBindText_.name() << "; entity_: "
-     << (std::holds_alternative<Variable>(conf.entity_)
-             ? std::get<Variable>(conf.entity_).name()
-             : std::get<std::string>(conf.entity_))
-     << "; word_: " << conf.word_ << "scoreVar_: "
-     << (conf.scoreVar_.has_value() ? conf.scoreVar_.value().name() : "not set")
-     << "; variableColumns_: "
-     << (conf.variableColumns_.has_value() ? "is set" : "not set")
-     << "; varOrFixed_: " << varOrFixedOut;
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os,
-                         const TextIndexScanForWordConfiguration& conf) {
-  os << "varToBindText_: " << conf.varToBindText_.name()
-     << "; word_: " << conf.word_ << "; matchVar_: "
-     << (conf.matchVar_.has_value() ? conf.matchVar_.value().name() : "not set")
-     << "; scoreVar_: "
-     << (conf.scoreVar_.has_value() ? conf.scoreVar_.value().name() : "not set")
-     << "; isPrefix_: " << (conf.isPrefix_ ? "true" : "false")
-     << "; variableColumns_: "
-     << (conf.variableColumns_.has_value() ? "is set" : "not set");
-  return os;
-}
-
 std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
     const QueryExecutionContext* qec,
     std::variant<Variable, std::string> entity) {
