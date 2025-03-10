@@ -24,10 +24,10 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 NetworkFunctions networkFunctions)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
-      getResultFunction_{std::move(getResultFunction)} {}
+      networkFunctions_{std::move(networkFunctions)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -110,7 +110,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
+    // If the `SILENT` keyword is set in the service clause, catch the error and
     // return a neutral Element.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
@@ -125,6 +125,17 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
+  // Receive updates about the RuntimeInformation from the service endpoint.
+  // Note: Regular SPARQL endpoints do not support RTI retrieval using
+  // a websocket connection, this works for QLever endpoints only.
+  const std::string queryId = ad_utility::UuidGenerator()();
+  const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
+  auto webSocketClient_ = networkFunctions_.getRuntimeInfoClient_(
+      serviceUrl, wsTarget, [this](const std::string& msg) {
+        childRuntimeInformation_ =
+            std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+      });
+
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
@@ -138,10 +149,10 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  HttpOrHttpsResponse response = getResultFunction_(
+  HttpOrHttpsResponse response = networkFunctions_.getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      "application/sparql-results+json", {{"Query-Id"s, queryId}});
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;
@@ -528,11 +539,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   const auto& [service, sibling] = [&]() {
-    if (a) {
-      return std::tie(a, right);
-    } else {
-      AD_CORRECTNESS_CHECK(b);
+    if (b) {
       return std::tie(b, left);
+    } else {
+      AD_CORRECTNESS_CHECK(a);
+      return std::tie(a, right);
     }
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
@@ -625,5 +636,5 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Service::cloneImpl() const {
   return std::make_unique<Service>(_executionContext, parsedServiceClause_,
-                                   getResultFunction_);
+                                   networkFunctions_);
 }

@@ -11,6 +11,7 @@
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
+#include "util/http/websocket/WebSocketClient.h"
 
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
 // service IRI, gets the result as JSON, parses it, and writes it into a result
@@ -32,10 +33,18 @@ class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
   using GetResultFunction = std::function<HttpOrHttpsResponse(
-      const ad_utility::httpUtils::Url&,
-      ad_utility::SharedCancellationHandle handle,
+      const ad_utility::httpUtils::Url&, ad_utility::SharedCancellationHandle,
       const boost::beast::http::verb&, std::string_view, std::string_view,
-      std::string_view)>;
+      std::string_view,
+      const std::vector<std::pair<std::string, std::string>>&)>;
+
+  // The type of the function used to obtain the RuntimeInformation.
+  using WebSocketClientVariant = std::variant<
+      std::unique_ptr<ad_utility::websocket::HttpWebSocketClient>,
+      std::unique_ptr<ad_utility::websocket::HttpsWebSocketClient>>;
+  using GetRuntimeInfoClient = std::function<WebSocketClientVariant(
+      const ad_utility::httpUtils::Url&, const std::string& target,
+      std::function<void(const std::string&)>)>;
 
   // Information on a Sibling operation.
   struct SiblingInfo {
@@ -44,15 +53,24 @@ class Service : public Operation {
     std::string cacheKey_;
   };
 
+  struct NetworkFunctions {
+    GetResultFunction getResultFunction_;
+    GetRuntimeInfoClient getRuntimeInfoClient_;
+  };
+
  private:
   // The parsed SERVICE clause.
   parsedQuery::Service parsedServiceClause_;
 
-  // The function used to obtain the result from the remote endpoint.
-  GetResultFunction getResultFunction_;
+  // The functions used to obtain the result and runtime information from the
+  // remote endpoint.
+  NetworkFunctions networkFunctions_;
 
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
+
+  // RuntimeInformation of the service-query computation on the endpoint.
+  std::shared_ptr<RuntimeInformation> childRuntimeInformation_;
 
  public:
   // Construct from parsed Service clause.
@@ -62,7 +80,10 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest);
+          NetworkFunctions networkFunctions = {
+              .getResultFunction_ = sendHttpOrHttpsRequest,
+              .getRuntimeInfoClient_ =
+                  ad_utility::websocket::getRuntimeInfoClient});
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -82,6 +103,14 @@ class Service : public Operation {
 
   // A SERVICE clause has no children.
   vector<QueryExecutionTree*> getChildren() override { return {}; }
+
+  absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
+  getRuntimeInfoChildren() final {
+    if (childRuntimeInformation_) {
+      return {childRuntimeInformation_};
+    }
+    return {};
+  }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(
