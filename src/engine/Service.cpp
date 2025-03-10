@@ -539,11 +539,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   const auto& [service, sibling] = [&]() {
-    if (a) {
-      return std::tie(a, right);
-    } else {
-      AD_CORRECTNESS_CHECK(b);
+    if (b) {
       return std::tie(b, left);
+    } else {
+      AD_CORRECTNESS_CHECK(a);
+      return std::tie(a, right);
     }
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);

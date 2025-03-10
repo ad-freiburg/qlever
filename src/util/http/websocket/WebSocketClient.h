@@ -31,10 +31,8 @@ class WebSocketClientImpl {
   using MessageHandler = std::function<void(const std::string&)>;
 
  public:
-  // Constructor with the endpoints url and additional path for the websocket
-  // connection.
-  WebSocketClientImpl(const ad_utility::httpUtils::Url& url,
-                      const std::string& websocketPath);
+  WebSocketClientImpl(std::string_view hostname, std::string_view port,
+                      std::string_view target);
 
   // Destructor gracefully closes the connection.
   ~WebSocketClientImpl() { close(); }
@@ -83,14 +81,16 @@ class WebSocketClientImpl {
   // Buffer for incoming messages.
   beast::flat_buffer buffer_;
 
-  // Url (hostname and port) of the endpoint.
-  ad_utility::httpUtils::Url url_;
-
-  // The actual target basepath + websocketpath (the one in `url_` is obsolete)
+  // Url of the endpoint.
+  std::string host_;
+  std::string port_;
   std::string target_;
 
   // Handler function to handle received messages in `readMessages()`.
   MessageHandler msgHandler_;
+
+  FRIEND_TEST(WebSocketClient, HttpConnection);
+  FRIEND_TEST(WebSocketClient, ReadMessages);
 };
 
 using HttpWebSocketClient = WebSocketClientImpl<tcp::socket>;
@@ -105,4 +105,8 @@ using WebSocketVariant = std::variant<std::unique_ptr<HttpWebSocketClient>,
 WebSocketVariant getRuntimeInfoClient(
     const ad_utility::httpUtils::Url& url, const std::string& target,
     const std::function<void(const std::string&)>& msgHandler);
+
+// Concatenates two url paths, expects both of them to start with a '/'.
+std::string concatUrlPaths(const std::string& a, const std::string& b);
+
 }  // namespace ad_utility::websocket

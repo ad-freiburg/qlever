@@ -458,3 +458,5 @@ addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 addLinkAndDiscoverTest(SPARQLProtocolTest engine)
 
 addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+addLinkAndDiscoverTest(WebSocketClientTest http)

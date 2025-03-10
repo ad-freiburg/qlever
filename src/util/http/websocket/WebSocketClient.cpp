@@ -10,20 +10,24 @@
 #include "util/TypeIdentity.h"
 
 namespace ad_utility::websocket {
-// ____________________________________________________________________________
-template <>
-HttpWebSocketClient::WebSocketClientImpl(const ad_utility::httpUtils::Url& url,
-                                         const std::string& webSocketPath)
-    : ioContext_(),
-      resolver_(ioContext_),
-      stream_(ioContext_),
-      url_(url),
-      target_(concatUrlPaths(url.target(), webSocketPath)) {}
 
 // ____________________________________________________________________________
 template <>
-HttpsWebSocketClient::WebSocketClientImpl(const ad_utility::httpUtils::Url& url,
-                                          const std::string& webSocketPath)
+HttpWebSocketClient::WebSocketClientImpl(std::string_view hostname,
+                                         std::string_view port,
+                                         std::string_view target)
+    : ioContext_(),
+      resolver_(ioContext_),
+      stream_(ioContext_),
+      host_(hostname),
+      port_(port),
+      target_(target) {}
+
+// ____________________________________________________________________________
+template <>
+HttpsWebSocketClient::WebSocketClientImpl(std::string_view hostname,
+                                          std::string_view port,
+                                          std::string_view target)
     : ioContext_(),
       resolver_(ioContext_),
       sslContext_([]() {
@@ -32,8 +36,9 @@ HttpsWebSocketClient::WebSocketClientImpl(const ad_utility::httpUtils::Url& url,
         return ctx;
       }()),
       stream_(ioContext_, sslContext_.value()),
-      url_(url),
-      target_(concatUrlPaths(url.target(), webSocketPath)) {}
+      host_(hostname),
+      port_(port),
+      target_(target) {}
 
 // ____________________________________________________________________________
 template <typename StreamType>
@@ -53,15 +58,18 @@ void WebSocketClientImpl<StreamType>::close() {
           }
           ioContext_.stop();
         });
+  } else {
+    ioContext_.stop();
   }
   if (ioThread_.joinable()) ioThread_.join();
+  AD_CONTRACT_CHECK(ioContext_.stopped());
 }
 
 // ____________________________________________________________________________
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::asyncResolve() {
   resolver_.async_resolve(
-      url_.host(), url_.port(),
+      host_, port_,
       [this](beast::error_code ec, tcp::resolver::results_type results) {
         if (ec) {
           LOG(ERROR) << "WebSocketClient: " << ec.message() << "\n";
@@ -89,9 +97,10 @@ void WebSocketClientImpl<StreamType>::asyncConnect(
       getLowestLayer(), results, [this](beast::error_code ec, tcp::endpoint) {
         if (ec) {
           LOG(ERROR) << "WebSocketClient: " << ec.message() << '\n';
+          return;
         }
-        LOG(INFO) << "WebSocketClient connected to " << url_.host() << ":"
-                  << url_.port() << '\n';
+        LOG(INFO) << "WebSocketClient connected to " << host_ << ":" << port_
+                  << '\n';
         if constexpr (isSSL) {
           asyncSSLHandshake();
         } else {
@@ -107,7 +116,7 @@ std::enable_if_t<std::is_same_v<T, beast::ssl_stream<tcp::socket>>, void>
 WebSocketClientImpl<StreamType>::asyncSSLHandshake() {
   // Set SNI Hostname (many hosts need this to handshake successfully)
   if (!SSL_set_tlsext_host_name(stream_.next_layer().native_handle(),
-                                url_.host().c_str()))
+                                host_.c_str()))
     throw beast::system_error(
         beast::error_code(static_cast<int>(::ERR_get_error()),
                           net::error::get_ssl_category()),
@@ -127,8 +136,7 @@ WebSocketClientImpl<StreamType>::asyncSSLHandshake() {
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::asyncWebsocketHandshake() {
   stream_.async_handshake(
-      absl::StrCat(url_.host(), ":", url_.port()), target_,
-      [this](beast::error_code ec) {
+      absl::StrCat(host_, ":", port_), target_, [this](beast::error_code ec) {
         if (ec) {
           LOG(ERROR) << "WebSocket handshake error: " << ec.message() << '\n';
           return;
@@ -143,9 +151,8 @@ void WebSocketClientImpl<StreamType>::asyncWebsocketHandshake() {
 // ____________________________________________________________________________
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::readMessages() {
-  AD_CONTRACT_CHECK(stream_.is_open());
   auto onRead = [this](beast::error_code ec, std::size_t bytes_transferred) {
-    if (ec == websocket::error::closed) {
+    if (ec == websocket::error::closed || ec == ssl::error::stream_truncated) {
       return;
     }
     if (ec) {
@@ -168,12 +175,20 @@ template class WebSocketClientImpl<tcp::socket>;
 template class WebSocketClientImpl<beast::ssl_stream<tcp::socket>>;
 
 // ____________________________________________________________________________
+std::string concatUrlPaths(const std::string& a, const std::string& b) {
+  AD_CONTRACT_CHECK(!a.empty() && !b.empty() && a.at(0) == '/' &&
+                    b.at(0) == '/');
+  return (a.back() == '/' ? a.substr(0, a.size() - 1) : a) + b;
+}
+
+// ____________________________________________________________________________
 WebSocketVariant getRuntimeInfoClient(
     const ad_utility::httpUtils::Url& url, const std::string& webSocketPath,
     const std::function<void(const std::string&)>& msgHandler) {
   using namespace ad_utility::use_type_identity;
   auto getClient = [&]<typename T>(TI<T>) {
-    WebSocketVariant c = std::make_unique<T>(url, webSocketPath);
+    WebSocketVariant c = std::make_unique<T>(
+        url.host(), url.port(), concatUrlPaths(url.target(), webSocketPath));
     std::visit(
         [&](auto& client) {
           client->setMessageHandler(msgHandler);
