@@ -63,14 +63,6 @@ class WebSocketClientImpl {
   // Read incoming messages and handle them with the `msgHandler_`.
   void readMessages();
 
-  // Concatenates two url paths, expects both of them to start with a '/'.
-  static std::string concatUrlPaths(const std::string& a,
-                                    const std::string& b) {
-    AD_CONTRACT_CHECK(!a.empty() && !b.empty() && a.at(0) == '/' &&
-                      b.at(0) == '/');
-    return (a.back() == '/' ? a.substr(0, a.size() - 1) : a) + b;
-  }
-
   // Stream and related objects.
   net::io_context ioContext_;
   net::ip::tcp::resolver resolver_;

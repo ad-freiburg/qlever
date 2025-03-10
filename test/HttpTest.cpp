@@ -100,9 +100,9 @@ TEST(HttpServer, HttpTest) {
     {
       auto httpClient = std::make_unique<HttpClient>(
           "localhost", std::to_string(httpServer.getPort()));
-      auto response =
-          HttpClient::sendRequest(std::move(httpClient), verb::post,
-                                  "localhost", "target2", handle, "body2");
+      auto response = HttpClient::sendRequest(
+          std::move(httpClient), verb::post, "localhost", "target2", handle,
+          "body2", "text/plain", "text/plain", {{"custom", "type"}});
       ASSERT_EQ(response.status_, boost::beast::http::status::ok);
       ASSERT_EQ(response.contentType_, "text/plain");
       ASSERT_EQ(toString(std::move(response.body_)), "POST\ntarget2\nbody2");

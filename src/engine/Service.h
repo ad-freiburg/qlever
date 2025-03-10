@@ -176,7 +176,10 @@ class Service : public Operation {
       const std::vector<std::string> vars,
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
+  void handleChildRuntimeInfoUpdate(const std::string& msg);
+
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, ChildRuntimeInformation);
 };

@@ -130,11 +130,10 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // a websocket connection, this works for QLever endpoints only.
   const std::string queryId = ad_utility::UuidGenerator()();
   const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
-  auto webSocketClient_ = networkFunctions_.getRuntimeInfoClient_(
-      serviceUrl, wsTarget, [this](const std::string& msg) {
-        childRuntimeInformation_ =
-            std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
-      });
+  auto webSocketClient = networkFunctions_.getRuntimeInfoClient_(
+      serviceUrl, wsTarget,
+      std::bind(&Service::handleChildRuntimeInfoUpdate, this,
+                std::placeholders::_1));
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
@@ -637,4 +636,13 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 std::unique_ptr<Operation> Service::cloneImpl() const {
   return std::make_unique<Service>(_executionContext, parsedServiceClause_,
                                    networkFunctions_);
+}
+
+// _____________________________________________________________________________
+void Service::handleChildRuntimeInfoUpdate(const std::string& msg) {
+  try {
+    childRuntimeInformation_ =
+        std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+  } catch (const nlohmann::json::parse_error&) {
+  }
 }

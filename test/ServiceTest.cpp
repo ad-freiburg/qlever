@@ -844,3 +844,35 @@ TEST_F(ServiceTest, clone) {
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, ChildRuntimeInformation) {
+  Service service{testQec,
+                  parsedQuery::Service{{Variable{"?x"}, Variable{"?y"}},
+                                       TripleComponent::Iri::fromIriref(
+                                           "<http://localhorst/api>"),
+                                       "PREFIX doof: <http://doof.org>",
+                                       "{ }",
+                                       true},
+                  {}};
+
+  // 0. Check overridden `getRuntimeInfoChildren()` function.
+  auto& childRTI = service.childRuntimeInformation_;
+  EXPECT_EQ(childRTI.get(), nullptr);
+  EXPECT_TRUE(service.getRuntimeInfoChildren().empty());
+
+  childRTI = std::make_shared<RuntimeInformation>();
+  childRTI->totalTime_ = 3ms;
+
+  auto serviceRTI = service.getRuntimeInfoPointer();
+  serviceRTI->children_.push_back(childRTI);
+
+  EXPECT_EQ(service.getRuntimeInfoChildren().size(), 1);
+  EXPECT_EQ(service.getRuntimeInfoChildren().at(0)->totalTime_,
+            childRTI->totalTime_);
+
+  // 1. Handle update of the `childRuntimeInformation_`.
+  EXPECT_NO_THROW(service.handleChildRuntimeInfoUpdate("invalid-json"));
+  service.handleChildRuntimeInfoUpdate(R"({"description": "child"})");
+  EXPECT_EQ(service.childRuntimeInformation_->descriptor_, "child");
+}

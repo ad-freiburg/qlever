@@ -15,17 +15,23 @@
 namespace ad_utility::websocket {
 // _____________________________________________________________________________
 TEST(WebSocketClient, HttpConnection) {
-  {
-    HttpWebSocketClient w("http://invalid.hostname", "443", "/");
+  auto isConnected = []<typename T>(const T& w) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return w.stream_.is_open() && !w.ioContext_.stopped();
+  };
 
-    // 0. Close without established connection.
+  // 0. Close without established connection.
+  {
+    HttpWebSocketClient w("localhost", "1", "/");
     EXPECT_NO_THROW(w.close());
     EXPECT_NO_THROW(w.readMessages());
+  }
 
-    // 1. Can't resolve hostname
+  // 1. Can't resolve hostname
+  {
+    HttpWebSocketClient w("invalid.hostname", "9999", "/");
     w.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    EXPECT_FALSE(w.stream_.is_open());
+    EXPECT_FALSE(isConnected(w));
   }
 
   auto httpServer =
@@ -34,11 +40,15 @@ TEST(WebSocketClient, HttpConnection) {
 
   // 2. Connection failed (server not running)
   {
-    HttpWebSocketClient w("localhost", std::to_string(httpServer.getPort()),
-                          "/");
-    w.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    EXPECT_FALSE(w.stream_.is_open());
+    auto check = [&](std::string_view s) {
+      auto w = getRuntimeInfoClient(
+          ad_utility::httpUtils::Url(s), "/",
+          []([[maybe_unused]] const std::string& _) { return _; });
+
+      std::visit([&](auto& client) { EXPECT_FALSE(isConnected(*client)); }, w);
+    };
+    check("http://localhost:" + std::to_string(httpServer.getPort()) + "/");
+    check("https://localhost:" + std::to_string(httpServer.getPort()) + "/");
   }
 
   httpServer.runInOwnThread();
@@ -48,8 +58,7 @@ TEST(WebSocketClient, HttpConnection) {
     HttpWebSocketClient w("localhost", std::to_string(httpServer.getPort()),
                           "/wrong-path");
     w.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    EXPECT_FALSE(w.stream_.is_open());
+    EXPECT_FALSE(isConnected(w));
   }
 
   // 4. WebSocket handshake worked
@@ -57,13 +66,10 @@ TEST(WebSocketClient, HttpConnection) {
     HttpWebSocketClient w("localhost", std::to_string(httpServer.getPort()),
                           absl::StrCat(WEBSOCKET_PATH, "some-id"));
     w.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    EXPECT_TRUE(w.stream_.is_open());
-    EXPECT_TRUE(w.ioThread_.joinable());
+    EXPECT_TRUE(isConnected(w));
 
     w.close();
-    EXPECT_FALSE(w.stream_.is_open());
-    EXPECT_FALSE(w.ioThread_.joinable());
+    EXPECT_FALSE(isConnected(w));
   }
 
   httpServer.shutDown();
