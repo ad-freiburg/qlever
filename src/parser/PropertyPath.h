@@ -19,7 +19,8 @@ class PropertyPath {
     IRI,
     ZERO_OR_MORE,
     ONE_OR_MORE,
-    ZERO_OR_ONE
+    ZERO_OR_ONE,
+    NEGATED
   };
 
   PropertyPath() : operation_(Operation::IRI) {}
@@ -91,6 +92,10 @@ class PropertyPath {
 
   static PropertyPath makeZeroOrOne(PropertyPath child) {
     return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
+  }
+
+  static PropertyPath makeNegated(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::NEGATED);
   }
 
   bool operator==(const PropertyPath& other) const = default;

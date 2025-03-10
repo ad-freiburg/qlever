@@ -368,11 +368,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
-  [[noreturn]] static PropertyPath visit(
-      const Parser::PathNegatedPropertySetContext*);
+  PropertyPath visit(Parser::PathNegatedPropertySetContext*);
 
-  [[noreturn]] static PropertyPath visit(
-      Parser::PathOneInPropertySetContext* ctx);
+  PropertyPath visit(Parser::PathOneInPropertySetContext* ctx);
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.

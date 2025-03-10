@@ -858,6 +858,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       return seedFromAlternative(left, path, right);
     case PropertyPath::Operation::INVERSE:
       return seedFromInverse(left, path, right);
+    case PropertyPath::Operation::NEGATED:
+      return seedFromNegated(left, path, right);
     case PropertyPath::Operation::IRI:
       return seedFromIri(left, path, right);
     case PropertyPath::Operation::SEQUENCE:
@@ -950,6 +952,42 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return seedFromPropertyPath(right, path.children_[0], left);
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
+  Variable forwardVar = generateUniqueVarName();
+  Variable inverseVar = generateUniqueVarName();
+  ParsedQuery::GraphPattern forwardPattern =
+      seedFromIri(left, PropertyPath::fromVariable(forwardVar), right);
+  ParsedQuery::GraphPattern inversePattern =
+      seedFromIri(right, PropertyPath::fromVariable(inverseVar), left);
+  auto makeFilter = [](const PropertyPath& unwrapped,
+                       const Variable& variable) {
+    using namespace sparqlExpression;
+    return SparqlFilter{
+        {std::make_shared<NotEqualExpression>(NotEqualExpression::Children{
+             std::make_unique<IriExpression>(
+                 TripleComponent::Iri::fromStringRepresentation(
+                     unwrapped.iri_)),
+             std::make_unique<VariableExpression>(variable)}),
+         absl::StrCat(unwrapped.iri_, " != ", variable.name())}};
+  };
+  using Operation = PropertyPath::Operation;
+  for (const auto& child : path.children_) {
+    if (child.operation_ == Operation::INVERSE) {
+      const auto& unwrapped = child.children_.at(0);
+      AD_CORRECTNESS_CHECK(unwrapped.operation_ == Operation::IRI);
+      inversePattern._filters.emplace_back(makeFilter(unwrapped, inverseVar));
+    } else {
+      AD_CORRECTNESS_CHECK(child.operation_ == Operation::IRI);
+      forwardPattern._filters.emplace_back(makeFilter(child, forwardVar));
+    }
+  }
+  return uniteGraphPatterns(
+      {std::move(forwardPattern), std::move(inversePattern)});
 }
 
 // _____________________________________________________________________________

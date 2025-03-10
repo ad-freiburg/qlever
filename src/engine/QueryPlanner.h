@@ -312,6 +312,11 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
+  // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
+  // `!<a>` and similar.
+  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
+                                            const PropertyPath& path,
+                                            const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right);
