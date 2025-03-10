@@ -9,15 +9,23 @@
 using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(std::string query) {
-  // The second argument is the `PrefixMap` for QLever's internal IRIs.
+ParsedQuery SparqlParser::parseQuery(
+    std::string operation, const std::vector<DatasetClause>& datasets) {
   using S = std::string;
+  std::optional<ParsedQuery::DatasetClauses> parsedDatasets = std::nullopt;
+  if (!datasets.empty()) {
+    parsedDatasets = parsedQuery::DatasetClauses::fromClauses(datasets);
+  }
+  // The second argument is the `PrefixMap` for QLever's internal IRIs.
+  // The third argument are the datasets from outside the query, which override
+  // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
-      std::move(query),
-      {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}}};
-  // Note: `AntlrParser::query` is a method of `AntlrParser` (which is an alias
-  // for `SparqlAutomaticParser`) that returns the `QueryContext*` for the whole
-  // query.
+      std::move(operation),
+      {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
+      std::move(parsedDatasets)};
+  // Note: `AntlrParser::queryOrUpdate` is a method of `AntlrParser` (which is
+  // an alias for `SparqlAutomaticParser`) that returns the
+  // `QueryOrUpdateContext*` for the whole query or update.
   auto resultOfParseAndRemainingText =
       p.parseTypesafe(&AntlrParser::queryOrUpdate);
   // The query rule ends with <EOF> so the parse always has to consume the whole
@@ -25,17 +33,4 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   // an earlier point.
   AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
-}
-
-// _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(
-    std::string operation, const std::vector<DatasetClause>& datasets) {
-  auto parsedOperation = parseQuery(std::move(operation));
-  // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-  // parameters overrides the dataset from the query itself.
-  if (!datasets.empty()) {
-    parsedOperation.datasetClauses_ =
-        parsedQuery::DatasetClauses::fromClauses(datasets);
-  }
-  return parsedOperation;
 }
