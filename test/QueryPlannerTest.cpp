@@ -749,6 +749,17 @@ TEST(QueryPlanner, TransitivePathUnbound) {
                         scan(internalVar(0), "<p>", internalVar(1))));
 }
 
+TEST(QueryPlanner, TransitivePathBound) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>{3,7} ?y }",
+      h::TransitivePath(left, right, 3, 7,
+                        scan(internalVar(0), "<p>", internalVar(1))));
+}
+
 TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
