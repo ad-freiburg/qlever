@@ -258,3 +258,8 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 
 // Websocket path for a specific query (/watch/query-id)
 constexpr inline std::string_view WEBSOCKET_PATH = "/watch/";
+
+// When operation results are returned as `application/qlever-results+json` the
+// Operation string is echoed. This operation string is truncated to ensure
+// performance.
+constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;

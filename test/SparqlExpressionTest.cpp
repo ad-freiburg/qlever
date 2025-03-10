@@ -1159,6 +1159,44 @@ TEST(SparqlExpression, testToNumericExpression) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testToDateOrDateTimeExpression) {
+  using namespace ad_utility::testing;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
+  auto parserDate = DateYearOrDuration::parseXsdDate;
+  auto parserDateTime = DateYearOrDuration::parseXsdDatetime;
+  auto parserDuration = DateYearOrDuration::parseXsdDayTimeDuration;
+  auto checkGetDate = testUnaryExpression<&makeConvertToDateExpression>;
+  auto checkGetDateTime = testUnaryExpression<&makeConvertToDateTimeExpression>;
+
+  checkGetDate(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", DateId(parserDate, "0000-01-01"),
+           DateId(parserDuration, "-PT5H"),
+           DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+           DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00")}),
+      Ids{U, U, U, U, U, U, U, DateId(parserDate, "-2025-02-20"),
+          DateId(parserDate, "2025-02-20"), U, DateId(parserDate, "0000-01-01"),
+          U, DateId(parserDate, "1900-12-13"),
+          DateId(parserDate, "2025-02-20")});
+  checkGetDateTime(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", "1900-12-13T03:12:00.33Z",
+           "-1900-12-13T03:12:00.33Z", "2025-02-20T17:12:00.01-05:00",
+           DateId(parserDateTime, "2025-02-20T17:12:00.01Z"),
+           DateId(parserDuration, "PT1H4M"), DateId(parserDate, "0000-01-01")}),
+      Ids{U, U, U, U, U, U, U, U, U, U,
+          DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "-1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01Z"), U,
+          DateId(parserDateTime, "0000-01-01T00:00:00.00")});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testToBooleanExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
@@ -1304,7 +1342,13 @@ TEST(SparqlExpression, concatExpression) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, ReplaceExpression) {
-  auto checkReplace = testNaryExpressionVec<&makeReplaceExpression>;
+  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
+                                           auto&& arg2) {
+    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
+                                 nullptr);
+  };
+  auto checkReplace = testNaryExpressionVec<makeReplaceExpressionThreeArgs>;
+  auto checkReplaceWithFlags = testNaryExpressionVec<&makeReplaceExpression>;
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),
@@ -1332,6 +1376,19 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
 
+  // Case-insensitive matching using the flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("i")}});
+  // Empty flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("")}});
+
   // Multiple matches within the same string
   checkReplace(
       IdOrLiteralOrIri{lit("wEeDEflE")},
@@ -1348,6 +1405,25 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
                  IdOrLiteralOrIri{lit("X")}});
+
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("i")}});
+
+  // Undefined flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("X")}, U});
+
+  using ::testing::HasSubstr;
+  // Invalid flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U},
+      std::tuple{idOrLitOrStringVec({"null"}), IdOrLiteralOrIri{lit("[n]")},
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("???")}});
+
   // Illegal replacement.
   checkReplace(
       IdOrLiteralOrIriVec{U, U, U, U, U, U},

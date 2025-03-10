@@ -1649,12 +1649,24 @@ TEST(SparqlParser, builtInCall) {
       "concat(?x, ?y, ?z)",
       matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
 
+  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
+                                           auto&& arg2) {
+    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
+                                 nullptr);
+  };
+
+  expectBuiltInCall("replace(?x, ?y, ?z)",
+                    matchNary(makeReplaceExpressionThreeArgs, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
   expectBuiltInCall(
-      "replace(?x, ?y, ?z)",
-      matchNary(&makeReplaceExpression, Var{"?x"}, Var{"?y"}, Var{"?z"}));
-  expectFails("replace(?x, ?y, ?z, \"i\")",
-              ::testing::AllOf(::testing::ContainsRegex("regex"),
-                               ::testing::ContainsRegex("flags")));
+      "replace(?x, ?y, ?z, \"imsu\")",
+      matchNaryWithChildrenMatchers(
+          makeReplaceExpressionThreeArgs, variableExpressionMatcher(Var{"?x"}),
+          matchNaryWithChildrenMatchers(
+              &makeMergeRegexPatternAndFlagsExpression,
+              variableExpressionMatcher(Var{"?y"}),
+              matchLiteralExpression(lit("imsu"))),
+          variableExpressionMatcher(Var{"?z"})));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
   expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
@@ -1862,6 +1874,10 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToDecimalExpression));
   expectFunctionCall(absl::StrCat(xsd, "boolean>(?x)"),
                      matchUnary(&makeConvertToBooleanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "date>(?x)"),
+                     matchUnary(&makeConvertToDateExpression));
+  expectFunctionCall(absl::StrCat(xsd, "dateTime>(?x)"),
+                     matchUnary(&makeConvertToDateTimeExpression));
 
   expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
                      matchUnary(&makeConvertToStringExpression));
@@ -1869,6 +1885,8 @@ TEST(SparqlParser, FunctionCall) {
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
   // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
