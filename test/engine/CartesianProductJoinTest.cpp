@@ -37,6 +37,11 @@ CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
     valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector(input), std::move(vars),
         useLimitInSuboperations));
+    // Make sure size estimates are increasing to ensure the order stays the
+    // same.
+    std::dynamic_pointer_cast<ValuesForTesting>(
+        valueOperations.back()->getRootOperation())
+        ->sizeEstimate() = i;
   }
   // Test that passing the same subtree in twice is illegal because it leads to
   // non-disjoint variable sets.
@@ -214,9 +219,9 @@ TEST(CartesianProductJoin, variableColumnMap) {
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, {0, AlwaysDefined}},
-      {Variable{"?y"}, {3, AlwaysDefined}},
-      {Variable{"?z"}, {5, PossiblyUndefined}}};
+      {Variable{"?x"}, {4, AlwaysDefined}},
+      {Variable{"?y"}, {1, AlwaysDefined}},
+      {Variable{"?z"}, {3, PossiblyUndefined}}};
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }
@@ -267,10 +272,17 @@ class CartesianProductJoinLazyTest
   static CartesianProductJoin makeJoin(std::vector<IdTable> tables) {
     AD_CONTRACT_CHECK(tables.size() >= 2);
     auto* qec = ad_utility::testing::getQec();
+    size_t counter = 0;
     CartesianProductJoin::Children children{};
     for (IdTable& table : std::span{tables}.subspan(0, tables.size() - 1)) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
+      // Make sure size estimates are increasing to ensure the order stays the
+      // same.
+      std::dynamic_pointer_cast<ValuesForTesting>(
+          children.back()->getRootOperation())
+          ->sizeEstimate() = counter;
+      counter++;
     }
     if (std::get<0>(GetParam()) == 0) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -281,6 +293,9 @@ class CartesianProductJoinLazyTest
           qec, splitIntoRandomSubtables(tables.back()),
           makeUniqueVariables(tables.back())));
     }
+    std::dynamic_pointer_cast<ValuesForTesting>(
+        children.back()->getRootOperation())
+        ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
     join.setLimit(LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
     return join;
@@ -645,4 +660,30 @@ TEST(CartesianProductJoin, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(join, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, childrenAreOrdered) {
+  auto* qec = getQec();
+  std::mt19937 rng{std::random_device{}()};
+  for (size_t i = 0; i < 100; i++) {
+    std::vector<std::shared_ptr<QueryExecutionTree>> children;
+    for (size_t j = 0; j < 10; j++) {
+      IdTable idTable{1, qec->getAllocator()};
+      idTable.resize(j);
+      ql::ranges::fill(idTable.getColumn(0), Id::makeUndefined());
+      children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, std::move(idTable),
+          std::vector<std::optional<Variable>>{{std::nullopt}}));
+    }
+    ql::ranges::shuffle(children, rng);
+
+    CartesianProductJoin join{qec, std::move(children)};
+    std::vector<size_t> actualSizeEstimates;
+    for (QueryExecutionTree* child : join.getChildren()) {
+      actualSizeEstimates.push_back(child->getSizeEstimate());
+    }
+    EXPECT_THAT(actualSizeEstimates,
+                ::testing::ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+  }
 }
