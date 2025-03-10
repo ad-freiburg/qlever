@@ -27,6 +27,9 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 ProtoResult TextIndexScanForWord::computeResult(
     [[maybe_unused]] bool requestLaziness) {
+  std::ostringstream oss;
+  oss << config_;
+  runtimeInfo().addDetail("text-index-scan-for-word-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
       config_.word_, getExecutionContext()->getAllocator());
 
@@ -102,10 +105,8 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  std::ostringstream oss;
-  oss << config_;
-  return absl::StrCat("TextIndexScanForWord on ", config_.varToBindText_.name(),
-                      " With config: ", oss.str());
+  return absl::StrCat("TextIndexScanForWord on ",
+                      config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________

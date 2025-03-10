@@ -28,6 +28,9 @@ TextIndexScanForEntity::TextIndexScanForEntity(
 // _____________________________________________________________________________
 ProtoResult TextIndexScanForEntity::computeResult(
     [[maybe_unused]] bool requestLaziness) {
+  std::ostringstream oss;
+  oss << config_;
+  runtimeInfo().addDetail("text-index-scan-for-entity-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
       config_.word_, getExecutionContext()->getAllocator());
 
@@ -126,11 +129,8 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getDescriptor() const {
-  std::ostringstream oss;
-  oss << config_;
   return absl::StrCat("TextIndexScanForEntity on ",
-                      config_.varToBindText_.name(),
-                      " With config: ", oss.str());
+                      config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
