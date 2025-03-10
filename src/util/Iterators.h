@@ -414,10 +414,10 @@ class InputRangeTypeErased {
 // it.
 template <typename Range>
 ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
-  auto it = range.begin();
-  AD_CORRECTNESS_CHECK(it != range.end());
+  auto it = ql::ranges::begin(range);
+  AD_CORRECTNESS_CHECK(it != ql::ranges::end(range));
   ql::ranges::range_value_t<Range> t = std::move(*it);
-  AD_CORRECTNESS_CHECK(++it == range.end());
+  AD_CORRECTNESS_CHECK(++it == ql::ranges::end(range));
   return t;
 }
 }  // namespace ad_utility

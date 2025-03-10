@@ -379,19 +379,19 @@ Result::LazyResult Union::computeResultKeepOrder(
 
   return std::visit(
       [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
-       &applyPermutation](auto leftRange, auto rightRange) {
+       &applyPermutation](auto left, auto right) {
         return ad_utility::callFixedSize(
             trimmedTargetOrder.size(),
-            [this, requestLaziness, &result1, &result2, &leftRange, &rightRange,
+            [this, requestLaziness, &result1, &result2, &left, &right,
              &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
               constexpr size_t extent = COMPARATOR_WIDTH == 0
                                             ? std::dynamic_extent
                                             : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
-                                                  std::move(leftRange),
+                                                  std::move(left),
                                                   computePermutation<true>()};
               sortedUnion::IterationData rightData{std::move(result2),
-                                                   std::move(rightRange),
+                                                   std::move(right),
                                                    computePermutation<false>()};
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
