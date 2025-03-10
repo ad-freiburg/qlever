@@ -111,7 +111,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 9cd62b173a766be8a5e1bc9b446c877da24cdc91
+        GIT_TAG d32c975118130673aa437566552dde12ef98453a
 )
 
 ################################

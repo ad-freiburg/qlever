@@ -15,7 +15,7 @@
 #include "parser/data/Variable.h"
 
 // Selection of a SpatialJoin join type
-enum class SpatialJoinJoinType { INTERSECTS, CONTAINS, COVERS, CROSSES, TOUCHES, EQUALS, OVERLAPS };
+enum class SpatialJoinJoinType { INTERSECTS, CONTAINS, COVERS, CROSSES, TOUCHES, EQUALS, OVERLAPS, WITHIN_DIST };
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -31,6 +31,7 @@ struct MaxDistanceConfig {
 // Full spatial join on selected join type
 struct SJConfig {
   SpatialJoinJoinType joinType_;
+  std::optional<size_t> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin

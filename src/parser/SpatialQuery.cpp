@@ -48,7 +48,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       // a more precise error description
       throw SpatialSearchException(
           "The parameter <joinType> needs an IRI that selects the algorithm "
-          "to employ. Currently supported are <intersects>, <covers>, <contains>, <touches>, <crosses>, <overlaps>, <equals>");
+          "to employ. Currently supported are <intersects>, <covers>, <contains>, <touches>, <crosses>, <overlaps>, <equals>, <within-dist>");
     }
     auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
     if (type == "intersects") {
@@ -65,10 +65,12 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       joinType_ = SpatialJoinJoinType::OVERLAPS;
     } else if (type == "equals") {
       joinType_ = SpatialJoinJoinType::EQUALS;
+    } else if (type == "within-dist") {
+      joinType_ = SpatialJoinJoinType::WITHIN_DIST;
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter <joinType> does not refer to a "
-          "supported join type. Currently supported are <intersects>, <covers>, <contains>, <touches>, <crosses>, <overlaps>, <equals>");
+          "supported join type. Currently supported are <intersects>, <covers>, <contains>, <touches>, <crosses>, <overlaps>, <equals>, <within-dist>");
     }
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
@@ -176,7 +178,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Task specification
   SpatialJoinTask task;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    task = SJConfig{joinType};
+    task = SJConfig{joinType, maxDist_};
   } else if (maxResults_.has_value()) {
     task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
   } else {

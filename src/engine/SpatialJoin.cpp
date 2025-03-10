@@ -3,8 +3,6 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#include "engine/SpatialJoin.h"
-
 #include <absl/container/flat_hash_set.h>
 #include <absl/strings/charconv.h>
 
@@ -18,6 +16,7 @@
 #include <variant>
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
@@ -74,11 +73,7 @@ bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxDist() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
-		if constexpr (std::is_same_v<T, SJConfig>) {
-			return std::nullopt;
-		} else {
-			return config.maxDist_;
-	}
+    return config.maxDist_;
   };
   return std::visit(visitor, config_.task_);
 }
@@ -176,8 +171,8 @@ string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, SJConfig>) {
-      return absl::StrCat("Spatial Join ", left, " to ", right,
-                          " of type ", config.joinType_);
+      return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
+                          config.joinType_);
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -227,16 +222,11 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  if (!childLeft_ || !childRight_) {
-    return 1;  // dummy return, as the class does not have its children yet
-  }
-
-  size_t spatialJoinCostEst = [this]() {
-    auto n = childLeft_->getSizeEstimate();
-    auto m = childRight_->getSizeEstimate();
-
+  if (childLeft_ && childRight_) {
+    size_t inputEstimate =
+        childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
-      return n * m;
+      return inputEstimate * inputEstimate;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
@@ -250,14 +240,14 @@ size_t SpatialJoin::getCostEstimate() {
       // for each item do a lookup on the index for the right table in O(log m).
       // Together we have O(n log(m) + m log(m)), because in general we can't
       // draw conclusions about the relation between the sizes of n and m.
-      auto logm = static_cast<size_t>(std::log(static_cast<double>(m)));
+      auto n = childLeft_->getSizeEstimate();
+      auto m = childRight_->getSizeEstimate();
+      auto logm = static_cast<size_t>(
+          log(static_cast<double>(childRight_->getSizeEstimate())));
       return (n * logm) + (m * logm);
     }
-  }();
-
-  // The cost to compute the children needs to be taken into account.
-  return spatialJoinCostEst + childLeft_->getCostEstimate() +
-         childRight_->getCostEstimate();
+  }
+  return 1;  // dummy return, as the class does not have its children yet
 }
 
 // ____________________________________________________________________________
@@ -386,7 +376,6 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
-
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
@@ -400,7 +389,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults(), config_.joinType_};
+                                   getMaxDist(),      getMaxResults(),
+                                   config_.joinType_};
 }
 
 // ____________________________________________________________________________
