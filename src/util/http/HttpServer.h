@@ -305,7 +305,8 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
                   R"({"error": "Request body size exceeds the allowed size ()",
                   getRequestBodyLimit().asString(),
                   R"(). Send a smaller request or set the allowed size via the "request-body-limit" run-time parameter."})"),
-              http::status::payload_too_large, ad_utility::MediaType::json);
+              http::status::payload_too_large, ad_utility::MediaType::json,
+              std::nullopt, 11);
         } else {
           // This is the error "The socket was closed due to a timeout" or if
           // the client stream ended unexpectedly.

@@ -101,7 +101,7 @@ CPP_concept HttpRequest = detail::isHttpRequest<T>;
  */
 inline http::response<http::string_body> createHttpResponseFromString(
     std::string body, http::status status, MediaType mediaType,
-    std::optional<bool> keepAlive = std::nullopt, unsigned version = 11) {
+    std::optional<bool> keepAlive, unsigned version) {
   http::response<http::string_body> response{status, version};
   response.set(http::field::content_type, toString(mediaType));
   response.body() = std::move(body);
