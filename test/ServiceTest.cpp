@@ -733,6 +733,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
     service->siblingInfo_.reset();
+    service->precomputedResultBecauseSiblingOfService().reset();
     service2->precomputedResultBecauseSiblingOfService().reset();
     siblingOperation->precomputedResultBecauseSiblingOfService().reset();
     testQec->clearCacheUnpinnedOnly();
@@ -756,9 +757,10 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Right requested and two Service operations -> compute
   Service::precomputeSiblingResult(service, service2, true, false);
-  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_TRUE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(service->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(service2->siblingInfo_.has_value());
+  EXPECT_FALSE(
+      service2->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Right requested and it is a service -> sibling result is computed and
