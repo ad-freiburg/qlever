@@ -3258,3 +3258,17 @@ TEST(QueryPlanner, postQueryValuesClause) {
       h::CartesianProductJoin(h::NeutralElement(),
                               h::ValuesClause("VALUES (?x\t?y) { (1 2) }")));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
+  h::expect("SELECT * { OPTIONAL { ?a ?b ?c } }",
+            h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")));
+  h::expect("SELECT * { ?a ?b ?c . OPTIONAL { ?d ?e ?f } }",
+            h::CartesianProductJoin(
+                h::IndexScanFromStrings("?a", "?b", "?c"),
+                h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+  h::expect("SELECT * { OPTIONAL { ?a ?b ?c } . OPTIONAL { ?d ?e ?f } }",
+            h::CartesianProductJoin(
+                h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")),
+                h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+}

@@ -576,6 +576,12 @@ class QueryPlanner {
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
 
+    // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
+    // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
+    // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
+                                          const auto& variables);
+
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
     // braces. This leads to all of those clauses currently being an
