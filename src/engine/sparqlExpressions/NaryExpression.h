@@ -82,10 +82,12 @@ SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
-
+SparqlExpression::Ptr makeMergeRegexPatternAndFlagsExpression(
+    SparqlExpression::Ptr pattern, SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
                                             SparqlExpression::Ptr pattern,
-                                            SparqlExpression::Ptr replacement);
+                                            SparqlExpression::Ptr replacement,
+                                            SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeLangMatchesExpression(SparqlExpression::Ptr child1,

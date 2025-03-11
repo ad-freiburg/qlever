@@ -32,6 +32,8 @@ class QueryPlanner {
   std::optional<Variable> activeGraphVariable_;
 
  public:
+  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
 
@@ -330,17 +332,31 @@ class QueryPlanner {
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
 
-  std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
+  // Create `SubtreePlan`s that join `a` and `b` together. The columns are
+  // computed automatically.
+  std::vector<SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
       boost::optional<const TripleGraph&> tg) const;
+
+  // Create `SubtreePlan`s that join `a` and `b` together. The columns are
+  // configured by `jcs`.
+  std::vector<SubtreePlan> createJoinCandidates(const SubtreePlan& a,
+                                                const SubtreePlan& b,
+                                                const JoinColumns& jcs) const;
+
+  // Whenever a join is applied to a `Union`, add candidates that try applying
+  // join to the children of the union directly, which can be more efficient if
+  // one of the children has an optimized join, which can happen for
+  // `TransitivePath` for example.
+  std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
-  // path. Else returns `std::nullopt`
+  // path. Else returns `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithTransitivePath(
-      SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
@@ -348,12 +364,10 @@ class QueryPlanner {
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   static std::optional<SubtreePlan> createJoinWithPathSearch(
-      const SubtreePlan& a, const SubtreePlan& b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Helper that returns `true` for each of the subtree plans `a` and `b` iff
   // the subtree plan is a spatial join and it is not yet fully constructed
@@ -364,9 +378,9 @@ class QueryPlanner {
   // if one of the inputs is a spatial join which is compatible with the other
   // input, then add that other input to the spatial join as a child instead of
   // creating a normal join.
-  static std::optional<SubtreePlan> createSpatialJoin(
-      const SubtreePlan& a, const SubtreePlan& b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+  static std::optional<SubtreePlan> createSpatialJoin(const SubtreePlan& a,
+                                                      const SubtreePlan& b,
+                                                      const JoinColumns& jcs);
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
@@ -391,8 +405,7 @@ class QueryPlanner {
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
-  static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
-      const SubtreePlan& a, const SubtreePlan& b);
+  static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
   string getPruningKey(const SubtreePlan& plan,
                        const vector<ColumnIndex>& orderedOnColumns) const;
