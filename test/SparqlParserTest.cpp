@@ -1267,6 +1267,28 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
   }
+  // Verify the filter is not applied as a regular filter if it is used
+  // somewhere in a triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . ?a ?b ?c . FILTER (LANG(?a) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
 }
 
 // _____________________________________________________________________________
