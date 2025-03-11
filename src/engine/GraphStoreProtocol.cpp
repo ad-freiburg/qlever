@@ -75,5 +75,7 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   } else {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
-  return SparqlParser::parseQuery(query).front();
+  auto parsedQuery = SparqlParser::parseQuery(query);
+  AD_CORRECTNESS_CHECK(parsedQuery.size() == 1);
+  return std::move(parsedQuery[0]);
 }

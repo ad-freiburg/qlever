@@ -30,12 +30,14 @@ std::vector<ParsedQuery> SparqlParser::parseQuery(std::string query) {
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseQuery(
     std::string operation, const std::vector<DatasetClause>& datasets) {
-  auto parsedOperation = parseQuery(std::move(operation));
+  auto parsedOperations = parseQuery(std::move(operation));
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
   // parameters overrides the dataset from the query itself.
   if (!datasets.empty()) {
-    parsedOperation[0].datasetClauses_ =
-        parsedQuery::DatasetClauses::fromClauses(datasets);
+    auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(datasets);
+    for (auto& parsedOperation : parsedOperations) {
+      parsedOperation.datasetClauses_ = datasetClauses;
+    }
   }
-  return parsedOperation;
+  return parsedOperations;
 }
