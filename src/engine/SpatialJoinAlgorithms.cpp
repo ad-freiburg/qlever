@@ -446,13 +446,13 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
-    for (size_t i = 0; i < 1000; ++i) {
-      p.value() =
-          GeoPoint{p.value().getLat() + 0.01, p.value().getLng() + 0.01};
-      s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
-      auto res3 = s2query.FindClosestEdges(&s2target);
-      ql::ranges::move(res3, std::back_inserter(res));
-    }
+    // for (size_t i = 0; i < 1000; ++i) {
+    //   p.value() =
+    //       GeoPoint{p.value().getLat() + 0.01, p.value().getLng() + 0.01};
+    //   s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
+    //   auto res3 = s2query.FindClosestEdges(&s2target);
+    //   ql::ranges::move(res3, std::back_inserter(res));
+    // }
     t.stop();
     AD_LOG_DEBUG << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
@@ -472,12 +472,10 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     }
     t2.stop();
   }
-  /*
   spatialJoin_.value()->runtimeInfo().addDetail("time for s2 queries",
                                                 t.msecs().count());
   spatialJoin_.value()->runtimeInfo().addDetail("time for result writing",
                                                 t2.msecs().count());
-                                                */
 
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
