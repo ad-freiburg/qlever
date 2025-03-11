@@ -3203,20 +3203,20 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
 
   h::expectWithGivenBudgets(
       std::move(query),
-      h::Union(h::TransitivePath(
-                   left1, right1, 0, std::numeric_limits<size_t>::max(),
-                   h::IndexScanFromStrings("<Q11629>", "<P279>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::Sort(h::Union(
-                       h::TransitivePath(
+      h::Union(
+          h::TransitivePath(
+              left1, right1, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("<Q11629>", "<P279>",
+                                      "?_QLever_internal_variable_qp_0"),
+              h::Union(h::Sort(h::TransitivePath(
                            left2, right2, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_2", "<P279>",
                                "?_QLever_internal_variable_qp_4"),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_6", "<P279>",
-                               "?_QLever_internal_variable_qp_7")),
-                       h::TransitivePath(
+                               "?_QLever_internal_variable_qp_7"))),
+                       h::Sort(h::TransitivePath(
                            left2, right2, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_2", "<P279>",
@@ -3224,20 +3224,19 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_8", "<P31>",
                                "?_QLever_internal_variable_qp_9"))))),
-               h::TransitivePath(
-                   left1, right1, 0, std::numeric_limits<size_t>::max(),
-                   h::IndexScanFromStrings("<Q11629>", "<P279>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::Sort(h::Union(
-                       h::TransitivePath(
+          h::TransitivePath(
+              left1, right1, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("<Q11629>", "<P279>",
+                                      "?_QLever_internal_variable_qp_0"),
+              h::Union(h::Sort(h::TransitivePath(
                            left3, right3, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_11", "<P31>",
                                "?_QLever_internal_variable_qp_13"),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_15", "<P279>",
-                               "?_QLever_internal_variable_qp_16")),
-                       h::TransitivePath(
+                               "?_QLever_internal_variable_qp_16"))),
+                       h::Sort(h::TransitivePath(
                            left3, right3, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_11", "<P31>",
@@ -3246,6 +3245,18 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
                                "?_QLever_internal_variable_qp_17", "<P31>",
                                "?_QLever_internal_variable_qp_18")))))),
       qec, {4, 16, 64'000'000});
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, postQueryValuesClause) {
+  h::expect("SELECT ?s ?p1 ?o1 { ?s ?p1 ?o1 } VALUES ?p1 { <pred> }",
+            h::Join(h::IndexScanFromStrings("?s", "?p1", "?o1"),
+                    h::Sort(h::ValuesClause("VALUES (?p1) { (<pred>) }"))));
+  h::expect("SELECT * { } VALUES () { () }", h::NeutralElement());
+  h::expect(
+      "SELECT * { } VALUES (?x ?y) { (1 2) }",
+      h::CartesianProductJoin(h::NeutralElement(),
+                              h::ValuesClause("VALUES (?x\t?y) { (1 2) }")));
 }
 
 // _____________________________________________________________________________
@@ -3268,17 +3279,16 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
       "SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(
-              {0},
-              h::Sort(h::Union(
-                  h::IndexScanFromStrings("?internal_property_path_variable_x",
-                                          "?internal_property_path_variable_y",
-                                          "?internal_property_path_variable_z",
-                                          {}, {{"<abc>"}}),
-                  h::IndexScanFromStrings("?internal_property_path_variable_z",
-                                          "?internal_property_path_variable_y",
-                                          "?internal_property_path_variable_x",
-                                          {}, {{"<abc>"}})))),
+          h::Distinct({0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z",
+                                        {}, {{"<abc>"}}),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x",
+                                        {}, {{"<abc>"}}))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
@@ -3287,17 +3297,16 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
       "SELECT * FROM <abc> WHERE { ?x a* ?y } ",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(
-              {0},
-              h::Sort(h::Union(
-                  h::IndexScanFromStrings("?internal_property_path_variable_x",
-                                          "?internal_property_path_variable_y",
-                                          "?internal_property_path_variable_z",
-                                          {}, {{"<abc>"}}),
-                  h::IndexScanFromStrings("?internal_property_path_variable_z",
-                                          "?internal_property_path_variable_y",
-                                          "?internal_property_path_variable_x",
-                                          {}, {{"<abc>"}})))),
+          h::Distinct({0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z",
+                                        {}, {{"<abc>"}}),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x",
+                                        {}, {{"<abc>"}}))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",

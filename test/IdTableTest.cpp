@@ -369,6 +369,45 @@ TEST(IdTable, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
+// _____________________________________________________________________________
+TEST(IdTable, insertAtEndWithPermutationAndLimit) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    Table init{4, std::move(additionalArgs.at(0))...};
+    init.push_back({make(7), make(2), make(4), make(1)});
+    init.push_back({make(0), make(22), make(1), make(4)});
+
+    Table t1{3, std::move(additionalArgs.at(1))...};
+    t1.push_back({make(1), make(0), make(6)});
+    t1.push_back({make(3), make(1), make(8)});
+    t1.push_back({make(0), make(6), make(8)});
+    t1.push_back({make(9), make(2), make(6)});
+
+    Table t2 = clone(init, std::move(additionalArgs.at(2))...);
+    std::vector<ColumnIndex> permutation{2, 1, 0, 3};
+    // Test inserting at the end
+    t2.insertAtEnd(t1, 1, 3, permutation, make(1337));
+    for (size_t i = 0; i < init.size(); i++) {
+      ASSERT_EQ(init[i], t2[i]) << i;
+    }
+    ASSERT_EQ(t2.size(), init.size() + 2);
+
+    EXPECT_EQ(t2.at(2, 0), make(8));
+    EXPECT_EQ(t2.at(2, 1), make(1));
+    EXPECT_EQ(t2.at(2, 2), make(3));
+    EXPECT_EQ(t2.at(2, 3), make(1337));
+
+    EXPECT_EQ(t2.at(3, 0), make(8));
+    EXPECT_EQ(t2.at(3, 1), make(6));
+    EXPECT_EQ(t2.at(3, 2), make(0));
+    EXPECT_EQ(t2.at(3, 3), make(1337));
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable,
+                              "IdTable.insertAtEndWithPermutationAndLimit");
+}
+
 TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
