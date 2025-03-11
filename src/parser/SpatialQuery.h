@@ -46,6 +46,8 @@ struct SpatialQuery : MagicServiceQuery {
   // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;
 
+  std::optional<SpatialJoinJoinType> joinType_;
+
   // Helper: if the spatial query was constructed from a special triple
   // <nearest-neighbors:...> for backward compatibility, we need to bypass the
   // check for the case of a nearest neighbors search with the right child not

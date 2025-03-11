@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <spatialjoin/Sweeper.h>
+
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/box.hpp>
@@ -85,6 +87,7 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
+  Result LibspatialjoinAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
@@ -194,6 +197,27 @@ class SpatialJoinAlgorithms {
   // the poles or the -180/180 longitude line, then it is disjoint in the
   // cartesian coordinates. The boxes themselves are disjoint to each other.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
+
+  util::geo::I32Box lsjParse(bool side, const IdTable* restable, size_t row,
+                             ColumnIndex col, sj::Sweeper& sweeper,
+                             std::vector<sj::WriteBatch>& parseBatches,
+                             size_t t,
+                             const util::geo::I32Box& filterBox = {
+                                 {std::numeric_limits<int32_t>::min(),
+                                  std::numeric_limits<int32_t>::min()},
+                                 {std::numeric_limits<int32_t>::max(),
+                                  std::numeric_limits<int32_t>::max()}}) const;
+
+  util::geo::I32Box lsjParse(bool side, const IdTable* restable,
+                             ColumnIndex col, sj::Sweeper& sweeper,
+                             std::vector<sj::WriteBatch>& parseBatches,
+                             const util::geo::I32Box& filterBox = {
+                                 {std::numeric_limits<int32_t>::min(),
+                                  std::numeric_limits<int32_t>::min()},
+                                 {std::numeric_limits<int32_t>::max(),
+                                  std::numeric_limits<int32_t>::max()}}) const;
+
+  ::util::geo::I32Point lsjTransform(const GeoPoint& loc) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
