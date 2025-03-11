@@ -59,8 +59,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
         child.writeToStream(out);
       }
       out << ")";
-      break;
-    }
+    } break;
     case Operation::IRI:
       out << iri_;
       break;

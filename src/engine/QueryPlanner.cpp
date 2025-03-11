@@ -958,6 +958,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
 ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
+  AD_CORRECTNESS_CHECK(!path.children_.empty());
   Variable forwardVar = generateUniqueVarName();
   Variable inverseVar = generateUniqueVarName();
   ParsedQuery::GraphPattern forwardPattern =
@@ -985,6 +986,12 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
       AD_CORRECTNESS_CHECK(child.operation_ == Operation::IRI);
       forwardPattern._filters.emplace_back(makeFilter(child, forwardVar));
     }
+  }
+  if (inversePattern._filters.empty()) {
+    return forwardPattern;
+  }
+  if (forwardPattern._filters.empty()) {
+    return inversePattern;
   }
   return uniteGraphPatterns(
       {std::move(forwardPattern), std::move(inversePattern)});
@@ -2642,6 +2649,9 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
                        auto& arg) { self->graphPatternOperationVisitor(arg); },
                    child);
       }
+      // Negated property paths can contain filters
+      ql::ranges::move(children._filters,
+                       std::back_inserter(rootPattern_->_filters));
     }
   }
 }
