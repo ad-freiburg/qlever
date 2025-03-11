@@ -3203,20 +3203,20 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
 
   h::expectWithGivenBudgets(
       std::move(query),
-      h::Union(h::TransitivePath(
-                   left1, right1, 0, std::numeric_limits<size_t>::max(),
-                   h::IndexScanFromStrings("<Q11629>", "<P279>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::Sort(h::Union(
-                       h::TransitivePath(
+      h::Union(
+          h::TransitivePath(
+              left1, right1, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("<Q11629>", "<P279>",
+                                      "?_QLever_internal_variable_qp_0"),
+              h::Union(h::Sort(h::TransitivePath(
                            left2, right2, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_2", "<P279>",
                                "?_QLever_internal_variable_qp_4"),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_6", "<P279>",
-                               "?_QLever_internal_variable_qp_7")),
-                       h::TransitivePath(
+                               "?_QLever_internal_variable_qp_7"))),
+                       h::Sort(h::TransitivePath(
                            left2, right2, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_2", "<P279>",
@@ -3224,20 +3224,19 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_8", "<P31>",
                                "?_QLever_internal_variable_qp_9"))))),
-               h::TransitivePath(
-                   left1, right1, 0, std::numeric_limits<size_t>::max(),
-                   h::IndexScanFromStrings("<Q11629>", "<P279>",
-                                           "?_QLever_internal_variable_qp_0"),
-                   h::Sort(h::Union(
-                       h::TransitivePath(
+          h::TransitivePath(
+              left1, right1, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("<Q11629>", "<P279>",
+                                      "?_QLever_internal_variable_qp_0"),
+              h::Union(h::Sort(h::TransitivePath(
                            left3, right3, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_11", "<P31>",
                                "?_QLever_internal_variable_qp_13"),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_15", "<P279>",
-                               "?_QLever_internal_variable_qp_16")),
-                       h::TransitivePath(
+                               "?_QLever_internal_variable_qp_16"))),
+                       h::Sort(h::TransitivePath(
                            left3, right3, 0, std::numeric_limits<size_t>::max(),
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_11", "<P31>",

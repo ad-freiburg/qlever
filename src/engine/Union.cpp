@@ -6,15 +6,16 @@
 #include "Union.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/SortedUnionImpl.h"
 #include "util/ChunkedForLoop.h"
-#include "util/TransparentFunctors.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
-             const std::shared_ptr<QueryExecutionTree>& t2)
-    : Operation(qec) {
+             const std::shared_ptr<QueryExecutionTree>& t2,
+             std::vector<ColumnIndex> targetOrder)
+    : Operation(qec), targetOrder_{std::move(targetOrder)} {
   AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
@@ -45,6 +46,33 @@ Union::Union(QueryExecutionContext* qec,
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(_columnOrigins, [](const auto& el) {
     return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
   }));
+
+  if (!targetOrder_.empty()) {
+    auto computeSortOrder = [this](bool left) {
+      vector<ColumnIndex> specificSortOrder;
+      for (ColumnIndex index : targetOrder_) {
+        ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
+        if (realIndex != NO_COLUMN) {
+          specificSortOrder.push_back(realIndex);
+        }
+      }
+      return specificSortOrder;
+    };
+
+    _subtrees[0] = QueryExecutionTree::createSortedTree(std::move(_subtrees[0]),
+                                                        computeSortOrder(true));
+    _subtrees[1] = QueryExecutionTree::createSortedTree(
+        std::move(_subtrees[1]), computeSortOrder(false));
+
+    // Swap children to get cheaper computation
+    if (_columnOrigins.at(targetOrder_.at(0)).at(1) == NO_COLUMN) {
+      // Make sure variables are computed before swapping.
+      (void)getExternallyVisibleVariableColumns();
+      std::swap(_subtrees[0], _subtrees[1]);
+      ql::ranges::for_each(_columnOrigins,
+                           [](auto& el) { std::swap(el[0], el[1]); });
+    }
+  }
 }
 
 string Union::getCacheKeyImpl() const {
@@ -52,6 +80,10 @@ string Union::getCacheKeyImpl() const {
   os << _subtrees[0]->getCacheKey() << "\n";
   os << "UNION\n";
   os << _subtrees[1]->getCacheKey() << "\n";
+  os << "sort order: ";
+  for (size_t i : targetOrder_) {
+    os << i << " ";
+  }
   return std::move(os).str();
 }
 
@@ -64,7 +96,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<ColumnIndex> Union::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -164,6 +196,17 @@ ProtoResult Union::computeResult(bool requestLaziness) {
       _subtrees[0]->getResult(requestLaziness);
   std::shared_ptr<const Result> subRes2 =
       _subtrees[1]->getResult(requestLaziness);
+
+  // If first sort column is not present in left child, we can fall back to the
+  // cheap computation because it orders the left child first.
+  if (!targetOrder_.empty() &&
+      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+    auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
+                                            std::move(subRes2));
+    return requestLaziness ? ProtoResult{std::move(generator), resultSortedOn()}
+                           : ProtoResult{getSingleElement(std::move(generator)),
+                                         resultSortedOn()};
+  }
 
   if (requestLaziness) {
     return {computeResultLazily(std::move(subRes1), std::move(subRes2)),
@@ -298,4 +341,64 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
     subtree = subtree->clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<Operation> Union::createSortedVariant(
+    const vector<ColumnIndex>& sortOrder) const {
+  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
+                                 _subtrees.at(1), sortOrder);
+}
+
+// _____________________________________________________________________________
+Result::LazyResult Union::computeResultKeepOrder(
+    bool requestLaziness, std::shared_ptr<const Result> result1,
+    std::shared_ptr<const Result> result2) const {
+  using sortedUnion::Wrapper;
+  using Range = std::variant<Result::LazyResult, std::array<Wrapper, 1>>;
+  auto toRange = [](const auto& result) {
+    return result->isFullyMaterialized()
+               ? Range{std::array{
+                     Wrapper{result->idTable(), result->localVocab()}}}
+               : Range{std::move(result->idTables())};
+  };
+  Range leftRange = toRange(result1);
+  Range rightRange = toRange(result2);
+
+  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex index) {
+    const auto& [left, right] = _columnOrigins.at(index);
+    return left == NO_COLUMN || right == NO_COLUMN;
+  });
+  std::span trimmedTargetOrder{targetOrder_.begin(),
+                               end == targetOrder_.end() ? end : end + 1};
+
+  auto applyPermutation = [this](IdTable idTable,
+                                 const std::vector<ColumnIndex>& permutation) {
+    return transformToCorrectColumnFormat(std::move(idTable), permutation);
+  };
+
+  return std::visit(
+      [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
+       &applyPermutation](auto left, auto right) {
+        return ad_utility::callFixedSize(
+            trimmedTargetOrder.size(),
+            [this, requestLaziness, &result1, &result2, &left, &right,
+             &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
+              constexpr size_t extent = COMPARATOR_WIDTH == 0
+                                            ? std::dynamic_extent
+                                            : COMPARATOR_WIDTH;
+              sortedUnion::IterationData leftData{std::move(result1),
+                                                  std::move(left),
+                                                  computePermutation<true>()};
+              sortedUnion::IterationData rightData{std::move(result2),
+                                                   std::move(right),
+                                                   computePermutation<false>()};
+              return Result::LazyResult{sortedUnion::SortedUnionImpl{
+                  std::move(leftData), std::move(rightData), requestLaziness,
+                  _columnOrigins, allocator(),
+                  std::span<const ColumnIndex, extent>{trimmedTargetOrder},
+                  std::move(applyPermutation)}};
+            });
+      },
+      std::move(leftRange), std::move(rightRange));
 }

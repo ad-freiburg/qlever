@@ -22,11 +22,16 @@ class Union : public Operation {
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
   std::array<std::shared_ptr<QueryExecutionTree>, 2> _subtrees;
+  // Stores the indices of the columns that the result of this operation should
+  // be sorted on. If set, the expensive union with merge implementation has to
+  // be used (which is most likely cheaper than sorting afterwards).
+  std::vector<ColumnIndex> targetOrder_;
 
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
-        const std::shared_ptr<QueryExecutionTree>& t2);
+        const std::shared_ptr<QueryExecutionTree>& t2,
+        std::vector<ColumnIndex> targetOrder = {});
 
  protected:
   virtual string getCacheKeyImpl() const override;
@@ -60,6 +65,14 @@ class Union : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
+
+  // Create a sorted variant of this operation. This can be more efficient than
+  // stacking a `Sort` operation on top of this one because Union can simply
+  // push the sort down to its children. If one of the children is already
+  // sorted properly then it is way cheaper to sort the other child and then
+  // merge the two sorted results.
+  std::shared_ptr<Operation> createSortedVariant(
+      const vector<ColumnIndex>& sortColumns) const;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {
@@ -100,5 +113,13 @@ class Union : public Operation {
   // the merged LocalVocab to the given `LocalVocab` object at the end.
   Result::Generator computeResultLazily(
       std::shared_ptr<const Result> result1,
+      std::shared_ptr<const Result> result2) const;
+
+  // Similar to `computeResultLazily` but it keeps the order of the results.
+  // This means that instead of just returning the results of the left and right
+  // child one after another, the results are merged in a way that the order of
+  // the results is preserved.
+  Result::LazyResult computeResultKeepOrder(
+      bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 };
