@@ -21,8 +21,8 @@ struct GraphPatternOperation;
 // of the operations that must be completed before applying the text limit
 // operation.
 struct TextLimitMetaObject {
-  vector<Variable> entityVars_;
-  vector<Variable> scoreVars_;
+  std::vector<Variable> entityVars_;
+  std::vector<Variable> scoreVars_;
   uint64_t idsOfMustBeFinishedOperations_;
 };
 

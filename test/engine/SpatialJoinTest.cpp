@@ -607,7 +607,7 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinKnownEmptyTest,
 namespace resultSortedOn {
 
 TEST(SpatialJoin, resultSortedOn) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = createSmallDataset();
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
@@ -706,6 +706,87 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, clone) {
+  auto qec = buildTestQEC();
+  auto numTriples = qec->getIndex().numTriples().normal;
+  ASSERT_EQ(numTriples, 15);
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        std::nullopt, std::nullopt};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_EQ(spatialJoin.getChildren().empty(),
+              cloneReference.getChildren().empty());
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        leftChild, std::nullopt};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        std::nullopt, rightChild};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        leftChild, rightChild};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+    EXPECT_NE(spatialJoin.getChildren().at(1),
+              cloneReference.getChildren().at(1));
+  }
+}
+
 }  // namespace stringRepresentation
 
 namespace getMultiplicityAndSizeEstimate {
@@ -727,7 +808,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     };
 
     const double doubleBound = 0.00001;
-    std::string kg = createSmallDatasetWithPoints();
+    std::string kg = createSmallDataset();
 
     // add multiplicities to test knowledge graph
     kg += "<node_1> <name> \"testing multiplicity\" .";
@@ -859,7 +940,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       // ================================ here the children are only index
       // scans, as they are perfectly predictable in relation to size and
       // multiplicity estimates
-      std::string kg = createSmallDatasetWithPoints();
+      std::string kg = createSmallDataset();
 
       // add multiplicities to test knowledge graph
       kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
@@ -926,22 +1007,22 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
         spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
         auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
 
-        assertMultiplicity(subj1.getVariable(), 9.8, spatialJoin, varColsMap);
-        assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
-        assertMultiplicity(subj2.getVariable(), 9.8, spatialJoin, varColsMap);
-        assertMultiplicity(obj2.getVariable(), 7.0, spatialJoin, varColsMap);
+        assertMultiplicity(subj1.getVariable(), 4.2, spatialJoin, varColsMap);
+        assertMultiplicity(obj1.getVariable(), 3.0, spatialJoin, varColsMap);
+        assertMultiplicity(subj2.getVariable(), 4.2, spatialJoin, varColsMap);
+        assertMultiplicity(obj2.getVariable(), 3.0, spatialJoin, varColsMap);
         ASSERT_TRUE(
             spatialJoin->onlyForTestingGetDistanceVariable().has_value());
         assertMultiplicity(Variable{"?distanceForTesting"}, 1, spatialJoin,
                            varColsMap);
       } else {
-        ASSERT_EQ(leftChild->getSizeEstimate(), 7);
-        ASSERT_EQ(rightChild->getSizeEstimate(), 7);
+        auto leftEstimate = leftChild->getSizeEstimate();
+        auto rightEstimate = rightChild->getSizeEstimate();
         auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
         spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
         auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
         spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-        ASSERT_LE(spatialJoin->getSizeEstimate(), 49);
+        ASSERT_LE(spatialJoin->getSizeEstimate(), leftEstimate * rightEstimate);
       }
     }
   }

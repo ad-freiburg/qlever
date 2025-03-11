@@ -80,7 +80,7 @@ jobs:
           echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
           mv ${{ github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.event.pull_request.head.sha }}.json.bz2
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: conformance-report
           path: conformance-report/

@@ -58,14 +58,8 @@ class OptionalJoin : public Operation {
     return {_left.get(), _right.get()};
   }
 
-  /**
-   * @brief Joins two result tables on any number of columns, inserting the
-   *        special value ID_NO_VALUE for any entries marked as optional.
-   * @param a
-   * @param b
-   * @param joinColumns
-   * @param result
-   */
+  // Joins two result tables on any number of columns, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
@@ -73,6 +67,8 @@ class OptionalJoin : public Operation {
       Implementation implementation = Implementation::GeneralCase);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   void computeSizeEstimateAndMultiplicities();
 
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

@@ -9,14 +9,18 @@
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
-  EXPECT_NO_THROW(Variable("?x"));
-  EXPECT_NO_THROW(Variable("$x"));
-  EXPECT_NO_THROW(Variable("?ql_matching_word_thür"));
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP()
+        << "legality of variable names is only checked with expensive checks";
+  }
+  EXPECT_NO_THROW(Variable("?x", true));
+  EXPECT_NO_THROW(Variable("$x", true));
+  EXPECT_NO_THROW(Variable("?ql_matching_word_thür", true));
 
   // No leading ? or $
   auto matcher = ::testing::HasSubstr("not a valid SPARQL variable");
-  AD_EXPECT_THROW_WITH_MESSAGE(Variable("x"), matcher);
-  AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x spaceInVar"), matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(Variable("x", true), matcher);
+  AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x spaceInVar", true), matcher);
 }
 
 // _____________________________________________________________________________

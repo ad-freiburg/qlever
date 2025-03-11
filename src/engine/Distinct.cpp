@@ -97,7 +97,7 @@ IdTable Distinct::distinct(
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
-  // Variant of `std::ranges::unique` that allows to skip the begin rows of
+  // Variant of `ql::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
   auto begin =
       ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
@@ -181,4 +181,10 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
 
   LOG(DEBUG) << "Distinct done.\n";
   return std::move(output).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Distinct::cloneImpl() const {
+  return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
+                                    keepIndices_);
 }

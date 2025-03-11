@@ -61,12 +61,11 @@ class C {
   int b;
 
  public:
-  AD_SERIALIZE_FRIEND_FUNCTION(C);
+  AD_SERIALIZE_FRIEND_FUNCTION(C) {
+    serializer | arg.a;
+    serializer | arg.b;
+  }
 };
-AD_SERIALIZE_FUNCTION(C) {
-  serializer | arg.a;
-  serializer | arg.b;
-}
 
 // D is not serializable
 struct D {};

@@ -10,7 +10,6 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -55,6 +54,8 @@ class Filter : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
@@ -70,13 +71,16 @@ class Filter : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
-  template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
-  void computeFilterImpl(IdTable& dynamicResultTable, Table&& input,
-                         const LocalVocab& localVocab,
-                         std::vector<ColumnIndex> sortedBy) const;
+  CPP_template(int WIDTH, typename Table)(
+      requires ad_utility::SimilarTo<
+          Table, IdTable>) void computeFilterImpl(IdTable& dynamicResultTable,
+                                                  Table&& input,
+                                                  const LocalVocab& localVocab,
+                                                  std::vector<ColumnIndex>
+                                                      sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
-  template <ad_utility::SimilarTo<IdTable> Table>
-  IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
-                        const LocalVocab& localVocab) const;
+  CPP_template(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+      IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
+                            const LocalVocab& localVocab) const;
 };

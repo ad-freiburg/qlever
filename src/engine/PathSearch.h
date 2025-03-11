@@ -253,6 +253,8 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
 
   /**

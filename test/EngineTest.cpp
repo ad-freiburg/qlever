@@ -19,6 +19,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -280,6 +281,18 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
 
     testOptionalJoin(a, b, jcls, expectedResult);
   }
+  {
+    // Test a corner case that previously contained a bug.
+    IdTable a{makeIdTableFromVector({{4, U, 2}})};
+    IdTable b{makeIdTableFromVector({{3, 3, 1}})};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    JoinColumns jcls{{1, 2}, {2, 1}};
+
+    IdTable expectedResult = makeIdTableFromVector({{4, U, 2, U}});
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
 }
 
 TEST(OptionalJoin, gallopingJoin) {
@@ -355,4 +368,18 @@ TEST(Engine, countDistinct) {
     AD_EXPECT_THROW_WITH_MESSAGE(Engine::countDistinct(t1, noop),
                                  ::testing::HasSubstr("must be sorted"));
   }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, clone) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto left = idTableToExecutionTree(qec, a);
+  auto right = idTableToExecutionTree(qec, a);
+  OptionalJoin opt{qec, left, right};
+
+  auto clone = opt.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(opt, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), opt.getDescriptor());
 }

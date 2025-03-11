@@ -179,7 +179,17 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
+  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+    return prepareJoin();
+  }
+
+  void checkCancellationWrapperForSpatialJoinAlgorithms() const {
+    checkCancellation();
+  }
+
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // helper function to generate a variable to column map from `childRight_`
   // that only contains the columns selected by `config_.payloadVariables_`
   // and (automatically added) the `config_.right_` variable.

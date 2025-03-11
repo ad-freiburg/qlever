@@ -16,6 +16,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::getQec;
 namespace {
@@ -649,6 +650,46 @@ TEST_P(TransitivePathTest, zeroLengthException) {
       ::testing::ContainsRegex("This query might have to evaluate the empty "
                                "path, which is currently "
                                "not supported"));
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, clone) {
+  auto sub = makeIdTableFromVector({{0, 2}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  {
+    auto transitivePath =
+        makePathUnbound(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                        left, right, 0, std::numeric_limits<size_t>::max());
+
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
+  {
+    auto transitivePath = makePathBound(
+        false, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
+  {
+    auto transitivePath = makePathBound(
+        true, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        sub.clone(), 0, {Variable{"?target"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
 }
 
 // _____________________________________________________________________________

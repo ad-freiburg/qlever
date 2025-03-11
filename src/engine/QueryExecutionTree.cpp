@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "parser/RdfEscaping.h"
+#include "global/RuntimeParameters.h"
 
 using std::string;
 
@@ -24,7 +24,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {
-  return rootOperation_->getCacheKey();
+  return cacheKey_.value();
 }
 
 // _____________________________________________________________________________
@@ -77,10 +77,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (cachedResult_) {
-    // result is pinned in cache. Nothing to compute
+  // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
+  // to `true`, we set the cost estimate to zero.
+  if (cachedResult_ &&
+      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
     return 0;
   }
+
+  // Otherwise, we return the cost estimate of the root operation. For index
+  // scans, we assume one unit of work per result row.
   if (getRootOperation()->isIndexScanWithNumVariables(1)) {
     return getSizeEstimate();
   } else {
@@ -91,15 +96,11 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (!sizeEstimate_.has_value()) {
-    if (cachedResult_) {
-      AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
-      sizeEstimate_ = cachedResult_->idTable().size();
-    } else {
-      // if we are in a unit test setting and there is no QueryExecutionContest
-      // specified it is the rootOperation_'s obligation to handle this case
-      // correctly
-      sizeEstimate_ = rootOperation_->getSizeEstimate();
-    }
+    // Note: Previously we used the exact size instead of the estimate for
+    // results that were already in the cache. This however often lead to poor
+    // planning, because the query planner compared exact sizes with estimates,
+    // which lead to worse plans than just conistently choosing the estimate.
+    sizeEstimate_ = rootOperation_->getSizeEstimate();
   }
   return sizeEstimate_.value();
 }
@@ -161,6 +162,15 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
   if (sortColumns.empty() || inputSorted) {
     return qet;
+  }
+
+  // Unwrap sort to avoid stacking sorts on top of each other.
+  if (auto sort = std::dynamic_pointer_cast<Sort>(qet->getRootOperation())) {
+    AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
+                    "with `Sort` with a different sort order. This is "
+                    "indicates a flaw during query planning."
+                 << std::endl;
+    qet = sort->getSubtree();
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();

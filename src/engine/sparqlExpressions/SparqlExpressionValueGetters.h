@@ -43,25 +43,29 @@ using OptIri = std::optional<Iri>;
 // general args to a numeric value (-> `int64_t or double`).
 using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 
+// Ensures that the T value is convertible to a numeric Id.
+template <typename T>
+CPP_concept ValueAsNumericId =
+    concepts::integral<T> || ad_utility::FloatingPoint<T> ||
+    ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
+
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
 // values will become `Id::makeUndefined()`.
-template <bool NanToUndef = false, typename T>
-requires std::integral<T> || std::floating_point<T> ||
-         ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>
-Id makeNumericId(T t) {
-  if constexpr (std::integral<T>) {
+CPP_template(bool NanToUndef = false,
+             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+  if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (std::floating_point<T> && NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && NanToUndef) {
     return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-  } else if constexpr (std::floating_point<T> && !NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && !NanToUndef) {
     return Id::makeFromDouble(t);
-  } else if constexpr (std::same_as<NotNumeric, T>) {
+  } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
-  } else if constexpr (std::same_as<NumericValue, T>) {
+  } else if constexpr (concepts::same_as<NumericValue, T>) {
     return std::visit([](const auto& x) { return makeNumericId(x); }, t);
   } else {
-    static_assert(std::same_as<Id, T>);
+    static_assert(concepts::same_as<Id, T>);
     return t;
   }
 }
@@ -139,6 +143,22 @@ struct StringValueGetter : Mixin<StringValueGetter> {
                                    const EvaluationContext*) const {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
+};
+// Similar to `StringValueGetter`, but correctly preprocesses strings so that
+// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
+// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
+// the latter represents the format that re2 expects.
+struct ReplacementStringGetter : StringValueGetter,
+                                 Mixin<ReplacementStringGetter> {
+  using Mixin<ReplacementStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+ private:
+  static std::string convertToReplacementString(std::string_view view);
 };
 
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
@@ -250,10 +270,11 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 // Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
 // not convertible to a string.
 struct RegexValueGetter {
-  template <SingleExpressionResult S>
-  requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
-  std::unique_ptr<re2::RE2> operator()(S&& input,
-                                       const EvaluationContext* context) const {
+  template <typename S>
+  auto operator()(S&& input, const EvaluationContext* context) const -> CPP_ret(
+      std::unique_ptr<re2::RE2>)(
+      requires SingleExpressionResult<S>&&
+          ranges::invocable<StringValueGetter, S&&, const EvaluationContext*>) {
     auto str = StringValueGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
@@ -327,6 +348,29 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
   IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
                               const EvaluationContext* context) const;
+};
+
+// Defines the return type for value-getter `StringOrDateGetter`.
+using OptStringOrDate =
+    std::optional<std::variant<DateYearOrDuration, std::string>>;
+
+// This value-getter retrieves `DateYearOrDuration` or `std::string`
+// (from literal) values.
+struct StringOrDateGetter : Mixin<StringOrDateGetter> {
+  using Mixin<StringOrDateGetter>::operator();
+  // Remark: We use only LiteralFromIdGetter because Iri values should never
+  // contain date-related string values.
+  OptStringOrDate operator()(ValueId id,
+                             const EvaluationContext* context) const {
+    if (id.getDatatype() == Datatype::Date) {
+      return id.getDate();
+    }
+    return LiteralFromIdGetter{}(id, context);
+  }
+  OptStringOrDate operator()(const LiteralOrIri& litOrIri,
+                             const EvaluationContext* context) const {
+    return LiteralFromIdGetter{}(litOrIri, context);
+  }
 };
 
 }  // namespace sparqlExpression::detail

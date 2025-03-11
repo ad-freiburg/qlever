@@ -565,7 +565,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   auto partialResultGenerator =
       [](std::vector<Result::IdTableVocabPair> pairs,
          Result::LazyResult prevGenerator,
-         std::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
+         ql::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
     for (auto& pair : pairs) {
       co_yield pair;
     }
@@ -620,4 +620,10 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Service::cloneImpl() const {
+  return std::make_unique<Service>(_executionContext, parsedServiceClause_,
+                                   getResultFunction_);
 }

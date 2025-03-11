@@ -52,8 +52,16 @@ struct TransitivePathSide {
     auto [tree, col] = treeAndCol_.value();
     const std::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
-    // TODO<C++23> use std::ranges::starts_with
+    // TODO<C++23> use ql::ranges::starts_with
     return (!sortedOn.empty() && sortedOn[0] == col);
+  }
+
+  TransitivePathSide clone() const {
+    TransitivePathSide copy = *this;
+    if (copy.treeAndCol_.has_value()) {
+      copy.treeAndCol_.value().first = copy.treeAndCol_.value().first->clone();
+    }
+    return copy;
   }
 };
 

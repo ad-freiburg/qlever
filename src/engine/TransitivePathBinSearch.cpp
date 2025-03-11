@@ -31,3 +31,12 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
   return BinSearchMap{dynSub.getColumn(startSide.subCol_),
                       dynSub.getColumn(targetSide.subCol_)};
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TransitivePathBinSearch::cloneImpl() const {
+  auto copy = std::make_unique<TransitivePathBinSearch>(*this);
+  copy->subtree_ = subtree_->clone();
+  copy->lhs_ = lhs_.clone();
+  copy->rhs_ = rhs_.clone();
+  return copy;
+}
