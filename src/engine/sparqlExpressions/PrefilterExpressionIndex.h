@@ -94,7 +94,6 @@ class PrefilterExpression {
   // necessary.
   std::vector<BlockMetadata> evaluate(
       std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks = true,
       const bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
@@ -120,48 +119,10 @@ class PrefilterExpression {
   // is violated, the function performing the checks will throw a
   // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
 
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const = 0;
-};
-
-//______________________________________________________________________________
-// For the actual comparison of the relevant ValueIds from the metadata triples,
-// we use the implementations from ValueIdComparators.
-//
-// Supported comparisons are:
-//  - LessThan, LessEqual, Equal, NotEqual, GreaterEqual, GreaterThan
-using CompOp = valueIdComparators::Comparison;
-
-//______________________________________________________________________________
-template <CompOp Comparison>
-class RelationalExpression : public PrefilterExpression {
- private:
-  // This is the right hand side value of the relational expression. The left
-  // hand value is indirectly supplied during the evaluation process via the
-  // `evaluationColumn` argument. `evaluationColumn` represents the column index
-  // associated with the `Variable` column of the `IndexScan`.
-  // E.g., a less-than expression with a value of 3 will represent the logical
-  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
-  // represent ?var = "Freiburg".
-  IdOrLocalVocabEntry rightSideReferenceValue_;
-
- public:
-  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
-      : rightSideReferenceValue_(referenceValue) {}
-
-  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
-  bool operator==(const PrefilterExpression& other) const override;
-  std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string asString(size_t depth) const override;
-
- private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const override;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
 };
 
 //______________________________________________________________________________
@@ -190,8 +151,8 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const override;
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -217,9 +178,65 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
+  std::vector<BlockMetadata> evaluateIsIriOrIsLiteralImpl(
+      std::span<const BlockMetadata> input, const bool isNegated,
+      size_t evaluationColumn) const;
+  std::vector<BlockMetadata> evaluateIsBlankOrIsNumericImpl(
+      std::span<const BlockMetadata> input, const bool isNegated,
+      size_t evaluationColumn) const;
   std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
+};
+
+//______________________________________________________________________________
+// For the actual comparison of the relevant ValueIds from the metadata triples,
+// we use the implementations from ValueIdComparators.
+//
+// Supported comparisons are:
+//  - LessThan, LessEqual, Equal, NotEqual, GreaterEqual, GreaterThan
+using CompOp = valueIdComparators::Comparison;
+
+//______________________________________________________________________________
+template <CompOp Comparison>
+class RelationalExpression : public PrefilterExpression {
+ private:
+  // This is the right hand side value of the relational expression. The left
+  // hand value is indirectly supplied during the evaluation process via the
+  // `evaluationColumn` argument. `evaluationColumn` represents the column index
+  // associated with the `Variable` column of the `IndexScan`.
+  // E.g., a less-than expression with a value of 3 will represent the logical
+  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
+  // represent ?var = "Freiburg".
+  IdOrLocalVocabEntry rightSideReferenceValue_;
+  // `IsDatatypeExpression` (for `IsDatatype::IRI` and `IsDatatype::LITERAL`)
+  // requires access to `evaluateOptGetCompleteComplementImpl` for proper
+  // complement computation while considering all datatype `ValueId`s.
+  template <IsDatatype Datatype>
+  friend class IsDatatypeExpression;
+
+ public:
+  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+      : rightSideReferenceValue_(referenceValue) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  // If `getComplementOverAllDatatypes` is set to `true`, this method returns
+  // the total complement over all datatype `ValueId`s from the
+  // provided `BlockMetadata` values.
+  std::vector<BlockMetadata> evaluateOptGetCompleteComplementImpl(
       std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const override;
+      bool getComplementOverAllDatatypes = false) const;
+  // Calls `evaluateOptGetCompleteComplementImpl` with
+  // `getComplementOverAllDatatypes` set to `false` (standard evaluation
+  // procedure).
+  std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -243,8 +260,8 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      const bool addMixedDatatypeBlocks) const override;
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________

@@ -332,7 +332,7 @@ static std::vector<BlockSpanItPair> mapRandomItToBlockSpanItComplemented(
 static std::vector<BlockMetadata> getRelevantBlocksFromIdRanges(
     const std::vector<RandomItPair>& relevantIdRanges,
     std::span<const BlockMetadata> input, const RandomIt& beginIdVec,
-    bool getComplementRange) {
+    const bool getComplementRange) {
   std::vector<BlockMetadata> relevantBlocks;
   // Reserve memory, input.size() is upper bound.
   relevantBlocks.reserve(input.size());
@@ -441,10 +441,9 @@ getValueIdsAndMixedDatatypeBlocks(std::span<const BlockMetadata> input,
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
     std::span<const BlockMetadata> input, size_t evaluationColumn,
-    const bool addBlocksMixedDatatype, const bool stripIncompleteBlocks) const {
+    const bool stripIncompleteBlocks) const {
   if (!stripIncompleteBlocks) {
-    return evaluateAndCheckImpl(input, evaluationColumn,
-                                addBlocksMixedDatatype);
+    return evaluateAndCheckImpl(input, evaluationColumn);
   }
   if (input.size() < 3) {
     return std::vector<BlockMetadata>(input.begin(), input.end());
@@ -461,8 +460,7 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     input = input.subspan(0, input.size() - 1);
   }
 
-  auto result =
-      evaluateAndCheckImpl(input, evaluationColumn, addBlocksMixedDatatype);
+  auto result = evaluateAndCheckImpl(input, evaluationColumn);
   if (firstBlock.has_value()) {
     result.insert(result.begin(), firstBlock.value());
   }
@@ -474,11 +472,9 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
 
 // _____________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    const bool addBlocksMixedDatatype) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   checkEvalRequirements(input, evaluationColumn);
-  const auto& relevantBlocks =
-      evaluateImpl(input, evaluationColumn, addBlocksMixedDatatype);
+  const auto& relevantBlocks = evaluateImpl(input, evaluationColumn);
   checkEvalRequirements(relevantBlocks, evaluationColumn);
   return relevantBlocks;
 }
@@ -518,9 +514,10 @@ RelationalExpression<Comparison>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
+std::vector<BlockMetadata>
+RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
     std::span<const BlockMetadata> input, size_t evaluationColumn,
-    const bool addBlocksMixedDatatype) const {
+    bool getComplementOverAllDatatypes) const {
   using namespace valueIdComparators;
   auto [idVector, mixedDatatypeBlocks] =
       getValueIdsAndMixedDatatypeBlocks<true>(input, evaluationColumn);
@@ -539,18 +536,17 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
                                                referenceId, Comparison)
                               : getRangesForId(idVector.begin(), idVector.end(),
                                                referenceId, Comparison, false);
-  const auto& relevantBlocks = getRelevantBlocksFromIdRanges(
-      relevantIdRanges, input, idVector.begin(), false);
+  return getSetUnion(
+      getRelevantBlocksFromIdRanges(relevantIdRanges, input, idVector.begin(),
+                                    getComplementOverAllDatatypes),
+      mixedDatatypeBlocks);
+};
 
-  if (!addBlocksMixedDatatype) {
-    // Don't add BlockMetadata values with bounding ValueIds referring to
-    // different datatypes.
-    // Not adding those values is relevant when calculating the complement
-    // for isIri (!isIri) and isLiteral (!isLiteral).
-    return relevantBlocks;
-  }
-  // By default, add the BlockMetadata values containing mixed datatypes.
-  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
+//______________________________________________________________________________
+template <CompOp Comparison>
+std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+  return evaluateOptGetCompleteComplementImpl(input, evaluationColumn, false);
 };
 
 //______________________________________________________________________________
@@ -636,98 +632,35 @@ std::string IsDatatypeExpression<Datatype>::asString(
 };
 
 //______________________________________________________________________________
-// Return the (relational) `PrefilterExpression` that enables precise filtering
-// for the expression `isIri` or `isLiteral`.
-// For more information see comments within the function.
 template <IsDatatype Datatype>
-requires(Datatype == IsDatatype::IRI || Datatype == IsDatatype::LITERAL)
-static std::unique_ptr<PrefilterExpression> getPrefilterExprForIsIriOrIsLit() {
+std::vector<BlockMetadata>
+IsDatatypeExpression<Datatype>::evaluateIsIriOrIsLiteralImpl(
+    std::span<const BlockMetadata> input, const bool isNegated,
+    size_t evaluationColumn) const {
   using enum IsDatatype;
   using LVE = LocalVocabEntry;
 
-  // Remark: Ids containing LITERAL values precede IRI related Ids in order.
   return Datatype == IRI
+             // Remark: Ids containing LITERAL values precede IRI related Ids in
+             // order.
              // The smallest possible IRI is represented by "<>", we use its
              // corresponding ValueId later on as a lower bound.
-             ? make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
-             // For pre-filtering LITERAL related ValueIds we use the empty
-             // literal '""' as a lower bound, and the ValueId that represents
-             // the beginning of IRI values as an upper bound.
-             : make<AndExpression>(make<GreaterEqualExpression>(
-                                       LVE::fromStringRepresentation("\"\"")),
-                                   make<LessThanExpression>(
-                                       LVE::fromStringRepresentation("<")));
-}
-
-// _____________________________________________________________________________
-// Retrieve the set difference `set{input} \ set{other[1, other.size() - 1]}`.
-// Or `set{input} - set{other[1, other.size() - 1]}`.
-// For more details see comments within the function.
-static std::vector<BlockMetadata> getSetDifference(
-    std::span<const BlockMetadata> input,
-    const std::vector<BlockMetadata>& other) {
-  if (input.empty()) return {};
-  if (other.size() <= 2) {
-    // Given that we ignore the first and last element of other w.r.t. the set
-    // difference operation, we can directly return input here.
-    return {std::make_move_iterator(input.begin()),
-            std::make_move_iterator(input.end())};
-  }
-  std::vector<BlockMetadata> result;
-  // Mask the first and last BlockMetadata value of other.
-  // This is necessary because we don't want to remove the bounding (but not
-  // mixed datatype) BlockMetadata value containing the Id range [(last)
-  // VocabId(literalVal), (first) VocabId(IriVal)] from input when evaluating
-  // the actual complement for !isIri or !isLiteral. In all other cases
-  // other.begin() and other.end() refer to BlockMetadata values which contain
-  // mixed datatypes. Thus we want to always add them to vector result. This is
-  // the reason why we apply std::prev and std::next w.r.t. other.
-  ql::ranges::set_difference(input.begin(), input.end(),
-                             std::next(other.begin()), std::prev(other.end()),
-                             std::back_inserter(result), blockLessThanBlock);
-  return result;
+             ? GreaterThanExpression(LVE::fromStringRepresentation("<>"))
+                   .evaluateOptGetCompleteComplementImpl(
+                       input, evaluationColumn, isNegated)
+             // For pre-filtering LITERAL related ValueIds we use the ValueId
+             // representing the beginning of IRI values as an upper bound.
+             : LessThanExpression(LVE::fromStringRepresentation("<"))
+                   .evaluateOptGetCompleteComplementImpl(
+                       input, evaluationColumn, isNegated);
 }
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-requires(Datatype == IsDatatype::IRI || Datatype == IsDatatype::LITERAL)
-std::vector<BlockMetadata> evaluateIsIriOrIsLiteral(
+std::vector<BlockMetadata>
+IsDatatypeExpression<Datatype>::evaluateIsBlankOrIsNumericImpl(
     std::span<const BlockMetadata> input, const bool isNegated,
-    size_t evaluationColumn) {
-  std::unique_ptr<PrefilterExpression> expr =
-      getPrefilterExprForIsIriOrIsLit<Datatype>();
-  // If IsDatatypeExpression<Datatype> is negated (!isDatatype(?var)), use
-  // getSetDifference to retrieve the complementing blocks.
-  return isNegated
-             ? getSetDifference(
-                   // Remark: For computing the correct complement here, it is
-                   // necessary to set the flag addBlocksMixedDatatype for
-                   // evaluate to false. If we would add the values referring to
-                   // a mixed datatype range, the BlockMetadata value
-                   // representing the Id range [(last) VocabId(literalVal),
-                   // (first) VocabId(IriVal)] would be hidden within the added
-                   // mixed-datatype blocks. To ensure that this value is always
-                   // the first or last element in the vector returned by
-                   // evaluate, we discard the mixed datatype blocks (they will
-                   // be implicitly added again with the application of
-                   // getSetDifference).
-                   // The visibility of BlockMetadata value representing the Id
-                   // range [(last) VocabId(literalVal), (first)
-                   // VocabId(IriVal)] at the first or last position is
-                   // necessary because we mask it out when calculating the set
-                   // difference. This masking is required because it is a
-                   // relevant result value w.r.t. !isLiteral and !isIri, hence
-                   // should always be returned.
-                   input, expr->evaluate(input, evaluationColumn, false))
-             : expr->evaluate(input, evaluationColumn);
-}
-
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-requires(Datatype == IsDatatype::BLANK || Datatype == IsDatatype::NUMERIC)
-std::vector<BlockMetadata> evaluateIsBlankOrIsNumeric(
-    std::span<const BlockMetadata> input, const bool isNegated,
-    size_t evaluationColumn) {
+    size_t evaluationColumn) const {
   using enum IsDatatype;
 
   auto [idVector, _] =
@@ -742,24 +675,23 @@ std::vector<BlockMetadata> evaluateIsBlankOrIsNumeric(
     relevantRanges.push_back(valueIdComparators::getRangeForDatatype(
         idsBegin, idsEnd, Datatype::BlankNodeIndex));
   } else {
-    // Remark: Swapping the defined relational order for Datatype::Int to
-    // Datatype::Double ValueIds (in ValueId.h) might affect the correctness of
-    // the following lines!
+    // Remark: Swapping the defined relational order for Datatype::Int
+    // to Datatype::Double ValueIds (in ValueId.h) might affect the
+    // correctness of the following lines!
     static_assert(Datatype::Int < Datatype::Double);
 
     const auto& rangeInt = valueIdComparators::getRangeForDatatype(
         idsBegin, idsEnd, Datatype::Int);
     const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
         idsBegin, idsEnd, Datatype::Double);
-    // Differentiate here regarding the adjacency of Int and Double datatype
-    // values.
-    // This is relevant w.r.t. getRelevantBlocksFromIdRanges(), because we
-    // technically add to .second + 1 for the first datatype range. If we simply
-    // add rangeInt and rangeDouble given that datatype Int and Double are
-    // stored directly next to each other, we potentially add a block twice
-    // (forbidden).
-    // Remark: This is necessary even if simplifyRanges(relevantRanges) is
-    // performed later on.
+    // Differentiate here regarding the adjacency of Int and Double
+    // datatype values. This is relevant w.r.t.
+    // getRelevantBlocksFromIdRanges(), because we technically add to
+    // .second + 1 for the first datatype range. If we simply add
+    // rangeInt and rangeDouble given that datatype Int and Double are
+    // stored directly next to each other, we potentially add a block
+    // twice (forbidden). Remark: This is necessary even if
+    // simplifyRanges(relevantRanges) is performed later on.
     if (rangeInt.second == rangeDouble.first ||
         rangeDouble.second == rangeInt.first) {
       relevantRanges.push_back({std::min(rangeInt.first, rangeDouble.first),
@@ -769,52 +701,25 @@ std::vector<BlockMetadata> evaluateIsBlankOrIsNumeric(
       relevantRanges.push_back(rangeDouble);
     }
   }
-
-  // Sort and remove overlaps w.r.t. relevant ranges.
+  // Sort and remove overlapping ranges.
   valueIdComparators::detail::simplifyRanges(relevantRanges);
-  if (relevantRanges.empty()) return {};
-  if (!isNegated) {
-    return getRelevantBlocksFromIdRanges(relevantRanges, input,
-                                         idVector.begin(), false);
+  if (relevantRanges.empty()) {
+    return {};
   }
-  // If this IsDatatypeExpression<Datatype> expression is negated, retrieve the
-  // corresponding complementing ranges.
-  return getSetDifference(
-      input, getRelevantBlocksFromIdRanges(relevantRanges, input,
-                                           idVector.begin(), false));
-  // Alternative approach for retrieving the complementing blocks.
-  // Instead of computing the complement directly on BlockMetadata value sets
-  // (set{input} - set{getRelevantBlocksFromIdRanges(...)}), the following
-  // approach would calculate the complement over relevant-range indices (see
-  // mapRandomItToBlockSpanItComplemented) w.r.t. idVector and retrieve the
-  // corresponding blocks from input.
-  //
-  // Given a decision against the use of the following snippet,
-  // mapRandomItToBlockSpanItComplemented can be removed and
-  // getRelevantBlocksFromIdRanges simplified.
-  // As a result, computing the complemented IsDatatypeExpression<Datatype>
-  // (!isDatatype) requires only getSetDifference (for !isIri and !isLiteral it
-  // should already be the logical best approach regarding robustness and
-  // maintainability).
-  /*
   return getRelevantBlocksFromIdRanges(relevantRanges, input, idVector.begin(),
-                                       false);
-  */
+                                       isNegated);
 }
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
 std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    [[maybe_unused]] const bool addBlocksMixedDatatype) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using enum IsDatatype;
   if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
-    return evaluateIsBlankOrIsNumeric<Datatype>(input, isNegated_,
-                                                evaluationColumn);
+    return evaluateIsBlankOrIsNumericImpl(input, isNegated_, evaluationColumn);
   } else {
     static_assert(Datatype == IRI || Datatype == LITERAL);
-    return evaluateIsIriOrIsLiteral<Datatype>(input, isNegated_,
-                                              evaluationColumn);
+    return evaluateIsIriOrIsLiteralImpl(input, isNegated_, evaluationColumn);
   }
 };
 
@@ -841,20 +746,15 @@ LogicalExpression<Operation>::logicalComplement() const {
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    [[maybe_unused]] const bool addBlocksMixedDatatype) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
-    auto resultChild1 = child1_->evaluate(input, evaluationColumn,
-                                          addBlocksMixedDatatype, false);
-    return child2_->evaluate(resultChild1, evaluationColumn,
-                             addBlocksMixedDatatype, false);
+    auto resultChild1 = child1_->evaluate(input, evaluationColumn, false);
+    return child2_->evaluate(resultChild1, evaluationColumn, false);
   } else {
     static_assert(Operation == OR);
-    return getSetUnion(child1_->evaluate(input, evaluationColumn,
-                                         addBlocksMixedDatatype, false),
-                       child2_->evaluate(input, evaluationColumn,
-                                         addBlocksMixedDatatype, false));
+    return getSetUnion(child1_->evaluate(input, evaluationColumn, false),
+                       child2_->evaluate(input, evaluationColumn, false));
   }
 };
 
@@ -904,10 +804,8 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    const bool addBlocksMixedDatatype) const {
-  return child_->evaluate(input, evaluationColumn, addBlocksMixedDatatype,
-                          false);
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+  return child_->evaluate(input, evaluationColumn, false);
 };
 
 //______________________________________________________________________________

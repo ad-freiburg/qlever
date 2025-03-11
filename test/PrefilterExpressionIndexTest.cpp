@@ -575,7 +575,6 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   makeTestIsDatatype(notExpr(isLit()),
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28}, false,
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28});
-
   // Test !isIri
   // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
   makeTestIsDatatype(
