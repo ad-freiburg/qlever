@@ -13,7 +13,7 @@
 namespace ad_utility::testing {
 
 // ______________________________________________________________
-Index makeIndexWithTestSettings() {
+Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
@@ -23,7 +23,10 @@ Index makeIndexWithTestSettings() {
   BATCH_SIZE_VOCABULARY_MERGE = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
-  index.parserBufferSize() = 1_kB;
+  index.parserBufferSize() =
+      parserBufferSize;  // Note that the default value remains unchanged, but
+                         // some tests (i.e. polygon testing in Spatial Joins)
+                         // require a larger buffer size
   return index;
 }
 
@@ -143,6 +146,7 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool createTextIndex, bool addWordsFromLiterals,
                     std::optional<std::pair<std::string, std::string>>
                         contentsOfWordsFileAndDocsFile,
+                    ad_utility::MemorySize parserBufferSize,
                     std::optional<TextScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam) {
   // Ignore the (irrelevant) log output of the index building and loading during
@@ -171,20 +175,11 @@ Index makeTestIndex(const std::string& indexBasename,
     if (!createTextIndex) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
-    }  // else {
-    //   if (scoringMetric.has_value()) {
-    //     settingsJson["text-scoring-metric"] = scoringMetric.value();
-    //   }
-    //   if (bAndKParam.has_value()) {
-    //     settingsJson["b-and-k-parameter-for-text-scoring"] =
-    //     std::make_pair(bAndKParam.value().first, bAndKParam.value().second);
-    //   }
-    // }
-
+    }
     settingsFile << settingsJson.dump();
   }
   {
-    Index index = makeIndexWithTestSettings();
+    Index index = makeIndexWithTestSettings(parserBufferSize);
     // This is enough for 2 triples per block. This is deliberately chosen as a
     // small value, s.t. the tiny knowledge graphs from unit tests also contain
     // multiple blocks. Should this value or the semantics of it (how many
@@ -276,6 +271,7 @@ QueryExecutionContext* getQec(
     bool addWordsFromLiterals,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsFile,
+    ad_utility::MemorySize parserBufferSize,
     std::optional<TextScoringMetric> scoringMetric,
     std::optional<std::pair<float, float>> bAndKParam) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
@@ -328,22 +324,22 @@ QueryExecutionContext* getQec(
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key,
-        Context{TypeErasedCleanup{[testIndexBasename]() {
-                  for (const std::string& indexFilename :
-                       getAllIndexFilenames(testIndexBasename)) {
-                    // Don't log when a file can't be deleted,
-                    // because the logging might already be
-                    // destroyed.
-                    ad_utility::deleteFile(indexFilename, false);
-                  }
-                }},
-                std::make_unique<Index>(makeTestIndex(
-                    testIndexBasename, turtleInput, loadAllPermutations,
-                    usePatterns, usePrefixCompression, blocksizePermutations,
-                    createTextIndex, addWordsFromLiterals,
-                    contentsOfWordsFileAndDocsFile, scoringMetric, bAndKParam)),
-                std::make_unique<QueryResultCache>()});
+        key, Context{TypeErasedCleanup{[testIndexBasename]() {
+                       for (const std::string& indexFilename :
+                            getAllIndexFilenames(testIndexBasename)) {
+                         // Don't log when a file can't be deleted,
+                         // because the logging might already be
+                         // destroyed.
+                         ad_utility::deleteFile(indexFilename, false);
+                       }
+                     }},
+                     std::make_unique<Index>(makeTestIndex(
+                         testIndexBasename, turtleInput, loadAllPermutations,
+                         usePatterns, usePrefixCompression,
+                         blocksizePermutations, createTextIndex,
+                         addWordsFromLiterals, contentsOfWordsFileAndDocsFile,
+                         parserBufferSize, scoringMetric, bAndKParam)),
+                     std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
