@@ -351,20 +351,22 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
-    bool addFromWordsAndDocsFile = !(wordsfile.empty() || docsfile.empty());
+    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
 
-    AD_CONTRACT_CHECK(
-        addFromWordsAndDocsFile || (wordsfile.empty() && docsfile.empty()),
-        "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
-        ". Both or none of docsfile and wordsfile have to be given to build "
-        "text index. If none are given the option to add words from literals "
-        "has to be true. For details see --help.");
-    if (addFromWordsAndDocsFile || addWordsFromLiterals) {
+    if (!(wordsAndDocsFileSpecified ||
+          (wordsfile.empty() && docsfile.empty()))) {
+      throw std::runtime_error(absl::StrCat(
+          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
+          ". Both or none of docsfile and wordsfile have to be given to build "
+          "text index. If none are given the option to add words from literals "
+          "has to be true. For details see --help."));
+    }
+    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
       index.storeTextScoringParamsInConfiguration(
           getTextScoringMetricFromString(scoringMetric), bScoringParam,
           kScoringParam);
       index.buildTextIndexFile(
-          addFromWordsAndDocsFile
+          wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
           addWordsFromLiterals);
