@@ -39,6 +39,22 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       graphsToFilter_{std::move(graphsToFilter)},
       prefilter_{std::move(prefilter)},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
+  if (permutation_ == Permutation::GPOS || permutation_ == Permutation::GPSO) {
+    // The Gxx permutations can only be scanned with a single graph for now.
+    AD_CORRECTNESS_CHECK(graphsToFilter_.has_value() &&
+                         graphsToFilter_->size() == 1);
+    singleGraphForGPermutations_ = *graphsToFilter_->begin();
+    graphsToFilter_.reset();
+    additionalColumns_.push_back(3);
+    const auto& lastKey =
+        permutation_ == Permutation::GPOS ? subject_ : object_;
+
+    // TODO<joka921> Triples with four entries currently don't work with these
+    // permutations. Also fix this in the query planner.
+    AD_CORRECTNESS_CHECK(numVariables_ > 0);
+    --numVariables_;
+    additionalVariables_.push_back(lastKey.getVariable());
+  }
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
@@ -295,9 +311,12 @@ void IndexScan::determineMultiplicities() {
 // _____________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
-  std::array triple{&subject_, &predicate_, &object_};
-  // TODO<joka921> This silently drops information for the Gxx permutations,
-  // let's see how we can make them work.
+  // TODO<joka921> This is hacky and a little dangerous, find something better
+  // or at least assert.
+  const TripleComponent* graphPtr = singleGraphForGPermutations_.has_value()
+                                        ? &singleGraphForGPermutations_.value()
+                                        : nullptr;
+  std::array triple{&subject_, &predicate_, &object_, graphPtr};
   auto permutation = Permutation::toKeyOrder(permutation_);
   return {triple[permutation[0]], triple[permutation[1]],
           triple[permutation[2]]};

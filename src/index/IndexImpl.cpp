@@ -936,6 +936,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     load(osp_);
     load(spo_);
     load(sop_);
+    // TODO<joka921> Do this only if they exist.
+    load(gpos_);
+    load(gpso_);
   } else {
     AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "

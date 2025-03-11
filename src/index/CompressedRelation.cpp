@@ -1382,15 +1382,10 @@ auto CompressedRelationWriter::createPermutationPair(
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    // TODO<joka921> That is hacky, it should be `everything in the key order
-    // after the switch indices`.
-    // TODO<joka921> And it doesn't work, we either have to also compare the
-    // columns before swapIndices[0], or we have to keep the input stable for
-    // combinations of the same GP
-    return std::tie(a[swapIndices[0]], a[swapIndices[1]],
-                    a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[swapIndices[0]], b[swapIndices[1]],
-                    b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    // The first column is constant, compare only the remaining three columns
+    // (including the Graph column), but not the additional payloads.
+    auto tie = [](const auto& x) { return std::tie(x[1], x[2], x[3]); };
+    return tie(a) < tie(b);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
