@@ -3260,6 +3260,20 @@ TEST(QueryPlanner, postQueryValuesClause) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
+  h::expect("SELECT * { OPTIONAL { ?a ?b ?c } }",
+            h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")));
+  h::expect("SELECT * { ?a ?b ?c . OPTIONAL { ?d ?e ?f } }",
+            h::CartesianProductJoin(
+                h::IndexScanFromStrings("?a", "?b", "?c"),
+                h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+  h::expect("SELECT * { OPTIONAL { ?a ?b ?c } . OPTIONAL { ?d ?e ?f } }",
+            h::CartesianProductJoin(
+                h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")),
+                h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   auto query = SparqlParser::parseQuery(
       "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
