@@ -178,6 +178,14 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     checkCancellation();
   }
 
+  // Apply trailing `VALUES` clause
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value() &&
+      !postValues.value()._inlineValues._variables.empty()) {
+    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
+    checkCancellation();
+  }
+
   // Now find the cheapest execution plan and store that as the optimal
   // plan for this graph pattern.
   vector<SubtreePlan>& lastRow = plans.back();
@@ -359,6 +367,21 @@ vector<SubtreePlan> QueryPlanner::getHavingRow(
     added.push_back(std::move(filtered));
   }
   return added;
+}
+
+// _____________________________________________________________________________
+std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
+    const parsedQuery::Values& values,
+    const std::vector<SubtreePlan>& currentPlans) const {
+  std::vector<SubtreePlan> result;
+
+  auto valuesPlan = makeSubtreePlan<::Values>(_qec, values._inlineValues);
+  for (auto& plan : currentPlans) {
+    ql::ranges::move(createJoinCandidatesAllowEmpty(
+                         plan, valuesPlan, getJoinColumns(plan, valuesPlan)),
+                     std::back_inserter(result));
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1899,6 +1922,17 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
 }
 
 // _____________________________________________________________________________
+std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
+    const SubtreePlan& ain, const SubtreePlan& bin,
+    const JoinColumns& jcs) const {
+  if (jcs.empty()) {
+    return std::vector{makeSubtreePlan<CartesianProductJoin>(
+        _qec, std::vector{ain._qet, bin._qet})};
+  }
+  return createJoinCandidates(ain, bin, jcs);
+}
+
+// _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     const JoinColumns& jcs) const {
@@ -2130,12 +2164,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
-      if (jcs.empty()) {
-        return std::vector{makeSubtreePlan<CartesianProductJoin>(
-            _qec, std::vector{plan1._qet, plan2._qet})};
-      }
-      return createJoinCandidates(flipped ? plan2 : plan1,
-                                  flipped ? plan1 : plan2, jcs);
+      return createJoinCandidatesAllowEmpty(flipped ? plan2 : plan1,
+                                            flipped ? plan1 : plan2, jcs);
     };
 
     auto [leftMapping, rightMapping] =
