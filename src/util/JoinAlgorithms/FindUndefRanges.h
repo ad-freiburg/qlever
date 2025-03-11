@@ -166,34 +166,35 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 // have additional information about the input (most notably which of the join
 // columns contain no UNDEF at all) and therefore a more specialized routine
 // should be chosen.
-CPP_template(typename It)(
-    requires std::random_access_iterator<
-        It>) auto findSmallerUndefRanges(const auto& row, It begin, It end,
-                                         bool& resultMightBeUnsorted)
-    -> cppcoro::generator<It> {
-  size_t numLastUndefined = 0;
-  assert(row.size() > 0);
-  auto it = ql::ranges::rbegin(row);
-  auto rend = ql::ranges::rend(row);
-  for (; it < rend; ++it) {
-    if (*it != Id::makeUndefined()) {
-      break;
+struct FindSmallerUndefRanges {
+  CPP_template(typename It)(requires std::random_access_iterator<It>) auto
+  operator()(const auto& row, It begin, It end,
+             bool& resultMightBeUnsorted) const -> cppcoro::generator<It> {
+    size_t numLastUndefined = 0;
+    assert(row.size() > 0);
+    auto it = ql::ranges::rbegin(row);
+    auto rend = ql::ranges::rend(row);
+    for (; it < rend; ++it) {
+      if (*it != Id::makeUndefined()) {
+        break;
+      }
+      ++numLastUndefined;
     }
-    ++numLastUndefined;
-  }
 
-  for (; it < rend; ++it) {
-    if (*it == Id::makeUndefined()) {
-      return findSmallerUndefRangesArbitrary(row, begin, end,
-                                             resultMightBeUnsorted);
+    for (; it < rend; ++it) {
+      if (*it == Id::makeUndefined()) {
+        return findSmallerUndefRangesArbitrary(row, begin, end,
+                                               resultMightBeUnsorted);
+      }
+    }
+    if (numLastUndefined == 0) {
+      return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
+                                                       resultMightBeUnsorted);
+    } else {
+      return findSmallerUndefRangesForRowsWithUndefInLastColumns(
+          row, numLastUndefined, begin, end, resultMightBeUnsorted);
     }
   }
-  if (numLastUndefined == 0) {
-    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                     resultMightBeUnsorted);
-  } else {
-    return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        row, numLastUndefined, begin, end, resultMightBeUnsorted);
-  }
-}
+};
+constexpr FindSmallerUndefRanges findSmallerUndefRanges;
 }  // namespace ad_utility

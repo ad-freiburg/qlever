@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -130,4 +131,23 @@ TEST(
     EXPECT_EQ(iterator->idTable_, makeIdTableFromVector({{val, val}}));
     EXPECT_EQ(++iterator, idTables.end());
   }
+}
+
+// _____________________________________________________________________________
+TEST(Bind, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+  Bind bind{
+      qec,
+      std::move(valuesTree),
+      {SparqlExpressionPimpl{
+           std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
+       Variable{"?b"}}};
+
+  auto clone = bind.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(bind, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), bind.getDescriptor());
 }

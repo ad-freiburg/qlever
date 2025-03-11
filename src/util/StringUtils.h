@@ -248,6 +248,8 @@ constexpr std::array<char, sz + 1> catImpl(
 };
 // Concatenate the `strings` into a single `std::array<char>` with an
 // additional zero byte at the end.
+// TODO<joka921>: C++17 doesn't support template values. This needs some
+// refactoring
 template <ConstexprString... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
@@ -274,6 +276,10 @@ constexpr std::string_view constexprStrCat() {
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
   return {b.data(), b.size() - 1};
 }
+
+// Truncates the operation string to a maximum length of
+// `MAX_LENGTH_OPERATION_ECHO`.
+std::string truncateOperationString(std::string_view operation);
 }  // namespace ad_utility
 
 // A helper function for the `operator+` overloads below.

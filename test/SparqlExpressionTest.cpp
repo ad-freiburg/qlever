@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -99,11 +100,11 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-template <VectorOrExpressionResult T>
-SingleExpressionResult auto toExpressionResult(T vec) {
+CPP_template(typename T)(
+    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
-  } else if constexpr (std::convertible_to<T, std::string_view>) {
+  } else if constexpr (ranges::convertible_to<T, std::string_view>) {
     // TODO<joka921> Make a generic testing utility for the string case...
     return IdOrLiteralOrIri{lit(vec)};
   } else {
@@ -157,7 +158,8 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
 // storing `Ids` which have to be handled using the `matchId` matcher (see
 // above) are all handled correctly.
 auto sparqlExpressionResultMatcher =
-    []<SingleExpressionResult Expected>(const Expected& expected) {
+    []<typename Expected>(const Expected& expected) {
+      CPP_assert(SingleExpressionResult<Expected>);
       if constexpr (isVectorResult<Expected>) {
         auto matcherVec =
             ad_utility::transform(expected, [](const auto& singleExpected) {
@@ -181,49 +183,50 @@ auto clone = [](const auto& x) {
 };
 
 // The implementation of `testNaryExpression` directly below.
-auto testNaryExpressionImpl =
-    [](auto&& makeExpression, SingleExpressionResult auto const& expected,
-       SingleExpressionResult auto const&... operands) {
-      ad_utility::AllocatorWithLimit<Id> alloc{
-          ad_utility::testing::makeAllocator()};
-      VariableToColumnMap map;
-      LocalVocab localVocab;
-      IdTable table{alloc};
+auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
+                                 auto const&... operands) {
+  CPP_assert(SingleExpressionResult<decltype(expected)> &&
+             (SingleExpressionResult<decltype(operands)> && ...));
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::testing::makeAllocator()};
+  VariableToColumnMap map;
+  LocalVocab localVocab;
+  IdTable table{alloc};
 
-      // Get the size of `operand`: size for a vector, 1 otherwise.
-      auto getResultSize = []<typename T>(const T& operand) -> size_t {
-        if constexpr (isVectorResult<T>) {
-          return operand.size();
-        }
-        return 1;
-      };
+  // Get the size of `operand`: size for a vector, 1 otherwise.
+  auto getResultSize = []<typename T>(const T& operand) -> size_t {
+    if constexpr (isVectorResult<T>) {
+      return operand.size();
+    }
+    return 1;
+  };
 
-      const auto resultSize = [&operands..., &getResultSize]() {
-        if constexpr (sizeof...(operands) == 0) {
-          (void)getResultSize;
-          return 0ul;
-        } else {
-          return std::max({getResultSize(operands)...});
-        }
-      }();
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
-      TestContext outerContext;
-      sparqlExpression::EvaluationContext& context = outerContext.context;
-      context._endIndex = resultSize;
+  TestContext outerContext;
+  sparqlExpression::EvaluationContext& context = outerContext.context;
+  context._endIndex = resultSize;
 
-      std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-          std::make_unique<SingleUseExpression>(
-              ExpressionResult{clone(operands)})...};
+  std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
+      std::make_unique<SingleUseExpression>(
+          ExpressionResult{clone(operands)})...};
 
-      auto expressionPtr = std::apply(makeExpression, std::move(children));
-      auto& expression = *expressionPtr;
+  auto expressionPtr = std::apply(makeExpression, std::move(children));
+  auto& expression = *expressionPtr;
 
-      ExpressionResult result = expression.evaluate(&context);
+  ExpressionResult result = expression.evaluate(&context);
 
-      using ExpectedType = std::decay_t<decltype(expected)>;
-      ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
-                              sparqlExpressionResultMatcher(expected)));
-    };
+  using ExpectedType = std::decay_t<decltype(expected)>;
+  ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
+                          sparqlExpressionResultMatcher(expected)));
+};
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
@@ -239,10 +242,11 @@ auto testNaryExpression = [](auto&& makeExpression,
 // in both orders of the operands `op1` and `op2`.
 template <auto makeFunction>
 auto testBinaryExpressionCommutative =
-    [](const SingleExpressionResult auto& expected,
-       const SingleExpressionResult auto& op1,
-       const SingleExpressionResult auto& op2,
+    [](const auto& expected, const auto& op1, const auto& op2,
        source_location l = source_location::current()) {
+      CPP_assert(SingleExpressionResult<decltype(expected)> &&
+                 SingleExpressionResult<decltype(op1)> &&
+                 SingleExpressionResult<decltype(op2)>);
       auto t = generateLocationTrace(l);
       testNaryExpression(makeFunction, expected, op1, op2);
       testNaryExpression(makeFunction, expected, op2, op1);
@@ -570,13 +574,15 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // _____________________________________________________________________________________
+namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
-static auto makeStrlenWithStr = [](auto arg) {
+auto checkIriOrUri = testNaryExpressionVec<&makeIriOrUriExpression>;
+auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
 auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
+}  // namespace
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(
@@ -611,20 +617,13 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
-                                    dateLYear, T, F},
-                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
+  checkIriOrUri(IdOrLiteralOrIriVec{U, U, U, U, U, U, U},
+                std::tuple{IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99),
+                                               dateDate, dateLYear, T, F},
+                           IdOrLiteralOrIri{LocalVocabEntry{
+                               ad_utility::triple_component::Iri{}}}});
   // test valid
   checkIriOrUri(
-      IdOrLiteralOrIriVec{
-          lit("bimbim"), iriref("<bambim>"),
-          lit("https://www.bimbimbam/2001/bamString"),
-          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
-          lit("http://www.w3.org/2001/XMLSchema#string"),
-          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
-          testContext().notInVocabIri, testContext().notInVocabIriLit,
-          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
-          lit("\t\n\r")},
       IdOrLiteralOrIriVec{
           iriref("<bimbim>"), iriref("<bambim>"),
           iriref("<https://www.bimbimbam/2001/bamString>"),
@@ -634,7 +633,35 @@ TEST(SparqlExpression, stringOperators) {
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
-          iriref("<\t\n\r>")});
+          iriref("<\t\n\r>")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("bimbim"), iriref("<bambim>"),
+              lit("https://www.bimbimbam/2001/bamString"),
+              lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+              lit("http://www.w3.org/2001/XMLSchema#string"),
+              iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+              testContext().notInVocabIri, testContext().notInVocabIriLit,
+              lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+              lit("\t\n\r")},
+          IdOrLiteralOrIri{
+              LocalVocabEntry{ad_utility::triple_component::Iri{}}}});
+
+  // test with base iri
+  checkIriOrUri(
+      IdOrLiteralOrIriVec{
+          U,
+          iriref("<http://example.com/hi/bimbim>"),
+          iriref("<http://example.com/hi/bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://example.com/hello>"),
+          iriref("<http://example.com/hello>"),
+      },
+      std::tuple{
+          IdOrLiteralOrIriVec{U, lit("bimbim"), iriref("<bambim>"),
+                              lit("https://www.bimbimbam/2001/bamString"),
+                              lit("/hello"), iriref("</hello>")},
+          IdOrLiteralOrIri{iriref("<http://example.com/hi>")}});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
@@ -1132,6 +1159,44 @@ TEST(SparqlExpression, testToNumericExpression) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testToDateOrDateTimeExpression) {
+  using namespace ad_utility::testing;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
+  auto parserDate = DateYearOrDuration::parseXsdDate;
+  auto parserDateTime = DateYearOrDuration::parseXsdDatetime;
+  auto parserDuration = DateYearOrDuration::parseXsdDayTimeDuration;
+  auto checkGetDate = testUnaryExpression<&makeConvertToDateExpression>;
+  auto checkGetDateTime = testUnaryExpression<&makeConvertToDateTimeExpression>;
+
+  checkGetDate(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", DateId(parserDate, "0000-01-01"),
+           DateId(parserDuration, "-PT5H"),
+           DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+           DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00")}),
+      Ids{U, U, U, U, U, U, U, DateId(parserDate, "-2025-02-20"),
+          DateId(parserDate, "2025-02-20"), U, DateId(parserDate, "0000-01-01"),
+          U, DateId(parserDate, "1900-12-13"),
+          DateId(parserDate, "2025-02-20")});
+  checkGetDateTime(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", "1900-12-13T03:12:00.33Z",
+           "-1900-12-13T03:12:00.33Z", "2025-02-20T17:12:00.01-05:00",
+           DateId(parserDateTime, "2025-02-20T17:12:00.01Z"),
+           DateId(parserDuration, "PT1H4M"), DateId(parserDate, "0000-01-01")}),
+      Ids{U, U, U, U, U, U, U, U, U, U,
+          DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "-1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01Z"), U,
+          DateId(parserDateTime, "0000-01-01T00:00:00.00")});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testToBooleanExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
@@ -1277,7 +1342,13 @@ TEST(SparqlExpression, concatExpression) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, ReplaceExpression) {
-  auto checkReplace = testNaryExpressionVec<&makeReplaceExpression>;
+  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
+                                           auto&& arg2) {
+    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
+                                 nullptr);
+  };
+  auto checkReplace = testNaryExpressionVec<makeReplaceExpressionThreeArgs>;
+  auto checkReplaceWithFlags = testNaryExpressionVec<&makeReplaceExpression>;
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),
@@ -1305,6 +1376,19 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
 
+  // Case-insensitive matching using the flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("i")}});
+  // Empty flag
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("")}});
+
   // Multiple matches within the same string
   checkReplace(
       IdOrLiteralOrIri{lit("wEeDEflE")},
@@ -1321,6 +1405,25 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
                  IdOrLiteralOrIri{lit("X")}});
+
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}), U,
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("i")}});
+
+  // Undefined flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U, U, U, U, U, U},
+      std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("X")}, U});
+
+  using ::testing::HasSubstr;
+  // Invalid flags
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U},
+      std::tuple{idOrLitOrStringVec({"null"}), IdOrLiteralOrIri{lit("[n]")},
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("???")}});
+
   // Illegal replacement.
   checkReplace(
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
@@ -1462,4 +1565,22 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
   EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
   EXPECT_ANY_THROW(expression.getCacheKey({}));
+}
+
+// This just tests basic functionality of the `ExistsExpression` class. Since
+// the actual implementation of the `EXISTS` operator is done in the
+// `ExistsJoin` class, most of the testing happens in
+// `test/engine/ExistsJoinTest.cpp`.
+TEST(ExistsExpression, basicFunctionality) {
+  ExistsExpression exists{ParsedQuery{}};
+  auto var = exists.variable();
+  TestContext context;
+  EXPECT_ANY_THROW(exists.evaluate(&context.context));
+  using namespace testing;
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("Uninitialized Exists"));
+  context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("ExistsExpression col# 437"));
 }

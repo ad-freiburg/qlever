@@ -59,7 +59,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
 // `ScanType`.
 static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
   using enum HasPredicateScan::ScanType;
-  AD_CONTRACT_CHECK(triple.p_._iri == HAS_PREDICATE_PREDICATE);
+  AD_CONTRACT_CHECK(triple.p_.iri_ == HAS_PREDICATE_PREDICATE);
   if (isVariable(triple.s_) && (isVariable(triple.o_))) {
     if (triple.s_ == triple.o_) {
       throw std::runtime_error{
@@ -393,3 +393,12 @@ const TripleComponent& HasPredicateScan::getObject() const { return object_; }
 
 // ___________________________________________________________________________
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return type_; }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> HasPredicateScan::cloneImpl() const {
+  auto copy = std::make_unique<HasPredicateScan>(*this);
+  if (subtree_.has_value()) {
+    copy->subtree_.value().subtree_ = subtree().clone();
+  }
+  return copy;
+}

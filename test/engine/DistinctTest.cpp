@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
@@ -222,4 +223,17 @@ TEST(Distinct, lazyWithLazyInputs) {
           m(makeIdTableFromVector(
               {{6, 7, 0, 6}, {2, 7, 1, 5}, {3, 7, 2, 4}, {1, 7, 3, 1}})),
           m(makeIdTableFromVector({{6, 7, 4, 6}}))));
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, clone) {
+  auto qec = ad_utility::testing::getQec();
+  Distinct distinct{ad_utility::testing::getQec(),
+                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    std::vector<ColumnIndex>{0, 1}};
+
+  auto clone = distinct.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(distinct, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), distinct.getDescriptor());
 }
