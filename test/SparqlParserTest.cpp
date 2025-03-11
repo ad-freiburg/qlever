@@ -1255,6 +1255,18 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
+  // Ensure filter is applied regularly if variable does not originate from
+  // triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { VALUES ?x { \"test\"@en } . FILTER (LANG(?x) = \"en\")}");
+
+    EXPECT_TRUE(std::holds_alternative<parsedQuery::Values>(
+        q._rootGraphPattern._graphPatterns[0]));
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) = \"en\")");
+  }
 }
 
 // _____________________________________________________________________________
