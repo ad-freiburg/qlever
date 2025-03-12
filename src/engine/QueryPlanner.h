@@ -349,6 +349,11 @@ class QueryPlanner {
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs) const;
 
+  // Same as `createJoinCandidates(SubtreePlan, SubtreePlan, JoinColumns)`, but
+  // creates a cartesian product when `jcs` is empty.
+  std::vector<SubtreePlan> createJoinCandidatesAllowEmpty(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+
   // Whenever a join is applied to a `Union`, add candidates that try applying
   // join to the children of the union directly, which can be more efficient if
   // one of the children has an optimized join, which can happen for
@@ -406,6 +411,11 @@ class QueryPlanner {
 
   vector<SubtreePlan> getHavingRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
+  // Apply the passed `VALUES` clause to the current plans.
+  std::vector<SubtreePlan> applyPostQueryValues(
+      const parsedQuery::Values& values,
+      const std::vector<SubtreePlan>& currentPlans) const;
 
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
@@ -570,6 +580,12 @@ class QueryPlanner {
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
+
+    // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
+    // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
+    // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
+                                          const auto& variables);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the

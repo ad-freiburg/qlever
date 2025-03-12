@@ -1171,6 +1171,23 @@ queries:
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
 
+  - query: trailing-values-limit
+    type: no-text
+    sparql: |
+      SELECT * {
+        VALUES (?x) { ("A") }
+      }
+      LIMIT 1
+      VALUES (?x) {
+        ("A")
+        ("A")
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: [ "?x" ]
+      - contains_row: [ "A" ]
+
 
   - query : filter-depending-on-last-optional
     type: no-text
