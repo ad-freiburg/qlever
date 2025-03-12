@@ -1,6 +1,7 @@
 // Copyright 2022 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Service.h"
 
@@ -564,19 +565,6 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     return;
   }
 
-  // Creates a `Result::Generator` from partially materialized result data.
-  auto partialResultGenerator =
-      [](std::vector<Result::IdTableVocabPair> pairs,
-         Result::LazyResult prevGenerator,
-         ql::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
-    for (auto& pair : pairs) {
-      co_yield pair;
-    }
-    for (auto& pair : ql::ranges::subrange{it, prevGenerator.end()}) {
-      co_yield pair;
-    }
-  };
-
   // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
@@ -594,8 +582,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // partially materialized result to the sibling.
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
-              partialResultGenerator(std::move(resultPairs),
-                                     std::move(generator), std::move(++it)),
+              Result::LazyResult{ad_utility::MultisourceCachingInputRange<
+                  decltype(resultPairs), decltype(generator),
+                  Result::IdTableVocabPair>(std::move(resultPairs),
+                                            std::move(generator), {},
+                                            std::move(++it))},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;

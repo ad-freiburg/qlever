@@ -1,6 +1,7 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
 #include "backports/algorithm.h"
@@ -72,8 +73,8 @@ CPP_class_template(typename View, typename F)(requires(
 // Deduction guides to correctly propagate the input as a value or reference.
 // This is the exact same way `std::ranges` and `range-v3` behave.
 template <typename Range, typename F>
-CachingTransformInputRange(Range&&, F)
-    -> CachingTransformInputRange<all_t<Range>, F>;
+CachingTransformInputRange(Range&&,
+                           F) -> CachingTransformInputRange<all_t<Range>, F>;
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
@@ -224,5 +225,59 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
+
+CPP_class_template(typename FirstView, typename SecondView, typename RetVal)(
+    requires(ql::ranges::input_range<FirstView>&& ql::ranges::input_range<
+             SecondView>)) struct MultisourceCachingInputRange
+    : ad_utility::InputRangeFromGet<RetVal> {
+  FirstView firstView_;
+  SecondView secondView_;
+  std::optional<ql::ranges::iterator_t<FirstView>> firstIt_;
+  std::optional<ql::ranges::iterator_t<SecondView>> secondIt_;
+
+  MultisourceCachingInputRange(
+      FirstView firstView, SecondView secondView,
+      std::optional<ql::ranges::iterator_t<FirstView>> firstIt = {},
+      std::optional<ql::ranges::iterator_t<SecondView>> secondIt = {})
+      : firstView_(std::move(firstView)),
+        secondView_(std::move(secondView)),
+        firstIt_(std::move(firstIt)),
+        secondIt_(std::move(secondIt)) {}
+
+  std::optional<RetVal> get() {
+    if (!firstIt_.has_value()) {
+      // The first view has not been started yet, so start there
+      firstIt_ = firstView_.begin();
+      return std::optional{std::move(*(firstIt_.value()))};
+    } else if (firstIt_.value() != firstView_.end()) {
+      // The first view is not finished, move to the next item
+      firstIt_.value()++;
+      if ((firstIt_.value() != firstView_.end())) {
+        // The first view has an item, return it
+        return std::optional{std::move(*(firstIt_.value()))};
+      } else {
+        // The first view is now finished, continue with the second view
+        if (!secondIt_.has_value()) {
+          // The second view has not been started. Start at the beginning
+          secondIt_ = secondView_.begin();
+        }  // else The second view is in progress, already pointing to the next
+           // item
+        if (secondIt_.value() != secondView_.end()) {
+          // The second view has an item, return it
+          return std::optional{std::move(*(secondIt_.value()))};
+        }  // else The second view is also finished, return nullopt
+      }
+    } else if (secondIt_.value() != secondView_.end()) {
+      // The first view is finished and the first result of the second view has
+      // been returned. Continue to the next item in the second view
+      secondIt_.value()++;
+      if (secondIt_.value() != secondView_.end()) {
+        // The second view has an item, return it
+        return std::optional{std::move(*(secondIt_.value()))};
+      }  // else The second view is also finished, return nullopt
+    }
+    return std::nullopt;
+  }
+};
 
 }  // namespace ad_utility
