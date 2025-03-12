@@ -805,7 +805,7 @@ std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
     ad_utility::MemorySize bufferSize = 1_kB) {
   auto parserChild = [&]() {
-    if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+    if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                     bufferSize};
     } else {
@@ -844,9 +844,7 @@ auto forAllParallelParsers(const auto& function, const auto&... args) {
       false, args...);
 }
 auto forAllMultifileParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfMultifileParser<Tokenizer>>(true, args...);
-  function.template operator()<RdfMultifileParser<TokenizerCtre>>(true,
-                                                                  args...);
+  function.template operator()<RdfMultifileParser>(true, args...);
 }
 
 auto forAllParsers(const auto& function, const auto&... args) {
@@ -1127,7 +1125,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     ad_utility::Timer t{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
-        if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+        if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
           return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                         40_B};
         } else {

@@ -746,7 +746,6 @@ class RdfParallelParser : public Parser {
 
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
-template <typename Tokenizer>
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests

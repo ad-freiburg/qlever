@@ -1181,8 +1181,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
 }
 
 // ______________________________________________________________
-template <typename T>
-RdfMultifileParser<T>::RdfMultifileParser(
+RdfMultifileParser::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files,
     ad_utility::MemorySize bufferSize) {
   using namespace qlever;
@@ -1229,8 +1228,7 @@ RdfMultifileParser<T>::RdfMultifileParser(
 }
 
 // _____________________________________________________________________________
-template <typename T>
-RdfMultifileParser<T>::~RdfMultifileParser() {
+RdfMultifileParser::~RdfMultifileParser() {
   ad_utility::ignoreExceptionIfThrows(
       [this] {
         parsingQueue_.finish();
@@ -1240,14 +1238,10 @@ RdfMultifileParser<T>::~RdfMultifileParser() {
 }
 
 //______________________________________________________________________________
-template <typename T>
-bool RdfMultifileParser<T>::getLineImpl(TurtleTriple*) {
-  AD_FAIL();
-}
+bool RdfMultifileParser::getLineImpl(TurtleTriple*) { AD_FAIL(); }
 
 // _____________________________________________________________________________
-template <typename T>
-std::optional<std::vector<TurtleTriple>> RdfMultifileParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch() {
   return finishedBatchQueue_.pop();
 }
 
@@ -1262,5 +1256,3 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
-template class RdfMultifileParser<Tokenizer>;
-template class RdfMultifileParser<TokenizerCtre>;
