@@ -29,7 +29,12 @@ struct MaxDistanceConfig {
 using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
+enum class SpatialJoinAlgorithm {
+  BASELINE,
+  S2_GEOMETRY,
+  BOUNDING_BOX,
+  S2_POINT_POLYLINE
+};
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
@@ -172,6 +177,14 @@ class SpatialJoin : public Operation {
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() const {
     return childRight_;
+  }
+
+  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+    return prepareJoin();
+  }
+
+  void checkCancellationWrapperForSpatialJoinAlgorithms() const {
+    checkCancellation();
   }
 
  private:

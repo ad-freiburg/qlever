@@ -255,3 +255,8 @@ constexpr inline std::string_view EMPH_OFF = "\033[22m";
 // Allowed range for geographical coordinates from WTK Text
 constexpr inline double COORDINATE_LAT_MAX = 90.0;
 constexpr inline double COORDINATE_LNG_MAX = 180.0;
+
+// When operation results are returned as `application/qlever-results+json` the
+// Operation string is echoed. This operation string is truncated to ensure
+// performance.
+constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
