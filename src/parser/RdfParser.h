@@ -4,34 +4,28 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
-#include <sys/mman.h>
 
-#include <codecvt>
-#include <exception>
 #include <future>
 #include <locale>
+#include <stdexcept>
 #include <string_view>
 
-#include "absl/strings/str_cat.h"
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/InputFileSpecification.h"
 #include "parser/ParallelBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
+#include "parser/TurtleTokenId.h"
 #include "parser/data/BlankNode.h"
 #include "util/Exception.h"
-#include "util/File.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
 #include "util/ParseException.h"
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
-
-using std::string;
 
 enum class TurtleParserIntegerOverflowBehavior {
   Error,
@@ -126,10 +120,6 @@ class TurtleParser : public RdfParserBase {
  public:
   using ParseException = ::ParseException;
 
-  // The CTRE Tokenizer implies relaxed parsing.
-  static constexpr bool UseRelaxedParsing =
-      std::is_same_v<Tokenizer_T, TokenizerCtre>;
-
   // Get the result of the single rule that was parsed most recently. Used for
   // testing.
   const TripleComponent& getLastParseResult() const { return lastParseResult_; }
@@ -175,6 +165,17 @@ class TurtleParser : public RdfParserBase {
   static constexpr const char* baseForRelativeIriKey_ = "@";
   static constexpr const char* baseForAbsoluteIriKey_ = "@@";
 
+  [[noreturn]] void raiseDisallowedPrefixOrBaseError() const {
+    AD_CORRECTNESS_CHECK(prefixAndBaseDisabled_);
+    raise(
+        "@prefix or @base directives need to be at the beginning of the file "
+        "when using the parallel parser. Later redundant redefinitions are "
+        "fine. Use '--parse-parallel false' if you can't guarantee this. If "
+        "the reason for this error is that the input is a concatenation of "
+        "Turtle files, each of which has the prefixes at the beginning, you "
+        "should feed the files to QLever separately instead of concatenated");
+  }
+
  protected:
   // Data members.
 
@@ -204,10 +205,10 @@ class TurtleParser : public RdfParserBase {
 
   // Getters for the two base prefixes. Without BASE declaration, these will
   // both return the empty IRI.
-  const TripleComponent::Iri& baseForRelativeIri() {
+  const TripleComponent::Iri& baseForRelativeIri() const {
     return prefixMap_.at(baseForRelativeIriKey_);
   }
-  const TripleComponent::Iri& baseForAbsoluteIri() {
+  const TripleComponent::Iri& baseForAbsoluteIri() const {
     return prefixMap_.at(baseForAbsoluteIriKey_);
   }
 
@@ -225,6 +226,8 @@ class TurtleParser : public RdfParserBase {
   // instances.
   static inline std::atomic<size_t> numParsers_ = 0;
   size_t blankNodePrefix_ = numParsers_.fetch_add(1);
+
+  bool prefixAndBaseDisabled_ = false;
 
  public:
   TurtleParser() = default;
@@ -265,7 +268,7 @@ class TurtleParser : public RdfParserBase {
   virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
-  [[noreturn]] void raise(std::string_view error_message) {
+  [[noreturn]] void raise(std::string_view error_message) const {
     auto d = tok_.view();
     std::stringstream errorMessage;
     errorMessage << "Parse error at byte position " << getParsePosition()
@@ -400,7 +403,7 @@ class TurtleParser : public RdfParserBase {
   }
 
   // create a new, unused, unique blank node string
-  string createAnonNode() {
+  std::string createAnonNode() {
     return BlankNode{true,
                      absl::StrCat(blankNodePrefix_, "_", numBlankNodes_++)}
         .toSparql();
@@ -479,9 +482,7 @@ CPP_template(typename Parser)(
     return positionOffset_ + tmpToParse_.size() - this->tok_.data().size();
   }
 
-  void initialize(const string& filename, ad_utility::MemorySize bufferSize) {
-    (void)filename;
-    (void)bufferSize;
+  void initialize(const std::string&, ad_utility::MemorySize) {
     throw std::runtime_error(
         "RdfStringParser doesn't support calls to initialize. Only use "
         "parseUtf8String() for unit tests\n");
@@ -534,7 +535,7 @@ CPP_template(typename Parser)(
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
-  void setInputStream(const string& toParse) {
+  void setInputStream(const std::string& toParse) {
     tmpToParse_.clear();
     tmpToParse_.reserve(toParse.size());
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());
@@ -554,6 +555,9 @@ CPP_template(typename Parser)(
   // can be used to test if the advancing of the tokenizer works
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
+
+  // Disable prefix parsing for turtle parsers during parallel parsing.
+  void disablePrefixParsing() { this->prefixAndBaseDisabled_ = true; }
 
   FRIEND_TEST(RdfParserTest, prefixedName);
   FRIEND_TEST(RdfParserTest, prefixID);
@@ -590,7 +594,7 @@ class RdfStreamParser : public Parser {
   // Default construction needed for tests
   RdfStreamParser() = default;
   explicit RdfStreamParser(
-      const string& filename,
+      const std::string& filename,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       TripleComponent defaultGraphIri =
           qlever::specialIds().at(DEFAULT_GRAPH_IRI))
@@ -602,7 +606,8 @@ class RdfStreamParser : public Parser {
 
   bool getLineImpl(TurtleTriple* triple) override;
 
-  void initialize(const string& filename, ad_utility::MemorySize bufferSize);
+  void initialize(const std::string& filename,
+                  ad_utility::MemorySize bufferSize);
 
   size_t getParsePosition() const override {
     return numBytesBeforeCurrentBatch_ + (tok_.data().data() - byteVec_.data());
@@ -644,7 +649,7 @@ class RdfStreamParser : public Parser {
 template <typename Parser>
 class RdfParallelParser : public Parser {
  public:
-  using Triple = std::array<string, 3>;
+  using Triple = std::array<std::string, 3>;
   // Default construction needed for tests
   RdfParallelParser() = default;
 
@@ -652,7 +657,7 @@ class RdfParallelParser : public Parser {
   // parser will sleep for the specified time before parsing each batch s.t.
   // certain corner cases can be tested.
   explicit RdfParallelParser(
-      const string& filename,
+      const std::string& filename,
       ad_utility::MemorySize bufferSize = DEFAULT_PARSER_BUFFER_SIZE,
       std::chrono::milliseconds sleepTimeForTesting =
           std::chrono::milliseconds{0})
@@ -665,7 +670,8 @@ class RdfParallelParser : public Parser {
   }
 
   // Construct a parser from a file and a given default graph iri.
-  RdfParallelParser(const string& filename, ad_utility::MemorySize bufferSize,
+  RdfParallelParser(const std::string& filename,
+                    ad_utility::MemorySize bufferSize,
                     const TripleComponent& defaultGraphIri)
       : Parser{defaultGraphIri}, defaultGraphIri_{defaultGraphIri} {
     initialize(filename, bufferSize);
@@ -683,7 +689,8 @@ class RdfParallelParser : public Parser {
     parallelParser_.resetTimers();
   }
 
-  void initialize(const string& filename, ad_utility::MemorySize bufferSize);
+  void initialize(const std::string& filename,
+                  ad_utility::MemorySize bufferSize);
 
   size_t getParsePosition() const override {
     // TODO: can we really define this position here?
@@ -720,6 +727,12 @@ class RdfParallelParser : public Parser {
       QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
       "parallel parser"};
   std::future<void> parseFuture_;
+
+  // Collect error messages in case of multiple failures. The `size_t` is the
+  // start position of the corresponding batch, used to order the errors in case
+  // the batches are finished out of order.
+  ad_utility::Synchronized<std::vector<std::pair<size_t, std::string>>>
+      errorMessages_;
   // The parallel parsers need to know when the last batch has been parsed, s.t.
   // the parser threads can be destroyed. The following two members are needed
   // for keeping track of this condition.
@@ -733,7 +746,6 @@ class RdfParallelParser : public Parser {
 
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
-template <typename Tokenizer>
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
@@ -779,7 +791,8 @@ class RdfMultifileParser : public RdfParserBase {
   // `parsingQueue_` is declared *after* the `finishedBatchQueue_`, s.t. when
   // destroying the parser, the threads from the `parsingQueue_` are all joined
   // before the `finishedBatchQueue_` (which they are using!) is destroyed.
-  ad_utility::TaskQueue<false> parsingQueue_{10, NUM_PARALLEL_PARSER_THREADS};
+  ad_utility::TaskQueue<false> parsingQueue_{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
+                                             NUM_PARALLEL_PARSER_THREADS};
 
   // The number of parsers that have started, but not yet finished. This is
   // needed to detect the complete parsing.
