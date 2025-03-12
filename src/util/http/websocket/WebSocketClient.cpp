@@ -50,7 +50,7 @@ void WebSocketClientImpl<StreamType>::start() {
 // ____________________________________________________________________________
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::close() {
-  if (stream_.is_open()) {
+  if (isConnected_) {
     stream_.async_close(
         websocket::close_code::normal, [this](beast::error_code ec) {
           if (ec) {
