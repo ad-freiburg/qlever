@@ -100,8 +100,4 @@ class UnicodeVocabulary {
   const UnicodeComparator& getComparator() const { return _comparator; }
 
   void close() { _underlyingVocabulary.close(); }
-
-  void build(const std::vector<std::string>& v, const std::string& filename) {
-    _underlyingVocabulary.build(v, filename);
-  }
 };
