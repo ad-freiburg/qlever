@@ -72,6 +72,9 @@ class SparqlQleverVisitor {
   enum struct DisableSomeChecksOnlyForTesting { False, True };
 
  private:
+  // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
+  // members.
+
   size_t _blankNodeCounter = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
@@ -106,6 +109,13 @@ class SparqlQleverVisitor {
   // meaning of blank and anonymous nodes is different.
   bool isInsideConstructTriples_ = false;
 
+  // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
+  // members.
+
+  // Resets the Visitors state between updates. This resets everything except
+  // prefix and base, because those are shared between consecutive updates.
+  void resetStateForMultipleUpdates();
+
  public:
   SparqlQleverVisitor() = default;
   explicit SparqlQleverVisitor(
@@ -128,7 +138,7 @@ class SparqlQleverVisitor {
   }
 
   // ___________________________________________________________________________
-  ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryContext* ctx);
@@ -200,7 +210,7 @@ class SparqlQleverVisitor {
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  ParsedQuery visit(Parser::UpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 

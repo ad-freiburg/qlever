@@ -24,7 +24,7 @@ std::vector<ParsedQuery> SparqlParser::parseQuery(std::string query) {
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.
   AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
-  return {std::move(resultOfParseAndRemainingText.resultOfParse_)};
+  return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
 // _____________________________________________________________________________
