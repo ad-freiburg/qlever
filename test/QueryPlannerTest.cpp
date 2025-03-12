@@ -3340,17 +3340,17 @@ TEST(QueryPlanner, negatedPaths) {
                           "?a", "?_QLever_internal_variable_qp_0", "?c")));
 
   h::expect("SELECT * { ?a !^<b> ?c }",
-            h::Filter("<b> != ?_QLever_internal_variable_qp_1",
+            h::Filter("<b> != ?_QLever_internal_variable_qp_0",
                       h::IndexScanFromStrings(
-                          "?c", "?_QLever_internal_variable_qp_1", "?a")));
+                          "?c", "?_QLever_internal_variable_qp_0", "?a")));
 
   h::expect("SELECT * { ?a !(^<b>) ?c }",
-            h::Filter("<b> != ?_QLever_internal_variable_qp_1",
+            h::Filter("<b> != ?_QLever_internal_variable_qp_0",
                       h::IndexScanFromStrings(
-                          "?c", "?_QLever_internal_variable_qp_1", "?a")));
+                          "?c", "?_QLever_internal_variable_qp_0", "?a")));
   h::expect(
       "SELECT * { ?a !(<b>|^<b>) ?c }",
-      h::Union(h::Filter(" <b> != ?_QLever_internal_variable_qp_0",
+      h::Union(h::Filter("<b> != ?_QLever_internal_variable_qp_0",
                          h::IndexScanFromStrings(
                              "?a", "?_QLever_internal_variable_qp_0", "?c")),
                h::Filter("<b> != ?_QLever_internal_variable_qp_1",
@@ -3358,15 +3358,12 @@ TEST(QueryPlanner, negatedPaths) {
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
   h::expect(
       "SELECT * { ?a !(<b>|^<d>|^<e>|<f>) ?c }",
-      h::Union(
-          h::Filter(
-              " <f> != ?_QLever_internal_variable_qp_0",
-              h::Filter(" <b> != ?_QLever_internal_variable_qp_0",
-                        h::IndexScanFromStrings(
-                            "?a", "?_QLever_internal_variable_qp_0", "?c"))),
-          h::Filter(
-              "<e> != ?_QLever_internal_variable_qp_1",
-              h::Filter("<d> != ?_QLever_internal_variable_qp_1",
-                        h::IndexScanFromStrings(
-                            "?c", "?_QLever_internal_variable_qp_1", "?a")))));
+      h::Union(h::Filter("<b> != ?_QLever_internal_variable_qp_0 && <f> != "
+                         "?_QLever_internal_variable_qp_0",
+                         h::IndexScanFromStrings(
+                             "?a", "?_QLever_internal_variable_qp_0", "?c")),
+               h::Filter("<d> != ?_QLever_internal_variable_qp_1 && <e> != "
+                         "?_QLever_internal_variable_qp_1",
+                         h::IndexScanFromStrings(
+                             "?c", "?_QLever_internal_variable_qp_1", "?a"))));
 }
