@@ -605,9 +605,6 @@ class SparqlQleverVisitor {
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
 
-  // Constructs a TripleComponent from a GraphTerm.
-  static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
-
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of
   // the corresponding `RuntimeParameter`).

@@ -4,23 +4,6 @@
 
 #include "Quads.h"
 
-#include "RdfParser.h"
-
-// _____________________________________________________________________________
-// TODO: deduplicate this
-TripleComponent visitGraphTerm(const GraphTerm& graphTerm) {
-  return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return element;
-    } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
-      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-          element.toSparql());
-    } else {
-      return element.toSparql();
-    }
-  });
-}
-
 // ____________________________________________________________________________________
 // Transform the triples and sets the graph on all triples.
 vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
@@ -28,8 +11,8 @@ vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     const SparqlTripleSimpleWithGraph::Graph& graph) {
   auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
       -> SparqlTripleSimpleWithGraph {
-    return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-            visitGraphTerm(triple[2]), graph};
+    return {triple[0].toTripleComponent(), triple[1].toTripleComponent(),
+            triple[2].toTripleComponent(), graph};
   };
 
   return ad_utility::transform(triples, convertTriple);
@@ -58,9 +41,9 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::getQuads() const {
 // ____________________________________________________________________________________
 std::vector<parsedQuery::GraphPatternOperation> Quads::getOperations() const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
-    return SparqlTriple::fromSimple(
-        SparqlTripleSimple(visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-                           visitGraphTerm(triple[2])));
+    return SparqlTriple::fromSimple(SparqlTripleSimple(
+        triple[0].toTripleComponent(), triple[1].toTripleComponent(),
+        triple[2].toTripleComponent()));
   };
 
   std::vector<parsedQuery::GraphPatternOperation> operations;

@@ -893,8 +893,9 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {visitGraphTerm(triple.subject_), visitVarOrPath(triple.predicate_),
-            visitGraphTerm(triple.object_)};
+    return {triple.subject_.toTripleComponent(),
+            visitVarOrPath(triple.predicate_),
+            triple.object_.toTripleComponent()};
   };
 
   BasicGraphPattern triples = {ad_utility::transform(
@@ -2756,21 +2757,6 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
   throw NotSupportedException{
       feature + " currently not supported by QLever.",
       ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-}
-
-// _____________________________________________________________________________
-TripleComponent SparqlQleverVisitor::visitGraphTerm(
-    const GraphTerm& graphTerm) {
-  return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return element;
-    } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
-      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-          element.toSparql());
-    } else {
-      return element.toSparql();
-    }
-  });
 }
 
 // _____________________________________________________________________________
