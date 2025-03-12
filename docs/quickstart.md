@@ -63,7 +63,7 @@ line does the job. It takes about 20 seconds on an AMD Ryzen 9 5900X.  The only
 purpose of the final `tee` is to save the log in a file (you can also recover
 the log from the docker container as long as it exists).
 
-        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/olympics:/index --entrypoint bash qlever -c "cd /index && xzcat olympics.nt.xz | IndexBuilderMain -F ttl -f - -l -i olympics -s olympics.settings.json | tee olympics.index-log.txt"
+        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/olympics:/index --entrypoint bash qlever -c "sudo apt-get -y update && sudo apt-get -y install xz-utils && cd /index && xzcat olympics.nt.xz | IndexBuilderMain -F ttl -f - -i olympics -s olympics.settings.json | tee olympics.index-log.txt"
 
 To build an index for the complete Wikidata (16 billion triples as of 30.09.2021), the
 following command line does the job (after obtaining the dataset and the
