@@ -32,17 +32,7 @@ bool TurtleParser<T>::statement() {
 // ______________________________________________________________
 template <class T>
 bool TurtleParser<T>::directive() {
-  bool successfulParse = prefixID() || base() || sparqlPrefix() || sparqlBase();
-  if (successfulParse && prefixAndBaseDisabled_) {
-    raise(
-        "@prefix or @base directives need to be at the beginning of the file "
-        "when using the parallel parser. Use '--parse-parallel false' if you "
-        "can't guarantee this. If the reason for this error is that the input "
-        "is a concatenation of Turtle files, each of which has the prefixes at "
-        "the beginning, you should feed the files to QLever separately instead "
-        "of concatenated");
-  }
-  return successfulParse;
+  return prefixID() || base() || sparqlPrefix() || sparqlBase();
 }
 
 // ________________________________________________________________
@@ -51,8 +41,14 @@ bool TurtleParser<T>::prefixID() {
   if (skip<TurtleTokenId::TurtlePrefix>()) {
     if (check(pnameNS()) && check(iriref()) &&
         check(skip<TurtleTokenId::Dot>())) {
+      const ad_utility::triple_component::Iri& newPrefix =
+          lastParseResult_.getIri();
+      if (prefixAndBaseDisabled_ && (!prefixMap_.contains(activePrefix_) ||
+                                     prefixMap_[activePrefix_] != newPrefix)) {
+        raiseDisallowedPrefixOrBaseError();
+      }
       // strip  the angled brackes <bla> -> bla
-      prefixMap_[activePrefix_] = lastParseResult_.getIri();
+      prefixMap_[activePrefix_] = newPrefix;
       return true;
     } else {
       raise("Parsing @prefix definition failed");
@@ -68,6 +64,11 @@ bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
       const auto& iri = lastParseResult_.getIri();
+      if (prefixAndBaseDisabled_ &&
+          (prefixMap_[baseForRelativeIriKey_] != iri.getBaseIri(false) ||
+           prefixMap_[baseForAbsoluteIriKey_] != iri.getBaseIri(true))) {
+        raiseDisallowedPrefixOrBaseError();
+      }
       prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
       prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
@@ -84,7 +85,13 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      prefixMap_[activePrefix_] = lastParseResult_.getIri();
+      const ad_utility::triple_component::Iri& newPrefix =
+          lastParseResult_.getIri();
+      if (prefixAndBaseDisabled_ && (!prefixMap_.contains(activePrefix_) ||
+                                     prefixMap_[activePrefix_] != newPrefix)) {
+        raiseDisallowedPrefixOrBaseError();
+      }
+      prefixMap_[activePrefix_] = newPrefix;
       return true;
     } else {
       raise("Parsing PREFIX definition failed");
@@ -100,6 +107,11 @@ bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
       auto iri = lastParseResult_.getIri();
+      if (prefixAndBaseDisabled_ &&
+          (prefixMap_[baseForRelativeIriKey_] != iri.getBaseIri(false) ||
+           prefixMap_[baseForAbsoluteIriKey_] != iri.getBaseIri(true))) {
+        raiseDisallowedPrefixOrBaseError();
+      }
       prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
       prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;

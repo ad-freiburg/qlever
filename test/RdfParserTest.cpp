@@ -1006,7 +1006,7 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
 // Test that in parallel parsing scattered prefixes or base declarations lead to
 // an exception
 TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
-  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
+  std::string filename{"exceptionOnScatteredPrefixOrBaseInParallelParser.dat"};
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              ad_utility::MemorySize bufferSize,
                                              std::string_view input) {
@@ -1019,30 +1019,94 @@ TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
         ::testing::HasSubstr("'--parse-parallel false'"));
     ad_utility::deleteFile(filename);
   };
-  std::string inputWithScatteredPrefix =
+  // Redefinition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex: <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex: <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+  // New definition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex1: <http://example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex1: <http://example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  }
+  // Same root, different relative base
+  {
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/abc> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://example.org/def> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/abc> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://example.org/def> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+}
+
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest,
+     noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser) {
+  std::string filename{
+      "noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser.dat"};
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             ad_utility::MemorySize bufferSize,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    EXPECT_NO_THROW(
+        parseFromFile<Parser>(filename, useBatchInterface, bufferSize));
+    ad_utility::deleteFile(filename);
+  };
+  std::string_view inputWithScatteredPrefix =
       "@prefix ex: <http://example.org/> . \n"
-      "<subject1> <predicate1> <object1> . \n "
-      "<subject2> <predicate2> <object2> . \n"
+      "<subject> <predicate> <object> . \n "
       "@prefix ex: <http://example.org/> . \n";
-  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
-  std::string inputWithScatteredSparqlPrefix =
-      "PREFIX ex: <http://example.org/> . \n"
-      "<subject1> <predicate1> <object1> . \n "
-      "<subject2> <predicate2> <object2> . \n"
-      "PREFIX ex: <http://example.org/> . \n";
-  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
-  std::string inputWithScatteredBase =
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+  std::string_view inputWithScatteredSparqlPrefix =
+      "PREFIX ex: <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "PREFIX ex: <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  std::string_view inputWithScatteredBase =
       "@base <http://example.org/> . \n"
-      "<subject1> <predicate1> <object1> . \n "
-      "<subject2> <predicate2> <object2> . \n"
+      "<subject> <predicate> <object> . \n "
       "@base <http://example.org/> . \n";
-  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
-  std::string inputWithScatteredSparqlBase =
-      "BASE <http://example.org/> . \n"
-      "<subject1> <predicate1> <object1> . \n "
-      "<subject2> <predicate2> <object2> . \n"
-      "BASE <http://example.org/> . \n";
-  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+  std::string_view inputWithScatteredSparqlBase =
+      "BASE <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "BASE <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
 }
 
 // Test that the parallel parser's destructor can be run quickly and without

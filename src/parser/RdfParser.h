@@ -165,6 +165,17 @@ class TurtleParser : public RdfParserBase {
   static constexpr const char* baseForRelativeIriKey_ = "@";
   static constexpr const char* baseForAbsoluteIriKey_ = "@@";
 
+  [[noreturn]] void raiseDisallowedPrefixOrBaseError() const {
+    AD_CORRECTNESS_CHECK(prefixAndBaseDisabled_);
+    raise(
+        "@prefix or @base directives need to be at the beginning of the file "
+        "when using the parallel parser. Later redundant redefinitions are "
+        "fine. Use '--parse-parallel false' if you can't guarantee this. If "
+        "the reason for this error is that the input is a concatenation of "
+        "Turtle files, each of which has the prefixes at the beginning, you "
+        "should feed the files to QLever separately instead of concatenated");
+  }
+
  protected:
   // Data members.
 
@@ -257,7 +268,7 @@ class TurtleParser : public RdfParserBase {
   virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
-  [[noreturn]] void raise(std::string_view error_message) {
+  [[noreturn]] void raise(std::string_view error_message) const {
     auto d = tok_.view();
     std::stringstream errorMessage;
     errorMessage << "Parse error at byte position " << getParsePosition()
