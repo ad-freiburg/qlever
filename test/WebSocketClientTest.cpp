@@ -17,7 +17,7 @@ namespace ad_utility::websocket {
 TEST(WebSocketClient, HttpConnection) {
   auto isConnected = []<typename T>(const T& w) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    return w.stream_.is_open() && !w.ioContext_.stopped();
+    return w.isConnected_.load();
   };
 
   // 0. Close without established connection.
@@ -41,7 +41,7 @@ TEST(WebSocketClient, HttpConnection) {
   // 2. Connection failed (server not running)
   {
     auto check = [&](std::string_view s) {
-      auto w = getRuntimeInfoClient(
+      auto w = getWebSocketClient(
           ad_utility::httpUtils::Url(s), "/",
           []([[maybe_unused]] const std::string& _) { return _; });
 

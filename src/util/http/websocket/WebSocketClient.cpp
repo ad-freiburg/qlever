@@ -63,6 +63,7 @@ void WebSocketClientImpl<StreamType>::close() {
   }
   if (ioThread_.joinable()) ioThread_.join();
   AD_CONTRACT_CHECK(ioContext_.stopped());
+  isConnected_ = false;
 }
 
 // ____________________________________________________________________________
@@ -144,6 +145,7 @@ void WebSocketClientImpl<StreamType>::asyncWebsocketHandshake() {
         // Websocket handshake successful.
         // Currently this is hardcoded to immediately start reading messages,
         // keeping the `ioContext_` running.
+        isConnected_ = true;
         readMessages();
       });
 }
@@ -182,12 +184,12 @@ std::string concatUrlPaths(const std::string& a, const std::string& b) {
 }
 
 // ____________________________________________________________________________
-WebSocketVariant getRuntimeInfoClient(
+WebSocketClientVariant getWebSocketClient(
     const ad_utility::httpUtils::Url& url, const std::string& webSocketPath,
     const std::function<void(const std::string&)>& msgHandler) {
   using namespace ad_utility::use_type_identity;
   auto getClient = [&]<typename T>(TI<T>) {
-    WebSocketVariant c = std::make_unique<T>(
+    WebSocketClientVariant c = std::make_unique<T>(
         url.host(), url.port(), concatUrlPaths(url.target(), webSocketPath));
     std::visit(
         [&](auto& client) {

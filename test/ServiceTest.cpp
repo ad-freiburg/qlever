@@ -117,7 +117,7 @@ class ServiceTest : public ::testing::Test {
         .getRuntimeInfoClient_ =
             [](const ad_utility::httpUtils::Url&, const std::string&,
                std::function<void(const std::string&)>) {
-              return Service::WebSocketClientVariant();
+              return ad_utility::websocket::WebSocketClientVariant();
             }};
   };
 

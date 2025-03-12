@@ -38,13 +38,11 @@ class Service : public Operation {
       std::string_view,
       const std::vector<std::pair<std::string, std::string>>&)>;
 
-  // The type of the function used to obtain the RuntimeInformation.
-  using WebSocketClientVariant = std::variant<
-      std::unique_ptr<ad_utility::websocket::HttpWebSocketClient>,
-      std::unique_ptr<ad_utility::websocket::HttpsWebSocketClient>>;
-  using GetRuntimeInfoClient = std::function<WebSocketClientVariant(
-      const ad_utility::httpUtils::Url&, const std::string& target,
-      std::function<void(const std::string&)>)>;
+  // The type of the function used to get the WebSocketClient.
+  using GetRuntimeInfoClient =
+      std::function<ad_utility::websocket::WebSocketClientVariant(
+          const ad_utility::httpUtils::Url&, const std::string& target,
+          std::function<void(const std::string&)>)>;
 
   // Information on a Sibling operation.
   struct SiblingInfo {
@@ -79,11 +77,11 @@ class Service : public Operation {
   // remote endpoint. The default is to use `httpUtils::sendHttpOrHttpsRequest`,
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
-  Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          NetworkFunctions networkFunctions = {
-              .getResultFunction_ = sendHttpOrHttpsRequest,
-              .getRuntimeInfoClient_ =
-                  ad_utility::websocket::getRuntimeInfoClient});
+  Service(
+      QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
+      NetworkFunctions networkFunctions = {
+          .getResultFunction_ = sendHttpOrHttpsRequest,
+          .getRuntimeInfoClient_ = ad_utility::websocket::getWebSocketClient});
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;

@@ -81,6 +81,9 @@ class WebSocketClientImpl {
   // Handler function to handle received messages in `readMessages()`.
   MessageHandler msgHandler_;
 
+  // Connection indicator for thread-safe testing.
+  std::atomic<bool> isConnected_{false};
+
   FRIEND_TEST(WebSocketClient, HttpConnection);
   FRIEND_TEST(WebSocketClient, ReadMessages);
 };
@@ -89,12 +92,13 @@ using HttpWebSocketClient = WebSocketClientImpl<tcp::socket>;
 using HttpsWebSocketClient =
     WebSocketClientImpl<beast::ssl_stream<tcp::socket>>;
 
-using WebSocketVariant = std::variant<std::unique_ptr<HttpWebSocketClient>,
-                                      std::unique_ptr<HttpsWebSocketClient>>;
+using WebSocketClientVariant =
+    std::variant<std::unique_ptr<HttpWebSocketClient>,
+                 std::unique_ptr<HttpsWebSocketClient>>;
 
-// Convenience function to get a webSocketClient handling all incoming messages
+// Convenience function to get a WebSocketClient handling all incoming messages
 // with the given `msgHandler_`.
-WebSocketVariant getRuntimeInfoClient(
+WebSocketClientVariant getWebSocketClient(
     const ad_utility::httpUtils::Url& url, const std::string& target,
     const std::function<void(const std::string&)>& msgHandler);
 

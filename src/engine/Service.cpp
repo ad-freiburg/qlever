@@ -130,7 +130,7 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // a websocket connection, this works for QLever endpoints only.
   const std::string queryId = ad_utility::UuidGenerator()();
   const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
-  auto webSocketClient = networkFunctions_.getRuntimeInfoClient_(
+  auto runtimeInfoClient = networkFunctions_.getRuntimeInfoClient_(
       serviceUrl, wsTarget,
       std::bind(&Service::handleChildRuntimeInfoUpdate, this,
                 std::placeholders::_1));
