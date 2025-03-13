@@ -36,127 +36,27 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       geometries_{qec->getAllocator()} {}
 
 // ____________________________________________________________________________
-util::geo::I32Box SpatialJoinAlgorithms::lsjParse(
-    bool side, const IdTable* restable, size_t row, ColumnIndex col,
-    sj::Sweeper& sweeper, std::vector<sj::WriteBatch>& parseBatches, size_t t,
-    const util::geo::I32Box& filterBox) const {
-  auto id = restable->at(row, col);
-  auto strId = std::to_string(row);
-
-  util::geo::I32Box ret;
-
-  if (id.getDatatype() == Datatype::VocabIndex) {
-    const auto wkt = qec_->getIndex().indexToString(id.getVocabIndex());
-
-    if (wkt.size() > 6 && memcmp(wkt.c_str(), "\"POINT", 6) == 0) {
-      const auto& point = sj::parsePoint(wkt.c_str() + 6);
-      ret = sweeper.getPaddedBoundingBox(point);
-
-      if (util::geo::intersects(ret, filterBox)) {
-        sweeper.add(point, strId, side, parseBatches[t]);
-      }
-    } else if (wkt.size() > 11 &&
-               memcmp(wkt.c_str(), "\"MULTIPOINT", 11) == 0) {
-      const auto& mp =
-          util::geo::I32MultiPoint(sj::parseLineString(wkt.c_str() + 11, 0));
-      ret = sweeper.getPaddedBoundingBox(mp);
-      if (mp.size() != 0 && util::geo::intersects(ret, filterBox))
-        sweeper.add(mp, strId, side, parseBatches[t]);
-    } else if (wkt.size() > 11 &&
-               memcmp(wkt.c_str(), "\"LINESTRING", 11) == 0) {
-      const auto& line = sj::parseLineString(wkt.c_str() + 11, 0);
-      ret = sweeper.getPaddedBoundingBox(line);
-      if (line.size() > 1 && util::geo::intersects(ret, filterBox))
-        sweeper.add(line, strId, side, parseBatches[t]);
-    } else if (wkt.size() > 16 &&
-               memcmp(wkt.c_str(), "\"MULTILINESTRING", 16) == 0) {
-      const auto& ml = sj::parseMultiLineString(wkt.c_str() + 16, 0);
-      ret = sweeper.getPaddedBoundingBox(ml);
-      if (util::geo::intersects(ret, filterBox)) {
-        sweeper.add(ml, strId, side, parseBatches[t]);
-      }
-    } else if (wkt.size() > 8 && memcmp(wkt.c_str(), "\"POLYGON", 8) == 0) {
-      const auto& poly = sj::parsePolygon(wkt.c_str() + 8, 0);
-      ret = sweeper.getPaddedBoundingBox(poly);
-      if (poly.getOuter().size() > 1 && util::geo::intersects(ret, filterBox))
-        sweeper.add(poly, strId, side, parseBatches[t]);
-    } else if (wkt.size() > 13 &&
-               memcmp(wkt.c_str(), "\"MULTIPOLYGON", 13) == 0) {
-      const auto& mp = sj::parseMultiPolygon(wkt.c_str() + 13, 0);
-      ret = sweeper.getPaddedBoundingBox(mp);
-      if (mp.size() && util::geo::intersects(ret, filterBox))
-        sweeper.add(mp, strId, side, parseBatches[t]);
-    } else if (wkt.size() > 19 &&
-               memcmp(wkt.c_str(), "\"GEOMETRYCOLLECTION", 19) == 0) {
-      const auto& p = sj::parseGeometryCollection(wkt.c_str() + 19);
-      const auto& col = p.first;
-
-      ret = sweeper.getPaddedBoundingBox(col);
-
-      if (col.size() && util::geo::intersects(ret, filterBox)) {
-        size_t subId = p.second > 1 ? 1 : 0;
-
-        for (const auto& a : col) {
-          if (a.getType() == 0) {
-            sweeper.add(a.getPoint(), strId, subId, side, parseBatches[t]);
-          }
-          if (a.getType() == 1) {
-            sweeper.add(a.getLine(), strId, subId, side, parseBatches[t]);
-          }
-          if (a.getType() == 2) {
-            sweeper.add(a.getPolygon(), strId, subId, side, parseBatches[t]);
-          }
-          if (a.getType() == 3) {
-            sweeper.add(a.getMultiLine(), strId, subId, side, parseBatches[t]);
-          }
-          if (a.getType() == 4) {
-            sweeper.add(a.getMultiPolygon(), strId, subId, side,
-                        parseBatches[t]);
-          }
-          if (a.getType() == 6) {
-            sweeper.add(a.getMultiPoint(), strId, subId, side, parseBatches[t]);
-          }
-          subId++;
-        }
-      }
-    }
-  } else if (id.getDatatype() == Datatype::GeoPoint) {
-    const auto& p = lsjTransform(id.getGeoPoint());
-    ret = sweeper.getPaddedBoundingBox(p);
-    if (util::geo::intersects(ret, filterBox)) {
-      sweeper.add(p, strId, side, parseBatches[t]);
-    }
-  }
-
-  if (parseBatches[t].size() > BATCH_SIZE) {
-    sweeper.addBatch(parseBatches[t]);
-    parseBatches[t] = {};
-  }
-
-  return ret;
-}
-
-// ____________________________________________________________________________
-util::geo::I32Box SpatialJoinAlgorithms::lsjParse(
-    bool side, const IdTable* restable, ColumnIndex col, sj::Sweeper& sweeper,
-    std::vector<sj::WriteBatch>& parseBatches,
-    const util::geo::I32Box& filterBox) const {
-  util::geo::I32Box retBox;
+util::geo::I32Box SpatialJoinAlgorithms::lsjParse(bool side,
+                                                  const IdTable* restable,
+                                                  ColumnIndex col,
+                                                  sj::Sweeper& sweeper,
+                                                  sj::WKTParser& parser) const {
   for (size_t row = 0; row < restable->size(); row++) {
-    retBox =
-        util::geo::extendBox(retBox, lsjParse(side, restable, row, col, sweeper,
-                                              parseBatches, 0, filterBox));
-  }
-  return retBox;
-}
+    auto id = restable->at(row, col);
+    if (id.getDatatype() == Datatype::VocabIndex) {
+      const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
 
-// ____________________________________________________________________________
-::util::geo::I32Point SpatialJoinAlgorithms::lsjTransform(
-    const GeoPoint& loc) const {
-  auto point = ::util::geo::latLngToWebMerc(
-      ::util::geo::DPoint(loc.getLng(), loc.getLat()));
-  return ::util::geo::I32Point{static_cast<int>(point.getX() * PREC),
-                               static_cast<int>(point.getY() * PREC)};
+      // +1 because of leading quote
+      parser.parseWKT(wkt.c_str() + 1, row, side);
+    } else if (id.getDatatype() == Datatype::GeoPoint) {
+      const auto& p = id.getGeoPoint();
+      parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row, side);
+    }
+  }
+
+  parser.done();
+
+  return parser.getBoundingBox();
 }
 
 // ____________________________________________________________________________
@@ -391,15 +291,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
               joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
-  // Helper function to convert `GeoPoint` to `S2Point`
-  auto constexpr toS2Point = [](const GeoPoint& p) {
-    auto lat = p.getLat();
-    auto lng = p.getLng();
-    auto latlng = S2LatLng::FromDegrees(lat, lng);
-    return S2Point{latlng};
-  };
-
-  size_t NUM_THREADS = 16;
+  size_t NUM_THREADS = std::thread::hardware_concurrency();
 
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
@@ -447,7 +339,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
        {}},
       ".", "");
 
-  std::vector<sj::WriteBatch> batches(NUM_THREADS);
+  sj::WKTParser wktParser(&sweeper, NUM_THREADS);
 
   util::geo::I32Box filterBox;
 
@@ -458,17 +350,19 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // smaller one and calculate a bbox on the fly to be used as a filter for the
   // larger one
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, batches);
-    lsjParse(true, idTableRight, rightJoinCol, sweeper, batches, box);
-  } else {
-    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, batches);
-    lsjParse(false, idTableLeft, leftJoinCol, sweeper, batches, box);
-  }
+    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, wktParser);
 
-  // flush parse batches
-  for (auto& b : batches) {
-    sweeper.addBatch(b);
-    b = {};
+    sweeper.setFilterBox(box);
+
+    sj::WKTParser bParser(&sweeper, NUM_THREADS);
+    lsjParse(true, idTableRight, rightJoinCol, sweeper, bParser);
+  } else {
+    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, wktParser);
+
+    sweeper.setFilterBox(box);
+
+    sj::WKTParser bParser(&sweeper, NUM_THREADS);
+    lsjParse(false, idTableLeft, leftJoinCol, sweeper, bParser);
   }
 
   // flush geometries

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -198,26 +199,9 @@ class SpatialJoinAlgorithms {
   // cartesian coordinates. The boxes themselves are disjoint to each other.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
-  util::geo::I32Box lsjParse(bool side, const IdTable* restable, size_t row,
-                             ColumnIndex col, sj::Sweeper& sweeper,
-                             std::vector<sj::WriteBatch>& parseBatches,
-                             size_t t,
-                             const util::geo::I32Box& filterBox = {
-                                 {std::numeric_limits<int32_t>::min(),
-                                  std::numeric_limits<int32_t>::min()},
-                                 {std::numeric_limits<int32_t>::max(),
-                                  std::numeric_limits<int32_t>::max()}}) const;
-
   util::geo::I32Box lsjParse(bool side, const IdTable* restable,
                              ColumnIndex col, sj::Sweeper& sweeper,
-                             std::vector<sj::WriteBatch>& parseBatches,
-                             const util::geo::I32Box& filterBox = {
-                                 {std::numeric_limits<int32_t>::min(),
-                                  std::numeric_limits<int32_t>::min()},
-                                 {std::numeric_limits<int32_t>::max(),
-                                  std::numeric_limits<int32_t>::max()}}) const;
-
-  ::util::geo::I32Point lsjTransform(const GeoPoint& loc) const;
+                             sj::WKTParser& parser) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
