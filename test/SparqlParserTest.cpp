@@ -1286,7 +1286,8 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   }
   {
     ParsedQuery q = SparqlParser::parseQuery(
-        "SELECT * { ?x ?y ?z . ?a ?b ?c . FILTER (LANG(?a) = \"en\")}");
+        "SELECT * { ?x ?y ?z . ?a ?b ?c ."
+        "?d <a> ?f . FILTER (LANG(?a) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
 }
