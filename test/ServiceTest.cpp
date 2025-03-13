@@ -493,6 +493,35 @@ TEST_F(ServiceTest, computeResult) {
   }
 }
 
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+
+  auto sibling = std::make_shared<Values>(
+      testQec,
+      (parsedQuery::SparqlValues){{Variable{"?a"}}, {{TC(iri("<a>"))}}});
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?a"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ SELECT ?obj WHERE { ?a ?b ?c } }",
+      false};
+
+  std::string_view expectedSparqlQuery =
+      " SELECT ?a WHERE { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
+      "?c } } }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({"a"}, {{"a"}}))};
+
+  serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
 TEST_F(ServiceTest, getCacheKey) {
   // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{

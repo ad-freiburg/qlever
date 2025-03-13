@@ -108,11 +108,20 @@ class Service : public Operation {
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
+  // Push down a `VALUES` clause into the body of the SERVICE clause and return
+  // it.
+  static std::string pushDownValues(std::string_view pattern,
+                                    std::string_view values);
+
+  // Return the optimized graph pattern derived from `parsedServiceClause_` and
+  // an optional derived sibling.
+  std::string getGraphPattern() const;
+
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   // Actually compute the result for the function above.
-  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
+  ProtoResult computeResultImpl(bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
@@ -148,6 +157,7 @@ class Service : public Operation {
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
   FRIEND_TEST(ServiceTest, computeResult);
+  FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
