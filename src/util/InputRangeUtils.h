@@ -58,7 +58,7 @@ CPP_class_template(typename View, typename F)(requires(
     // with lazy `generator`s.
     if (!it_.has_value()) {
       it_ = view_.begin();
-    } else {
+    } else if (*it_ != view_.end()) {
       ++(it_.value());
     }
     if (*it_ == view_.end()) {
