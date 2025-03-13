@@ -94,7 +94,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Service::computeResult(bool requestLaziness) {
   // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
     auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
@@ -120,7 +120,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+ProtoResult Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};

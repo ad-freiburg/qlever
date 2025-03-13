@@ -109,10 +109,10 @@ class Service : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   // Actually compute the result for the function above.
-  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
+  ProtoResult computeResultImpl(bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
