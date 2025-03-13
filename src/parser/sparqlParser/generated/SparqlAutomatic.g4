@@ -371,8 +371,22 @@ pathEltOrInverse
     ;
 
 pathMod
-    : '+' | '*' | '?'
+    : '+' | '*' | '?' | '{' minMax '}'
     ;
+
+// See docs at https://www.w3.org/TR/sparql11-property-paths/#path-language
+minMax
+    : stepsMin ',' stepsMax
+    | stepsExact
+    | stepsMin ','
+    | ',' stepsMax
+    ;
+
+stepsMin: integer ;
+
+stepsMax: integer ;
+
+stepsExact: integer ;
 
 
 pathPrimary

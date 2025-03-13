@@ -22,6 +22,14 @@ PropertyPath PropertyPath::makeModified(PropertyPath child,
 }
 
 // _____________________________________________________________________________
+PropertyPath PropertyPath::makeModified(PropertyPath child,
+                                        int64_t stepsMin, 
+                                        int64_t stepsMax) {
+  AD_CORRECTNESS_CHECK(stepsMin<=stepsMax);
+  return makeWithChildren({std::move(child)}, Operation::MIN_MAX, stepsMin, stepsMax);
+}
+
+// _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
   switch (operation_) {
     case Operation::ALTERNATIVE:
@@ -92,6 +100,15 @@ void PropertyPath::writeToStream(std::ostream& out) const {
         out << "missing" << std::endl;
       }
       out << ")?";
+      break;
+    case Operation::MIN_MAX:
+      out << "(";
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")";
       break;
   }
 }
