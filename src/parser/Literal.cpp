@@ -149,4 +149,10 @@ void Literal::removeDatatype() {
   beginOfSuffix_ = content_.size();
 }
 
+// __________________________________________
+void Literal::replaceContent(const std::string& newContent) {
+  content_.erase(1, beginOfSuffix_ - 2);
+  content_.insert(1, newContent);
+}
+
 }  // namespace ad_utility::triple_component

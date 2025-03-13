@@ -97,5 +97,7 @@ class Literal {
 
   // Remove the datatype suffix from the Literal.
   void removeDatatype();
+
+  void replaceContent(const std::string& newContent);
 };
 }  // namespace ad_utility::triple_component
