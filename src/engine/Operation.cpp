@@ -413,10 +413,8 @@ void Operation::updateRuntimeInformationOnSuccess(
     // Therefore, for each child of this operation the correct runtime is
     // available.
     _runtimeInfo->children_.clear();
-    for (auto* child : getChildren()) {
-      AD_CONTRACT_CHECK(child);
-      _runtimeInfo->children_.push_back(
-          child->getRootOperation()->getRuntimeInfoPointer());
+    for (const auto& child : getRuntimeInfoChildren()) {
+      _runtimeInfo->children_.push_back(child);
     }
   }
   signalQueryUpdate();
@@ -470,8 +468,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->children_.clear();
-  for (auto child : getChildren()) {
-    _runtimeInfo->children_.push_back(child->getRootOperation()->_runtimeInfo);
+  for (const auto& child : getRuntimeInfoChildren()) {
+    _runtimeInfo->children_.push_back(child);
   }
 
   _runtimeInfo->totalTime_ = duration;
@@ -598,7 +596,6 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-
 void Operation::signalQueryUpdate() const {
   if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
@@ -624,6 +621,17 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
+Operation::getRuntimeInfoChildren() {
+  absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2> res;
+  for (auto& child : getChildren()) {
+    AD_CONTRACT_CHECK(child);
+    res.emplace_back(child->getRootOperation()->getRuntimeInfoPointer());
+  }
+  return res;
 }
 
 // _____________________________________________________________________________
