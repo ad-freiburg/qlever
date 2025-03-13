@@ -97,10 +97,15 @@ size_t Service::getCostEstimate() {
 ProtoResult Service::computeResult(bool requestLaziness) {
   // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
-    auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
-    parsedServiceClause_.graphPatternAsString_ =
-        "{\n" + valuesClause.value() + '\n' +
-        parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
+    auto& graphPattern = parsedServiceClause_.graphPatternAsString_;
+    std::string_view patternView{graphPattern};
+    patternView.remove_prefix(graphPattern.find('{'));
+    if (ctre::starts_with<"\\{[ \t\r\n]*SELECT">(patternView)) {
+      graphPattern = "{\n" + valuesClause.value() + '\n' + patternView + "\n}";
+    } else {
+      graphPattern =
+          "{\n" + valuesClause.value() + '\n' + patternView.substr(1);
+    }
   }
 
   try {

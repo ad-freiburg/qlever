@@ -148,6 +148,7 @@ class Service : public Operation {
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
   FRIEND_TEST(ServiceTest, computeResult);
+  FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
