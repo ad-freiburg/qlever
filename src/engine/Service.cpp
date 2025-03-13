@@ -38,7 +38,7 @@ std::string Service::getCacheKeyImpl() const {
   }
   os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
-     << parsedServiceClause_.graphPatternAsString_ << "\n";
+     << getGraphPattern() << "\n";
   if (siblingInfo_.has_value()) {
     os << siblingInfo_->cacheKey_ << "\n";
   }
@@ -93,21 +93,32 @@ size_t Service::getCostEstimate() {
   return 10 * getSizeEstimateBeforeLimit();
 }
 
-// ____________________________________________________________________________
-ProtoResult Service::computeResult(bool requestLaziness) {
-  // Try to simplify the Service Query using it's sibling Operation.
-  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
-    auto& graphPattern = parsedServiceClause_.graphPatternAsString_;
-    std::string_view patternView{graphPattern};
-    patternView.remove_prefix(graphPattern.find('{'));
-    if (ctre::starts_with<"\\{[ \t\r\n]*SELECT">(patternView)) {
-      graphPattern = "{\n" + valuesClause.value() + '\n' + patternView + "\n}";
-    } else {
-      graphPattern =
-          "{\n" + valuesClause.value() + '\n' + patternView.substr(1);
-    }
+// _____________________________________________________________________________
+std::string Service::pushDownValues(std::string_view pattern,
+                                    std::string_view values) {
+  size_t index = pattern.find('{');
+  AD_CORRECTNESS_CHECK(index != std::string::npos);
+  pattern.remove_prefix(index + 1);
+  // If we have a single subquery in the service clause, wrap it inside curly
+  // braces so it remains valid syntax alongside a VALUES clause.
+  if (ctre::starts_with<"[ \t\r\n]*SELECT">(pattern)) {
+    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
   }
+  return absl::StrCat("{\n", values, "\n", pattern);
+}
 
+// _____________________________________________________________________________
+std::string Service::getGraphPattern() const {
+  // Try to simplify the Service Query using it's sibling Operation.
+  const auto& graphPattern = parsedServiceClause_.graphPatternAsString_;
+  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    return pushDownValues(graphPattern, valuesClause.value());
+  }
+  return graphPattern;
+}
+
+// _____________________________________________________________________________
+ProtoResult Service::computeResult(bool requestLaziness) {
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -133,9 +144,9 @@ ProtoResult Service::computeResultImpl(bool requestLaziness) {
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
-  std::string serviceQuery = absl::StrCat(
-      parsedServiceClause_.prologue_, "\nSELECT ", variablesForSelectClause,
-      " WHERE ", parsedServiceClause_.graphPatternAsString_);
+  std::string serviceQuery =
+      absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
+                   variablesForSelectClause, " WHERE ", getGraphPattern());
   LOG(INFO) << "Sending SERVICE query to remote endpoint "
             << "(protocol: " << serviceUrl.protocolAsString()
             << ", host: " << serviceUrl.host()
