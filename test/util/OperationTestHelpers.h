@@ -8,6 +8,7 @@
 #include <chrono>
 #include <vector>
 
+#include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 

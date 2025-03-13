@@ -15,6 +15,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -23,6 +24,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -262,6 +264,8 @@ inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
 
+constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
+
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
 // Return a matcher that matches a query execution tree that consists of
@@ -420,6 +424,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
+
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(
     const Matcher<const parsedQuery::Describe&>& describeMatcher,
@@ -482,6 +495,16 @@ void expectWithGivenBudget(std::string query, auto matcher,
   EXPECT_THAT(qet, matcher);
 }
 
+// Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
+void expectWithGivenBudgets(std::string query, auto matcher,
+                            std::optional<QueryExecutionContext*> optQec,
+                            std::vector<size_t> queryPlanningBudgets,
+                            source_location l = source_location::current()) {
+  for (size_t budget : queryPlanningBudgets) {
+    expectWithGivenBudget(query, matcher, optQec, budget, l);
+  }
+}
+
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
 void expectGreedy(std::string query, auto matcher,
@@ -505,13 +528,7 @@ void expectDynamicProgramming(
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = source_location::current()) {
-  auto e = [&](size_t budget) {
-    expectWithGivenBudget(query, matcher, optQec, budget, l);
-  };
-  e(0);
-  e(1);
-  e(4);
-  e(16);
-  e(64'000'000);
+  expectWithGivenBudgets(std::move(query), std::move(matcher),
+                         std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
