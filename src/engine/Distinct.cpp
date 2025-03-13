@@ -19,12 +19,17 @@ Distinct::Distinct(QueryExecutionContext* qec,
                    const std::vector<ColumnIndex>& keepIndices)
     : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
   AD_CORRECTNESS_CHECK(subtree_);
-  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-      keepIndices_, [sortedCols = subtree_->resultSortedOn(),
-                     size = keepIndices_.size()](ColumnIndex distinctCol) {
-        return ad_utility::contains(std::span{sortedCols}.subspan(0, size),
-                                    distinctCol);
-      }));
+  const auto& sortedOn = subtree_->resultSortedOn();
+  std::span relevantSortedCols{sortedOn.begin(),
+                               std::min(sortedOn.size(), keepIndices.size())};
+  bool isSorted = ql::ranges::all_of(
+      keepIndices_, [relevantSortedCols](ColumnIndex distinctCol) {
+        return ad_utility::contains(relevantSortedCols, distinctCol);
+      });
+  if (!isSorted) {
+    subtree_ =
+        QueryExecutionTree::createSortedTree(std::move(subtree_), keepIndices_);
+  }
 }
 
 // _____________________________________________________________________________

@@ -315,9 +315,7 @@ TEST(LocalVocab, propagation) {
 
   // DISTINCT operation (the third argument are the indices of the input columns
   // that are considered for the output; not important for this test).
-  Distinct distinct1(testQec,
-                     QueryExecutionTree::createSortedTree(qet(values1), {0, 1}),
-                     {0, 1});
+  Distinct distinct1(testQec, qet(values1), {0, 1});
   checkLocalVocab(distinct1, localVocab1);
 
   // GROUP BY operation.
@@ -343,8 +341,7 @@ TEST(LocalVocab, propagation) {
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
   // as it did before GroupBy::computeResult copied it's local vocabulary).
-  Distinct distinct2(
-      testQec, QueryExecutionTree::createSortedTree(qet(values1), {0}), {0});
+  Distinct distinct2(testQec, qet(values1), {0});
   checkLocalVocab(distinct2, localVocab1);
 
   // UNION operation with exactly one non-empty local vocab and with two
