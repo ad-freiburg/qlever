@@ -278,8 +278,13 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
+      // TODO<RobinTF> There might be more cases where the variable is matched
+      // against a pattern.
       if (triple.s_ == variable || triple.o_ == variable ||
           (isVariable(triple.p_) && triple.p_.iri_ == variable.name())) {
+        // If at some point we find a triple using the variable, we know that it
+        // is safe to join it with an index scan to filter out non-matching
+        // language tags.
         variableFoundInTriple = true;
       }
     }
