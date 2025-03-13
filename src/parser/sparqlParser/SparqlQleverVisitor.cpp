@@ -54,6 +54,11 @@ using SparqlValues = parsedQuery::SparqlValues;
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
+namespace {
+constexpr std::string_view a =
+    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+}
+
 // _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
     const antlr4::ParserRuleContext* context) {
@@ -1573,7 +1578,7 @@ GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
+    return GraphTerm{Iri{std::string{a}}};
   }
 }
 
@@ -1866,21 +1871,27 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+    return PropertyPath::fromIri(std::string{a});
   }
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
-  reportNotSupported(ctx, "\"!\" inside a property path is ");
+PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+  return PropertyPath::makeNegated(visitVector(ctx->pathOneInPropertySet()));
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext*) {
-  // This rule is only used by the `PathNegatedPropertySet` rule which also is
-  // not supported and should already have thrown an exception.
-  AD_FAIL();
+PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
+  std::string iri = ctx->iri()
+                        ? std::move(visit(ctx->iri()).toStringRepresentation())
+                        : std::string{a};
+  const std::string& text = ctx->getText();
+  AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
+  auto propertyPath = PropertyPath::fromIri(std::move(iri));
+  if (text.starts_with("^")) {
+    return PropertyPath::makeInverse(propertyPath);
+  }
+  return propertyPath;
 }
 
 // ____________________________________________________________________________________
