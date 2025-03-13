@@ -238,8 +238,19 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && !ctx->update()->update1()) {
+void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  _blankNodeCounter = 0;
+  numGraphPatterns_ = 0;
+  visibleVariables_ = {};
+  activeDatasetClauses_ = {};
+  prologueString_ = {};
+  parsedQuery_ = {};
+  isInsideConstructTriples_ = false;
+}
+
+// ____________________________________________________________________________________
+std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
+  if (ctx->update() && ctx->update()->update1().empty()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
     // have an `update1()`, then it consists of a (possibly empty) prologue, but
@@ -249,7 +260,8 @@ ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
                 "Empty query (this includes queries that only consist "
                 "of comments or prefix declarations).");
   }
-  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
+  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
+                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -513,23 +525,29 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
-  // The prologue (BASE and PREFIX declarations)  only affects the internal
-  // state of the visitor.
-  visit(ctx->prologue());
+std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
+  std::vector<ParsedQuery> updates{};
 
-  auto update = visit(ctx->update1());
-
-  // More than one operation in a single update request is not yet supported,
-  // but a semicolon after a single update is allowed.
-  if (ctx->update() && !ctx->update()->getText().empty()) {
-    parsedQuery_ = ParsedQuery{};
-    reportNotSupported(ctx->update(), "Multiple updates in one query are");
+  AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
+  for (size_t i = 0; i < ctx->update1().size(); ++i) {
+    // The prologue (BASE and PREFIX declarations) only affects the internal
+    // state of the visitor. The standard mentions that prefixes are shared
+    // between consecutive updates.
+    visit(ctx->prologue(i));
+    auto thisUpdate = visit(ctx->update1(i));
+    // The string representation of the Update is from the beginning of that
+    // updates prologue to the end of the update. The `;` between queries is
+    // ignored in the string representation.
+    const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
+    const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
+    thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
+        ctx->getStart()->getInputStream()->toString(), updateStartPos,
+        updateEndPos - updateStartPos + 1)};
+    updates.push_back(std::move(thisUpdate));
+    resetStateForMultipleUpdates();
   }
 
-  update._originalString = ctx->getStart()->getInputStream()->toString();
-
-  return update;
+  return updates;
 }
 
 // ____________________________________________________________________________________
@@ -542,7 +560,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
   }
 
-  return parsedQuery_;
+  return std::move(parsedQuery_);
 }
 
 // ____________________________________________________________________________________

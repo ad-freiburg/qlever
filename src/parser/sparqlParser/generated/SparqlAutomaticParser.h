@@ -1052,9 +1052,10 @@ class SparqlAutomaticParser : public antlr4::Parser {
    public:
     UpdateContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    PrologueContext* prologue();
-    Update1Context* update1();
-    UpdateContext* update();
+    std::vector<PrologueContext*> prologue();
+    PrologueContext* prologue(size_t i);
+    std::vector<Update1Context*> update1();
+    Update1Context* update1(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
