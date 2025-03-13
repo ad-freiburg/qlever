@@ -24,6 +24,7 @@
 #include "util/ParseableDuration.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
+#include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
