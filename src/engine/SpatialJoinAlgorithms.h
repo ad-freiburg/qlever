@@ -84,6 +84,7 @@ class SpatialJoinAlgorithms {
                         std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
   Result BoundingBoxAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
@@ -144,6 +145,10 @@ class SpatialJoinAlgorithms {
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
+  /*
+std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
+                                      ColumnIndex col) const;
+                                      */
 
   // returns everything between the first two quotes. If the string does not
   // contain two quotes, the string is returned as a whole
