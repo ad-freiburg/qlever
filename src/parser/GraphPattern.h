@@ -42,8 +42,9 @@ class GraphPattern {
   // pattern.
 
   // Modify query to take care of language filter. `variable` is the variable,
-  // `languageInQuotes` is the language.
-  void addLanguageFilter(const Variable& variable,
+  // `languageInQuotes` is the language. Return `true` if it could successfully
+  // be applied, false otherwise.
+  bool addLanguageFilter(const Variable& variable,
                          const std::string& languageInQuotes);
 
   bool _optional;
