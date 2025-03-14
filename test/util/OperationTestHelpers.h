@@ -32,7 +32,7 @@ class StallForeverOperation : public Operation {
   using Operation::Operation;
   // Do-nothing operation that runs for 100ms without computing anything, but
   // which can be cancelled.
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto end = std::chrono::steady_clock::now() + 100ms;
     while (std::chrono::steady_clock::now() < end) {
       checkCancellation();
@@ -79,7 +79,7 @@ class ShallowParentOperation : public Operation {
     return {child_.get()};
   }
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
     return {childResult->idTable().clone(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
@@ -127,7 +127,7 @@ class AlwaysFailOperation : public Operation {
   using Operation::Operation;
   AlwaysFailOperation(QueryExecutionContext* qec, Variable variable)
       : Operation{qec}, variable_{std::move(variable)} {}
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     if (!requestLaziness) {
       throw std::runtime_error{"AlwaysFailOperation"};
     }
@@ -166,7 +166,7 @@ class CustomGeneratorOperation : public Operation {
   CustomGeneratorOperation(QueryExecutionContext* context,
                            Result::Generator generator)
       : Operation{context}, generator_{std::move(generator)} {}
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     AD_CONTRACT_CHECK(requestLaziness);
     return {std::move(generator_), resultSortedOn()};
   }

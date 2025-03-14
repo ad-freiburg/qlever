@@ -69,8 +69,7 @@ class Sort : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

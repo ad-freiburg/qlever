@@ -44,7 +44,7 @@ class Bind : public Operation {
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   static IdTable cloneSubView(const IdTable& idTable,
                               const std::pair<size_t, size_t>& subrange);

@@ -48,8 +48,7 @@ class Values : public Operation {
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

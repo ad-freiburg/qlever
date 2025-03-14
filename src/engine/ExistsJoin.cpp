@@ -82,7 +82,7 @@ size_t ExistsJoin::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   auto leftRes = left_->getResult();
   auto rightRes = right_->getResult();
   const auto& left = leftRes->idTable();

@@ -90,7 +90,7 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of

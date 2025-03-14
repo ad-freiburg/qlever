@@ -49,7 +49,7 @@ class TextIndexScanForWord : public Operation {
 
   // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 };

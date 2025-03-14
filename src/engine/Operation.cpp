@@ -133,13 +133,13 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
 }
 
 // _____________________________________________________________________________
-ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
-                                      ComputationMode computationMode) {
+Result Operation::runComputation(const ad_utility::Timer& timer,
+                                 ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
-  ProtoResult result =
+  Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
                     result.isFullyMaterialized());

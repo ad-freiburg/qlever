@@ -190,7 +190,7 @@ size_t Union::getCostEstimate() {
          getSizeEstimateBeforeLimit();
 }
 
-ProtoResult Union::computeResult(bool requestLaziness) {
+Result Union::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   std::shared_ptr<const Result> subRes1 =
       _subtrees[0]->getResult(requestLaziness);
@@ -203,9 +203,9 @@ ProtoResult Union::computeResult(bool requestLaziness) {
       _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
     auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
                                             std::move(subRes2));
-    return requestLaziness ? ProtoResult{std::move(generator), resultSortedOn()}
-                           : ProtoResult{getSingleElement(std::move(generator)),
-                                         resultSortedOn()};
+    return requestLaziness ? Result{std::move(generator), resultSortedOn()}
+                           : Result{getSingleElement(std::move(generator)),
+                                    resultSortedOn()};
   }
 
   if (requestLaziness) {

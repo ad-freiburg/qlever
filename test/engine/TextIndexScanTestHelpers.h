@@ -15,7 +15,7 @@ namespace textIndexScanTestHelpers {
 // The only problem is the increased size of the docsDB and the double saving
 // of the literals.
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
-                                           const ProtoResult& result,
+                                           const Result& result,
                                            const size_t& rowIndex) {
   size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
   uint64_t textRecordIdFromTable =
@@ -32,14 +32,14 @@ inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
 }
 
 inline const TextRecordIndex getTextRecordIdFromResultTable(
-    [[maybe_unused]] const QueryExecutionContext* qec,
-    const ProtoResult& result, const size_t& rowIndex) {
+    [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
+    const size_t& rowIndex) {
   return result.idTable().getColumn(0)[rowIndex].getTextRecordIndex();
 }
 
 // Only use on prefix search results
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
-                                       const ProtoResult& result,
+                                       const Result& result,
                                        const size_t& rowIndex) {
   return qec->getIndex().indexToString(
       result.idTable().getColumn(1)[rowIndex].getVocabIndex());
@@ -47,15 +47,15 @@ inline string getEntityFromResultTable(const QueryExecutionContext* qec,
 
 // Only use on prefix search results
 inline string getWordFromResultTable(const QueryExecutionContext* qec,
-                                     const ProtoResult& result,
+                                     const Result& result,
                                      const size_t& rowIndex) {
   return std::string{qec->getIndex().indexToString(
       result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
 inline size_t getScoreFromResultTable(
-    [[maybe_unused]] const QueryExecutionContext* qec,
-    const ProtoResult& result, const size_t& rowIndex, bool wasPrefixSearch) {
+    [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
+    const size_t& rowIndex, bool wasPrefixSearch) {
   size_t colToRetrieve = wasPrefixSearch ? 2 : 1;
   return static_cast<size_t>(
       result.idTable().getColumn(colToRetrieve)[rowIndex].getInt());

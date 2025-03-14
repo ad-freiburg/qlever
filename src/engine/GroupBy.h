@@ -100,7 +100,7 @@ class GroupBy : public Operation {
   sparqlExpression::EvaluationContext createEvaluationContext(
       const LocalVocab& localVocab, const IdTable& idTable) const;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by

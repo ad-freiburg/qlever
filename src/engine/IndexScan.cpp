@@ -231,7 +231,7 @@ IdTable IndexScan::materializedIndexScan() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult(bool requestLaziness) {
+Result IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};

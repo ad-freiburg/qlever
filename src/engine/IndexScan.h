@@ -178,7 +178,7 @@ class IndexScan final : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

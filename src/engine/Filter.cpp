@@ -60,7 +60,7 @@ void Filter::setPrefilterExpressionForChildren() {
 }
 
 // _____________________________________________________________________________
-ProtoResult Filter::computeResult(bool requestLaziness) {
+Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
   LOG(DEBUG) << "Filter result computation..." << endl;

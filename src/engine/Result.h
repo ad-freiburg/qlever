@@ -258,7 +258,3 @@ class Result {
   // generator.
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
-
-// Class alias to conceptually differentiate between Results that produce
-// values and Results meant to be consumed.
-using ProtoResult = Result;

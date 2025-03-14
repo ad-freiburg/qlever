@@ -147,7 +147,7 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @return Result The result of the TransitivePath operation
    */
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     auto [startSide, targetSide] = decideDirection();
     // In order to traverse the graph represented by this result, we need random
     // access across the whole table, so it doesn't make sense to lazily compute
@@ -162,17 +162,15 @@ class TransitivePathImpl : public TransitivePathBase {
           computeTransitivePathBound(std::move(subRes), startSide, targetSide,
                                      std::move(sideRes), !requestLaziness);
 
-      return requestLaziness
-                 ? ProtoResult{std::move(gen), resultSortedOn()}
-                 : ProtoResult{cppcoro::getSingleElement(std::move(gen)),
-                               resultSortedOn()};
+      return requestLaziness ? Result{std::move(gen), resultSortedOn()}
+                             : Result{cppcoro::getSingleElement(std::move(gen)),
+                                      resultSortedOn()};
     }
     auto gen = computeTransitivePath(std::move(subRes), startSide, targetSide,
                                      !requestLaziness);
-    return requestLaziness
-               ? ProtoResult{std::move(gen), resultSortedOn()}
-               : ProtoResult{cppcoro::getSingleElement(std::move(gen)),
-                             resultSortedOn()};
+    return requestLaziness ? Result{std::move(gen), resultSortedOn()}
+                           : Result{cppcoro::getSingleElement(std::move(gen)),
+                                    resultSortedOn()};
   }
 
   /**
