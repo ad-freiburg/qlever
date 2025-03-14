@@ -351,8 +351,7 @@ class ValueId {
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
       return H::combine(std::move(h), id._bits, 0);
     }
-    auto lvi = id.getLocalVocabIndex();
-    auto [lower, upper] = lvi->positionInVocab();
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
     if (upper != lower) {
       return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 1);
     }
