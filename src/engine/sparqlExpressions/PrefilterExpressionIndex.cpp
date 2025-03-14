@@ -240,7 +240,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
   RelevantBlockRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   // Helper to properly add the range defining index pair to `blockRanges`.
-  // This procedure ensures that the added ranges dont't overlap by merging
+  // This procedure ensures that the added ranges don't overlap by merging
   // them if required.
   const auto addRange = [&blockRanges](const size_t rangeIdxFirst,
                                        const size_t rangeIdxSecond) {
@@ -277,7 +277,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
 // (1)
 // Assume for simplicity that the following construct represents the
 // `BlockMetadata` span (`input`) provided to `PrefilterExpression::evaluate`
-// eralier on. Each bracket representing the relevant first and last `ValueId`
+// earlier on. Each bracket representing the relevant first and last `ValueId`
 // for a single `BlockMetadata` value.
 // Lets assume `std::span<const BlockMetadata> input` is:
 // `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150, 1158]}`
@@ -320,7 +320,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
 // Remark: For every `BlockMetadata` value we retrieved two bounding
 // `ValueId`s. This is the reason why we have to divide by two. We also round up
 // with `(std::distance(idSpanBegin, secondIdRangeIt) + 1) / 2` because the
-// `::iterators` specifiy ranges up-to-but-not-including.
+// `::iterators` specify ranges up-to-but-not-including.
 //
 // The added range is
 // `size_t begin = std::distance(::iterator(1021), ::iterator(1021)) / 2
@@ -353,7 +353,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRanges(
   RelevantBlockRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   // Helper to properly add the range defining index pair to `blockRanges`.
-  // This procedure ensures that the added ranges dont't overlap by merging
+  // This procedure ensures that the added ranges don't overlap by merging
   // them if required.
   const auto addRange = [&blockRanges](const size_t rangeIdxFirst,
                                        const size_t rangeIdxSecond) {
