@@ -112,7 +112,6 @@ LiteralValueGetterWithXsdStringFilter::operator()(
   if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
     return s.getLiteral();
   }
-  AD_THROW("Input is not a plain string or xsd:string.");
   return std::nullopt;
 }
 

@@ -1709,11 +1709,9 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 
           // Case: IRI
           {getId("<s>"),
-           {
-               {false, false, "<s>"}
-               //, {true, false, std::nullopt}
-               //,{false, true, std::nullopt}
-           }},
+           {{false, false, "<s>"},
+            {true, false, std::nullopt},
+            {false, true, std::nullopt}}},
 
           // Case: datatype `Int`
           {ad_utility::testing::IntId(1),

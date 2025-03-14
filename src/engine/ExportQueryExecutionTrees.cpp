@@ -377,7 +377,6 @@ std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::handleIriOrLiteral(
     LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
   if (!word.isLiteral()) {
-    AD_THROW("The input is an IRI, but only literals are allowed.");
     return std::nullopt;
   }
 
@@ -395,8 +394,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
 }
 
 // _____________________________________________________________________________
-ad_utility::triple_component::LiteralOrIri
-ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
@@ -425,7 +423,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
   }
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
       -> std::optional<std::pair<std::string, const char*>> {
     if constexpr (onlyReturnLiterals) {

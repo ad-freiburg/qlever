@@ -22,6 +22,7 @@ class ExportQueryExecutionTrees {
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -78,7 +79,7 @@ class ExportQueryExecutionTrees {
   // return 'std::nullopt'. These semantics are useful for the string
   // expressions in StringExpressions.cpp.
   template <bool returnOnlyLiterals = false>
-  static std::optional<ad_utility::triple_component::Literal> idToLiteral(
+  static std::optional<Literal> idToLiteral(
       const Index& index, Id id, const LocalVocab& localVocab,
       bool onlyReturnLiteralsWithXsdString = false);
 
@@ -88,14 +89,13 @@ class ExportQueryExecutionTrees {
   // If `onlyReturnLiteralsWithXsdString` is `true`, returns `std::nullopt`.
   // If `onlyReturnLiteralsWithXsdString` is `false`, removes datatypes from
   // literals (e.g. the integer `42` is converted to the plain literal `"42"`).
-  static std::optional<ad_utility::triple_component::Literal>
-  idToLiteralForEncodedValue(Id id,
-                             bool onlyReturnLiteralsWithXsdString = false);
+  static std::optional<Literal> idToLiteralForEncodedValue(
+      Id id, bool onlyReturnLiteralsWithXsdString = false);
 
   // A helper function for the `idToLiteralOrIri` function. Checks and processes
   // a LiteralOrIri based on the given parameters.
-  static std::optional<ad_utility::triple_component::Literal>
-  handleIriOrLiteral(LiteralOrIri word, bool onlyReturnLiteralsWithXsdString);
+  static std::optional<Literal> handleIriOrLiteral(
+      LiteralOrIri word, bool onlyReturnLiteralsWithXsdString);
 
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.
@@ -105,9 +105,8 @@ class ExportQueryExecutionTrees {
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.
   // This function should only be called with suitable `Datatype` Id's,
   // otherwise `AD_FAIL()` is called.
-  static ad_utility::triple_component::LiteralOrIri
-  getLiteralOrIriFromVocabIndex(const Index& index, Id id,
-                                const LocalVocab& localVocab);
+  static LiteralOrIri getLiteralOrIriFromVocabIndex(
+      const Index& index, Id id, const LocalVocab& localVocab);
 
   // Convert a `stream_generator` to an "ordinary" `generator<string>` that
   // yields exactly the same chunks as the `stream_generator`. Exceptions that

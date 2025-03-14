@@ -151,7 +151,11 @@ struct LiteralValueGetter : Mixin<LiteralValueGetter> {
 
   std::optional<ad_utility::triple_component::Literal> operator()(
       const LiteralOrIri& s, const EvaluationContext*) const {
-    return s.getLiteral();
+    if (s.isLiteral()) {
+      return s.getLiteral();
+    } else {
+      return std::nullopt;
+    }
   }
 };
 
