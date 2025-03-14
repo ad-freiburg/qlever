@@ -47,6 +47,9 @@ struct SpatialJoinConfiguration {
   Variable left_;
   Variable right_;
 
+  // TODO<joka921> Comment
+  std::optional<Variable> leftDeletionVariable_;
+
   // If given, the distance will be added to the result and be bound to this
   // variable.
   std::optional<Variable> distanceVariable_ = std::nullopt;
@@ -73,6 +76,7 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
+  std::optional<ColumnIndex> leftDeleteColumnIndex_;
 };
 
 // The spatial join operation without a limit on the maximum number of results

@@ -24,6 +24,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
   if (predString == "left") {
     setVariable("left", object, left_);
+  } else if (predString == "leftDeletion") {
+    setVariable("leftDeletion", object, leftValuesToIgnore_);
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
@@ -148,8 +150,13 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     task = MaxDistanceConfig{maxDist_.value()};
   }
 
-  return SpatialJoinConfiguration{
-      task, left_.value(), right_.value(), distanceVariable_, pv, algo};
+  return SpatialJoinConfiguration{task,
+                                  left_.value(),
+                                  right_.value(),
+                                  leftValuesToIgnore_,
+                                  distanceVariable_,
+                                  pv,
+                                  algo};
 }
 
 // ____________________________________________________________________________

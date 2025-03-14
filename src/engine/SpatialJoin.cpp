@@ -369,6 +369,11 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Input table columns for the join
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
+  std::optional<ColumnIndex> leftDeleteCol;
+  if (config_.leftDeletionVariable_.has_value()) {
+    leftDeleteCol =
+        childLeft_->getVariableColumn(config_.leftDeletionVariable_.value());
+  }
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
   // Payload cols and join col
@@ -384,7 +389,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults()};
+                                   getMaxDist(),      getMaxResults(),
+                                   leftDeleteCol};
 }
 
 // ____________________________________________________________________________

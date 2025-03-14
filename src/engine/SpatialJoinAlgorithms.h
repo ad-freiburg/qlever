@@ -85,6 +85,7 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result S2PointPolylineAlgorithm();
+  Result S2PointStartEndpointAlgorithm();
   Result BoundingBoxAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
