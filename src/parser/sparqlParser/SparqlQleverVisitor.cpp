@@ -850,23 +850,21 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
     }
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
-  } else {
-    AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
-    auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
-    pattern._graphPatterns = std::move(subOps);
-    for (auto& filter : filters) {
-      if (auto langFilterData =
-              filter.expression_.getLanguageFilterExpression();
-          langFilterData.has_value()) {
-        const auto& [variable, language] = langFilterData.value();
-        if (pattern.addLanguageFilter(variable, language)) {
-          continue;
-        }
-      }
-      pattern._filters.push_back(std::move(filter));
-    }
-    return pattern;
   }
+  AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
+  auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
+  pattern._graphPatterns = std::move(subOps);
+  for (auto& filter : filters) {
+    if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
+        langFilterData.has_value()) {
+      const auto& [variable, language] = langFilterData.value();
+      if (pattern.addLanguageFilter(variable, language)) {
+        continue;
+      }
+    }
+    pattern._filters.push_back(std::move(filter));
+  }
+  return pattern;
 }
 
 Visitor::OperationsAndFilters Visitor::visit(
