@@ -526,21 +526,23 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   makeTestIsDatatype(
       isNum(),
       {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
-      false);
+      true);
   // Test case with b4GapNumeric. b4GapNumeric contains potentially hidden
   // numeric values (Its bounding ValueIds are not of type INT or DOUBLE).
   makeTestIsDatatype(isNum(), {b4GapNumeric}, false, {b4GapNumeric});
-  makeTestIsDatatype(isNum(), {b4GapNumeric}, false,
+  makeTestIsDatatype(isNum(), {b2, b4GapNumeric, b28}, false,
                      {b1, b2, b3, b4GapNumeric, b27, b28});
-  makeTestIsDatatype(isNum(), {b4GapNumeric}, false,
+  makeTestIsDatatype(isNum(), {b4GapNumeric, b25, b28}, false,
                      {b4GapNumeric, b25, b27, b28});
-  makeTestIsDatatype(isNum(), {b4GapNumeric}, false, {b2, b3, b4GapNumeric});
-  makeTestIsDatatype(isNum(), {}, false, {b1, b2, b3, b19, b21, b22, b23, b24});
-  makeTestIsDatatype(isNum(), {b18}, false,
+  makeTestIsDatatype(isNum(), {b2, b4GapNumeric}, false,
+                     {b2, b3, b4GapNumeric});
+  makeTestIsDatatype(isNum(), {b2}, false,
+                     {b1, b2, b3, b19, b21, b22, b23, b24});
+  makeTestIsDatatype(isNum(), {b2, b18}, false,
                      {b1, b2, b3, b18, b19, b21, b22, b23, b24});
 
   // Test isBlank
-  makeTestIsDatatype(isBlank(), {b28}, false);
+  makeTestIsDatatype(isBlank(), {b28}, true);
 
   // Test implicitly the complementing procedure defined in
   // PrefilterExpressionIndex.cpp.
@@ -575,6 +577,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   makeTestIsDatatype(notExpr(isLit()),
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28}, false,
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28});
+
   // Test !isIri
   // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
   makeTestIsDatatype(
