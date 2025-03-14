@@ -832,11 +832,12 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   auto& impl = index.getImpl();
-  auto expect = [&impl, &locatedTriplesSnapshot](
-                    Permutation::Enum p, const ScanSpecification& scanSpec,
-                    size_t lower, size_t upper, size_t exact,
-                    ad_utility::source_location sourceLocation =
-                        ad_utility::source_location::current()) {
+  auto expectResultSizes = [&impl, &locatedTriplesSnapshot](
+                               Permutation::Enum p,
+                               const ScanSpecification& scanSpec, size_t lower,
+                               size_t upper, size_t exact,
+                               ad_utility::source_location sourceLocation =
+                                   ad_utility::source_location::current()) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
@@ -854,13 +855,16 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   };
   // The Scans request all triples of the one and only block.
   for (auto perm : Permutation::ALL) {
-    expect(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2, 2);
+    expectResultSizes(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2,
+                      2);
   }
-  expect(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2, 2);
+  expectResultSizes(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2,
+                    2);
   // Not all triples of the block are requested. The size estimate is truncated
   // by a factor which is a RuntimeParameter.
-  expect(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1, 1);
-  expect(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
+  expectResultSizes(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1,
+                    1);
+  expectResultSizes(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
 }
 
 // Test the correct setting of the metadata for the contained graphs.
