@@ -17,8 +17,7 @@
 #include <cmath>
 #include <set>
 
-#include "../../cmake-build-clang-18-debug/_deps/s2-src/src/s2/s2closest_cell_query.h"
-#include "../../cmake-build-gcc-13-release-profile/_deps/s2-src/src/s2/s2shapeutil_coding.h"
+#include <s2/s2closest_cell_query.h>
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
@@ -636,6 +635,7 @@ Result SpatialJoinAlgorithms::S2PointStartEndpointAlgorithm() {
     s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
         util::units::Meters(static_cast<float>(maxDist.value()))));
   }
+  s2query.mutable_options()->sortAndDeduplicateInfiniteResults_ = false;
 
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
