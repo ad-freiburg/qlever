@@ -345,7 +345,18 @@ class ValueId {
   /// and `ad_utility::HashMap`
   template <typename H>
   friend H AbslHashValue(H h, const ValueId& id) {
-    return H::combine(std::move(h), id._bits);
+    // Depending on the case a number is added to the hashing. This ensures that
+    // for two unequal elements the hash expansion (~list of simpler values
+    // being hashed with `combine`) of neither is a suffix of the other.
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      return H::combine(std::move(h), id._bits, 0);
+    }
+    auto lvi = id.getLocalVocabIndex();
+    auto [lower, upper] = lvi->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 1);
+    }
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 2);
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
