@@ -2560,3 +2560,37 @@ TEST(SparqlParser, SourceSelector) {
   auto expectDefaultGraph = ExpectCompleteParse<&Parser::defaultGraphClause>{};
   expectDefaultGraph("<x>", m::TripleComponentIri("<x>"));
 }
+
+// _____________________________________________________________________________
+TEST(ParserTest, propertyPathInCollection) {
+  std::string query =
+      "PREFIX : <http://example.org/>\n"
+      "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  EXPECT_THAT(
+      SparqlParser::parseQuery(std::move(query)),
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples(
+              {{Var{"?_QLever_internal_variable_2"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                Var{"?_QLever_internal_variable_1"}},
+               {Var{"?_QLever_internal_variable_2"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
+               {Var{"?_QLever_internal_variable_1"},
+                PropertyPath::makeWithChildren(
+                    {PropertyPath::fromIri("<http://example.org/r>")},
+                    PropertyPath::Operation::INVERSE),
+                lit("\"hello\"")},
+               {Var{"?_QLever_internal_variable_3"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                Var{"?_QLever_internal_variable_0"}},
+               {Var{"?_QLever_internal_variable_3"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                Var{"?_QLever_internal_variable_2"}},
+               {Var{"?_QLever_internal_variable_0"},
+                PropertyPath::makeModified(
+                    PropertyPath::fromIri("<http://example.org/p>"), "*"),
+                123},
+               {Var{"?s"}, "?p", Var{"?_QLever_internal_variable_3"}}}))));
+}
