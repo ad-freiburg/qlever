@@ -30,6 +30,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -82,6 +83,15 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
+}
+
+// Helper function that assigns the node, filter and text limit ids from
+// `source` to `target`.
+void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
+                                      const QueryPlanner::SubtreePlan& source) {
+  target._idsOfIncludedNodes = source._idsOfIncludedNodes;
+  target._idsOfIncludedFilters = source._idsOfIncludedFilters;
+  target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
 }
 }  // namespace
 
@@ -176,6 +186,14 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
     plans.emplace_back(getOrderByRow(pq, plans));
+    checkCancellation();
+  }
+
+  // Apply trailing `VALUES` clause
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value() &&
+      !postValues.value()._inlineValues._variables.empty()) {
+    plans.emplace_back(applyPostQueryValues(postValues.value(), plans.back()));
     checkCancellation();
   }
 
@@ -363,6 +381,21 @@ vector<SubtreePlan> QueryPlanner::getHavingRow(
 }
 
 // _____________________________________________________________________________
+std::vector<SubtreePlan> QueryPlanner::applyPostQueryValues(
+    const parsedQuery::Values& values,
+    const std::vector<SubtreePlan>& currentPlans) const {
+  std::vector<SubtreePlan> result;
+
+  auto valuesPlan = makeSubtreePlan<::Values>(_qec, values._inlineValues);
+  for (auto& plan : currentPlans) {
+    ql::ranges::move(createJoinCandidatesAllowEmpty(
+                         plan, valuesPlan, getJoinColumns(plan, valuesPlan)),
+                     std::back_inserter(result));
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
 vector<SubtreePlan> QueryPlanner::getGroupByRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
@@ -372,9 +405,7 @@ vector<SubtreePlan> QueryPlanner::getGroupByRow(
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
-    groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    groupByPlan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
+    assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
@@ -406,9 +437,7 @@ vector<SubtreePlan> QueryPlanner::getOrderByRow(
   for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
     auto& tree = plan._qet;
-    plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
-    plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
+    assignNodesFilterAndTextLimitIds(plan, parent);
     vector<pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
@@ -872,6 +901,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
       return seedFromAlternative(left, path, right);
     case PropertyPath::Operation::INVERSE:
       return seedFromInverse(left, path, right);
+    case PropertyPath::Operation::NEGATED:
+      return seedFromNegated(left, path, right);
     case PropertyPath::Operation::IRI:
       return seedFromIri(left, path, right);
     case PropertyPath::Operation::SEQUENCE:
@@ -964,6 +995,83 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return seedFromPropertyPath(right, path.children_[0], left);
+}
+
+namespace {
+using std::string_view;
+// Split the children of a property path into forward and inverse children.
+std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
+    const std::vector<PropertyPath>& children) {
+  using Operation = PropertyPath::Operation;
+  std::vector<string_view> forwardIris;
+  std::vector<string_view> inverseIris;
+  for (const auto& child : children) {
+    if (child.operation_ == Operation::INVERSE) {
+      const auto& unwrapped = child.children_.at(0);
+      AD_CORRECTNESS_CHECK(unwrapped.operation_ == Operation::IRI);
+      inverseIris.emplace_back(unwrapped.iri_);
+    } else {
+      AD_CORRECTNESS_CHECK(child.operation_ == Operation::IRI);
+      forwardIris.emplace_back(child.iri_);
+    }
+  }
+  return {std::move(forwardIris), std::move(inverseIris)};
+}
+
+// Create a `SparqlExpression` that represents the expression `iri != variable`.
+std::unique_ptr<sparqlExpression::SparqlExpression> makeNotEqualExpression(
+    const Variable& variable, std::string_view iri) {
+  using namespace sparqlExpression;
+  return std::make_unique<NotEqualExpression>(NotEqualExpression::Children{
+      std::make_unique<IriExpression>(
+          TripleComponent::Iri::fromStringRepresentation(std::string{iri})),
+      std::make_unique<VariableExpression>(variable)});
+}
+
+// Appends a string to `os` that represents the expression `iri != variable`.
+void appendNotEqualString(std::ostream& os, std::string_view iri,
+                          const Variable& variable) {
+  os << iri << " != " << variable.name();
+}
+}  // namespace
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
+  AD_CORRECTNESS_CHECK(!path.children_.empty());
+  const auto& [forwardIris, inverseIris] = splitChildren(path.children_);
+  auto makeFilterPattern = [this](const TripleComponent& left,
+                                  const TripleComponent& right,
+                                  const std::vector<string_view>& iris) {
+    using namespace sparqlExpression;
+    Variable variable = generateUniqueVarName();
+    ParsedQuery::GraphPattern pattern =
+        seedFromIri(left, PropertyPath::fromVariable(variable), right);
+    std::ostringstream descriptor;
+    auto expression = makeNotEqualExpression(variable, iris.at(0));
+    appendNotEqualString(descriptor, iris.at(0), variable);
+    // Combine subsequent iris with a logical AND.
+    for (string_view iri : std::span{iris.begin() + 1, iris.end()}) {
+      expression = makeAndExpression(std::move(expression),
+                                     makeNotEqualExpression(variable, iri));
+      descriptor << " && ";
+      appendNotEqualString(descriptor, iri, variable);
+    }
+    pattern._filters.emplace_back(SparqlExpressionPimpl{
+        std::move(expression), std::move(descriptor).str()});
+    return pattern;
+  };
+  // If only one direction is negated, only return the pattern for that
+  // direction. Only if both are given we apply a union.
+  if (inverseIris.empty()) {
+    return makeFilterPattern(left, right, forwardIris);
+  }
+  if (forwardIris.empty()) {
+    return makeFilterPattern(right, left, inverseIris);
+  }
+  return uniteGraphPatterns({makeFilterPattern(left, right, forwardIris),
+                             makeFilterPattern(right, left, inverseIris)});
 }
 
 // _____________________________________________________________________________
@@ -1885,7 +1993,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
     return tie(a) < tie(b);
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
@@ -1909,6 +2017,17 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     jcs = getJoinColumns(a, b);
   }
 
+  return createJoinCandidates(ain, bin, jcs);
+}
+
+// _____________________________________________________________________________
+std::vector<SubtreePlan> QueryPlanner::createJoinCandidatesAllowEmpty(
+    const SubtreePlan& ain, const SubtreePlan& bin,
+    const JoinColumns& jcs) const {
+  if (jcs.empty()) {
+    return std::vector{makeSubtreePlan<CartesianProductJoin>(
+        _qec, std::vector{ain._qet, bin._qet})};
+  }
   return createJoinCandidates(ain, bin, jcs);
 }
 
@@ -2144,12 +2263,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
-      if (jcs.empty()) {
-        return std::vector{makeSubtreePlan<CartesianProductJoin>(
-            _qec, std::vector{plan1._qet, plan2._qet})};
-      }
-      return createJoinCandidates(flipped ? plan2 : plan1,
-                                  flipped ? plan1 : plan2, jcs);
+      return createJoinCandidatesAllowEmpty(flipped ? plan2 : plan1,
+                                            flipped ? plan1 : plan2, jcs);
     };
 
     auto [leftMapping, rightMapping] =
@@ -2436,7 +2551,38 @@ void QueryPlanner::checkCancellation(
   cancellationHandle_->throwIfCancelled(location);
 }
 
-// _______________________________________________________________
+// _____________________________________________________________________________
+bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
+    std::vector<SubtreePlan>& candidates, const auto& variables) {
+  using enum SubtreePlan::Type;
+  bool areVariablesUnconnected = ql::ranges::all_of(
+      variables,
+      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  if (!areVariablesUnconnected) {
+    return false;
+  }
+  // A MINUS clause that doesn't share any variable with the preceding
+  // patterns behaves as if it isn't there.
+  auto type = candidates[0].type;
+  if (type == MINUS) {
+    return true;
+  }
+  // An OPTIONAL clause that doesn't share any variable with the preceding
+  // patterns behaves as if it is joined with the neutral element.
+  if (type == OPTIONAL) {
+    auto& newPlans = candidatePlans_.emplace_back();
+    ql::ranges::for_each(
+        candidates, [this, &newPlans](const SubtreePlan& plan) {
+          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
+          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          newPlans.push_back(std::move(joinedPlan));
+        });
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     std::vector<SubtreePlan>&& candidates) {
   // Empty group graph patterns should have been handled previously.
@@ -2446,30 +2592,18 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // actually behave like ordinary (Group)GraphPatterns.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  using enum SubtreePlan::Type;
-  if (auto type = candidates[0].type;
-      (type == OPTIONAL || type == MINUS) &&
-      ql::ranges::all_of(variables, [this](const Variable& var) {
-        return !boundVariables_.contains(var);
-      })) {
-    // A MINUS clause that doesn't share any variable with the preceding
-    // patterns behaves as if it isn't there.
-    if (type == MINUS) {
-      return;
-    }
-
-    // All variables in the OPTIONAL are unbound so far, so this OPTIONAL
-    // actually is not an OPTIONAL.
-    for (auto& vec : candidates) {
-      vec.type = SubtreePlan::BASIC;
-    }
-  }
+  bool specialCaseHandled =
+      handleUnconnectedMinusOrOptional(candidates, variables);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
   // and MINUS clauses (this used to be a bug in an old version of the code).
   ql::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
+
+  if (specialCaseHandled) {
+    return;
+  }
 
   // If our input is not OPTIONAL and not a MINUS, this means that we can still
   // arbitrarily optimize among our candidates and just append our new
@@ -2620,6 +2754,9 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
                        auto& arg) { self->graphPatternOperationVisitor(arg); },
                    child);
       }
+      // Negated property paths can contain filters
+      ql::ranges::move(children._filters,
+                       std::back_inserter(rootPattern_->_filters));
     }
   }
 }
@@ -2683,8 +2820,14 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     right.value_ = getSideValue(arg._right);
     size_t min = arg._min;
     size_t max = arg._max;
+    if (planner_.activeGraphVariable_.has_value()) {
+      throw std::runtime_error{
+          "Property paths inside a GRAPH clause with a graph variable are not "
+          "yet supported."};
+    }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
-        qec_, std::move(sub._qet), std::move(left), std::move(right), min, max);
+        qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
+        planner_.activeDatasetClauses_.defaultGraphs_);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
