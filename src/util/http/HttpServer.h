@@ -1,7 +1,7 @@
-
-//  Copyright 2021, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2021-2025, University of Freiburg,
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
@@ -21,6 +21,10 @@ namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
+
+// Including the `RuntimeParameters` header is expensive. Move functions that
+// require it into an implementation file.
+ad_utility::MemorySize getRequestBodyLimit();
 
 /*
  * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
@@ -48,12 +52,11 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  * a `net::awaitable<void>`. It is only called if the request is a valid
  * websocket upgrade request and the URL represents a valid path.
  */
-template <typename HttpHandler,
-          ad_utility::InvocableWithExactReturnType<
-              net::awaitable<void>, const http::request<http::string_body>&,
-              tcp::socket>
-              WebSocketHandler>
-class HttpServer {
+CPP_template(typename HttpHandler, typename WebSocketHandler)(
+    requires ad_utility::InvocableWithExactReturnType<
+        WebSocketHandler, net::awaitable<void>,
+        const http::request<http::string_body>&,
+        tcp::socket>) class HttpServer {
  private:
   HttpHandler httpHandler_;
   int numServerThreads_;
@@ -72,12 +75,25 @@ class HttpServer {
   /// Construct from the `queryRegistry`, port and ip address, on which this
   /// server will listen, as well as the HttpHandler. This constructor only
   /// initializes several member functions
-  explicit HttpServer(
-      unsigned short port, std::string_view ipAddress = "0.0.0.0",
-      int numServerThreads = 1, HttpHandler handler = HttpHandler{},
-      ad_utility::InvocableWithConvertibleReturnType<WebSocketHandler,
-                                                     net::io_context&> auto
-          webSocketHandlerSupplier = {})
+  ///
+  // Note: The following constraint can not be written with a single declaration
+  // in the `std::enable_if_t` world, because of the following bug in GCC 11:
+  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105268
+  template <typename HandlerSupplier>
+  static constexpr bool isSupplier =
+      ad_utility::InvocableWithConvertibleReturnType<
+          HandlerSupplier, WebSocketHandler, net::io_context&>;
+  CPP_template_2(typename HandlerSupplier)(
+      requires isSupplier<
+          HandlerSupplier>) explicit HttpServer(unsigned short port,
+                                                std::string_view ipAddress =
+                                                    "0.0.0.0",
+                                                int numServerThreads = 1,
+                                                HttpHandler handler =
+                                                    HttpHandler{},
+                                                HandlerSupplier
+                                                    webSocketHandlerSupplier =
+                                                        {})
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
@@ -230,14 +246,25 @@ class HttpServer {
 
     // Sessions might be reused for multiple request/response pairs.
     while (true) {
+      // Optional to temporarily store an error response. We can not `co_await`
+      // in a `catch` block and thus can not send the error response directly in
+      // the `catch`.
+      std::optional<http::response<http::string_body>> errorResponse;
+
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
-        http::request<http::string_body> req;
 
-        // Read a request
-        co_await http::async_read(stream, buffer, req,
+        // Read a request. Use a parser so that we can control the limit of the
+        // request size.
+        http::request_parser<http::string_body> requestParser;
+        auto bodyLimit = getRequestBodyLimit().getBytes();
+        requestParser.body_limit(bodyLimit == 0
+                                     ? boost::none
+                                     : boost::optional<uint64_t>(bodyLimit));
+        co_await http::async_read(stream, buffer, requestParser,
                                   boost::asio::use_awaitable);
+        http::request<http::string_body> req = requestParser.release();
 
         // Let request be handled by `WebSocketSession` if the HTTP
         // request is a WebSocket handshake
@@ -272,6 +299,15 @@ class HttpServer {
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
+        } else if (error.code() == http::error::body_limit) {
+          errorResponse = ad_utility::httpUtils::createHttpResponseFromString(
+              absl::StrCat(
+                  "Request body size exceeds the allowed size (",
+                  getRequestBodyLimit().asString(),
+                  "), send a smaller request or set the allowed size via the ",
+                  "runtime parameter `request-body-limit`"),
+              http::status::payload_too_large, ad_utility::MediaType::textPlain,
+              std::nullopt, 11);
         } else {
           // This is the error "The socket was closed due to a timeout" or if
           // the client stream ended unexpectedly.
@@ -283,8 +319,12 @@ class HttpServer {
             logBeastError(error.code(), error.what());
           }
         }
-        // In case of an error, close the session by returning.
-        co_return;
+        // If we have an error response send it outside the `catch` block. (We
+        // can not `co_await` in the `catch` block) Otherwise close the
+        // session by returning.
+        if (!errorResponse) {
+          co_return;
+        }
       } catch (const std::exception& error) {
         LOG(ERROR) << error.what() << std::endl;
         co_return;
@@ -293,6 +333,12 @@ class HttpServer {
                       "this shouldn't happen"
                    << std::endl;
         co_return;
+      }
+
+      // If we have an error response, send it and then close the session by
+      // returning.
+      if (errorResponse.has_value()) {
+        co_return co_await sendMessage(std::move(errorResponse).value());
       }
     }
   }

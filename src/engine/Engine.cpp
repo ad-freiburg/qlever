@@ -6,6 +6,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
+#include "util/Exception.h"
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.

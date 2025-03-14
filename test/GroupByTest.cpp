@@ -30,6 +30,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
 using ::testing::Eq;
@@ -51,7 +52,6 @@ auto optionalHasTable = [](const VectorTable& table) {
 class GroupByTest : public ::testing::Test {
  public:
   GroupByTest() {
-    FILE_BUFFER_SIZE = 1000;
     // Create the index. The full index creation is run here to allow for
     // loading a docsDb file, which is not otherwise accessible
     std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
@@ -81,6 +81,7 @@ class GroupByTest : public ::testing::Test {
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
+    _index.parserBufferSize() = 1_kB;
   }
 
   virtual ~GroupByTest() {
@@ -114,6 +115,26 @@ TEST_F(GroupByTest, getDescriptor) {
   GroupBy groupBy{
       ad_utility::testing::getQec(), {Variable{"?a"}}, {alias}, values};
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByTest, clone) {
+  auto expr =
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
+  auto alias =
+      Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
+            Variable{"?a"}};
+
+  parsedQuery::SparqlValues input;
+  input._variables = {Variable{"?a"}};
+  auto values = ad_utility::makeExecutionTree<Values>(getQec(), input);
+
+  GroupBy groupBy{getQec(), {Variable{"?a"}}, {alias}, values};
+
+  auto clone = groupBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(groupBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), groupBy.getDescriptor());
 }
 
 TEST_F(GroupByTest, doGroupBy) {
@@ -263,9 +284,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(123u, outTable._data[1][9]);
   ASSERT_EQ(0u, outTable._data[2][9]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][10]);
 
   std::memcpy(&buffer, &outTable._data[0][11], sizeof(float));
   ASSERT_FLOAT_EQ(-3, buffer);
@@ -283,9 +304,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(41223u, outTable._data[1][13]);
   ASSERT_EQ(41223u, outTable._data[2][13]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][14]);
 
   std::memcpy(&buffer, &outTable._data[0][15], sizeof(float));
   ASSERT_FLOAT_EQ(2, buffer);

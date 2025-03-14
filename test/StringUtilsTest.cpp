@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "global/Constants.h"
 #include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
@@ -370,4 +371,30 @@ TEST(StringUtilsTest, constexprStrCatImpl) {
   using C = ConstexprString;
   ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
             (std::array{'h', 'i', '\0'}));
+}
+
+TEST(StringUtilsTest, truncateOperationString) {
+  auto expectTruncate = [](std::string_view test, bool willTruncate,
+                           ad_utility::source_location l =
+                               ad_utility::source_location::current()) {
+    auto tr = generateLocationTrace(l);
+    const std::string truncated = ad_utility::truncateOperationString(test);
+    if (willTruncate) {
+      EXPECT_THAT(truncated, testing::SizeIs(MAX_LENGTH_OPERATION_ECHO));
+    } else {
+      EXPECT_THAT(truncated, testing::SizeIs(test.size()));
+    }
+    std::string_view truncated_view = truncated;
+    if (willTruncate) {
+      EXPECT_THAT(truncated_view.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
+                  testing::Eq(test.substr(0, MAX_LENGTH_OPERATION_ECHO - 3)));
+    } else {
+      EXPECT_THAT(truncated, testing::Eq(test));
+    }
+  };
+  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO + 1000, 'f'), true);
+  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO + 1, 'f'), true);
+  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO, 'f'), false);
+  expectTruncate(std::string(MAX_LENGTH_OPERATION_ECHO - 1, 'f'), false);
+  expectTruncate("SELECT * WHERE { ?s ?p ?o }", false);
 }

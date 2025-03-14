@@ -22,6 +22,7 @@ class ValuesForTesting : public Operation {
   size_t sizeEstimate_;
   size_t costEstimate_;
   bool unlikelyToFitInCache_ = false;
+  ad_utility::MemorySize* cacheSizeStorage_ = nullptr;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -74,6 +75,9 @@ class ValuesForTesting : public Operation {
     costEstimate_ = totalRows;
   }
 
+  ValuesForTesting(ValuesForTesting&&) = default;
+  ValuesForTesting& operator=(ValuesForTesting&&) = default;
+
   // Accessors for the estimates for manual testing.
   size_t& sizeEstimate() { return sizeEstimate_; }
   size_t& costEstimate() { return costEstimate_; }
@@ -115,9 +119,17 @@ class ValuesForTesting : public Operation {
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
-  bool unlikelyToFitInCache(ad_utility::MemorySize) const override {
+  bool unlikelyToFitInCache(ad_utility::MemorySize cacheSize) const override {
+    if (cacheSizeStorage_ != nullptr) {
+      *cacheSizeStorage_ = cacheSize;
+    }
     return unlikelyToFitInCache_;
   }
+
+  void setCacheSizeStorage(ad_utility::MemorySize* cacheSizeStorage) {
+    cacheSizeStorage_ = cacheSizeStorage;
+  }
+
   bool supportsLimit() const override { return supportsLimit_; }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
@@ -201,6 +213,29 @@ class ValuesForTesting : public Operation {
     return m;
   }
 
+  // _____________________________________________________________________________
+  ValuesForTesting(const ValuesForTesting& other)
+      : Operation{other._executionContext},
+        variables_{other.variables_},
+        supportsLimit_{other.supportsLimit_},
+        sizeEstimate_{other.sizeEstimate_},
+        costEstimate_{other.costEstimate_},
+        unlikelyToFitInCache_{other.unlikelyToFitInCache_},
+        resultSortedColumns_{other.resultSortedColumns_},
+        localVocab_{other.localVocab_.clone()},
+        multiplicity_{other.multiplicity_},
+        forceFullyMaterialized_{other.forceFullyMaterialized_} {
+    for (const auto& idTable : other.tables_) {
+      tables_.push_back(idTable.clone());
+    }
+  }
+
+  ValuesForTesting& operator=(const ValuesForTesting&) = delete;
+
+  std::unique_ptr<Operation> cloneImpl() const override {
+    return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
+  }
+
   std::vector<ColumnIndex> resultSortedColumns_;
   LocalVocab localVocab_;
   std::optional<float> multiplicity_;
@@ -214,4 +249,5 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
  public:
   using ValuesForTesting::ValuesForTesting;
   bool knownEmptyResult() override { return false; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };

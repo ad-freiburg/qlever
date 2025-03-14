@@ -469,7 +469,14 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       "\n"
       "\n",
       makeExpectedQLeverJSON({std::nullopt, std::nullopt}),
-      makeExpectedSparqlJSON({}), expectedXml};
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("o");
+        j["results"]["bindings"].push_back({});
+        j["results"]["bindings"].push_back({});
+        return j;
+      }(),
+      expectedXml};
   runSelectQueryTestCase(testCase);
 
   // The `2` is the number of results including triples with UNDEF values. The
@@ -1045,6 +1052,30 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, EmptyLines) {
+  std::string kg = "<s> <p> <o>";
+  std::string query = "SELECT * WHERE { <s> <p> <o> }";
+  std::string expectedXml = makeXMLHeader({}) +
+                            R"(
+  <result>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCase{kg,
+                               query,
+                               1,
+                               "\n\n",
+                               "\n\n",
+                               nlohmann::json{std::vector{std::vector<int>{}}},
+                               []() {
+                                 nlohmann::json j;
+                                 j["head"]["vars"] = nlohmann::json::array();
+                                 j["results"]["bindings"].push_back({});
+                                 return j;
+                               }(),
+                               expectedXml};
+  runSelectQueryTestCase(testCase);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
@@ -1232,13 +1263,13 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
                                         ad_utility::MediaType::octetStream),
                ad_utility::Exception);
 
-  // A SparqlJSON query where none of the variables is even visible in the
-  // query body is not supported.
+  // If none of the selected variables is defined in the query body, we have an
+  // empty solution mapping per row, but there is no need to materialize any
+  // IRIs or literals.
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["results"]["bindings"].empty());
-
+  ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),

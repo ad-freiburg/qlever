@@ -11,6 +11,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "backports/concepts.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
@@ -85,19 +86,26 @@ class Exception : public std::exception {
 #define AD_FAIL() AD_THROW("This code should be unreachable")
 
 namespace ad_utility::detail {
+
+template <typename S>
+CPP_requires(is_str_catable_, requires(S&& s)(absl::StrCat(AD_FWD(s))));
+
+template <typename S>
+CPP_concept CanStrCat = CPP_requires_ref(is_str_catable_, S);
+
 // Helper functions that convert the various arguments to the
 // `AD_CONTRACT_CHECK` etc. macros to strings.
 // The argument must be
 // * A type that can be passed to `absl::StrCat` (e.g. `string`, `string_views`,
 // builtin numeric types) [first overload]
 // * A callbable that takes no arguments and returns a string [second overload]
-template <typename S>
-requires requires(S&& s) { absl::StrCat(AD_FWD(s)); }
-std::string getMessageImpl(S&& s) {
+CPP_template(typename S)(requires CanStrCat<S>) std::string
+    getMessageImpl(S&& s) {
   return absl::StrCat(AD_FWD(s));
 }
-std::string getMessageImpl(
-    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& f) {
+CPP_template(typename T)(
+    requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
+    std::string getMessageImpl(T&& f) {
   return std::invoke(f);
 }
 

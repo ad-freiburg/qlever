@@ -82,8 +82,8 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"cache-max-size-single-entry">(),
       "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
-  add("lazy-result-max-cache-size,E",
-      optionFactory.getProgramOption<"lazy-result-max-cache-size">(),
+  add("cache-max-size-lazy-result,E",
+      optionFactory.getProgramOption<"cache-max-size-lazy-result">(),
       "Maximum size up to which lazy results will be cached by aggregating "
       "partial results. Caching does cause significant overhead for this "
       "case.");
@@ -122,6 +122,10 @@ int main(int argc, char** argv) {
       "variables that are unbound in the query throw an exception. These "
       "queries technically are allowed by the SPARQL standard, but typically "
       "are the result of typos and unintended by the user");
+  add("request-body-limit",
+      optionFactory.getProgramOption<"request-body-limit">(),
+      "Set the maximum size for the body of requests the server will process. "
+      "Set to zero to disable the limit.");
   po::variables_map optionsMap;
 
   try {

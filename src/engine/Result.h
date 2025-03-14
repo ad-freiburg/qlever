@@ -117,6 +117,8 @@ class Result {
          LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
+
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
@@ -173,8 +175,8 @@ class Result {
   // the name of the function called with the local vocab as argument):
   //
   // ExportQueryExecutionTrees::idTableToQLeverJSONArray (idToStringAndType)
-  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (dito)
-  // ExportQueryExecutionTrees::selectQueryResultToStream (dito)
+  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (ditto)
+  // ExportQueryExecutionTrees::selectQueryResultToStream (ditto)
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
@@ -197,9 +199,11 @@ class Result {
                                                      const Result& result2);
 
   // Overload for more than two `Results`
-  template <std::ranges::forward_range R>
-  requires std::convertible_to<std::ranges::range_value_t<R>, const Result&>
-  static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
+  CPP_template(typename R)(
+      requires ql::ranges::forward_range<R> CPP_and
+          std::convertible_to<ql::ranges::range_value_t<R>,
+                              const Result&>) static SharedLocalVocabWrapper
+      getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());

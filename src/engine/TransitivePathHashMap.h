@@ -22,8 +22,8 @@ struct HashMapWrapper {
   Map map_;
   Set emptySet_;
 
-  HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
-      : map_(std::move(map)), emptySet_(allocator){};
+  HashMapWrapper(Map map, const ad_utility::AllocatorWithLimit<Id>& allocator)
+      : map_(std::move(map)), emptySet_(allocator) {}
 
   /**
    * @brief Return the successors for the given Id. The successors are all ids,
@@ -52,47 +52,10 @@ struct HashMapWrapper {
  */
 class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
-  TransitivePathHashMap(QueryExecutionContext* qec,
-                        std::shared_ptr<QueryExecutionTree> child,
-                        TransitivePathSide leftSide,
-                        TransitivePathSide rightSide, size_t minDist,
-                        size_t maxDist);
+  using TransitivePathImpl::TransitivePathImpl;
 
  private:
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the startSideTable
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @param startSideTable An IdTable containing the Ids for the startSide
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide,
-      const IdTable& startSideTable) const;
-
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide) const;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
   // initialize the map from the subresult
   HashMapWrapper setupEdgesMap(

@@ -7,18 +7,24 @@
 #include "engine/ExportQueryExecutionTrees.h"
 
 // _____________________________________________________________________________
-void ExecuteUpdate::executeUpdate(
+UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
+  UpdateMetadata metadata{};
   auto [toInsert, toDelete] =
-      computeGraphUpdateQuads(index, query, qet, cancellationHandle);
+      computeGraphUpdateQuads(index, query, qet, cancellationHandle, metadata);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   deltaTriples.deleteTriples(cancellationHandle,
                              std::move(toDelete.idTriples_));
+  metadata.deletionTime_ = timer.msecs();
+  timer.reset();
   deltaTriples.insertTriples(cancellationHandle,
                              std::move(toInsert.idTriples_));
+  metadata.insertionTime_ = timer.msecs();
+  return metadata;
 }
 
 // _____________________________________________________________________________
@@ -120,7 +126,7 @@ std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
           ExecuteUpdate::IdTriplesAndLocalVocab>
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    const CancellationHandle& cancellationHandle) {
+    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
@@ -132,6 +138,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // update.
   auto result = qet.getResult(false);
 
+  // Start the timer once the where clause has been evaluated.
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
 
   auto prepareTemplateAndResultContainer =
@@ -168,8 +176,31 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  sortAndRemoveDuplicates(toInsert);
+  sortAndRemoveDuplicates(toDelete);
+  metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
+                                         static_cast<int64_t>(toDelete.size())};
+  toDelete = setMinus(toDelete, toInsert);
+  metadata.triplePreparationTime_ = timer.msecs();
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
       IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
+}
+
+// _____________________________________________________________________________
+void ExecuteUpdate::sortAndRemoveDuplicates(
+    std::vector<IdTriple<>>& container) {
+  ql::ranges::sort(container);
+  container.erase(std::unique(container.begin(), container.end()),
+                  container.end());
+}
+
+// _____________________________________________________________________________
+std::vector<IdTriple<>> ExecuteUpdate::setMinus(
+    const std::vector<IdTriple<>>& a, const std::vector<IdTriple<>>& b) {
+  std::vector<IdTriple<>> reducedToDelete;
+  reducedToDelete.reserve(a.size());
+  ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
+  return reducedToDelete;
 }

@@ -7,6 +7,7 @@
 #include <optional>
 #include <variant>
 
+#include "backports/concepts.h"
 #include "parser/Iri.h"
 #include "parser/NormalizedString.h"
 
@@ -41,8 +42,9 @@ class Literal {
   }
 
  public:
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
+  CPP_template(typename H,
+               typename L)(requires std::same_as<L, Literal>) friend H
+      AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
   bool operator==(const Literal&) const = default;
