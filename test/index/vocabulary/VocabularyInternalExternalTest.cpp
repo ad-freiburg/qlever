@@ -34,7 +34,7 @@ class VocabularyCreator {
   auto createVocabularyImpl(const std::vector<std::string>& words) {
     VocabularyInternalExternal vocabulary;
     {
-      auto writer = VocabularyInternalExternal::WordWriter(vocabFilename_);
+      auto writer = VocabularyInternalExternal::makeDiskWriter(vocabFilename_);
       size_t i = 0;
       for (auto& word : words) {
         writer(word, i % 2 == 0);

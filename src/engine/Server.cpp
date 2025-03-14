@@ -20,7 +20,6 @@
 #include "index/IndexImpl.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
@@ -343,6 +342,11 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
+    requireValidAccessToken("clear-named-cache");
+    logCommand(cmd, "clear the cache for named queries");
+    namedQueryCache_.clear();
+    response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
@@ -632,6 +636,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
   result["num-pinned-entries"] = cache_.numPinnedEntries();
+  result["num-named-queries"] = namedQueryCache_.numEntries();
 
   // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
   // converter.
@@ -797,7 +802,6 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   // format.
   co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
                                   requestTimer, cancellationHandle);
-
   // Print the runtime info. This needs to be done after the query
   // was computed.
   LOG(INFO) << "Done processing query and sending result"
@@ -901,6 +905,7 @@ json Server::processUpdateImpl(
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
   cache_.clearAll();
+  namedQueryCache_.clear();
 
   return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
                                          plannedUpdate, qet, countBefore,
