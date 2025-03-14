@@ -161,16 +161,16 @@ getValueIdsAndMixedDatatypeBlocks(std::span<const BlockMetadata> input,
 
 //______________________________________________________________________________
 static std::vector<BlockMetadata> getRelevantBlocks(
-    RelevantBlockRanges relevantBlockRanges,
+    const RelevantBlockRanges& relevantBlockRanges,
     std::span<const BlockMetadata> blocks) {
-  // `blocksEnd` is used, but this is not detected during compile time.
+  // `blocksEnd` is used, but this may not be detected during compile time.
   // Suppress this warning.
   [[maybe_unused]] auto blocksEnd = blocks.size();
   auto blocksBegin = blocks.begin();
 
   std::vector<BlockMetadata> relevantBlocks;
   for (const auto& [rangeBegin, rangeEnd] : relevantBlockRanges) {
-    assert(rangeBegin >= 0 && rangeBegin < rangeEnd && rangeEnd < blocksEnd);
+    assert(rangeBegin >= 0 && rangeBegin <= rangeEnd && rangeEnd <= blocksEnd);
     relevantBlocks.insert(relevantBlocks.end(), blocksBegin + rangeBegin,
                           blocksBegin + rangeEnd);
   }
@@ -211,6 +211,8 @@ namespace detail::mapping {
 const auto addRangeAndSimplify = [](RelevantBlockRanges& blockRangeIndices,
                                     const size_t rangeIdxFirst,
                                     const size_t rangeIdxSecond) {
+  // Empty ranges aren't relevant.
+  if (rangeIdxFirst == rangeIdxSecond) return;
   // Simplify the mapped ranges if adjacent or overlapping.
   // This simplification procedure also ensures that no `BlockMetadata`
   // value is retrieved twice later on (no overlapping indices for adjacient
@@ -236,6 +238,11 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
     std::span<const ValueId> idSpan) {
   auto idSpanBegin = idSpan.begin();
   auto idSpanEnd = idSpan.end();
+
+  // The MAX index (allowed difference).
+  const auto maxIndex = std::distance(idSpanBegin, idSpanEnd) / 2;
+  if (relevantIdRanges.empty()) return {std::make_pair(0, maxIndex)};
+
   // Vector containing the `BlockRange` mapped indices.
   RelevantBlockRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
@@ -247,10 +254,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
     addRangeAndSimplify(blockRanges, rangeIdxFirst, rangeIdxSecond);
   };
 
-  // The MAX index (allowed difference).
-  const auto maxIndex = std::distance(idSpanBegin, idSpanEnd) / 2;
   RandomIt lastIdRangeIt = idSpanBegin;
-
   for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRanges) {
     addRange(
         static_cast<size_t>(std::distance(idSpanBegin, lastIdRangeIt) / 2),
@@ -347,6 +351,7 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
 static RelevantBlockRanges mapRandomItRangesToBlockRanges(
     const std::vector<RandomItPair>& relevantIdRanges,
     std::span<const ValueId> idSpan) {
+  if (relevantIdRanges.empty()) return {};
   auto idSpanBegin = idSpan.begin();
   auto idSpanEnd = idSpan.end();
   // Vector containing the `BlockRange` mapped indices.
@@ -686,7 +691,6 @@ IsDatatypeExpression<Datatype>::evaluateIsBlankOrIsNumericImpl(
   }
   // Sort and remove overlapping ranges.
   valueIdComparators::detail::simplifyRanges(relevantRanges);
-  if (relevantRanges.empty()) return {};
   return isNegated
              ? detail::mapping::mapRandomItRangesToBlockRangesComplemented(
                    relevantRanges, idSpan)
@@ -732,7 +736,8 @@ static RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
 
   RelevantBlockRanges unionedRanges;
   unionedRanges.reserve(r1.size() + r2.size());
-  auto idx1 = r1.begin(), idx2 = r2.begin();
+  auto idx1 = r1.begin();
+  auto idx2 = r2.begin();
   // Handles overlapping ranges.
   // Avoid adding indices twice by setting lastMaxIdx to the highest index
   // value added so far.
@@ -779,7 +784,8 @@ static RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
           std::max(std::min(idx1First, idx2First), lastMaxIdx), newlastMaxIdx);
       lastMaxIdx = newlastMaxIdx;
       // Skip to the next range for `r1` and `r2`.
-      idx1++, idx2++;
+      idx1++;
+      idx2++;
     }
   }
   // Helper for adding the respective rest `BlockRange`s of r1 or r2 while
@@ -816,7 +822,8 @@ static RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
 
   RelevantBlockRanges intersectedRanges;
   intersectedRanges.reserve(r1.size() + r2.size());
-  auto idx1 = r1.begin(), idx2 = r2.begin();
+  auto idx1 = r1.begin();
+  auto idx2 = r2.begin();
 
   while (idx1 != r1.end() && idx2 != r2.end()) {
     const auto& [idx1First, idx1Second] = *idx1;
@@ -840,7 +847,8 @@ static RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
     } else {
       // If idx2Second is equal to idx1Second, skip for both to the next
       // respective range.
-      idx1++, idx2++;
+      idx1++;
+      idx2++;
     }
   }
   // The remaining BlockRange values from r1 or r2 are simply discarded given
