@@ -273,7 +273,7 @@ class ValuesForTesting : public Operation {
         multiplicity_{other.multiplicity_},
         forceFullyMaterialized_{other.forceFullyMaterialized_} {
     for (const auto& idTable : other.tables_) {
-      tables_.push_back(idTable.clone());
+      tables_.push_back(std::make_shared<IdTable>(idTable->clone()));
     }
   }
 
