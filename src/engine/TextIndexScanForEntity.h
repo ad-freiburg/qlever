@@ -100,7 +100,7 @@ class TextIndexScanForEntity : public Operation {
     return std::get<FixedEntity>(varOrFixed_.entity_).second;
   }
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 };

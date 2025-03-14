@@ -222,7 +222,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 }
 
 // _____________________________________________________________________________
-ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab;
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //
