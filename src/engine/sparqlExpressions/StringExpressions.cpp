@@ -22,6 +22,29 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
+// Count UTF-8 characters by skipping continuation bytes (those starting with
+// "10").
+inline std::size_t utf8Length(std::string_view s) {
+  return ql::ranges::count_if(
+      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
+}
+
+// Convert UTF-8 position to byte offset
+inline std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
+  std::size_t byteOffset = 0;
+  int64_t charCount = 0;
+
+  for (char c : str) {
+    if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+      if (charCount++ == utf8Pos) {
+        break;
+      }
+    }
+    ++byteOffset;
+  }
+  return byteOffset;
+}
+
 // String functions.
 [[maybe_unused]] auto strImpl =
     [](std::optional<std::string> s) -> IdOrLiteralOrIri {
@@ -62,6 +85,49 @@ class StringExpressionImpl : public SparqlExpression {
           CPP_and(sizeof...(C) + 1 ==
                   N)) explicit StringExpressionImpl(SparqlExpression::Ptr child,
                                                     C... children) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+    if (child->isStrExpression()) {
+      auto childrenOfStr = std::move(*child).moveChildrenOut();
+      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
+      impl_ = std::make_unique<ExpressionWithStr>(
+          std::move(childrenOfStr.at(0)), std::move(children)...);
+    } else {
+      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
+                                                     std::move(children)...);
+    }
+  }
+
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    return impl_->evaluate(context);
+  }
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
+    return impl_->getCacheKey(varColMap);
+  }
+
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
+    return impl_->children();
+  }
+};
+
+// Same as the `StringExpressionImpl` above, but with the LiteralOrValueGetter.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+class LiteralExpressionImpl : public SparqlExpression {
+ private:
+  using ExpressionWithStr = NARY<
+      N, FV<Function, LiteralValueGetter, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithoutStr =
+      NARY<N, FV<Function, LiteralValueGetterWithXsdStringFilter,
+                 AdditionalNonStringValueGetters...>>;
+
+  SparqlExpression::Ptr impl_;
+
+ public:
+  explicit LiteralExpressionImpl(
+      SparqlExpression::Ptr child,
+      std::same_as<SparqlExpression::Ptr> auto... children)
+      requires(sizeof...(children) + 1 == N) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
@@ -150,11 +216,7 @@ using IriOrUriExpression =
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
-  // Count UTF-8 characters by skipping continuation bytes (those starting with
-  // "10").
-  auto utf8Len = ql::ranges::count_if(
-      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
-  return Id::makeFromInt(utf8Len);
+  return Id::makeFromInt(utf8Length(s));
 };
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
@@ -206,8 +268,9 @@ class SubstrImpl {
   };
 
  public:
-  IdOrLiteralOrIri operator()(std::optional<std::string> s, NumericValue start,
-                              NumericValue length) const {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> s,
+      NumericValue start, NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
@@ -226,29 +289,36 @@ class SubstrImpl {
     if (startInt < 0) {
       lengthInt += startInt;
     }
-
-    const auto& str = s.value();
+    const auto& str = asStringViewUnsafe(s.value().getContent());
+    std::size_t utf8len = utf8Length(str);
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
-    // with valid arguments for the `getUTF8Substring` method below for both
+    // with valid arguments for the `setSubstr` method below for both
     // starting position and length since all the other corner cases have been
     // dealt with above.
-    auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
+    auto clamp = [utf8len](int64_t n) -> std::size_t {
       if (n < 0) {
         return 0;
       }
-      if (static_cast<size_t>(n) > sz) {
-        return sz;
+      if (static_cast<size_t>(n) > utf8len) {
+        return utf8len;
       }
       return static_cast<size_t>(n);
     };
 
-    return toLiteral(
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)));
+    startInt = clamp(startInt);
+    lengthInt = clamp(lengthInt);
+    std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
+    std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
+    std::size_t byteLength = endByteOffset - startByteOffset;
+
+    s.value().setSubstr(startByteOffset, byteLength);
+    return std::move(LiteralOrIri(s.value()));
   }
 };
 
 using SubstrExpression =
-    StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
+    LiteralExpressionImpl<3, SubstrImpl, NumericValueGetter,
+                          NumericValueGetter>;
 
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,

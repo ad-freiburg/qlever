@@ -91,6 +91,31 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetter::operator()(Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithXsdStringFilter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithXsdStringFilter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
+    return s.getLiteral();
+  }
+  return std::nullopt;
+}
+
+// ____________________________________________________________________________
 std::optional<std::string> ReplacementStringGetter::operator()(
     Id id, const EvaluationContext* context) const {
   std::optional<std::string> originalString =
