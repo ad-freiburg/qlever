@@ -824,11 +824,10 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 TEST(CompressedRelationReader, getResultSizeImpl) {
   auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
   DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
-  DeltaTriples::Triples insertTriples{IdTriple{{V(0), V(1), V(2), V(3)}},
-                                      IdTriple{{V(0), V(4), V(5), V(3)}}};
-  deltaTriplesManager.modify<void>([&insertTriples](DeltaTriples& dt) {
+  deltaTriplesManager.modify<void>([](DeltaTriples& dt) {
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    dt.insertTriples(handle, insertTriples);
+    dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
+                              IdTriple{{V(0), V(4), V(5), V(3)}}});
   });
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
@@ -840,27 +839,26 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
                         ad_utility::source_location::current()) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
-    auto [actual_lower, actual_upper] = perm.reader().getSizeEstimateForScan(
-        scanSpec,
-        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
-        locatedTriplesSnapshot.getLocatedTriplesForPermutation(
-            perm.permutation()));
-    auto actual_exact = perm.reader().getResultSizeOfScan(
-        scanSpec,
-        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
-        locatedTriplesSnapshot.getLocatedTriplesForPermutation(
-            perm.permutation()));
+    auto& reader = perm.reader();
+    auto& augmentedBlocks =
+        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot);
+    auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+        perm.permutation());
+    auto [actual_lower, actual_upper] =
+        reader.getSizeEstimateForScan(scanSpec, augmentedBlocks, ltpb);
     EXPECT_THAT(actual_lower, testing::Eq(lower));
     EXPECT_THAT(actual_upper, testing::Eq(upper));
+    auto actual_exact =
+        reader.getResultSizeOfScan(scanSpec, augmentedBlocks, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
-  // The Scans request all triples of the only block.
+  // The Scans request all triples of the one and only block.
   for (auto perm : Permutation::ALL) {
     expect(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2, 2);
   }
   expect(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2, 2);
   // Not all triples of the block are requested. The size estimate is truncated
-  // by a configurable factor.
+  // by a factor which is a RuntimeParameter.
   expect(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1, 1);
   expect(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
 }
