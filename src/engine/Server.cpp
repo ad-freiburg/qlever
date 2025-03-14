@@ -262,8 +262,8 @@ auto Server::prepareOperation(
             << ad_utility::truncateOperationString(operationSPARQL)
             << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
 
   return std::tuple{std::move(qec), std::move(cancellationHandle),
                     std::move(cancelTimeoutOnDestruction)};
