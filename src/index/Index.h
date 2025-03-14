@@ -116,7 +116,7 @@ class Index {
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
-  // Get a (non-owning) pointer to the BlankNodeManager of this Index.
+  // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
 

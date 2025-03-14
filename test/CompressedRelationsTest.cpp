@@ -6,6 +6,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/IndexImpl.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -818,6 +819,50 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   // only want graph `3`, so the block can't be skipped.
   metadata.graphInfo_.reset();
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
+}
+
+TEST(CompressedRelationReader, getResultSizeImpl) {
+  auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
+  DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
+  DeltaTriples::Triples insertTriples{IdTriple{{V(0), V(1), V(2), V(3)}},
+                                      IdTriple{{V(0), V(4), V(5), V(3)}}};
+  deltaTriplesManager.modify<void>([&insertTriples](DeltaTriples& dt) {
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    dt.insertTriples(handle, insertTriples);
+  });
+  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
+  auto& impl = index.getImpl();
+  auto expect = [&impl, &locatedTriplesSnapshot](
+                    Permutation::Enum p, const ScanSpecification& scanSpec,
+                    size_t lower, size_t upper, size_t exact,
+                    ad_utility::source_location sourceLocation =
+                        ad_utility::source_location::current()) {
+    auto loc = generateLocationTrace(sourceLocation);
+    auto& perm = impl.getPermutation(p);
+    auto [actual_lower, actual_upper] = perm.reader().getSizeEstimateForScan(
+        scanSpec,
+        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+        locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+            perm.permutation()));
+    auto actual_exact = perm.reader().getResultSizeOfScan(
+        scanSpec,
+        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+        locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+            perm.permutation()));
+    EXPECT_THAT(actual_lower, testing::Eq(lower));
+    EXPECT_THAT(actual_upper, testing::Eq(upper));
+    EXPECT_THAT(actual_exact, testing::Eq(exact));
+  };
+  // The Scans request all triples of the only block.
+  for (auto perm : Permutation::ALL) {
+    expect(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2, 2);
+  }
+  expect(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2, 2);
+  // Not all triples of the block are requested. The size estimate is truncated
+  // by a configurable factor.
+  expect(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1, 1);
+  expect(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
 }
 
 // Test the correct setting of the metadata for the contained graphs.
