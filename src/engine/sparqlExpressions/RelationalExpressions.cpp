@@ -426,6 +426,35 @@ ExpressionResult InExpression::evaluate(
 }
 
 // _____________________________________________________________________________
+// (1) the provided `SparqlExpression* child` is a direct `Variable` expression
+// (e.g. `?x`), return `<Variable, false>`.
+// (2) the provided `SparqlExpression* child` is an expression `YEAR` which
+// refers to a `Variable` value (e.g. `YEAR(?x)`), return `<Variable, true>`.
+// (3) None of the previous expression cases, return default `std::nullopt`.
+// The `bool` flag is relevant later on to differentiate w.r.t. the logic that
+// needs to be applied for the creation of `PrefilterExpression`.
+static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
+    const SparqlExpression* child) {
+  bool isYear = false;
+  if (child->isYearExpression()) {
+    // The direct child is an expression YEAR();
+    isYear = true;
+    const auto& grandChild = child->children();
+    // The expression YEAR() should by definition hold a single child.
+    AD_CORRECTNESS_CHECK(grandChild.size() == 1);
+    child = grandChild[0].get();
+  }
+  if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
+    // (1) isYear is false: The direct child is already a Variable (expression).
+    // (2) isYear is true: The direct child is expression YEAR(). The actual
+    // pre-filter reference Variable is the child of expression YEAR().
+    return std::make_pair(optVariable.value(), isYear);
+  }
+  // No Variable for pre-filtering available.
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
@@ -437,18 +466,14 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   const auto tryGetPrefilterExprVariablePairVec =
       [](const SparqlExpression* child0, const SparqlExpression* child1,
          bool reversed) -> std::vector<PrefilterExprVariablePair> {
-    const auto* variableExpr = dynamic_cast<const VariableExpression*>(child0);
-    if (!variableExpr) {
-      return {};
-    }
-
+    const auto& optVariableIsYearPair = getOptVariableAndIsYear(child0);
+    if (!optVariableIsYearPair.has_value()) return {};
+    const auto& [variable, prefilterDate] = optVariableIsYearPair.value();
     const auto& optReferenceValue =
         detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
-    if (!optReferenceValue.has_value()) {
-      return {};
-    }
+    if (!optReferenceValue.has_value()) return {};
     return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
-        optReferenceValue.value(), variableExpr->value(), reversed);
+        optReferenceValue.value(), variable, reversed, prefilterDate);
   };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child

@@ -90,18 +90,20 @@ const auto evalAndEqualityCheck =
 TEST(GetPrefilterExpressionFromSparqlExpression,
      testGetPrefilterExpressionDefault) {
   evalAndEqualityCheck(
-      makeUnaryMinusExpression(makeLiteralSparqlExpr(IntId(0))));
-  evalAndEqualityCheck(makeMultiplyExpression(
-      makeLiteralSparqlExpr(DoubleId(11)), makeLiteralSparqlExpr(DoubleId(3))));
+      makeUnaryMinusExpression(makeOptLiteralSparqlExpr(IntId(0))));
   evalAndEqualityCheck(
-      makeStrEndsExpression(makeLiteralSparqlExpr(L("\"Freiburg\"")),
-                            makeLiteralSparqlExpr(L("\"burg\""))));
+      makeMultiplyExpression(makeOptLiteralSparqlExpr(DoubleId(11)),
+                             makeOptLiteralSparqlExpr(DoubleId(3))));
   evalAndEqualityCheck(
-      makeIsIriExpression(makeLiteralSparqlExpr(I("<IriIri>"))));
-  evalAndEqualityCheck(makeLogExpression(makeLiteralSparqlExpr(DoubleId(8))));
+      makeStrEndsExpression(makeOptLiteralSparqlExpr(L("\"Freiburg\"")),
+                            makeOptLiteralSparqlExpr(L("\"burg\""))));
   evalAndEqualityCheck(
-      makeStrIriDtExpression(makeLiteralSparqlExpr(L("\"test\"")),
-                             makeLiteralSparqlExpr(I("<test_iri>"))));
+      makeIsIriExpression(makeOptLiteralSparqlExpr(I("<IriIri>"))));
+  evalAndEqualityCheck(
+      makeLogExpression(makeOptLiteralSparqlExpr(DoubleId(8))));
+  evalAndEqualityCheck(
+      makeStrIriDtExpression(makeOptLiteralSparqlExpr(L("\"test\"")),
+                             makeOptLiteralSparqlExpr(I("<test_iri>"))));
 }
 
 //______________________________________________________________________________
@@ -482,6 +484,76 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
   evalAndEqualityCheck(strStartsSprql(VocabId(0), VocabId(10)));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression creation for the expression: `YEAR(?var) op INT`.
+TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
+  const auto var = Variable{"?x"};
+  // Retrieve the `ValueId` for the pre-filter reference `Date` created with the
+  // provided `expectedYear` value.
+  const auto getDateId = [](const int expectedYear) {
+    return Id::makeFromDate(DateYearOrDuration(Date(expectedYear, 0, 0)));
+  };
+
+  // Test SparqlExpression for which we expect a PrefilterExpression.
+  evalAndEqualityCheck(gtSprql(yearSprqlExpr(var), IntId(2000)),
+                       pr(ge(getDateId(2001)), var));
+  evalAndEqualityCheck(geSprql(yearSprqlExpr(var), IntId(0)),
+                       pr(ge(getDateId(0)), var));
+  evalAndEqualityCheck(ltSprql(yearSprqlExpr(var), IntId(-10)),
+                       pr(lt(getDateId(-10)), var));
+  evalAndEqualityCheck(leSprql(yearSprqlExpr(var), IntId(-2025)),
+                       pr(lt(getDateId(-2024)), var));
+  evalAndEqualityCheck(eqSprql(yearSprqlExpr(var), IntId(0)),
+                       pr(andExpr(lt(getDateId(1)), ge(getDateId(0))), var));
+  evalAndEqualityCheck(
+      neqSprql(yearSprqlExpr(var), IntId(2030)),
+      pr(orExpr(lt(getDateId(2030)), ge(getDateId(2031))), var));
+  evalAndEqualityCheck(eqSprql(IntId(0), yearSprqlExpr(var)),
+                       pr(andExpr(lt(getDateId(1)), ge(getDateId(0))), var));
+  evalAndEqualityCheck(neqSprql(IntId(0), yearSprqlExpr(var)),
+                       pr(orExpr(lt(getDateId(0)), ge(getDateId(1))), var));
+  evalAndEqualityCheck(leSprql(IntId(-20), yearSprqlExpr(var)),
+                       pr(ge(getDateId(-20)), var));
+  evalAndEqualityCheck(gtSprql(IntId(2000), yearSprqlExpr(var)),
+                       pr(lt(getDateId(2000)), var));
+
+  // For the following expression no pre-filter should be available.
+  evalAndEqualityCheck(
+      eqSprql(yearSprqlExpr(ltSprql(var, IntId(2025))), IntId(2025)));
+
+  auto assertThrowsError = [](std::unique_ptr<SparqlExpression> expr,
+                              const std::string& runtimeErrorMessage) {
+    AD_EXPECT_THROW_WITH_MESSAGE(expr->getPrefilterExpressionForMetadata(),
+                                 ::testing::Eq(runtimeErrorMessage));
+  };
+  // Test SparqlExpressions for which we expect that the reference value-type
+  // error is thrown.
+  assertThrowsError(
+      eqSprql(yearSprqlExpr(var), I("<iri>")),
+      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(
+      gtSprql(yearSprqlExpr(var), I("<iri>")),
+      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(
+      neqSprql(yearSprqlExpr(var), L("\"lit value\"")),
+      "Provided Literal or Iri with value: \"lit value\". This is an invalid "
+      "reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)),
+                    "Reference value for filtering date values over expression "
+                    "YEAR is of invalid datatype: Bool.\nPlease provide an "
+                    "integer value as reference year.");
+  assertThrowsError(neqSprql(yearSprqlExpr(var), Id::makeUndefined()),
+                    "Reference value for filtering date values over expression "
+                    "YEAR is of invalid datatype: Undefined.\nPlease provide "
+                    "an integer value as reference year.");
 }
 
 // Test that the conditions required for a correct merge of child
