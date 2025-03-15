@@ -126,7 +126,6 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto pqs = SparqlParser::parseUpdate(update);
     EXPECT_THAT(pqs, testing::SizeIs(1));
     auto pq = std::move(pqs[0]);
-
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
     UpdateMetadata metadata;
