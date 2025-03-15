@@ -301,12 +301,16 @@ TEST_F(ValueIdTest, Hashing) {
   }
   {
     using namespace ad_utility::triple_component;
+    using namespace ad_utility::testing;
+    Index index = makeTestIndex("ValueIdTest_Hashing");
+    auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;
     Iri iri = Iri::fromIriref("<foo>");
     LocalVocabEntry lve1(iri);
     LocalVocabEntry lve2(iri);
     LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""));
+    LocalVocabEntry lve4(Iri::fromIriref("<x>"));
     auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
       return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
     };
@@ -316,8 +320,9 @@ TEST_F(ValueIdTest, Hashing) {
     // - If two elements are not equal, then hash expansions must differ and
     // neither can be a suffix of the other.
     EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly(
-        {LVID(lve1, lv1), LVID(lve2, lv2), LVID(lve3, lv1), Id::makeFromInt(0),
-         Id::makeFromInt(42), Id::makeFromDouble(0), Id::makeFromDouble(1.56),
+        {LVID(lve1, lv1), LVID(lve2, lv2), LVID(lve3, lv1), LVID(lve4, lv1),
+         mkId("<x>"), Id::makeFromInt(0), Id::makeFromInt(42),
+         Id::makeFromDouble(0), Id::makeFromDouble(1.56),
          Id::makeFromDouble(1e-10), Id::makeFromDouble(1e+100),
          Id::makeFromBool(true), Id::makeFromBool(false),
          Id::makeUndefined()}));

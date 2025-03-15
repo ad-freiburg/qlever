@@ -353,9 +353,9 @@ class ValueId {
     }
     auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
     if (upper != lower) {
-      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 1);
+      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
     }
-    return H::combine(std::move(h), *id.getLocalVocabIndex(), 2);
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
