@@ -2422,10 +2422,10 @@ TEST(SparqlParser, Datasets) {
   expectUpdate(
       "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
       "?c} }",
-      m::UpdateClause(
+      testing::ElementsAre(m::UpdateClause(
           m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
-          filterGraphPattern, m::datasetClausesMatcher(datasets)));
+          filterGraphPattern, m::datasetClausesMatcher(datasets))));
   expectQuery(
       "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
       m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
