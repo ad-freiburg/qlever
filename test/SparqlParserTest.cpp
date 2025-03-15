@@ -1443,6 +1443,6 @@ TEST(ParserTest, parseWithDatasets) {
       m::DescribeQuery(
           m::Describe({Var("?x")}, {datasets, {}},
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
-                                     filterGraphPattern, datasets)),
+                                     filterGraphPattern)),
           datasets));
 }
