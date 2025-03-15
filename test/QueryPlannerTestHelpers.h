@@ -15,6 +15,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -23,6 +24,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -262,6 +264,8 @@ inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
 
+constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
+
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
 // Return a matcher that matches a query execution tree that consists of
@@ -419,6 +423,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(

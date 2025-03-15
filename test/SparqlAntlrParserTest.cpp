@@ -713,6 +713,8 @@ TEST(SparqlParser, propertyPaths) {
   auto Iri = &PropertyPath::fromIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
+  auto Inverse = &PropertyPath::makeInverse;
+  auto Negated = &PropertyPath::makeNegated;
   auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
   auto OneOrMore = &PropertyPath::makeOneOrMore;
   auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
@@ -742,6 +744,23 @@ TEST(SparqlParser, propertyPaths) {
                   Alternative({Iri("<http://www.example.com/a>"),
                                Iri("<http://www.example.com/b>")}),
                   {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("^a:a", Inverse(Iri("<http://www.example.com/a>")),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!a:a", Negated({Iri("<http://www.example.com/a>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a)", Negated({Iri("<http://www.example.com/a>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a|^a:a)",
+                  Negated({Iri("<http://www.example.com/a>"),
+                           Inverse(Iri("<http://www.example.com/a>"))}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a|^a:b|a:c|a:d|^a:e)",
+                  Negated({Iri("<http://www.example.com/a>"),
+                           Inverse(Iri("<http://www.example.com/b>")),
+                           Iri("<http://www.example.com/c>"),
+                           Iri("<http://www.example.com/d>"),
+                           Inverse(Iri("<http://www.example.com/e>"))}),
+                  {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
@@ -758,21 +777,50 @@ TEST(SparqlParser, propertyPaths) {
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected =
-        Alternative({Sequence({
-                         Iri("<http://www.example.com/a/a>"),
-                         ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
-                     }),
-                     Iri("<http://www.example.com/c/c>"),
-                     OneOrMore({Sequence({Iri("<http://www.example.com/a/a>"),
-                                          Iri("<http://www.example.com/b/b>"),
-                                          Iri("<a/b/c>")})})});
+    PropertyPath expected = Alternative(
+        {Sequence({
+             Iri("<http://www.example.com/a/a>"),
+             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+         }),
+         Iri("<http://www.example.com/c/c>"),
+         OneOrMore(
+             {Sequence({Iri("<http://www.example.com/a/a>"),
+                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}),
+         Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
+         Negated(
+             {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
+              Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+              Inverse(Iri("<http://www.example.com/a/a>"))})});
     expected.computeCanBeNull();
     expected.canBeNull_ = false;
-    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
+    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
                      {"c", "<http://www.example.com/c/>"}});
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, propertyPathsWriteToStream) {
+  auto toString = [](const PropertyPath& path) {
+    std::ostringstream os;
+    path.writeToStream(os);
+    return std::move(os).str();
+  };
+  {
+    auto path = PropertyPath::makeNegated(
+        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>"))});
+    EXPECT_EQ("!(^(<a>))", toString(path));
+  }
+  {
+    auto path = PropertyPath::makeNegated(
+        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>")),
+         PropertyPath::fromIri("<b>")});
+    EXPECT_EQ("!(^(<a>)|<b>)", toString(path));
+  }
+  {
+    auto path = PropertyPath::makeNegated({});
+    EXPECT_EQ("!()", toString(path));
   }
 }
 
