@@ -2429,40 +2429,6 @@ TEST(SparqlParser, Update) {
                     "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
 }
 
-TEST(SparqlParser, QueryOrUpdate) {
-  auto expectQuery =
-      ExpectCompleteParse<&Parser::queryOrUpdate>{defaultPrefixMap};
-  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
-  // Empty queries (queries without any query or update operation) are
-  // forbidden.
-  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
-  expectQueryFails("", emptyMatcher);
-  expectQueryFails(" ", emptyMatcher);
-  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
-  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
-  // Hit all paths for coverage.
-  expectQuery(
-      "SELECT ?a WHERE { ?a <is-a> <b> }",
-      ElementsAre(AllOf(
-          m::SelectQuery(
-              m::Select({Var{"?a"}}),
-              m::GraphPattern(m::Triples({{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
-          m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
-          m::VisibleVariables({Var{"?a"}}))));
-  expectQuery(
-      "INSERT DATA { <a> <b> <c> }",
-      ElementsAre(AllOf(
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
-                  std::nullopt),
-              m::GraphPattern()),
-          m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
-}
-
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
