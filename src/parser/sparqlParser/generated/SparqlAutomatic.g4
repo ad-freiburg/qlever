@@ -149,7 +149,10 @@ textLimitClause
 
 valuesClause : ( VALUES dataBlock )?;
 
-update: prologue (update1 (';' update)? )? ;
+// We have replaced the original recursive definition with an equivalent
+// non-recursive definition for performance reasons.
+// Original definition: `update: prologue (update1 (';' update)? )? ;`
+update: prologue (update1 (';' prologue update1)* (';' prologue)? )? ;
 
 update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
 

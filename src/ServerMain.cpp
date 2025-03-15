@@ -122,6 +122,10 @@ int main(int argc, char** argv) {
       "variables that are unbound in the query throw an exception. These "
       "queries technically are allowed by the SPARQL standard, but typically "
       "are the result of typos and unintended by the user");
+  add("request-body-limit",
+      optionFactory.getProgramOption<"request-body-limit">(),
+      "Set the maximum size for the body of requests the server will process. "
+      "Set to zero to disable the limit.");
   po::variables_map optionsMap;
 
   try {

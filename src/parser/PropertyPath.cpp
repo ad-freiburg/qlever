@@ -48,6 +48,18 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       }
       out << ")";
       break;
+    case Operation::NEGATED: {
+      out << "!(";
+      bool firstRun = true;
+      for (const auto& child : children_) {
+        if (!firstRun) {
+          out << '|';
+        }
+        firstRun = false;
+        child.writeToStream(out);
+      }
+      out << ")";
+    } break;
     case Operation::IRI:
       out << iri_;
       break;

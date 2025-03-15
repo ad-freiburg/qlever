@@ -713,6 +713,8 @@ TEST(SparqlParser, propertyPaths) {
   auto Iri = &PropertyPath::fromIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
+  auto Inverse = &PropertyPath::makeInverse;
+  auto Negated = &PropertyPath::makeNegated;
   auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
   auto OneOrMore = &PropertyPath::makeOneOrMore;
   auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
@@ -742,6 +744,23 @@ TEST(SparqlParser, propertyPaths) {
                   Alternative({Iri("<http://www.example.com/a>"),
                                Iri("<http://www.example.com/b>")}),
                   {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("^a:a", Inverse(Iri("<http://www.example.com/a>")),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!a:a", Negated({Iri("<http://www.example.com/a>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a)", Negated({Iri("<http://www.example.com/a>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a|^a:a)",
+                  Negated({Iri("<http://www.example.com/a>"),
+                           Inverse(Iri("<http://www.example.com/a>"))}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("!(a:a|^a:b|a:c|a:d|^a:e)",
+                  Negated({Iri("<http://www.example.com/a>"),
+                           Inverse(Iri("<http://www.example.com/b>")),
+                           Iri("<http://www.example.com/c>"),
+                           Iri("<http://www.example.com/d>"),
+                           Inverse(Iri("<http://www.example.com/e>"))}),
+                  {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
@@ -758,21 +777,50 @@ TEST(SparqlParser, propertyPaths) {
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected =
-        Alternative({Sequence({
-                         Iri("<http://www.example.com/a/a>"),
-                         ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
-                     }),
-                     Iri("<http://www.example.com/c/c>"),
-                     OneOrMore({Sequence({Iri("<http://www.example.com/a/a>"),
-                                          Iri("<http://www.example.com/b/b>"),
-                                          Iri("<a/b/c>")})})});
+    PropertyPath expected = Alternative(
+        {Sequence({
+             Iri("<http://www.example.com/a/a>"),
+             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+         }),
+         Iri("<http://www.example.com/c/c>"),
+         OneOrMore(
+             {Sequence({Iri("<http://www.example.com/a/a>"),
+                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}),
+         Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
+         Negated(
+             {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
+              Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+              Inverse(Iri("<http://www.example.com/a/a>"))})});
     expected.computeCanBeNull();
     expected.canBeNull_ = false;
-    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
+    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
                      {"c", "<http://www.example.com/c/>"}});
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, propertyPathsWriteToStream) {
+  auto toString = [](const PropertyPath& path) {
+    std::ostringstream os;
+    path.writeToStream(os);
+    return std::move(os).str();
+  };
+  {
+    auto path = PropertyPath::makeNegated(
+        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>"))});
+    EXPECT_EQ("!(^(<a>))", toString(path));
+  }
+  {
+    auto path = PropertyPath::makeNegated(
+        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>")),
+         PropertyPath::fromIri("<b>")});
+    EXPECT_EQ("!(^(<a>)|<b>)", toString(path));
+  }
+  {
+    auto path = PropertyPath::makeNegated({});
+    EXPECT_EQ("!()", toString(path));
   }
 }
 
@@ -2084,7 +2132,9 @@ TEST(SparqlParser, Update) {
                           const std::string& query, auto&& expected,
                           ad_utility::source_location l =
                               ad_utility::source_location::current()) {
-    expectUpdate_(query, testing::AllOf(expected, m::pq::OriginalString(query)),
+    expectUpdate_(query,
+                  testing::ElementsAre(
+                      testing::AllOf(expected, m::pq::OriginalString(query))),
                   l);
   };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
@@ -2188,10 +2238,6 @@ TEST(SparqlParser, Update) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
-  // Chaining multiple updates into one query is not supported.
-  expectUpdateFails(
-      "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
-      "}");
   expectUpdate("LOAD <foo>",
                m::UpdateClause(m::Load(false, Iri("<foo>"), std::nullopt),
                                m::GraphPattern()));
@@ -2217,21 +2263,55 @@ TEST(SparqlParser, Update) {
   expectUpdate("COPY DEFAULT TO GRAPH <foo>",
                m::UpdateClause(m::Copy(false, DEFAULT{}, Iri("<foo>")),
                                m::GraphPattern()));
-  const auto simpleInsertMatcher = m::UpdateClause(
+  const auto insertMatcher = m::UpdateClause(
       m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
                      std::nullopt),
       m::GraphPattern());
-  expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
-  expectUpdate("INSERT DATA { <a> <b> <c> };", simpleInsertMatcher);
-  const auto multipleUpdatesError = testing::HasSubstr(
-      "Not supported: Multiple updates in one query are "
-      "currently not supported by QLever");
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo>",
-                    multipleUpdatesError);
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; BASE <bar>",
-                    multipleUpdatesError);
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
-                    multipleUpdatesError);
+  const auto fooInsertMatcher = m::UpdateClause(
+      m::GraphUpdate(
+          {}, {{Iri("<foo/a>"), Iri("<foo/b>"), Iri("<foo/c>"), noGraph}},
+          std::nullopt),
+      m::GraphPattern());
+  const auto deleteWhereAllMatcher = m::UpdateClause(
+      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {},
+                     std::nullopt),
+      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}})));
+  expectUpdate("INSERT DATA { <a> <b> <c> }", insertMatcher);
+  // Multiple Updates
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> };",
+      ElementsAre(AllOf(insertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> }; BASE <https://example.org> PREFIX foo: "
+      "<foo>",
+      ElementsAre(AllOf(insertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
+      ElementsAre(AllOf(insertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")),
+                  AllOf(deleteWhereAllMatcher,
+                        m::pq::OriginalString("DELETE WHERE { ?s ?p ?o }"))));
+  expectUpdate_(
+      "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
+      "foo:b foo:c }",
+      ElementsAre(
+          AllOf(insertMatcher,
+                m::pq::OriginalString(
+                    "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }")),
+          AllOf(fooInsertMatcher,
+                m::pq::OriginalString("INSERT DATA { foo:a foo:b foo:c }"))));
+  expectUpdate_(
+      "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo/> "
+      "INSERT DATA { foo:a foo:b foo:c }",
+      ElementsAre(
+          AllOf(insertMatcher,
+                m::pq::OriginalString(
+                    "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }")),
+          AllOf(fooInsertMatcher,
+                m::pq::OriginalString(
+                    "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
@@ -2249,20 +2329,23 @@ TEST(SparqlParser, QueryOrUpdate) {
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
   expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
   // Hit all paths for coverage.
-  expectQuery("SELECT ?a WHERE { ?a <is-a> <b> }",
-              AllOf(m::SelectQuery(m::Select({Var{"?a"}}),
-                                   m::GraphPattern(m::Triples(
-                                       {{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
-                    m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
-                    m::VisibleVariables({Var{"?a"}})));
+  expectQuery(
+      "SELECT ?a WHERE { ?a <is-a> <b> }",
+      ElementsAre(AllOf(
+          m::SelectQuery(
+              m::Select({Var{"?a"}}),
+              m::GraphPattern(m::Triples({{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
+          m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
+          m::VisibleVariables({Var{"?a"}}))));
   expectQuery(
       "INSERT DATA { <a> <b> <c> }",
-      AllOf(m::UpdateClause(m::GraphUpdate({},
-                                           {{Iri("<a>"), Iri("<b>"), Iri("<c>"),
-                                             std::monostate{}}},
-                                           std::nullopt),
-                            m::GraphPattern()),
-            m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")));
+      ElementsAre(AllOf(
+          m::UpdateClause(
+              m::GraphUpdate(
+                  {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+                  std::nullopt),
+              m::GraphPattern()),
+          m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
 }
 
 TEST(SparqlParser, GraphOrDefault) {

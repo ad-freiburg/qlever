@@ -1446,3 +1446,10 @@ TEST(ParserTest, parseWithDatasets) {
                                      filterGraphPattern)),
           datasets));
 }
+
+TEST(ParserTest, multipleUpdatesAreForbidden) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
+      testing::HasSubstr("Multiple Updates in one request are not supported."));
+}
