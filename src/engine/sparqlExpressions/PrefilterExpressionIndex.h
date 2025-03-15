@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
@@ -35,6 +35,18 @@ constexpr size_t maxInfoRecursion = 3;
 // filter out the non-relevant blocks by checking their content of
 // `firstTriple_` and `lastTriple_` (`PermutedTriple`)
 using BlockMetadata = CompressedBlockMetadata;
+
+//______________________________________________________________________________
+// The alias `BlockRange` represents a range of relevant `BlockMetadata`
+// values. The relevant range is defined by a `std::pair` of indices (as
+// `size_t` values).
+using BlockRange = std::pair<size_t, size_t>;
+
+//______________________________________________________________________________
+// A `std::vector` containing `BlockRange`s. `BlockRange` is an alias for
+// `std::pair<size_t, size_t>` (defines a relevant `BlockMetadata` value
+// section).
+using RelevantBlockRanges = std::vector<BlockRange>;
 
 //______________________________________________________________________________
 /*
@@ -87,14 +99,18 @@ class PrefilterExpression {
   // (1) unqiueness of blocks
   // (2) sorted (order)
   // (3) Constant values for all columns `< evaluationColumn`
-  // To indicate that the possibly incomplete first and last block should be
-  // handled appropriately, the `stripIncompleteBlocks` flag is set to `true`.
-  // The flag value shouldn't be changed in general, because `evaluate()` only
-  // removes the respective block if it is conditionally (inconsistent columns)
-  // necessary.
+  // Remark: The potentially incomplete first/last `BlockMetadata` values in
+  // input are handled automatically. They are stripped at the beginning and
+  // added again when the evaluation procedure was successfully performed.
   std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn,
-                                      bool stripIncompleteBlocks = true) const;
+                                      size_t evaluationColumn) const;
+
+  // `evaluateImpl` is internally used for the actual pre-filter procedure on
+  // the flat `std::span<const ValueId> idSpan`. The `ValueId`s contained
+  // `idSpan` are simply the retrieved bounding `ValueId`s from the for
+  // `evaluate` provided `BlockMetadata` values.
+  virtual RelevantBlockRanges evaluateImpl(
+      std::span<const ValueId> idSpan) const = 0;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -107,58 +123,6 @@ class PrefilterExpression {
   // `IdOrLocalVocabEntry` variant.
   static ValueId getValueIdFromIdOrLocalVocabEntry(
       const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
-
- private:
-  // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
-  // instead of this method.
-  // Performs the following conditional checks on
-  // the provided `BlockMetadata` values: (1) unqiueness of blocks (2) sorted
-  // (order) (3) Constant values for all columns `< evaluationColumn` This
-  // function subsequently invokes the `evaluateImpl` method and checks the
-  // corresponding result for those conditions again. If a respective condition
-  // is violated, the function performing the checks will throw a
-  // `std::runtime_error`.
-  std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
-
-  virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
-};
-
-//______________________________________________________________________________
-// For the actual comparison of the relevant ValueIds from the metadata triples,
-// we use the implementations from ValueIdComparators.
-//
-// Supported comparisons are:
-//  - LessThan, LessEqual, Equal, NotEqual, GreaterEqual, GreaterThan
-using CompOp = valueIdComparators::Comparison;
-
-//______________________________________________________________________________
-template <CompOp Comparison>
-class RelationalExpression : public PrefilterExpression {
- private:
-  // This is the right hand side value of the relational expression. The left
-  // hand value is indirectly supplied during the evaluation process via the
-  // `evaluationColumn` argument. `evaluationColumn` represents the column index
-  // associated with the `Variable` column of the `IndexScan`.
-  // E.g., a less-than expression with a value of 3 will represent the logical
-  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
-  // represent ?var = "Freiburg".
-  IdOrLocalVocabEntry rightSideReferenceValue_;
-
- public:
-  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
-      : rightSideReferenceValue_(referenceValue) {}
-
-  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
-  bool operator==(const PrefilterExpression& other) const override;
-  std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string asString(size_t depth) const override;
-
- private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -186,9 +150,88 @@ class LogicalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  RelevantBlockRanges evaluateImpl(
+      std::span<const ValueId> idSpan) const override;
+};
+
+//______________________________________________________________________________
+// Values to differentiate `PrefilterExpression` for the respective `isDatatype`
+// SPARQL expressions. Supported by the following prefilter
+// `IsDatatypeExpression`: `isIri`, `isBlank`, `isLiteral` and `isNumeric`.
+enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
+
+//______________________________________________________________________________
+// The specialized `PrefilterExpression` class that actually applies the
+// pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
+template <IsDatatype Datatype>
+class IsDatatypeExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+
+ public:
+  explicit IsDatatypeExpression(bool isNegated = false)
+      : isNegated_(isNegated){};
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  RelevantBlockRanges evaluateIsIriOrIsLiteralImpl(
+      std::span<const ValueId> idSpan, const bool isNegated) const;
+  RelevantBlockRanges evaluateIsBlankOrIsNumericImpl(
+      std::span<const ValueId> idSpan, const bool isNegated) const;
+  RelevantBlockRanges evaluateImpl(
+      std::span<const ValueId> idSpan) const override;
+};
+
+//______________________________________________________________________________
+// For the actual comparison of the relevant ValueIds from the metadata triples,
+// we use the implementations from ValueIdComparators.
+//
+// Supported comparisons are:
+//  - LessThan, LessEqual, Equal, NotEqual, GreaterEqual, GreaterThan
+using CompOp = valueIdComparators::Comparison;
+
+//______________________________________________________________________________
+template <CompOp Comparison>
+class RelationalExpression : public PrefilterExpression {
+ private:
+  // This is the right hand side value of the relational expression. The left
+  // hand value is indirectly supplied during the evaluation process via the
+  // `evaluationColumn` argument. `evaluationColumn` represents the column index
+  // associated with the `Variable` column of the `IndexScan`.
+  // E.g., a less-than expression with a value of 3 will represent the logical
+  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
+  // represent ?var = "Freiburg".
+  IdOrLocalVocabEntry rightSideReferenceValue_;
+  // `IsDatatypeExpression` (for `IsDatatype::IRI` and `IsDatatype::LITERAL`)
+  // requires access to `evaluateOptGetCompleteComplementImpl` for proper
+  // complement computation while considering all datatype `ValueId`s.
+  template <IsDatatype Datatype>
+  friend class IsDatatypeExpression;
+
+ public:
+  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+      : rightSideReferenceValue_(referenceValue) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  // If `getComplementOverAllDatatypes` is set to `true`, this method returns
+  // the total complement over all datatype `ValueId`s from the
+  // provided `BlockMetadata` values.
+  RelevantBlockRanges evaluateOptGetCompleteComplementImpl(
+      std::span<const ValueId> idSpan,
+      bool getComplementOverAllDatatypes = false) const;
+  // Calls `evaluateOptGetCompleteComplementImpl` with
+  // `getComplementOverAllDatatypes` set to `false` (standard evaluation
+  // procedure).
+  RelevantBlockRanges evaluateImpl(
+      std::span<const ValueId> idSpan) const override;
 };
 
 //______________________________________________________________________________
@@ -211,9 +254,8 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  RelevantBlockRanges evaluateImpl(
+      std::span<const ValueId> idSpan) const override;
 };
 
 //______________________________________________________________________________
@@ -230,6 +272,17 @@ using GreaterEqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GE>;
 using GreaterThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GT>;
+
+//______________________________________________________________________________
+// Define convenient names for the templated `IsDatatypeExpression`s.
+using IsIriExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::IRI>;
+using IsBlankExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::BLANK>;
+using IsLiteralExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::LITERAL>;
+using IsNumericExpression = prefilterExpressions::IsDatatypeExpression<
+    prefilterExpressions::IsDatatype::NUMERIC>;
 
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.
