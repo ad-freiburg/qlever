@@ -427,10 +427,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer,
-       this](std::vector<ParsedQuery> parsedOperation,
-             std::string operationName, std::string_view operationString,
+       this](std::vector<ParsedQuery> operations, std::string operationName,
+             std::string_view operationString,
              std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string msg) -> Awaitable<void> {
+             std::string_view msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -444,35 +444,30 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     auto [qec, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, operationString, messageSender,
                          parameters, timeLimit.value());
-    if (!ql::ranges::all_of(parsedOperation, expectedOperation)) {
+    if (!ql::ranges::all_of(operations, expectedOperation)) {
       throw std::runtime_error(absl::StrCat(
           msg, ad_utility::truncateOperationString(operationString)));
     }
-    if (ql::ranges::all_of(parsedOperation,
+    if (ql::ranges::all_of(operations,
                            std::mem_fn(&ParsedQuery::hasUpdateClause))) {
       co_return co_await processUpdate(
-          std::move(parsedOperation), requestTimer, cancellationHandle, qec,
+          std::move(operations), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value());
     } else {
-      AD_CORRECTNESS_CHECK(parsedOperation.size() == 1);
-      AD_CORRECTNESS_CHECK(
-          ql::ranges::all_of(parsedOperation,
-                             std::mem_fn(&ParsedQuery::hasSelectClause)) ||
-          ql::ranges::all_of(parsedOperation,
-                             std::mem_fn(&ParsedQuery::hasAskClause)) ||
-          ql::ranges::all_of(parsedOperation,
-                             std::mem_fn(&ParsedQuery::hasConstructClause)));
+      AD_CORRECTNESS_CHECK(operations.size() == 1);
+      ParsedQuery query = std::move(operations[0]);
+      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasUpdateClause() ||
+                           query.hasConstructClause());
       co_return co_await processQuery(
-          parameters, std::move(parsedOperation[0]), requestTimer,
-          cancellationHandle, qec, std::move(request), send, timeLimit.value());
+          parameters, std::move(query), requestTimer, cancellationHandle, qec,
+          std::move(request), send, timeLimit.value());
     }
   };
   auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
     auto parsedQuery = SparqlParser::parseQuery(std::move(query.query_),
                                                 query.datasetClauses_);
-    AD_CORRECTNESS_CHECK(parsedQuery.size() == 1);
     return visitOperation(
-        parsedQuery, "SPARQL Query", parsedQuery.front()._originalString,
+        {parsedQuery}, "SPARQL Query", parsedQuery._originalString,
         std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
@@ -480,10 +475,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   auto visitUpdate = [&visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
-    auto parsedUpdate =
-        SparqlParser::parseQuery(update.update_, update.datasetClauses_);
+    auto parsedUpdates =
+        SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
     return visitOperation(
-        parsedUpdate, "SPARQL Update", update.update_,
+        parsedUpdates, "SPARQL Update", update.update_,
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");

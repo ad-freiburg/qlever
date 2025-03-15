@@ -158,7 +158,7 @@ class Server {
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          std::vector<ParsedQuery>&& update,
+          std::vector<ParsedQuery>&& updates,
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,

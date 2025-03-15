@@ -43,7 +43,9 @@ TEST(ExecuteUpdate, executeUpdate) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto pq = SparqlParser::parseQuery(update);
+    auto pqs = SparqlParser::parseUpdate(update);
+    EXPECT_THAT(pqs, testing::SizeIs(1));
+    auto pq = std::move(pqs[0]);
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
     ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
@@ -63,7 +65,9 @@ TEST(ExecuteUpdate, executeUpdate) {
   auto expectExecuteUpdateFails =
       [&index, &expectExecuteUpdateHelper](
           const std::string& update,
-          const testing::Matcher<const std::string&>& messageMatcher) {
+          const testing::Matcher<const std::string&>& messageMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         DeltaTriples deltaTriples{index};
         AD_EXPECT_THROW_WITH_MESSAGE(
             expectExecuteUpdateHelper(update, deltaTriples), messageMatcher);
@@ -84,7 +88,9 @@ TEST(ExecuteUpdate, executeUpdate) {
   expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8));
   expectExecuteUpdateFails(
       "SELECT * WHERE { ?s ?p ?o }",
-      testing::HasSubstr("Assertion `query.hasUpdateClause()` failed."));
+      testing::HasSubstr(
+          "Assertion `resultOfParseAndRemainingText.remainingText_.empty()` "
+          "failed."));
   expectExecuteUpdateFails(
       "CLEAR DEFAULT",
       testing::HasSubstr(
@@ -118,7 +124,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto pq = SparqlParser::parseQuery(update);
+    auto pqs = SparqlParser::parseUpdate(update);
+    EXPECT_THAT(pqs, testing::SizeIs(1));
+    auto pq = std::move(pqs[0]);
+
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
     UpdateMetadata metadata;
@@ -182,7 +191,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
            IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))}));
   expectComputeGraphUpdateQuadsFails(
       "SELECT * WHERE { ?s ?p ?o }",
-      HasSubstr("Assertion `query.hasUpdateClause()` failed."));
+      HasSubstr(
+          "Assertion `resultOfParseAndRemainingText.remainingText_.empty()` "
+          "failed."));
   expectComputeGraphUpdateQuadsFails(
       "CLEAR DEFAULT",
       HasSubstr(
