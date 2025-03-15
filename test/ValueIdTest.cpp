@@ -9,6 +9,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "absl/hash/hash_testing.h"
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
@@ -280,22 +281,52 @@ TEST_F(ValueIdTest, Serialization) {
 }
 
 TEST_F(ValueIdTest, Hashing) {
-  auto ids = makeRandomIds();
-  ad_utility::HashSet<ValueId> idsWithoutDuplicates;
-  for (size_t i = 0; i < 2; ++i) {
-    for (auto id : ids) {
-      idsWithoutDuplicates.insert(id);
+  {
+    auto ids = makeRandomIds();
+    ad_utility::HashSet<ValueId> idsWithoutDuplicates;
+    for (size_t i = 0; i < 2; ++i) {
+      for (auto id : ids) {
+        idsWithoutDuplicates.insert(id);
+      }
     }
+    std::vector<ValueId> idsWithoutDuplicatesAsVector(
+        idsWithoutDuplicates.begin(), idsWithoutDuplicates.end());
+
+    std::sort(idsWithoutDuplicatesAsVector.begin(),
+              idsWithoutDuplicatesAsVector.end());
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+    ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
   }
-  std::vector<ValueId> idsWithoutDuplicatesAsVector(
-      idsWithoutDuplicates.begin(), idsWithoutDuplicates.end());
-
-  std::sort(idsWithoutDuplicatesAsVector.begin(),
-            idsWithoutDuplicatesAsVector.end());
-  std::sort(ids.begin(), ids.end());
-  ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-
-  ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
+  {
+    using namespace ad_utility::triple_component;
+    using namespace ad_utility::testing;
+    Index index = makeTestIndex("ValueIdTest_Hashing");
+    auto mkId = makeGetId(index);
+    LocalVocab lv1;
+    LocalVocab lv2;
+    Iri iri = Iri::fromIriref("<foo>");
+    LocalVocabEntry lve1(iri);
+    LocalVocabEntry lve2(iri);
+    LocalVocabEntry lve3(Literal::fromStringRepresentation("\"foo\""));
+    LocalVocabEntry lve4(Iri::fromIriref("<x>"));
+    auto LVID = [](LocalVocabEntry& lve, LocalVocab& lv) {
+      return Id::makeFromLocalVocabIndex(lv.getIndexAndAddIfNotContained(lve));
+    };
+    // Checks that hashing is implemented correctly using `==` for equality. The
+    // hash expansion is the values added with `combine`.
+    // - If two elements are equal, then their hash expansions must be equal.
+    // - If two elements are not equal, then hash expansions must differ and
+    // neither can be a suffix of the other.
+    EXPECT_TRUE(absl::VerifyTypeImplementsAbslHashCorrectly(
+        {LVID(lve1, lv1), LVID(lve2, lv2), LVID(lve3, lv1), LVID(lve4, lv1),
+         mkId("<x>"), Id::makeFromInt(0), Id::makeFromInt(42),
+         Id::makeFromDouble(0), Id::makeFromDouble(1.56),
+         Id::makeFromDouble(1e-10), Id::makeFromDouble(1e+100),
+         Id::makeFromBool(true), Id::makeFromBool(false),
+         Id::makeUndefined()}));
+  }
 }
 
 TEST_F(ValueIdTest, toDebugString) {

@@ -13,8 +13,14 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
-  positionInVocab.lowerBound_ = vocab.lower_bound(toStringRepresentation());
-  positionInVocab.upperBound_ = vocab.upper_bound(toStringRepresentation());
+  using SortLevel = Index::Vocab::SortLevel;
+  positionInVocab.lowerBound_ =
+      vocab.lower_bound(toStringRepresentation(), SortLevel::TOTAL);
+  positionInVocab.upperBound_ =
+      vocab.upper_bound(toStringRepresentation(), SortLevel::TOTAL);
+  AD_CORRECTNESS_CHECK(positionInVocab.upperBound_.get() -
+                           positionInVocab.lowerBound_.get() <=
+                       1);
   lowerBoundInVocab_.store(positionInVocab.lowerBound_,
                            std::memory_order_relaxed);
   upperBoundInVocab_.store(positionInVocab.upperBound_,
