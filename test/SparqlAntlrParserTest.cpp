@@ -52,12 +52,11 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
-       ParsedQuery::DatasetClauses clauses = {},
+       std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      // TODO: use dataset clauses directly?
-      ParserAndVisitor p{input, std::move(prefixes), {}, disableSomeChecks};
-      p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
+      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
+                         disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
