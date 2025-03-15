@@ -113,7 +113,7 @@ struct ExpectCompleteParse {
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), {}, disableSomeChecks),
+              input, std::move(prefixMap), std::nullopt, disableSomeChecks),
           matcher, l);
     });
   };
