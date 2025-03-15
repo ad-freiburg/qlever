@@ -52,11 +52,11 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
-       ParsedQuery::DatasetClauses clauses = {},
+       std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
-      p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
+      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
+                         disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
@@ -113,7 +113,7 @@ struct ExpectCompleteParse {
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), {}, disableSomeChecks),
+              input, std::move(prefixMap), std::nullopt, disableSomeChecks),
           matcher, l);
     });
   };
@@ -1533,106 +1533,10 @@ TEST(SparqlParser, Query) {
   RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 
-// Some helper matchers for the `builtInCall` test below.
-namespace builtInCallTestHelpers {
-using namespace sparqlExpression;
-
-// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
-// (via `dynamic_cast`) points to an object of type `Expression`, and that this
-// `Expression` matches the `matcher`.
-template <typename Expression, typename Matcher = decltype(testing::_)>
-auto matchPtr(Matcher matcher = Matcher{})
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  return testing::Pointee(
-      testing::WhenDynamicCastTo<const Expression&>(matcher));
-}
-
-// Return a matcher that matches a `SparqlExpression::Ptr` that stores a
-// `VariableExpression` with the given  `variable`.
-auto variableExpressionMatcher = [](const Variable& variable) {
-  return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
-};
-
-// Return a matcher that matches a `SparqlExpression::Ptr`that stores an
-// `Expression` (template argument), the children of which match the
-// `childrenMatchers`.
-template <typename Expression>
-auto matchPtrWithChildren(auto&&... childrenMatchers)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  return matchPtr<Expression>(
-      AD_PROPERTY(SparqlExpression, childrenForTesting,
-                  testing::ElementsAre(childrenMatchers...)));
-}
-
-// Same as `matchPtrWithChildren` above, but the children are all variables.
-template <typename Expression>
-auto matchPtrWithVariables(const std::same_as<Variable> auto&... children)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  return matchPtrWithChildren<Expression>(
-      variableExpressionMatcher(children)...);
-}
-
-// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
-// (via `dynamic_cast`) to an object of the same type that a call to the
-// `makeFunction` yields. The matcher also checks that the expression's children
-// match the `childrenMatchers`.
-auto matchNaryWithChildrenMatchers(auto makeFunction,
-                                   auto&&... childrenMatchers)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  using namespace sparqlExpression;
-  auto typeIdLambda = [](const auto& ptr) {
-    return std::type_index{typeid(*ptr)};
-  };
-
-  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
-    return std::make_unique<VariableExpression>(Variable{"?x"});
-  };
-  auto expectedTypeIndex =
-      typeIdLambda(makeFunction(makeDummyChild(childrenMatchers)...));
-  ::testing::Matcher<const SparqlExpression::Ptr&> typeIdMatcher =
-      ::testing::ResultOf(typeIdLambda, ::testing::Eq(expectedTypeIndex));
-  return ::testing::AllOf(typeIdMatcher,
-                          ::testing::Pointee(AD_PROPERTY(
-                              SparqlExpression, childrenForTesting,
-                              ::testing::ElementsAre(childrenMatchers...))));
-}
-
-auto idExpressionMatcher = [](Id id) {
-  return matchPtr<IdExpression>(
-      AD_PROPERTY(IdExpression, value, testing::Eq(id)));
-};
-
-// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
-// (via `dynamic_cast`) to an object of the same type that a call to the
-// `makeFunction` yields. The matcher also checks that the expression's children
-// are the `variables`.
-auto matchNary(
-    auto makeFunction,
-    QL_CONCEPT_OR_NOTHING(ad_utility::SimilarTo<Variable>) auto&&... variables)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  using namespace sparqlExpression;
-  return matchNaryWithChildrenMatchers(makeFunction,
-                                       variableExpressionMatcher(variables)...);
-}
-auto matchUnary(auto makeFunction)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  return matchNary(makeFunction, Variable{"?x"});
-}
-
-template <typename T>
-auto matchLiteralExpression(const T& value)
-    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
-  using Expr = sparqlExpression::detail::LiteralExpression<T>;
-  return ::testing::Pointee(::testing::WhenDynamicCastTo<const Expr&>(
-      AD_PROPERTY(Expr, value, ::testing::Eq(value))));
-}
-}  // namespace builtInCallTestHelpers
-
 // ___________________________________________________________________________
 TEST(SparqlParser, primaryExpression) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   auto expectPrimaryExpression =
       ExpectCompleteParse<&Parser::primaryExpression>{};
   auto expectFails = ExpectParseFails<&Parser::primaryExpression>{};
@@ -1646,7 +1550,7 @@ TEST(SparqlParser, primaryExpression) {
 // ___________________________________________________________________________
 TEST(SparqlParser, builtInCall) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
   expectBuiltInCall("StrLEN(?x)", matchUnary(&makeStrlenExpression));
@@ -1760,7 +1664,7 @@ TEST(SparqlParser, builtInCall) {
 
 TEST(SparqlParser, unaryExpression) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   auto expectUnary = ExpectCompleteParse<&Parser::unaryExpression>{};
 
   expectUnary("-?x", matchUnary(&makeUnaryMinusExpression));
@@ -1769,7 +1673,7 @@ TEST(SparqlParser, unaryExpression) {
 
 TEST(SparqlParser, multiplicativeExpression) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   Variable x{"?x"};
   Variable y{"?y"};
   Variable z{"?z"};
@@ -1794,7 +1698,7 @@ TEST(SparqlParser, relationalExpression) {
   Variable y{"?y"};
   Variable z{"?z"};
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
   expectRelational("?x IN (?y, ?z)",
                    matchPtrWithVariables<InExpression>(x, y, z));
@@ -1819,7 +1723,7 @@ matchOperatorAndExpression(
 
 TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   Variable x{"?x"};
   Variable y{"?y"};
   Variable z{"?z"};
@@ -1875,7 +1779,7 @@ TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
 
 TEST(SparqlParser, FunctionCall) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
   // These prefixes are currently stored without the leading "<", so we have to
@@ -1950,7 +1854,7 @@ TEST(SparqlParser, FunctionCall) {
 // ______________________________________________________________________________
 TEST(SparqlParser, substringExpression) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   using V = Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
@@ -1975,7 +1879,7 @@ TEST(SparqlParser, substringExpression) {
 // _________________________________________________________
 TEST(SparqlParser, binaryStringExpressions) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   using V = Variable;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
@@ -1991,26 +1895,8 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }
 
-// Matchers for EXISTS and NOT EXISTS functions.
-namespace existsTestHelpers {
-using namespace sparqlExpression;
-using namespace ::testing;
-
-// Match an EXISTS function
-auto existsMatcher(Matcher<const ParsedQuery&> pattern) {
-  return Pointee(WhenDynamicCastTo<const ExistsExpression&>(
-      AD_PROPERTY(ExistsExpression, argument, pattern)));
-}
-// Match a NOT EXISTS function
-auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
-  return builtInCallTestHelpers::matchNaryWithChildrenMatchers(
-      &makeUnaryNegateExpression, existsMatcher(pattern));
-}
-}  // namespace existsTestHelpers
-
 // _____________________________________________________________________________
 TEST(SparqlParser, Exists) {
-  using namespace existsTestHelpers;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
 
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
@@ -2025,9 +1911,9 @@ TEST(SparqlParser, Exists) {
   };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
-                    existsMatcher(selectABarFooMatcher()));
+                    m::Exists(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
-                    notExistsMatcher(selectABarFooMatcher()));
+                    m::NotExists(selectABarFooMatcher()));
 
   Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
   Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};
@@ -2039,17 +1925,16 @@ TEST(SparqlParser, Exists) {
   datasetClauses.namedGraphs_ = namedGraphs;
   datasetClauses.defaultGraphs_.value().insert(iri("<blubb>"));
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
-                    existsMatcher(selectABarFooMatcher()));
+                    m::Exists(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
-                    notExistsMatcher(selectABarFooMatcher()));
+                    m::NotExists(selectABarFooMatcher()));
 
-  expectBuiltInCall(
-      "EXISTS {?a <bar> ?foo}",
-      existsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
-      datasetClauses);
+  expectBuiltInCall("EXISTS {?a <bar> ?foo}",
+                    m::Exists(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+                    datasetClauses);
   expectBuiltInCall(
       "NOT EXISTS {?a <bar> ?foo}",
-      notExistsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+      m::NotExists(selectABarFooMatcher(defaultGraphs, namedGraphs)),
       datasetClauses);
 }
 
@@ -2064,7 +1949,7 @@ template <typename AggregateExpr>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
     bool distinct, const Variable& child, const auto&... additionalMatchers) {
   using namespace ::testing;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   using Exp = SparqlExpression;
 
   auto innerMatcher = [&]() -> Matcher<const AggregateExpr&> {
@@ -2090,7 +1975,7 @@ template <typename AggregateExpr>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregateWithoutChild(
     bool distinct) {
   using namespace ::testing;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   using Exp = SparqlExpression;
 
   using enum SparqlExpression::AggregateStatus;
@@ -2103,7 +1988,7 @@ template <typename AggregateExpr>
 // ___________________________________________________________
 TEST(SparqlParser, aggregateExpressions) {
   using namespace sparqlExpression;
-  using namespace builtInCallTestHelpers;
+  using namespace m::builtInCall;
   using namespace aggregateTestHelpers;
   using V = Variable;
   auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
@@ -2513,4 +2398,50 @@ TEST(SparqlParser, SourceSelector) {
 
   auto expectDefaultGraph = ExpectCompleteParse<&Parser::defaultGraphClause>{};
   expectDefaultGraph("<x>", m::TripleComponentIri("<x>"));
+}
+
+TEST(SparqlParser, Datasets) {
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
+  auto expectAsk = ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
+  auto expectConstruct =
+      ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
+  auto expectDescribe =
+      ExpectCompleteParse<&Parser::describeQuery>{defaultPrefixMap};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  auto noGraph = std::monostate{};
+  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<g>")}};
+  // Only checks `_filters` on the GraphPattern. We are not concerned with the
+  // `_graphPatterns` here.
+  auto filterGraphPattern = m::Filters(m::ExistsFilter(
+      m::GraphPattern(m::Triples({{Var("?a"), "?b", Var("?c")}})), datasets));
+  // Check that datasets are propagated correctly into the different types of
+  // operations.
+  expectUpdate(
+      "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
+      "?c} }",
+      testing::ElementsAre(m::UpdateClause(
+          m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
+                         std::nullopt),
+          filterGraphPattern, m::datasetClausesMatcher(datasets))));
+  expectQuery(
+      "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
+      m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
+  expectAsk("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+            m::AskQuery(filterGraphPattern, datasets));
+  expectConstruct(
+      "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b?c}}",
+      m::ConstructQuery(
+          {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+          filterGraphPattern, datasets));
+  // See comment in visit function for `DescribeQueryContext`.
+  expectDescribe(
+      "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+      m::DescribeQuery(
+          m::Describe({Var("?x")}, {datasets, {}},
+                      m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
+                                     filterGraphPattern)),
+          datasets));
 }
