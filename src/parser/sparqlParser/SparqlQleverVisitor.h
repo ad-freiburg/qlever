@@ -216,7 +216,7 @@ class SparqlQleverVisitor {
 
   updateClause::Load visit(Parser::LoadContext* ctx);
 
-  updateClause::Clear visit(Parser::ClearContext* ctx);
+  ParsedQuery visit(Parser::ClearContext* ctx);
 
   updateClause::Drop visit(Parser::DropContext* ctx);
 

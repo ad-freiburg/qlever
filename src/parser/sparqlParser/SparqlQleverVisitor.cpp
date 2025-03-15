@@ -552,12 +552,13 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  if (ctx->deleteWhere() || ctx->modify()) {
-    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify());
+  if (ctx->deleteWhere() || ctx->modify() || ctx->clear()) {
+    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify(),
+                                         ctx->clear());
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-        ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
-        ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+        ctx->load(), ctx->drop(), ctx->create(), ctx->add(), ctx->move(),
+        ctx->copy(), ctx->insertData(), ctx->deleteData());
   }
 
   return std::move(parsedQuery_);
@@ -570,9 +571,60 @@ Load Visitor::visit(Parser::LoadContext* ctx) {
       ctx->graphRef() ? visit(ctx->graphRef()) : std::optional<GraphRef>{}};
 }
 
+GraphPatternOperation makeAllTripleGraphPattern(GraphRefAll graph) {
+  GraphPattern inner;
+  inner._graphPatterns.emplace_back(
+      BasicGraphPattern{{{{Variable("?s")}, "?p", {Variable("?o")}}}});
+  using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
+  Graph graphSpec =
+      std::visit(ad_utility::OverloadCallOperator{
+                     [](const ad_utility::triple_component::Iri& iri) -> Graph {
+                       return iri;
+                     },
+                     [](const ALL&) -> Graph { return Variable("?g"); },
+                     [](const DEFAULT&) -> Graph { AD_FAIL(); },
+                     [](const NAMED&) -> Graph { AD_FAIL(); }},
+                 graph);
+  return {parsedQuery::GroupGraphPattern{std::move(inner), graphSpec}};
+}
+
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(GraphRefAll graph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  using Iri = ad_utility::triple_component::Iri;
+  Graph graphSpec =
+      std::visit(ad_utility::OverloadCallOperator{
+                     [](const ad_utility::triple_component::Iri& iri) -> Graph {
+                       return ::Iri(iri.toStringRepresentation());
+                     },
+                     [](const ALL&) -> Graph { return Variable("?g"); },
+                     [](const DEFAULT&) -> Graph { AD_FAIL(); },
+                     [](const NAMED&) -> Graph { AD_FAIL(); }},
+                 graph);
+  return {{Variable("?s")}, {Variable("?p")}, {Variable("?o")}, graphSpec};
+}
+
 // ____________________________________________________________________________________
-Clear Visitor::visit(Parser::ClearContext* ctx) {
-  return Clear{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRefAll())};
+ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
+  bool silent = static_cast<bool>(ctx->SILENT());
+  GraphRefAll graph = visit(ctx->graphRefAll());
+  if (holds_alternative<NAMED>(graph)) {
+    reportNotSupported(ctx->graphRefAll(), "Clearing only the named graphs is");
+  }
+  if (holds_alternative<DEFAULT>(graph)) {
+    reportNotSupported(
+        ctx->graphRefAll(),
+        // This is unspecified behaviour, because we deviate from the standard
+        // by using the union graph instead of the unnamed graph. Either use
+        // `ALL` or explicitly name `ql:default-graph`.
+        "Clearing the default graph is");
+  }
+
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      makeAllTripleGraphPattern(graph));
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
