@@ -772,7 +772,8 @@ Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
           static_assert(std::is_same_v<T, BlankNode> ||
                         std::is_same_v<T, Literal>);
           reportError(ctx->varOrIri(),
-                      "Only IRIs and variables are allowed as graph names.");
+                      "Internal Error: got unexpected type. Please report this "
+                      "to the developers.");
         }
       });
 
