@@ -89,8 +89,7 @@ TEST(ExecuteUpdate, executeUpdate) {
   expectExecuteUpdateFails(
       "SELECT * WHERE { ?s ?p ?o }",
       testing::HasSubstr(
-          "Assertion `resultOfParseAndRemainingText.remainingText_.empty()` "
-          "failed."));
+          R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
   expectExecuteUpdateFails(
       "CLEAR DEFAULT",
       testing::HasSubstr(
@@ -192,8 +191,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   expectComputeGraphUpdateQuadsFails(
       "SELECT * WHERE { ?s ?p ?o }",
       HasSubstr(
-          "Assertion `resultOfParseAndRemainingText.remainingText_.empty()` "
-          "failed."));
+          R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
   expectComputeGraphUpdateQuadsFails(
       "CLEAR DEFAULT",
       HasSubstr(
