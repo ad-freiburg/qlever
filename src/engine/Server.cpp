@@ -428,9 +428,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer,
        this](std::vector<ParsedQuery> operations, std::string operationName,
-             std::string_view operationString,
+             const std::string operationString,
              std::function<bool(const ParsedQuery&)> expectedOperation,
-             std::string_view msg) -> Awaitable<void> {
+             const std::string msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -464,10 +464,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
   };
   auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
-    auto parsedQuery = SparqlParser::parseQuery(std::move(query.query_),
-                                                query.datasetClauses_);
+    auto parsedQuery =
+        SparqlParser::parseQuery(query.query_, query.datasetClauses_);
     return visitOperation(
-        {parsedQuery}, "SPARQL Query", parsedQuery._originalString,
+        {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
@@ -478,7 +478,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     auto parsedUpdates =
         SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
     return visitOperation(
-        parsedUpdates, "SPARQL Update", update.update_,
+        std::move(parsedUpdates), "SPARQL Update", std::move(update.update_),
         &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
@@ -496,18 +496,20 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
     auto trueFunc = [](const ParsedQuery&) { return true; };
-    std::string_view queryType =
+    std::string_view operationType =
         parsedOperation.hasUpdateClause() ? "Update" : "Query";
-    return visitOperation(
-        {parsedOperation}, absl::StrCat("Graph Store (", queryType, ")"),
-        parsedOperation._originalString, trueFunc, "Unused dummy message");
+    std::string operationString = parsedOperation._originalString;
+    return visitOperation({std::move(parsedOperation)},
+                          absl::StrCat("Graph Store (", operationType, ")"),
+                          std::move(operationString), trueFunc,
+                          "Unused dummy message");
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
     if (response.has_value()) {
-      co_return co_await send(std::move(response.value()));
+      return send(std::move(response.value()));
     }
 
     // At this point, if there is a "?" in the query string, it means that there
@@ -518,8 +520,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
     // No path matched up until this point, so return 404 to indicate the client
     // made an error and the server will not serve anything else.
-    co_return co_await send(
-        createNotFoundResponse("Unknown path", std::move(request)));
+    return send(createNotFoundResponse("Unknown path", std::move(request)));
   };
 
   co_return co_await processOperation(
