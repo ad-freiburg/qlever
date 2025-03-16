@@ -75,8 +75,8 @@ using ValueIdFromBlocksIt =
 //______________________________________________________________________________
 /*
 Remark: We don't evaluate the actual SPARQL Expression. We only pre-filter
-w.r.t. blocks that contain potentially relevant data for the actual evaluation of
-those expressions to make the evaluation procedure more efficient.
+w.r.t. blocks that contain potentially relevant data for the actual evaluation
+of those expressions to make the evaluation procedure more efficient.
 
 The block-filtering is applied with the following operations:
 Relational Expressions - `<=`, `>=`, `<`, `>`, `==` and `!=`.

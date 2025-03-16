@@ -547,7 +547,7 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // Enables access to the i-th `ValueId` regarding our containerized
 // `std::span<const BlockMetadata> inputSpan`.
 // Each `BlockMetadata` value holds exactly two bound `ValueId`s (one in
-// `firstTriple_` and `lastTriple_` respectively) over the specifiecd column
+// `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.
 // Thus, the valid index range over `i` is `[0, 2 * inputSpan.size())`.
 ValueId AccessValueIdFromBlockMetadata::operator()(auto&& randomAccessContainer,
