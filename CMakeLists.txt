@@ -32,6 +32,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsized-deallocation")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -264,7 +265,7 @@ set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/joka921/s2geometry.git
-        GIT_TAG dd0f00d66fdfe192efb4e06e8633e486a40bab38 #something from the delta-queries branch.
+        GIT_TAG d49ca23414b4471be9addfe46c6f57d391543205 #something from the delta-queries branch.
         SYSTEM
 )
 

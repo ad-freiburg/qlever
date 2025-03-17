@@ -141,6 +141,10 @@ class SpatialJoinAlgorithms {
     return getRtreeEntry(idTable, row, col);
   }
 
+  static void setIndexCacheMode(bool doInsert);
+  static void writeIndexCacheToFile(const std::string& filename);
+  static void readIndexCacheFromFile(const std::string& filename);
+
  private:
   // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint

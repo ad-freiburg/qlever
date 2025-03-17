@@ -21,8 +21,25 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/Serializer/SerializeHashMap.h"
 
 using namespace BoostGeometryNamespace;
+
+static bool& indexCacheWritingEnabled() {
+  static bool b;
+  return b;
+}
+
+using IndexCache =
+    std::unordered_map<std::string, std::optional<S2PointIndex<size_t>>>;
+static IndexCache& indexCache() {
+  static IndexCache cache;
+  return cache;
+}
+
+void SpatialJoinAlgorithms::setIndexCacheMode(bool doInsert) {
+  indexCacheWritingEnabled() = doInsert;
+}
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
