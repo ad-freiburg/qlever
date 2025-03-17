@@ -5,7 +5,7 @@ add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
-        Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
+        QueryPlanner.cpp QueryPlanningCostFactors.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
@@ -14,7 +14,8 @@ add_library(engine
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
-        Describe.cpp GraphStoreProtocol.cpp
-        QueryExecutionContext.cpp ExistsJoin.cpp SPARQLProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp)
+        Describe.cpp GraphStoreProtocol.cpp NamedQueryCache.cpp QueryExecutionContext.cpp ExistsJoin.cpp
+        SPARQLProtocol.cpp ParsedRequestBuilder.cpp NeutralOptional.cpp)
+add_library(server Server.cpp)
+qlever_target_link_libraries(server)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)

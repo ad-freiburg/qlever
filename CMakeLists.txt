@@ -32,6 +32,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -fsized-deallocation")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
@@ -203,6 +204,11 @@ if (${USE_CPP_17_BACKPORTS})
     add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
 endif()
 
+set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
+if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
+    add_definitions("-D_QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY")
+endif ()
+
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
@@ -250,10 +256,16 @@ FetchContent_Declare(
 # S2 Geometry
 ################################
 set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
+# FetchContent_Declare(
+#       s2
+#        GIT_REPOSITORY https://github.com/google/s2geometry.git
+#        GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+#        SYSTEM
+#)
 FetchContent_Declare(
         s2
-        GIT_REPOSITORY https://github.com/google/s2geometry.git
-        GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        GIT_REPOSITORY https://github.com/joka921/s2geometry.git
+        GIT_TAG d49ca23414b4471be9addfe46c6f57d391543205 #something from the delta-queries branch.
         SYSTEM
 )
 
@@ -425,6 +437,7 @@ target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(benchmark)
+add_subdirectory(src/libqlever)
 
 enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
@@ -439,7 +452,7 @@ add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)

@@ -6,10 +6,10 @@
 
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 
 namespace {
 

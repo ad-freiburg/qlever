@@ -1,0 +1,55 @@
+//  Copyright 2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+#pragma once
+
+#include "engine/ValuesForTesting.h"
+#include "util/Cache.h"
+#include "util/Synchronized.h"
+
+// A simple thread-safe cache that associates query results with an explicit
+// name.
+class NamedQueryCache {
+ public:
+  // The cache value. It stores all the information required to construct a
+  // proper `QueryExecutionTree` later on.
+  // TODO<joka921> We definitely need the local vocab here...
+  struct Value {
+    std::shared_ptr<const IdTable> result_;
+    VariableToColumnMap varToColMap_;
+    std::vector<ColumnIndex> resultSortedOn_;
+  };
+
+  // TODO<joka921> Use a better size getter for better statistics.
+  struct ValueSizeGetter {
+    ad_utility::MemorySize operator()(const Value&) {
+      return ad_utility::MemorySize::bytes(1);
+    }
+  };
+  using Key = std::string;
+  using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
+
+ private:
+  ad_utility::Synchronized<Cache> cache_;
+
+ public:
+  // Store an explicit query result with a given `key`. Previously stored
+  // `value`s with the same `key` are overwritten.
+  void store(const Key& key, Value value);
+
+  // Clear the cache.
+  void clear();
+
+  // Get the number of cached queries.
+  size_t numEntries() const;
+
+  // Retrieve the query result that is associated with the `key`.
+  // Throw an exception if the `key` doesn't exist.
+  std::shared_ptr<const Value> get(const Key& key);
+
+  // Retrieve the query result with the given `key` and convert it into an
+  // explicit `ValuesForTesting` operation that can be used as part of a
+  // `QueryExecutionTree`.
+  std::shared_ptr<ValuesForTesting> getOperation(const Key& key,
+                                                 QueryExecutionContext* ctx);
+};

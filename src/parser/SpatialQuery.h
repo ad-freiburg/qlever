@@ -23,6 +23,8 @@ struct SpatialQuery : MagicServiceQuery {
   std::optional<Variable> left_;
   std::optional<Variable> right_;
 
+  std::optional<Variable> leftValuesToIgnore_;
+
   // The spatial join task definition: maximum distance and number of results.
   // One of both - or both - must be provided.
   std::optional<size_t> maxDist_;

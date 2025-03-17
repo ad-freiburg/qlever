@@ -29,7 +29,12 @@ struct MaxDistanceConfig {
 using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
+enum class SpatialJoinAlgorithm {
+  BASELINE,
+  S2_GEOMETRY,
+  BOUNDING_BOX,
+  S2_POINT_POLYLINE
+};
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
@@ -41,6 +46,9 @@ struct SpatialJoinConfiguration {
   // The variables for the two tables to be joined
   Variable left_;
   Variable right_;
+
+  // TODO<joka921> Comment
+  std::optional<Variable> leftDeletionVariable_;
 
   // If given, the distance will be added to the result and be bound to this
   // variable.
@@ -68,6 +76,7 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
+  std::optional<ColumnIndex> leftDeleteColumnIndex_;
 };
 
 // The spatial join operation without a limit on the maximum number of results

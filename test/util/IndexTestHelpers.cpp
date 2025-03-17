@@ -6,6 +6,7 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "engine/NamedQueryCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "util/ProgressBar.h"
@@ -190,6 +191,8 @@ Index makeTestIndex(const std::string& indexBasename,
     index.loadAllPermutations() = loadAllPermutations;
     qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
                                         std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(VocabularyType::random());
     index.createFromFiles({spec});
     if (createTextIndex) {
       if (contentsOfWordsFileAndDocsFile.has_value()) {
@@ -282,10 +285,11 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
+    std::unique_ptr<NamedQueryCache> namedCache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{});
+            SortPerformanceEstimator{}, namedCache_.get());
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool,

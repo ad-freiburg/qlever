@@ -62,6 +62,9 @@ class CacheValue {
   };
 };
 
+// Forward declaration because of cyclic dependencies
+class NamedQueryCache;
+
 // The key for the `QueryResultCache` below. It consists of a `string` (the
 // actual cache key of a `QueryExecutionTree` and the index of the
 // `LocatedTriplesSnapshot` that was used to create the corresponding value.
@@ -86,6 +89,9 @@ struct QueryCacheKey {
 using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
+// Forward declaration because of cyclic dependency
+class NamedQueryCache;
+
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
@@ -94,17 +100,10 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
+      NamedQueryCache* namedCache,
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
-      const bool pinSubtrees = false, const bool pinResult = false)
-      : _pinSubtrees(pinSubtrees),
-        _pinResult(pinResult),
-        _index(index),
-        _subtreeCache(cache),
-        _allocator(std::move(allocator)),
-        _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator),
-        updateCallback_(std::move(updateCallback)) {}
+      bool pinSubtrees = false, bool pinResult = false);
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -148,10 +147,16 @@ class QueryExecutionContext {
     return areWebsocketUpdatesEnabled_;
   }
 
- private:
-  static bool areWebSocketUpdatesEnabled();
+  NamedQueryCache& namedQueryCache() {
+    AD_CORRECTNESS_CHECK(namedQueryCache_ != nullptr);
+    return *namedQueryCache_;
+  }
+
+  auto& pinWithExplicitName() { return pinWithExplicitName_; }
+  const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
 
  private:
+  static bool areWebSocketUpdatesEnabled();
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -169,4 +174,8 @@ class QueryExecutionContext {
   // Cache the state of that runtime parameter to reduce the contention of the
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
+
+  NamedQueryCache* namedQueryCache_ = nullptr;
+
+  std::optional<std::string> pinWithExplicitName_ = std::nullopt;
 };

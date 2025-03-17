@@ -225,7 +225,8 @@ size_t SpatialJoin::getCostEstimate() {
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
+              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX ||
+              config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE,
           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
@@ -368,6 +369,11 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Input table columns for the join
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
+  std::optional<ColumnIndex> leftDeleteCol;
+  if (config_.leftDeletionVariable_.has_value()) {
+    leftDeleteCol =
+        childLeft_->getVariableColumn(config_.leftDeletionVariable_.value());
+  }
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
   // Payload cols and join col
@@ -383,7 +389,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults()};
+                                   getMaxDist(),      getMaxResults(),
+                                   leftDeleteCol};
 }
 
 // ____________________________________________________________________________
@@ -397,6 +404,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else if (config_.algo_ == SpatialJoinAlgorithm::S2_POINT_POLYLINE) {
+    return algorithms.S2PointPolylineAlgorithm();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");

@@ -285,11 +285,15 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadata_;
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
+
+  // TODO<joka921> Include this into a common header.
+  using KeyOrder = std::array<size_t, 4>;
+
+  template <std::array<size_t, 2> swapIndices = std::array<size_t, 2>{1, 2}>
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
-      std::array<size_t, 3> permutation,
+      cppcoro::generator<IdTableStatic<0>> sortedTriples, KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
 

@@ -24,6 +24,8 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+  // TODO<joka921> This should be a variant with the above member.
+  std::optional<TripleComponent> singleGraphForGPermutations_;
   PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;

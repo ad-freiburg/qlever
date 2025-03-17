@@ -186,12 +186,18 @@ class IndexImpl {
   Permutation spo_{Permutation::Enum::SPO, allocator_};
   Permutation ops_{Permutation::Enum::OPS, allocator_};
   Permutation osp_{Permutation::Enum::OSP, allocator_};
+  Permutation gpso_{Permutation::Enum::GPSO, allocator_};
+  Permutation gpos_{Permutation::Enum::GPOS, allocator_};
 
   // During the index building, store the IDs of the `ql:has-pattern` predicate
   // and of `ql:default-graph` as they are required to add additional triples
   // after the creation of the vocabulary is finished.
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
+
+  // The vocabulary type that is used (only relevant during index building).
+  ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
+      ad_utility::VocabularyType::Enum::CompressedOnDisk};
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -276,6 +282,13 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
+  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
+  // details.
+  void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
+    vocabularyTypeForIndexBuilding_ = type;
+    configurationJson_["vocabulary-type"] = type;
+  }
+
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
@@ -306,10 +319,10 @@ class IndexImpl {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
-  std::string indexToString(VocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  std::string_view indexToString(WordVocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
   // ___________________________________________________________________________
@@ -549,7 +562,7 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
-                            std::array<size_t, 3> permutation,
+                            Permutation::KeyOrder permutation,
                             auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________
@@ -635,7 +648,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  bool isLiteral(const string& object) const;
+  bool isLiteral(std::string_view object) const;
 
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
@@ -701,6 +714,13 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+  // _____________________________________________________________________________
+  // TODO<joka921> This is heavily misplaced here.
+  CPP_template(typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createGPSOAndGPOS(size_t numColumns,
+                                          BlocksOfTriples sortedTriples,
+                                          NextSorter&&... nextSorter);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(

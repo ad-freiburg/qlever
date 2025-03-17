@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "NamedQueryCache.h"
 #include "backports/algorithm.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -855,6 +856,19 @@ auto QueryPlanner::seedWithScansAndText(
 
           pushPlan(makeSubtreePlan<IndexScan>(
               _qec, permutation, std::move(triple.value()), relevantGraphs));
+
+          // If we only have a single graph, also consider the GPxx permutations
+          if (permutation == PSO && relevantGraphs.has_value() &&
+              relevantGraphs->size() == 1) {
+            pushPlan(makeSubtreePlan<IndexScan>(
+                _qec, GPSO, std::move(triple.value()), relevantGraphs));
+          }
+          // TODO<joka921> Code duplication.
+          if (permutation == POS && relevantGraphs.has_value() &&
+              relevantGraphs->size() == 1) {
+            pushPlan(makeSubtreePlan<IndexScan>(
+                _qec, GPOS, std::move(triple.value()), relevantGraphs));
+          }
         };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
@@ -2032,24 +2046,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // If both sides are spatial joins that are still missing children, return
-  // immediately to prevent a regular join on the variables, which would lead to
-  // the spatial join never having children.
-  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
-    return candidates;
-  }
-
-  // if one of the inputs is the spatial join and the other input is compatible
-  // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
-  // SpatialJoin operations are incompatible with normal join operations, we
-  // return immediately instead of creating a normal join below as well.
-  // Note, that this if statement should be evaluated first, such that no other
-  // join options get considered, when one of the candidates is a SpatialJoin.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
-    return candidates;
-  }
-
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -2068,6 +2064,24 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+  }
+
+  // If both sides are spatial joins that are still missing children, return
+  // immediately to prevent a regular join on the variables, which would lead to
+  // the spatial join never having children.
+  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
+
+  // if one of the inputs is the spatial join and the other input is compatible
+  // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
+  // SpatialJoin operations are incompatible with normal join operations, we
+  // return immediately instead of creating a normal join below as well.
+  // Note, that this if statement should be evaluated first, such that no other
+  // join options get considered, when one of the candidates is a SpatialJoin.
+  if (auto opt = createSpatialJoin(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -2702,6 +2716,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::NamedCachedQuery>) {
+    visitNamedCachedQuery(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2882,6 +2898,15 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitNamedCachedQuery(
+    parsedQuery::NamedCachedQuery& arg) {
+  auto candidate = SubtreePlan{
+      planner_._qec, planner_._qec->namedQueryCache().getOperation(
+                         arg.validateAndGetIdentifier(), planner_._qec)};
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _______________________________________________________________

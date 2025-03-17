@@ -341,6 +341,8 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+
   readIndexBuilderSettingsFromFile();
 
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
@@ -390,9 +392,15 @@ void IndexImpl::createFromFiles(
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
+    auto fourthSorter =
+        makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
     createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+                               thirdSorter.getSortedBlocks<0>(), fourthSorter);
     configurationJson_["has-all-permutations"] = true;
+
+    createGPSOAndGPOS(NumColumnsIndexBuilding,
+                      fourthSorter.getSortedBlocks<0>());
+
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
@@ -404,9 +412,14 @@ void IndexImpl::createFromFiles(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
+    auto fourthSorter =
+        makeSorter<SortByGPSO, NumColumnsIndexBuilding + 2>("gpos-sorter");
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
-                               thirdSorterPtr->template getSortedBlocks<0>());
+                               thirdSorterPtr->template getSortedBlocks<0>(),
+                               fourthSorter);
+    createGPSOAndGPOS(NumColumnsIndexBuilding + 2,
+                      fourthSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -562,7 +575,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
-    wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
@@ -771,7 +783,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
+                                     Permutation::KeyOrder permutation,
                                      auto&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -799,10 +811,18 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto [numDistinctCol0, blockData1, blockData2] =
-      CompressedRelationWriter::createPermutationPair(
+  auto [numDistinctCol0, blockData1, blockData2] = [&]() {
+    if (permutation[0] != ADDITIONAL_COLUMN_GRAPH_ID) {
+      return CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    } else {
+      return CompressedRelationWriter::createPermutationPair<
+          std::array<size_t, 2>{2, 3}>(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    }
+  }();
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -915,6 +935,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     load(osp_);
     load(spo_);
     load(sop_);
+    // TODO<joka921> Do this only if they exist.
+    load(gpos_);
+    load(gpso_);
   } else {
     AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "
@@ -976,7 +999,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(std::string_view object) const {
   return decltype(vocab_)::stringIsLiteral(object);
 }
 
@@ -1133,6 +1156,11 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
+
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::CompressedOnDisk);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
@@ -1441,6 +1469,10 @@ Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
       return osp_;
     case OPS:
       return ops_;
+    case GPOS:
+      return gpos_;
+    case GPSO:
+      return gpso_;
   }
   AD_FAIL();
 }
@@ -1524,10 +1556,13 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
+RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
+  return vocab_[id];
+}
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType IndexImpl::indexToString(
+    WordVocabIndex id) const {
   return textVocab_[id];
 }
 
@@ -1653,6 +1688,18 @@ CPP_template_def(typename... NextSorter)(requires(
   if (doWriteConfiguration) {
     writeConfiguration();
   }
+};
+
+// _____________________________________________________________________________
+CPP_template_def(typename... NextSorter)(requires(
+    sizeof...(NextSorter) <=
+    1)) void IndexImpl::createGPSOAndGPOS(size_t numColumns,
+                                          BlocksOfTriples sortedTriples,
+                                          NextSorter&&... nextSorter) {
+  // TODO<joka921> What metadata do we want in the `configurationJson_`?
+  [[maybe_unused]] size_t numSomethingTotal =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), gpso_, gpos_,
+                            nextSorter.makePushCallback()...);
 };
 
 // _____________________________________________________________________________

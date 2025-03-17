@@ -24,6 +24,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
   if (predString == "left") {
     setVariable("left", object, left_);
+  } else if (predString == "leftDeletion") {
+    setVariable("leftDeletion", object, leftValuesToIgnore_);
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
@@ -58,11 +60,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
     } else if (algo == "boundingBox") {
       algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
+    } else if (algo == "pointPolyline") {
+      algo_ = SpatialJoinAlgorithm::S2_POINT_POLYLINE;
+
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter <algorithm> does not refer to a "
           "supported spatial search algorithm. Please select either "
-          "<baseline>, <s2> or <boundingBox>.");
+          "<baseline>, <s2>, <pointPolyline> or <boundingBox>.");
     }
   } else if (predString == "payload") {
     if (object.isVariable()) {
@@ -145,8 +150,13 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     task = MaxDistanceConfig{maxDist_.value()};
   }
 
-  return SpatialJoinConfiguration{
-      task, left_.value(), right_.value(), distanceVariable_, pv, algo};
+  return SpatialJoinConfiguration{task,
+                                  left_.value(),
+                                  right_.value(),
+                                  leftValuesToIgnore_,
+                                  distanceVariable_,
+                                  pv,
+                                  algo};
 }
 
 // ____________________________________________________________________________
