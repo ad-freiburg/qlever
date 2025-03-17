@@ -27,7 +27,11 @@ class ExistsExpression : public SparqlExpression {
   Variable variable_{absl::StrCat("?ql_internal_exists_", index_)};
 
  public:
-  explicit ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {}
+  explicit ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {
+    // If no visible variables exist within the `EXISTS` pattern, then it
+    // becomes pointless.
+    AD_CONTRACT_CHECK(!argument_.getVisibleVariables().empty());
+  }
   const auto& argument() const { return argument_; }
   const auto& variable() const { return variable_; }
 
@@ -63,6 +67,11 @@ class ExistsExpression : public SparqlExpression {
   // This is the one expression, where this function should return `true`.
   // Used to extract `EXISTS` expressions from a general expression tree.
   bool isExistsExpression() const override { return true; }
+
+  // Return all the variables that are used in this expression.
+  std::span<const Variable> getContainedVariablesNonRecursive() const override {
+    return argument_.getVisibleVariables();
+  }
 
  private:
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }

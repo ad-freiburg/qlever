@@ -2540,7 +2540,11 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   auto group = visit(pattern);
   ParsedQuery argumentOfExists =
       std::exchange(parsedQuery_, std::move(queryBackup));
-  argumentOfExists.selectClause().setAsterisk();
+  SelectClause& selectClause = argumentOfExists.selectClause();
+  selectClause.setAsterisk();
+  for (Variable& variable : visibleVariables_) {
+    selectClause.addVisibleVariable(std::move(variable));
+  }
   argumentOfExists._rootGraphPattern = std::move(group);
 
   // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
