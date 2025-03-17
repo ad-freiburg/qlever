@@ -456,7 +456,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     } else {
       AD_CORRECTNESS_CHECK(operations.size() == 1);
       ParsedQuery query = std::move(operations[0]);
-      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasUpdateClause() ||
+      AD_CORRECTNESS_CHECK(query.hasSelectClause() || query.hasAskClause() ||
                            query.hasConstructClause());
       co_return co_await processQuery(
           parameters, std::move(query), requestTimer, cancellationHandle, qec,
