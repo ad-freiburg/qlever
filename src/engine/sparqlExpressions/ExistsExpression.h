@@ -27,11 +27,7 @@ class ExistsExpression : public SparqlExpression {
   Variable variable_{absl::StrCat("?ql_internal_exists_", index_)};
 
  public:
-  explicit ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {
-    // If no visible variables exist within the `EXISTS` pattern, then it
-    // becomes pointless.
-    AD_CONTRACT_CHECK(!argument_.getVisibleVariables().empty());
-  }
+  explicit ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {}
   const auto& argument() const { return argument_; }
   const auto& variable() const { return variable_; }
 

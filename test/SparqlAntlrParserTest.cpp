@@ -54,8 +54,10 @@ auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
+       std::vector<Variable> variables = {}) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      p.visitor_.setVisibleVariablesForTesting(variables);
       p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
@@ -83,6 +85,7 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
+  std::vector<Variable> visibleVariables_{};
 
   auto operator()(const string& input, const Value& value,
                   ad_utility::source_location l =
@@ -111,10 +114,10 @@ struct ExpectCompleteParse {
                       ad_utility::source_location::current()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
-      return expectCompleteParse(
-          parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), {}, disableSomeChecks),
-          matcher, l);
+      return expectCompleteParse(parse<Clause, parseInsideConstructTemplate>(
+                                     input, std::move(prefixMap), {},
+                                     disableSomeChecks, visibleVariables_),
+                                 matcher, l);
     });
   };
 
@@ -125,10 +128,10 @@ struct ExpectCompleteParse {
                       ad_utility::source_location::current()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
-      return expectCompleteParse(
-          parse<Clause, parseInsideConstructTemplate>(
-              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
-          matcher, l);
+      return expectCompleteParse(parse<Clause, parseInsideConstructTemplate>(
+                                     input, {}, std::move(activeDatasetClauses),
+                                     disableSomeChecks, visibleVariables_),
+                                 matcher, l);
     });
   };
 };
@@ -2011,23 +2014,32 @@ auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
 // _____________________________________________________________________________
 TEST(SparqlParser, Exists) {
   using namespace existsTestHelpers;
+  auto expectBuiltInCallNoVars = ExpectCompleteParse<&Parser::builtInCall>{};
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+  expectBuiltInCall.visibleVariables_ = {Variable{"?a"}, Variable{"?foo"}};
 
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
   // FROM and FROM NAMED clauses can be specified as arguments.
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
-    return AllOf(m::SelectQuery(
-        AllOf(m::AsteriskSelect(), m::VariablesSelect({"?a", "?foo"})),
-        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
-  };
+  auto selectABarFooMatcher =
+      [](Graphs defaultGraphs = std::nullopt, Graphs namedGraphs = std::nullopt,
+         const std::vector<std::string>& variables = {"?a", "?foo"}) {
+        return AllOf(m::SelectQuery(
+            AllOf(m::AsteriskSelect(), m::VariablesSelect(variables)),
+            m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+            defaultGraphs, namedGraphs));
+      };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     existsMatcher(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
                     notExistsMatcher(selectABarFooMatcher()));
+
+  expectBuiltInCallNoVars("EXISTS {?a <bar> ?foo}",
+                          existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCallNoVars(
+      "NOT EXISTS {?a <bar> ?foo}",
+      notExistsMatcher(selectABarFooMatcher(std::nullopt, std::nullopt, {})));
 
   Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
   Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};

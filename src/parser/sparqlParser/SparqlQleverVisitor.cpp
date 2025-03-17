@@ -2543,7 +2543,13 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   SelectClause& selectClause = argumentOfExists.selectClause();
   selectClause.setAsterisk();
   for (Variable& variable : visibleVariables_) {
-    selectClause.addVisibleVariable(std::move(variable));
+    // If we're not negated, we can safely add all visible variables to the
+    // expression, resulting in this filter to be optimized away if no variables
+    // match in the main pattern. For the negative case a variable is a wildcard
+    // match, so we just ignore this variable.
+    if (!negate || ad_utility::contains(visibleVariablesBackup, variable)) {
+      selectClause.addVisibleVariable(std::move(variable));
+    }
   }
   argumentOfExists._rootGraphPattern = std::move(group);
 
