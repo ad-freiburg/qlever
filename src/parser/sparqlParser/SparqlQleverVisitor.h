@@ -212,21 +212,21 @@ class SparqlQleverVisitor {
 
   std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
-  ParsedQuery visit(Parser::Update1Context* ctx);
+  std::vector<ParsedQuery> visit(Parser::Update1Context* ctx);
 
   updateClause::Load visit(Parser::LoadContext* ctx);
 
   ParsedQuery visit(Parser::ClearContext* ctx);
 
-  updateClause::Drop visit(Parser::DropContext* ctx);
+  ParsedQuery visit(Parser::DropContext* ctx);
 
-  updateClause::Create visit(Parser::CreateContext* ctx);
+  ParsedQuery visit(Parser::CreateContext* ctx);
 
-  updateClause::Add visit(Parser::AddContext* ctx);
+  std::optional<ParsedQuery> visit(Parser::AddContext* ctx);
 
-  updateClause::Move visit(Parser::MoveContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::MoveContext* ctx);
 
-  updateClause::Copy visit(Parser::CopyContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::CopyContext* ctx);
 
   updateClause::GraphUpdate visit(Parser::InsertDataContext* ctx);
 
@@ -635,6 +635,10 @@ class SparqlQleverVisitor {
   // planner.
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
+
+  ParsedQuery makeClear(GraphRefAll graph);
+  ParsedQuery makeClear(GraphOrDefault graph);
+  ParsedQuery makeCopyAll(GraphOrDefault source, GraphOrDefault target);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
