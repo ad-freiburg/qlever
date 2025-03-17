@@ -2018,8 +2018,8 @@ TEST(SparqlParser, Exists) {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
-        m::AsteriskSelect(),
+    return AllOf(m::SelectQuery(
+        AllOf(m::AsteriskSelect(), m::VariablesSelect({"?a", "?foo"})),
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
         defaultGraphs, namedGraphs));
   };

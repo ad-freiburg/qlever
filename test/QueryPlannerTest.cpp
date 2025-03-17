@@ -2924,7 +2924,7 @@ TEST(QueryPlanner, Exists) {
 
   // Simple tests for EXISTS with FILTER, BIND, and GROUP BY.
   h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
-            h::Filter("EXISTS {?a ?b ?c}", h::ExistsJoin(xyz, abc)));
+            h::IndexScanFromStrings("?x", "?y", "?z"));
   h::expect("SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} as ?bound) }",
             h::Bind(h::ExistsJoin(xyz, abc), "EXISTS {?a ?b ?c}",
                     Variable("?bound")));
@@ -2937,8 +2937,7 @@ TEST(QueryPlanner, Exists) {
   auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);
   h::expect(
       "SELECT * { ?x ?y ?z FILTER (EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f})}",
-      h::Filter("EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}", existsAbcDef));
-  ;
+      h::IndexScanFromStrings("?x", "?y", "?z"));
   h::expect(
       "SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f} as "
       "?bound)}",
@@ -2959,27 +2958,19 @@ TEST(QueryPlanner, Exists) {
   auto abcg = h::IndexScanFromStrings("?a", "?b", "?c", {}, H{"<g>"});
 
   // Various uses of FILTER EXISTS.
-  auto existsJoin = h::ExistsJoin(xyzg, abcg);
-  auto filter = h::Filter("EXISTS {?a ?b ?c}", existsJoin);
-  h::expect("SELECT * FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
-  h::expect("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
+  h::expect("SELECT * FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", xyzg);
+  h::expect("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", xyzg);
   h::expect(
       "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-      filter);
+      xyzg);
   h::expect("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-            h::Describe(::testing::_, filter));
+            h::Describe(::testing::_, xyzg));
 
   // Test the interaction of FROM NAMES with EXISTS
-  auto varG = std::vector{Variable{"?g"}};
-  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
-  auto uvcg =
-      h::IndexScanFromStrings("?u", "?v", "?c", {}, H{"<g2>"}, varG, graphCol);
-  existsJoin = h::ExistsJoin(xyzg, h::UnorderedJoins(abcg, uvcg));
-  filter = h::Filter("EXISTS {?a ?b ?c. GRAPH ?g { ?u ?v ?c}}", existsJoin);
   h::expect(
       "SELECT * FROM <g> FROM NAMED <g2> { ?x ?y ?z FILTER EXISTS {?a ?b ?c. "
       "GRAPH ?g { ?u ?v ?c}}}",
-      filter);
+      xyzg);
 }
 
 // _____________________________________________________________________________
