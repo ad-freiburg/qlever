@@ -33,6 +33,8 @@ class ValuesForTesting : public Operation {
   bool unlikelyToFitInCache_ = false;
   ad_utility::MemorySize* cacheSizeStorage_ = nullptr;
 
+  std::optional<std::string> explicitCacheKey_;
+
  public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
@@ -120,6 +122,8 @@ class ValuesForTesting : public Operation {
   size_t& sizeEstimate() { return sizeEstimate_; }
   size_t& costEstimate() { return costEstimate_; }
 
+  void setCacheKey(std::string key) { explicitCacheKey_ = std::move(key); }
+
   // ___________________________________________________________________________
   ProtoResult computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_ && tables_.size() != 1) {
@@ -179,6 +183,9 @@ class ValuesForTesting : public Operation {
  private:
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
+    if (explicitCacheKey_.has_value()) {
+      return explicitCacheKey_.value();
+    }
     std::stringstream str;
     auto numRowsView =
         detail::getTables(tables_) | ql::views::transform(&IdTable::numRows);
