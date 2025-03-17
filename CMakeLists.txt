@@ -264,7 +264,7 @@ set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/joka921/s2geometry.git
-        GIT_TAG 4886aaa24f69726e20a5aed4a8e6e2f3ea1767bc #something from the delta-queries branch.
+        GIT_TAG dd0f00d66fdfe192efb4e06e8633e486a40bab38 #something from the delta-queries branch.
         SYSTEM
 )
 

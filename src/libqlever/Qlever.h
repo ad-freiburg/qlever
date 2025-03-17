@@ -116,5 +116,9 @@ class Qlever {
       bool returnResult = true);
 
   QueryPlan parseAndPlanQuery(std::string query);
+
+  // Compute the spatial index structures for all <pointPolyline> spatial joins
+  // in the given `query`.
+  void computeSpatialIndicesForPointPolyline(std::string query);
 };
 }  // namespace qlever

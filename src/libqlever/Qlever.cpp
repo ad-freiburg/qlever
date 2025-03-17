@@ -210,4 +210,10 @@ std::string Qlever::pinNamed(QueryOrPlan queryOrPlan, std::string name,
   }
   return result;
 }
+
+void Qlever::computeSpatialIndicesForPointPolyline(std::string queryString) {
+  [[maybe_unused]] const auto& result =
+      query(std::move(queryString), ad_utility::MediaType::octetStream);
+}
+
 }  // namespace qlever

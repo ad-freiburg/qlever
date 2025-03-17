@@ -5,6 +5,7 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
+#include <s2/s2closest_cell_query.h>
 #include <s2/s2closest_edge_query.h>
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
@@ -17,7 +18,6 @@
 #include <cmath>
 #include <set>
 
-#include <s2/s2closest_cell_query.h>
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
@@ -542,7 +542,10 @@ Result SpatialJoinAlgorithms::S2PointStartEndpointAlgorithm() {
 
   // TODO<joka921> This currently has a static cache that is really dangerous
   // etc.
-  static std::optional<S2PointIndex<size_t>> indexCache_;
+  // TODO<joka921> Make the nonstatic cache threadsafe.
+  static std::unordered_map<std::string, std::optional<S2PointIndex<size_t>>>
+      indicesCache;
+  // static std::optional<S2PointIndex<size_t>> indexCache_;
   std::vector<std::pair<S2Polyline, size_t>> lines;
 
   ad_utility::Timer t{ad_utility::Timer::Started};
@@ -551,8 +554,8 @@ Result SpatialJoinAlgorithms::S2PointStartEndpointAlgorithm() {
   auto indexTable = indexOfRight ? idTableRight : idTableLeft;
   auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
-  // Populate the index
-
+  auto& indexCache_ = indicesCache
+      [spatialJoin_.value()->onlyForTestingGetRightChild()->getCacheKey()];
   if (!indexCache_.has_value()) {
     indexCache_.emplace();
     auto& s2Index = indexCache_.value();
@@ -572,11 +575,11 @@ Result SpatialJoinAlgorithms::S2PointStartEndpointAlgorithm() {
         s2Index.Add(point, row);
       }
 
+      /*
       auto span = line.vertices_span();
       if (span.empty()) {
         continue;
       }
-      /*
       s2Index.Add(span.front(), row);
       s2Index.Add(span.back(), row);
       */
