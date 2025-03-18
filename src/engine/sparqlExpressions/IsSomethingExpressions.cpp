@@ -33,10 +33,9 @@ class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
       [[maybe_unused]] bool isNegated) const override {
     using namespace prefilterExpressions;
     std::vector<PrefilterExprVariablePair> prefilterVec;
-    const SparqlExpression* childExpr = this->getNthChild(0).value_or(nullptr);
-    // An IsSomethingExpression should always hold a child expression.
-    AD_CORRECTNESS_CHECK(childExpr != nullptr);
-    // Pre-filtering is only applicable if `isDatatype()` references a
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 1);
+    const SparqlExpression* childExpr = children[0].get();
     // `VariableExpression` (e.g. `isLiteral(?x)`).
     std::optional<Variable> optVar = childExpr->getVariableOrNullopt();
     if (optVar.has_value()) {
