@@ -100,6 +100,6 @@ class CountAvailablePredicates : public Operation {
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
 class SparqlTriple;
 
