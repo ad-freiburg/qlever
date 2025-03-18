@@ -13,14 +13,14 @@
 #include "util/Iterators.h"
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
-// procedure w.r.t. relevant data blocks / ValueId values by making use of the
+// procedure w.r.t. relevant data blocks/ValueId values, by making use of the
 // available metadata (see CompressedBlockMetadata in CompressedRelation.h)
 // while performing the index scan. As a result, the actual SparqlExpression
 // evaluation is performed for a smaller IdTable if a PrefilterExpression
 // (declared in this file) for the respective SparqlExpression is available and
 // compatible with the IndexScan. The following SparqlExpressions construct a
 // PrefilterExpression if possible: logical-or, logical-and, logical-negate
-// (unary), relational-ops. and strstarts.
+// (unary), relational-ops and strstarts.
 
 namespace prefilterExpressions {
 
@@ -50,18 +50,15 @@ using BlockRange = std::pair<size_t, size_t>;
 using RelevantBlockRanges = std::vector<BlockRange>;
 
 //______________________________________________________________________________
-// `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator for
+// `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
 // containierized `std::span<cont BlockMetadata>` objects.
-// Each `BlockMetadata` contains the descriptive triples `firstTriple_` and
-// `lastTriple_`. Value `evaluationColumn` specifies for those triples the
-// column/element index at which the relevant (bounding) `ValueId`s regarding
-// our pre-filter procedure are positioned.
 struct AccessValueIdFromBlockMetadata {
   size_t evaluationColumn_;
   explicit AccessValueIdFromBlockMetadata(size_t evaluationColumn)
       : evaluationColumn_{evaluationColumn} {}
 
-  ValueId operator()(auto&& randomAccessContainer, uint64_t i) const;
+  ValueId operator()(std::span<const BlockMetadata> randomAccessContainer,
+                     uint64_t i) const;
 };
 
 // Specialized `Iterator` with `ValueId` access (retrieve `ValueId`s from
@@ -71,6 +68,12 @@ using ValueIdFromBlocksIt =
     ad_utility::IteratorForAccessOperator<std::span<const BlockMetadata>,
                                           AccessValueIdFromBlockMetadata,
                                           ad_utility::IsConst::True>;
+
+//______________________________________________________________________________
+// `RandomValueIdItPair` represents a range of relevant `ValueId`s over the
+// containierized `std::span<const BlockMetadata> input`:
+// `std::pair<iterator(firstRelevantValueId), iterator(lastRelevantValueId)>`.
+using RandomValueIdItPair = std::pair<ValueIdFromBlocksIt, ValueIdFromBlocksIt>;
 
 //______________________________________________________________________________
 /*
@@ -314,6 +317,28 @@ using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
+
+//______________________________________________________________________________
+namespace logicalOps {
+// Use for testing only.
+RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
+                                    const RelevantBlockRanges& r2);
+// Use for testing only.
+RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
+                             const RelevantBlockRanges& r2);
+}  // namespace logicalOps
+
+//______________________________________________________________________________
+namespace mapping {
+// Use for testing only.
+RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
+    const std::vector<RandomValueIdItPair>& relevantIdRanges,
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd);
+// Use for testing only.
+RelevantBlockRanges mapRandomItRangesToBlockRanges(
+    const std::vector<RandomValueIdItPair>& relevantIdRanges,
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd);
+}  // namespace mapping
 
 //______________________________________________________________________________
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.

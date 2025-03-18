@@ -22,6 +22,7 @@ namespace {
 using namespace prefilterExpressions;
 using namespace makeFilterExpression;
 using namespace filterHelper;
+using namespace valueIdComparators;
 
 constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 
@@ -291,6 +292,33 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         expr->evaluate(input.empty() ? allTestBlocksIsDatatype : input, 2),
         adjustedExpected);
   }
+
+  // Test the `mapRandomItRangesToBlockRangesComplemented` (if
+  // `testComplement = true`) or `mapRandomItRangesToBlockRanges` helper
+  // function of `PrefilterExpression`s. We assert that the retrieved
+  // relevant iterators with respect to the containerized `std::span<const
+  // BlockMetadata> evalBlocks` are correctly mapped back to
+  // `RelevantBlockRange`s (index values regarding `evalBlocks`).
+  auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
+                                  RelevantBlockRanges&& relevantRanges,
+                                  bool testComplement) {
+    // Make `ValueId`s of `evalBlocks` accessible by iterators.
+    // For the defined `BlockMetadata` values above, evaluation column at index
+    // 2 is relevant.
+    std::span<const BlockMetadata> evalBlocks{allTestBlocksIsDatatype};
+    AccessValueIdFromBlockMetadata accessValueIdOp(2);
+    ValueIdFromBlocksIt idsBegin{&evalBlocks, 0, accessValueIdOp};
+    ValueIdFromBlocksIt idsEnd{&evalBlocks, evalBlocks.size() * 2,
+                               accessValueIdOp};
+    std::vector<RandomValueIdItPair> iteratorRanges =
+        getRangesForId(idsBegin, idsEnd, referenceId, compOp);
+    using namespace prefilterExpressions::detail::mapping;
+    EXPECT_EQ(relevantRanges, testComplement
+                                  ? mapRandomItRangesToBlockRangesComplemented(
+                                        iteratorRanges, idsBegin, idsEnd)
+                                  : mapRandomItRangesToBlockRanges(
+                                        iteratorRanges, idsBegin, idsEnd));
+  }
 };
 
 }  // namespace
@@ -322,6 +350,59 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
   auto blockWithGraphInfo = b21;
   blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
   EXPECT_THAT(blockWithGraphInfo, matcher("Graphs: I:12, I:13\n"));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression helper functions
+// mapRandomItRangesToBlockRangesComplemented and
+// mapRandomItRangesToBlockRanges.
+TEST_F(PrefilterExpressionOnMetadataTest, testValueIdIteratorToIndexMapping) {
+  // Remark: If testComplement is set to true, the complement over all datatypes
+  // is computed.
+  makeTestDetailIndexMapping(CompOp::LT, IntId(10), {{3, 18}}, false);
+  makeTestDetailIndexMapping(CompOp::LT, IntId(10),
+                             {{0, 4}, {13, 14}, {17, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::LE, IntId(5), {{3, 7}, {8, 18}}, false);
+  makeTestDetailIndexMapping(CompOp::LE, IntId(5),
+                             {{0, 4}, {6, 8}, {13, 14}, {17, 27}}, true);
+  // This will yield an empty range. However, in the actual evaluation those
+  // empty ranges will be removed by valueIdComparators::detail::simplifyRanges
+  makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {}, false);
+  makeTestDetailIndexMapping(CompOp::GT, DoubleId(10.00), {{0, 27}}, true);
+  // b11 at index 10 is also relevant. But given that this block contains mixed
+  // datatypes, the possibly contained DoubleId(0.00) is hidden for
+  // getRangesForId. This is solved in the overall computation by adding all
+  // blocks holding mixed datatype values at the end.
+  makeTestDetailIndexMapping(CompOp::EQ, DoubleId(0.00), {{3, 6}}, false);
+  makeTestDetailIndexMapping(CompOp::EQ, DoubleId(0.00), {{0, 4}, {5, 27}},
+                             true);
+  makeTestDetailIndexMapping(CompOp::LE, DoubleId(-6.25), {{8, 9}, {14, 18}},
+                             false);
+  makeTestDetailIndexMapping(CompOp::GE, DoubleId(-8.00), {{3, 16}}, false);
+  makeTestDetailIndexMapping(CompOp::GE, DoubleId(-8.00),
+                             {{0, 4}, {8, 9}, {16, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::EQ, DoubleId(-9.42), {}, false);
+  makeTestDetailIndexMapping(CompOp::NE, DoubleId(-9.42), {{3, 18}}, false);
+  makeTestDetailIndexMapping(CompOp::GT, idAugsburg, {{18, 25}}, false);
+  makeTestDetailIndexMapping(CompOp::LT, idHamburg, {{17, 19}}, false);
+  makeTestDetailIndexMapping(CompOp::GT, idHamburg, {{0, 21}, {24, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::GT, idAugsburg, {{0, 18}, {24, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::GE, idAugsburg, {{17, 25}}, false);
+  makeTestDetailIndexMapping(CompOp::LT, referenceDate1, {{24, 25}}, false);
+  makeTestDetailIndexMapping(CompOp::LT, referenceDate1, {{0, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::LT, undef, {}, false);
+  makeTestDetailIndexMapping(CompOp::LT, undef, {{0, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::EQ, falseId, {{1, 3}}, false);
+  makeTestDetailIndexMapping(CompOp::NE, falseId, {{3, 4}}, false);
+  makeTestDetailIndexMapping(CompOp::EQ, falseId, {{0, 2}, {3, 27}}, true);
+  // Test corner case regarding last ValueId of last BlockMetadata value.
+  makeTestDetailIndexMapping(CompOp::LT, BlankNodeId(10), {{0, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::NE, BlankNodeId(10), {{0, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::GT, BlankNodeId(0), {{26, 27}}, false);
+  makeTestDetailIndexMapping(CompOp::GT, BlankNodeId(0), {{0, 27}}, true);
+  makeTestDetailIndexMapping(CompOp::EQ, BlankNodeId(10), {{26, 27}}, false);
+  makeTestDetailIndexMapping(CompOp::LT, BlankNodeId(11), {{26, 27}}, false);
+  makeTestDetailIndexMapping(CompOp::GT, BlankNodeId(10), {}, false);
 }
 
 // Test Relational Expressions
@@ -853,6 +934,54 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
                *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
                *orExpr(eq(IntId(0)), le(IntId(0))));
+}
+
+//______________________________________________________________________________
+// Test `getUnion` over `BlockRange` values.
+TEST(PrefilterExpressionOnMetadataDetailTest, testGetUnionOnBlockRanges) {
+  const auto makeTestOrRanges = [](RelevantBlockRanges&& r1,
+                                   RelevantBlockRanges&& r2,
+                                   RelevantBlockRanges&& rExpected) {
+    EXPECT_EQ(prefilterExpressions::detail::logicalOps::getUnion(r1, r2),
+              rExpected);
+  };
+  // RelevantBlockRanges r1 UNION RelevantBlockRanges r2 should yield:
+  // RelevantBlockRanges rExpected.
+  makeTestOrRanges({}, {}, {});
+  makeTestOrRanges({{0, 5}}, {}, {{0, 5}});
+  makeTestOrRanges({{0, 5}}, {{4, 7}}, {{0, 7}});
+  makeTestOrRanges({}, {{0, 1}, {3, 10}}, {{0, 1}, {3, 10}});
+  makeTestOrRanges({{0, 1}, {3, 10}}, {}, {{0, 1}, {3, 10}});
+  makeTestOrRanges({{0, 10}}, {{2, 3}, {4, 8}, {9, 12}}, {{0, 12}});
+  makeTestOrRanges({{0, 1}, {1, 8}, {8, 9}}, {}, {{0, 9}});
+  makeTestOrRanges({{2, 10}, {15, 16}, {20, 23}}, {{4, 6}, {8, 9}, {15, 22}},
+                   {{2, 10}, {15, 23}});
+  makeTestOrRanges({{0, 5}}, {{0, 5}}, {{0, 5}});
+  makeTestOrRanges({{1, 4}}, {{10, 25}, {25, 33}}, {{1, 4}, {10, 33}});
+}
+
+//______________________________________________________________________________
+// Test `getIntersection` over `BlockRange` values.
+TEST(PrefilterExpressionOnMetadataDetailTest,
+     testGetIntersectionOnBlockRanges) {
+  const auto makeTestAndRanges = [](RelevantBlockRanges&& r1,
+                                    RelevantBlockRanges&& r2,
+                                    RelevantBlockRanges&& rExpected) {
+    EXPECT_EQ(prefilterExpressions::detail::logicalOps::getIntersection(r1, r2),
+              rExpected);
+  };
+  // RelevantBlockRanges r1 INTERSECTION RelevantBlockRanges r2 should yield:
+  // RelevantBlockRanges rExpected.
+  makeTestAndRanges({}, {}, {});
+  makeTestAndRanges({{0, 3}, {3, 5}}, {}, {});
+  makeTestAndRanges({{3, 9}}, {{3, 9}}, {{3, 9}});
+  makeTestAndRanges({{0, 10}}, {{2, 4}}, {{2, 4}});
+  makeTestAndRanges({{3, 9}, {9, 12}}, {{0, 10}, {10, 14}}, {{3, 12}});
+  makeTestAndRanges({{0, 33}}, {{0, 9}, {9, 11}, {30, 33}},
+                    {{0, 11}, {30, 33}});
+  makeTestAndRanges({{0, 9}, {9, 11}, {30, 33}}, {{0, 33}},
+                    {{0, 11}, {30, 33}});
+  makeTestAndRanges({{0, 8}, {10, 14}}, {{6, 12}}, {{6, 8}, {10, 12}});
 }
 
 //______________________________________________________________________________

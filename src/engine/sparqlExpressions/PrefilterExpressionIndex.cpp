@@ -138,20 +138,14 @@ static std::vector<BlockMetadata> getRelevantBlocks(
   return relevantBlocks;
 }
 
-//______________________________________________________________________________
-// `RandomValueIdItPair` represents a range of relevant `ValueId`s over the
-// containierized `std::span<const BlockMetadata> input`:
-// `std::pair<iterator(firstRelevantValueId), iterator(lastRelevantValueId)>`.
-using RandomValueIdItPair = std::pair<ValueIdFromBlocksIt, ValueIdFromBlocksIt>;
-
 namespace detail::mapping {
 //______________________________________________________________________________
-// Helper for adding the relevant ranges to `blockRangeIndices`.
-// `addRangeAndSimplify` ensures that the ranges added are non-overlapping and
-// merged together if adjacent.
-const auto addRangeAndSimplify = [](RelevantBlockRanges& blockRangeIndices,
-                                    const size_t rangeIdxFirst,
-                                    const size_t rangeIdxSecond) {
+// Helper for the following index-map functions that adds the relevant
+// ranges to `blockRangeIndices`. `addRangeAndSimplify` ensures that the ranges
+// added are non-overlapping and merged together if adjacent.
+auto addRangeAndSimplify = [](RelevantBlockRanges& blockRangeIndices,
+                              const size_t rangeIdxFirst,
+                              const size_t rangeIdxSecond) {
   // Empty ranges aren't relevant.
   if (rangeIdxFirst == rangeIdxSecond) return;
   // Simplify the mapped ranges if adjacent or overlapping.
@@ -174,7 +168,7 @@ const auto addRangeAndSimplify = [](RelevantBlockRanges& blockRangeIndices,
 // `mapRandomItRangesToBlockRanges`. The only difference here is that we map
 // over the complementing `RandomValueIdItPair`s with respect to the
 // `RandomValueIdItPair`s contained in `relevantIdRanges`.
-static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
+RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
     const std::vector<RandomValueIdItPair>& relevantIdRanges,
     ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) {
   // The MAX index (allowed difference).
@@ -184,30 +178,25 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
   // Vector containing the `BlockRange` mapped indices.
   RelevantBlockRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-  // Helper to properly add the range defining index pair to `blockRanges`.
-  // This procedure ensures that the added ranges don't overlap by merging
-  // them if required.
-  const auto addRange = [&blockRanges](const size_t rangeIdxFirst,
-                                       const size_t rangeIdxSecond) {
-    addRangeAndSimplify(blockRanges, rangeIdxFirst, rangeIdxSecond);
-  };
 
   ValueIdFromBlocksIt lastIdRangeIt = idsBegin;
   for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRanges) {
-    addRange(static_cast<size_t>(std::distance(idsBegin, lastIdRangeIt) / 2),
-             // std::min ensures that we respect the bounds of the
-             // `BlockMetadata` value span later on.
-             static_cast<size_t>(std::min(
-                 (std::distance(idsBegin, firstIdRangeIt) + 1) / 2, maxIndex)));
-    // Set the start of the next complementing section.
+    addRangeAndSimplify(
+        blockRanges,
+        static_cast<size_t>(std::distance(idsBegin, lastIdRangeIt) / 2),
+        // std::min ensures that we respect the bounds of the
+        // `BlockMetadata` value span later on.
+        static_cast<size_t>(std::min(
+            (std::distance(idsBegin, firstIdRangeIt) + 1) / 2, maxIndex)));
+    // Set start index for the next complement section.
     lastIdRangeIt = secondIdRangeIt;
   }
   // Handle the last complementing section.
   const auto& mappedBlockRangeFirst =
       std::distance(idsBegin, lastIdRangeIt) / 2;
   if (mappedBlockRangeFirst < maxIndex) {
-    addRange(static_cast<size_t>(mappedBlockRangeFirst),
-             static_cast<size_t>(maxIndex));
+    addRangeAndSimplify(blockRanges, static_cast<size_t>(mappedBlockRangeFirst),
+                        static_cast<size_t>(maxIndex));
   }
   return blockRanges;
 }
@@ -287,27 +276,20 @@ static RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
 //
 // And indeed, those blocks are relevant when pre-filtering for `< 1123`
 // (specified for (3))
-static RelevantBlockRanges mapRandomItRangesToBlockRanges(
+RelevantBlockRanges mapRandomItRangesToBlockRanges(
     const std::vector<RandomValueIdItPair>& relevantIdRanges,
     ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) {
   if (relevantIdRanges.empty()) return {};
   // Vector containing the `BlockRange` mapped indices.
   RelevantBlockRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-  // Helper to properly add the range defining index pair to `blockRanges`.
-  // This procedure ensures that the added ranges don't overlap by merging
-  // them if required.
-  const auto addRange = [&blockRanges](const size_t rangeIdxFirst,
-                                       const size_t rangeIdxSecond) {
-    addRangeAndSimplify(blockRanges, rangeIdxFirst, rangeIdxSecond);
-  };
-
   // The MAX index (allowed difference).
   const auto maxIndex = std::distance(idsBegin, idsEnd) / 2;
 
   for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRanges) {
     assert(firstIdRangeIt <= secondIdRangeIt);
-    addRange(
+    addRangeAndSimplify(
+        blockRanges,
         static_cast<size_t>(std::distance(idsBegin, firstIdRangeIt) / 2),
         // std::min ensures that we respect the bounds of the `BlockMetadata`
         // value span later on.
@@ -320,9 +302,23 @@ static RelevantBlockRanges mapRandomItRangesToBlockRanges(
 
 // SECTION HELPER LOGICAL OPERATORS
 namespace detail::logicalOps {
+
+//______________________________________________________________________________
+// Helper for `getUnion` and `getIntersection`.
+// Add the range defined by `startIndex`/`endIndex` to `RelevantBlockRanges
+// ranges` and simplify/merge with respect to the last added range if possible.
+auto addAndSimplifyRange = [](RelevantBlockRanges& ranges, size_t startIndex,
+                              size_t endIndex) {
+  if (ranges.empty() || startIndex > ranges.back().second) {
+    ranges.emplace_back(startIndex, endIndex);
+  } else {
+    ranges.back().second = std::max(ranges.back().second, endIndex);
+  }
+};
+
 //______________________________________________________________________________
 // `getUnion` implements `logical-or (||)` on `BlockRange` values. The function
-// unionizes index (`size_t`) ranges.
+// unifies index (`size_t`) ranges.
 // `BlockRange` is simply an alias for `std::pair<size_t, size_t>`.
 //
 // EXAMPLE
@@ -331,82 +327,43 @@ namespace detail::logicalOps {
 // `RelevantBlockRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is
 // `RelevantBlocksRanges result`: `[<2, 10>, <15, 23>]`
-static RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
-                                    const RelevantBlockRanges& r2) {
-  // (1) If r1 is empty, the union of r2 with r1 is simply r2.
-  // (2) If r2 is empty, the union of r1 with r2 is simply r1.
-  // (3) Given both are empty, the empty vector is automatically
-  // returned here with (1) and (2).
-  if (r1.empty()) return r2;
-  if (r2.empty()) return r1;
-
+RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
+                             const RelevantBlockRanges& r2) {
+  // (1) Given the  ranges r1 and r2 are empty, return the empty range.
+  if (r1.empty() && r2.empty()) return {};
+  // (2) Merge, unite and simplify the ranges of r1 and r2.
   RelevantBlockRanges unionedRanges;
   unionedRanges.reserve(r1.size() + r2.size());
   auto idx1 = r1.begin();
   auto idx2 = r2.begin();
-  // Handles overlapping ranges.
-  // Avoid adding indices twice by setting lastMaxIdx to the highest index
-  // value added so far.
-  // See while-loop: If-branches with `idx1Second < lastMaxIdx` or `idx2Second <
-  // lastMaxId` and potential skipping later on avoids adding indices twice.
-  size_t lastMaxIdx = 0;
 
   while (idx1 != r1.end() && idx2 != r2.end()) {
     const auto& [idx1First, idx1Second] = *idx1;
     const auto& [idx2First, idx2Second] = *idx2;
-    if (idx1Second < lastMaxIdx) {
-      idx1++;
-    } else if (idx2Second < lastMaxIdx) {
-      idx2++;
-    } else if (idx2Second < idx1First) {
+    if (idx2Second < idx1First) {
       // The current ranges of r1 and r2 don't intersect.
       // BlockRange of r2 < BlockRange of r1 overall.
-      // Given there is technically an index overlap with the previously added
-      // range possible, applying `std::max` ensures that those intersecting
-      // indices aren't added twice.
-      unionedRanges.emplace_back(std::max(idx2First, lastMaxIdx), idx2Second);
-      lastMaxIdx = idx2Second;
-      // Skip to the next range in `r2`.
+      addAndSimplifyRange(unionedRanges, idx2First, idx2Second);
       idx2++;
     } else if (idx1Second < idx2First) {
       // The current ranges of r1 and r2 don't intersect.
       // BlockRange of r1 < BlockRange of r2 overall.
-      // Given there is technically an index overlap with the previously added
-      // range possible, applying `std::max` ensures that those intersecting
-      // indices aren't added twice.
-      unionedRanges.emplace_back(std::max(idx1First, lastMaxIdx), idx1Second);
-      lastMaxIdx = idx1Second;
-      // Skip to the next range in `r1`.
+      addAndSimplifyRange(unionedRanges, idx1First, idx1Second);
       idx1++;
     } else {
-      auto newlastMaxIdx = std::max(idx1Second, idx2Second);
-      assert(newlastMaxIdx > lastMaxIdx);
-      unionedRanges.emplace_back(
-          // `std::max` avoids adding indices twice given one of the previous
-          // ranges was large and completely contained the other range or even
-          // ranges.
-          // The `std::max` is applied here for the same reasons mentioned
-          // above.
-          std::max(std::min(idx1First, idx2First), lastMaxIdx), newlastMaxIdx);
-      lastMaxIdx = newlastMaxIdx;
-      // Skip to the next range for `r1` and `r2`.
+      // Overlapping ranges r1 and r2.
+      addAndSimplifyRange(unionedRanges, std::min(idx1First, idx2First),
+                          std::max(idx1Second, idx2Second));
       idx1++;
       idx2++;
     }
   }
-  // Helper for adding the respective rest `BlockRange`s of r1 or r2 while
-  // respecting the highest added index so far (`lastMaxIdx`). This avoids
-  // adding indices twice.
-  const auto optAddAdjustedRange = [&unionedRanges,
-                                    &lastMaxIdx](const BlockRange& range) {
-    if (range.first >= lastMaxIdx) {
-      unionedRanges.emplace_back(std::max(range.first, lastMaxIdx),
-                                 range.second);
-    }
+  const auto optAddRestRanges = [&unionedRanges](const BlockRange& range) {
+    addAndSimplifyRange(unionedRanges, range.first, range.second);
   };
   // Add the additional `BlockRange`s of r1 or r2 to unionedRanges.
-  ql::ranges::for_each(idx1, r1.end(), optAddAdjustedRange);
-  ql::ranges::for_each(idx2, r2.end(), optAddAdjustedRange);
+  ql::ranges::for_each(idx1, r1.end(), optAddRestRanges);
+  ql::ranges::for_each(idx2, r2.end(), optAddRestRanges);
   return unionedRanges;
 }
 
@@ -421,8 +378,8 @@ static RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
 // `RelevantBlockRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is
 // `RelevantBlocksRanges result`: `[<4, 6>, <8, 9>, <15, 16>, <20, 22>]`
-static RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
-                                           const RelevantBlockRanges& r2) {
+RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
+                                    const RelevantBlockRanges& r2) {
   // If one of the ranges is empty, the intersection by definition is empty.
   if (r1.empty() || r2.empty()) return {};
 
@@ -443,16 +400,14 @@ static RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
       idx2++;
       continue;
     }
-    // The ranges overlap, retrieve the intersection.
-    intersectedRanges.emplace_back(std::max(idx1First, idx2First),
-                                   std::min(idx1Second, idx2Second));
+    // The ranges r1 and r2 overlap, add the intersction to intersectedRanges.
+    addAndSimplifyRange(intersectedRanges, std::max(idx1First, idx2First),
+                        std::min(idx1Second, idx2Second));
     if (idx1Second < idx2Second) {
       idx1++;
     } else if (idx2Second < idx1Second) {
       idx2++;
     } else {
-      // If idx2Second is equal to idx1Second, skip for both to the next
-      // respective range.
       idx1++;
       idx2++;
     }
@@ -550,8 +505,8 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.
 // Thus, the valid index range over `i` is `[0, 2 * inputSpan.size())`.
-ValueId AccessValueIdFromBlockMetadata::operator()(auto&& randomAccessContainer,
-                                                   uint64_t i) const {
+ValueId AccessValueIdFromBlockMetadata::operator()(
+    std::span<const BlockMetadata> randomAccessContainer, uint64_t i) const {
   const BlockMetadata& block = randomAccessContainer[i / 2];
   return i % 2 == 0
              ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
@@ -968,7 +923,6 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
-
 //______________________________________________________________________________
 // Returns the corresponding mirrored `RelationalExpression<mirrored
 // comparison>` for the given `CompOp comparison` template argument. For
