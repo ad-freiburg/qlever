@@ -186,9 +186,9 @@ std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
 //______________________________________________________________________________
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
-    const RelValues& child) {
+    VariantArgs child) {
   using enum prefilterExpressions::IsDatatype;
-  auto childExpr = std::visit(getExpr, child);
+  auto childExpr = std::visit(getExpr, std::move(child));
   if constexpr (Datatype == IRI) {
     return makeIsIriExpression(std::move(childExpr));
   } else if constexpr (Datatype == LITERAL) {
