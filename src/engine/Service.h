@@ -54,6 +54,13 @@ class Service : public Operation {
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
 
+  // Counter to generate fresh ids for each instance of the class.
+  static inline std::atomic_uint32_t counter_ = 0;
+
+  // Id that is being used to avoid caching of the result. It is supposed to be
+  // unique for every instance of the class.
+  uint32_t cacheBreaker_ = counter_++;
+
  public:
   // Construct from parsed Service clause.
   //

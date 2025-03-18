@@ -6,7 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -31,19 +30,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "SERVICE ";
-  if (parsedServiceClause_.silent_) {
-    os << "SILENT ";
-  }
-  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
-     << parsedServiceClause_.prologue_ << "\n"
-     << getGraphPattern() << "\n";
-  if (siblingInfo_.has_value()) {
-    os << siblingInfo_->cacheKey_ << "\n";
-  }
-  os << "}\n";
-  return std::move(os).str();
+  return absl::StrCat("SERVICE ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
@@ -640,6 +627,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Service::cloneImpl() const {
-  return std::make_unique<Service>(_executionContext, parsedServiceClause_,
-                                   getResultFunction_);
+  auto service = std::make_unique<Service>(
+      _executionContext, parsedServiceClause_, getResultFunction_);
+  service->cacheBreaker_ = cacheBreaker_;
+  return service;
 }
