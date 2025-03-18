@@ -33,7 +33,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-ProtoResult Minus::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of

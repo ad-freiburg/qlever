@@ -118,7 +118,7 @@ std::string Service::getGraphPattern() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult Service::computeResult(bool requestLaziness) {
+Result Service::computeResult(bool requestLaziness) {
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -136,7 +136,7 @@ ProtoResult Service::computeResult(bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResultImpl(bool requestLaziness) {
+Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
@@ -204,9 +204,9 @@ ProtoResult Service::computeResultImpl(bool requestLaziness) {
   auto generator =
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{cppcoro::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 template <size_t I>
@@ -421,7 +421,7 @@ TripleComponent Service::bindingToTripleComponent(
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+Result Service::makeNeutralElementResultForSilentFail() const {
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   idTable.emplace_back();
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {

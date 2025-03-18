@@ -118,16 +118,16 @@ class Service : public Operation {
   std::string getGraphPattern() const;
 
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Actually compute the result for the function above.
-  ProtoResult computeResultImpl(bool requestLaziness);
+  Result computeResultImpl(bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
 
   // Create result for silent fail.
-  ProtoResult makeNeutralElementResultForSilentFail() const;
+  Result makeNeutralElementResultForSilentFail() const;
 
   // Check that all visible variables of the SERVICE clause exist in the json
   // object, otherwise throw an error.
