@@ -555,15 +555,15 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
+  using Updates = std::vector<ParsedQuery>;
   if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
       ctx->create() || ctx->copy() || ctx->move()) {
-    return visitAlternative<std::vector<ParsedQuery>>(
-        ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
-        ctx->create(), ctx->copy(), ctx->move());
+    return visitAlternative<Updates>(ctx->deleteWhere(), ctx->modify(),
+                                     ctx->clear(), ctx->drop(), ctx->create(),
+                                     ctx->copy(), ctx->move());
   } else if (ctx->add()) {
     auto value = visitAlternative<std::optional<ParsedQuery>>(ctx->add());
-    return value.has_value() ? std::vector<ParsedQuery>{std::move(*value)}
-                             : std::vector<ParsedQuery>{};
+    return value.has_value() ? Updates{std::move(*value)} : Updates{};
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->insertData(), ctx->deleteData());
@@ -710,10 +710,7 @@ ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::CreateContext*) {
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{{}, {}}};
-  return parsedQuery_;
-}
+std::vector<ParsedQuery> Visitor::visit(Parser::CreateContext*) { return {}; }
 
 // ____________________________________________________________________________________
 std::optional<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
