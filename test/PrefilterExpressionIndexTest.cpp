@@ -27,6 +27,21 @@ using namespace valueIdComparators;
 constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 
 //______________________________________________________________________________
+// Helper to create Date-ValueIds for a date specified by its components.
+const auto makeIdForDate = [](int year, int month = 0, int day = 0,
+                              int hour = -1, int minute = 0,
+                              double seconds = 0.00) {
+  return Id::makeFromDate(
+      DateYearOrDuration(Date(year, month, day, hour, minute, seconds)));
+};
+
+using DateT = DateYearOrDuration::Type;
+// For (large) year values `> 9999` or `< 9999`.
+const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
+  return Id::makeFromDate(DateYearOrDuration(year, type));
+};
+
+//______________________________________________________________________________
 /*
 Our pre-filtering procedure expects blocks that are in correct (ascending)
 order w.r.t. their contained ValueIds given the first and last triple.
@@ -139,6 +154,34 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
       VocabId(0), VocabId(0), VocabId(1), VocabId(0));
 
+  // Date related blocks.
+  const BlockMetadata b1Date =
+      makeBlock(makeIdForLYearDate(-17546), makeIdForLYearDate(-17545));
+  const BlockMetadata b2Date =
+      makeBlock(makeIdForLYearDate(-16300), makeIdForLYearDate(-16099));
+  const BlockMetadata b3Date =
+      makeBlock(makeIdForLYearDate(-15345), makeIdForLYearDate(-10001));
+  const BlockMetadata b4Date =
+      makeBlock(makeIdForLYearDate(-10001), makeIdForDate(2000, 1, 2));
+  const BlockMetadata b5Date = makeBlock(
+      makeIdForDate(2000, 8, 9), makeIdForDate(2010, 2, 2, 3, 5, 59.99));
+  const BlockMetadata b6Date = makeBlock(
+      makeIdForDate(2015, 5, 10), makeIdForDate(2020, 7, 25, 12, 30, 45));
+  const BlockMetadata b7Date = makeBlock(makeIdForDate(2025, 3, 15, 8, 0, 0),
+                                         makeIdForDate(2030, 6, 5, 14, 15, 30));
+  const BlockMetadata b8Date =
+      makeBlock(makeIdForDate(2040, 1, 1, 3, 33, 22.35),
+                makeIdForDate(2040, 4, 18, 22, 45, 10.5));
+  const BlockMetadata b9Date =
+      makeBlock(makeIdForDate(2041, 9, 30, 6, 20, 0.001),
+                makeIdForDate(2050, 12, 31, 23, 59, 59.99));
+  const BlockMetadata b10Date =
+      makeBlock(makeIdForLYearDate(10001), makeIdForLYearDate(10033));
+  const BlockMetadata b11Date =
+      makeBlock(makeIdForLYearDate(10033), makeIdForLYearDate(12000));
+  const BlockMetadata b12Date =
+      makeBlock(makeIdForLYearDate(14579), makeIdForLYearDate(38263));
+
   // All blocks that contain mixed (ValueId) types over column 2,
   // or possibly incomplete ones.
   const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b26, b28};
@@ -160,6 +203,11 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   const std::vector<BlockMetadata> mixedBlocksTestIsDatatype = {b2,  b4,  b11,
                                                                 b18, b25, b28};
+
+  // Selection of date related blocks.
+  const std::vector<BlockMetadata> dateBlocks = {
+      b1Date, b2Date, b3Date, b4Date,  b5Date,  b6Date,
+      b7Date, b8Date, b9Date, b10Date, b11Date, b12Date};
 
   const std::vector<BlockMetadata> blocksIncomplete = {bFirstIncomplete,
                                                        b2,
@@ -318,6 +366,11 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                                         iteratorRanges, idsBegin, idsEnd)
                                   : mapRandomItRangesToBlockRanges(
                                         iteratorRanges, idsBegin, idsEnd));
+  }
+  // Simple `ASSERT_EQ` on date blocks
+  auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
+                    std::vector<BlockMetadata>&& expected) {
+    ASSERT_EQ(expr->evaluate(dateBlocks, 2), expected);
   }
 };
 
@@ -832,6 +885,32 @@ TEST_F(PrefilterExpressionOnMetadataTest,
 }
 
 //______________________________________________________________________________
+// Test PrefilterExpression explicitly on date related values (Date-ValueId)
+TEST_F(PrefilterExpressionOnMetadataTest, testRelationalPrefilteringDates) {
+  makeTestDate(
+      gt(makeIdForDate(2000, 1, 2)),
+      {b5Date, b6Date, b7Date, b8Date, b9Date, b10Date, b11Date, b12Date});
+  makeTestDate(
+      andExpr(gt(makeIdForDate(2000, 1, 2)), lt(makeIdForDate(2040, 0, 0))),
+      {b5Date, b6Date, b7Date});
+  makeTestDate(ge(makeIdForDate(2000, 1, 2)),
+               {b4Date, b5Date, b6Date, b7Date, b8Date, b9Date, b10Date,
+                b11Date, b12Date});
+  makeTestDate(neq(makeIdForLYearDate(12000)),
+               {b1Date, b2Date, b3Date, b4Date, b5Date, b6Date, b7Date, b8Date,
+                b9Date, b10Date, b11Date, b12Date});
+  makeTestDate(gt(makeIdForLYearDate(12000)), {b12Date});
+  makeTestDate(lt(makeIdForLYearDate(12000)),
+               {b1Date, b2Date, b3Date, b4Date, b5Date, b6Date, b7Date, b8Date,
+                b9Date, b10Date, b11Date});
+  makeTestDate(le(makeIdForDate(2027, 0, 1)),
+               {b1Date, b2Date, b3Date, b4Date, b5Date, b6Date, b7Date});
+  makeTestDate(orExpr(gt(makeIdForDate(2030, 6, 5, 14, 15, 30)),
+                      le(makeIdForLYearDate(-16100))),
+               {b1Date, b2Date, b8Date, b9Date, b10Date, b11Date, b12Date});
+}
+
+//______________________________________________________________________________
 // Test that correct errors are thrown for invalid input (condition)
 TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
   makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
@@ -988,10 +1067,9 @@ TEST(PrefilterExpressionOnMetadataDetailTest,
 // Test PrefilterExpression content formatting for debugging.
 TEST(PrefilterExpressionExpressionOnMetadataTest,
      checkPrintFormattedPrefilterExpression) {
-  auto exprToString = [](const PrefilterExpression& expr) {
+  auto exprToString = [](const auto& expr) {
     return (std::stringstream{} << expr).str();
   };
-
   auto matcher = [&exprToString](const std::string& substring) {
     return ::testing::ResultOf(exprToString, ::testing::Eq(substring));
   };
@@ -1067,4 +1145,16 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "
                       "Numeric\nis negated: true.\n}\n.\n"));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression unknown `CompOp comparison` value detection.
+TEST(PrefilterExpressionExpressionOnMetadataTest,
+     checkMakePrefilterVecDetectsAndThrowsForInvalidComparisonOp) {
+  using namespace prefilterExpressions::detail;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makePrefilterExpressionYearImpl(static_cast<CompOp>(10), 0),
+      ::testing::HasSubstr(
+          "Set unknown (relational) comparison operator for the creation of "
+          "PrefilterExpression on date-values: Undefined CompOp value: 10."));
 }

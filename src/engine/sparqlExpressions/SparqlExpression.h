@@ -85,6 +85,9 @@ class SparqlExpression {
   // is correct for most of the expressions.
   virtual bool containsLangExpression() const;
 
+  // Helper to identify if this is represents a `YEAR` expression.
+  virtual bool isYearExpression() const;
+
   // ___________________________________________________________________________
   using LangFilterData = SparqlExpressionPimpl::LangFilterData;
   virtual std::optional<LangFilterData> getLanguageFilterExpression() const;

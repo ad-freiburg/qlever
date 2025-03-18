@@ -709,10 +709,6 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     --endBlock;
   }
 
-  if (beginBlock == endBlock) {
-    return {numResults, numResults};
-  }
-
   ql::ranges::for_each(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
