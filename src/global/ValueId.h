@@ -345,9 +345,11 @@ class ValueId {
   /// and `ad_utility::HashMap`
   template <typename H>
   friend H AbslHashValue(H h, const ValueId& id) {
-    // Depending on the case a number is added to the hashing. This ensures that
-    // for two unequal elements the hash expansion (~list of simpler values
-    // being hashed with `combine`) of neither is a suffix of the other.
+    // Adding 0/1 to the hash is required to ensure that for two unequal
+    // elements the hash expansions of neither is a suffix of the other.This is
+    // a property that absl requires for hashes. The hash expansion is the list
+    // of simpler values actually being hashed (here: bits or hash expansion of
+    // the LocalVocabEntry).
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
       return H::combine(std::move(h), id._bits, 0);
     }
