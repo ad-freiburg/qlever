@@ -309,7 +309,7 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ProtoResult computeResultOnlyForTesting(
+  virtual Result computeResultOnlyForTesting(
       bool requestLaziness = false) final {
     return computeResult(requestLaziness);
   }
@@ -366,7 +366,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ProtoResult computeResult(bool requestLaziness) = 0;
+  virtual Result computeResult(bool requestLaziness) = 0;
 
   // Update the runtime information of this operation according to the given
   // arguments, considering the possibility that the initial runtime information
@@ -384,8 +384,8 @@ class Operation {
   // `Operation`. The value provided by `computationMode` decides if lazy
   // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
   // an `ad_utility::Exception`.
-  ProtoResult runComputation(const ad_utility::Timer& timer,
-                             ComputationMode computationMode);
+  Result runComputation(const ad_utility::Timer& timer,
+                        ComputationMode computationMode);
 
   // Call `runComputation` and transform it into a value that could be inserted
   // into the cache.

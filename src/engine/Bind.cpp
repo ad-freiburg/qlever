@@ -105,7 +105,7 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
 }
 
 // _____________________________________________________________________________
-ProtoResult Bind::computeResult(bool requestLaziness) {
+Result Bind::computeResult(bool requestLaziness) {
   _subtree->setLimit(getLimit());
   LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);

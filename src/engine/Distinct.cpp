@@ -59,7 +59,7 @@ Result::Generator Distinct::lazyDistinct(Result::LazyResult input,
 }
 
 // _____________________________________________________________________________
-ProtoResult Distinct::computeResult(bool requestLaziness) {
+Result Distinct::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
@@ -77,9 +77,9 @@ ProtoResult Distinct::computeResult(bool requestLaziness) {
       CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
                       std::move(subRes->idTables()), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{cppcoro::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
