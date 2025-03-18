@@ -60,6 +60,23 @@ constexpr std::string_view a =
 }
 
 // _____________________________________________________________________________
+BlankNode Visitor::newBlankNode() {
+  std::string label = std::to_string(_blankNodeCounter);
+  _blankNodeCounter++;
+  // true means automatically generated
+  return {true, std::move(label)};
+}
+
+// _____________________________________________________________________________
+GraphTerm Visitor::newBlankNodeOrVariable() {
+  if (isInsideConstructTriples_) {
+    return GraphTerm{newBlankNode()};
+  } else {
+    return parsedQuery_.getNewInternalVariable();
+  }
+}
+
+// _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
     const antlr4::ParserRuleContext* context) {
   const auto& fullInput = context->getStart()->getInputStream()->toString();
@@ -1962,13 +1979,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
-  GraphTerm term = [this]() -> GraphTerm {
-    if (isInsideConstructTriples_) {
-      return GraphTerm{newBlankNode()};
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
-  }();
+  GraphTerm term = newBlankNodeOrVariable();
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
   for (auto& [predicate, object] : propertyList.first) {
@@ -1996,23 +2007,23 @@ SubjectOrObjectAndPathTriples Visitor::visit(
   return {std::move(subject), triples};
 }
 
-// ____________________________________________________________________________________
-SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  Triples triples;
+// _____________________________________________________________________________
+template <typename TripleType, typename Func>
+TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
+                                    Func iriStringToPredicate) {
+  typename TripleType::second_type triples;
   GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
-  auto nodes = ctx->graphNode();
-  for (auto context : Reversed{nodes}) {
-    GraphTerm currentTerm{newBlankNode()};
-    auto graphNode = visit(context);
-
+  for (auto graphNode : Reversed{elements}) {
+    GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
         {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}},
+         iriStringToPredicate(
+             "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
          std::move(graphNode.first)});
-    triples.push_back(
-        {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}},
-         std::move(nextTerm)});
+    triples.push_back({currentTerm,
+                       iriStringToPredicate(
+                           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"),
+                       std::move(nextTerm)});
     nextTerm = std::move(currentTerm);
 
     ad_utility::appendVector(triples, std::move(graphNode.second));
@@ -2020,10 +2031,19 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return {std::move(nextTerm), std::move(triples)};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
+  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
+    return GraphTerm{Iri{std::move(iri)}};
+  });
+}
+
+// _____________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
-  throwCollectionsNotSupported(ctx);
+  return toRdfCollection(
+      visitVector(ctx->graphNodePath()),
+      [](std::string iri) { return PropertyPath::fromIri(std::move(iri)); });
 }
 
 // ____________________________________________________________________________________
@@ -2730,11 +2750,7 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
-    if (isInsideConstructTriples_) {
-      return newBlankNode();
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
+    return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
     if (isInsideConstructTriples_) {
