@@ -15,6 +15,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -155,6 +156,12 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
+constexpr auto TextIndexScanForWordConf =
+    [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForWord>(
+      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
+};
+
 // Matcher for the `TextLimit` Operation.
 constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
                               const Variable& textRecVar,
@@ -193,6 +200,12 @@ inline auto TextIndexScanForEntity =
         AD_PROPERTY(::TextIndexScanForEntity, word, word),
         AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
   }
+};
+
+constexpr auto TextIndexScanForEntityConf =
+    [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForEntity>(
+      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,
@@ -422,6 +435,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(

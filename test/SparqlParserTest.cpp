@@ -1407,3 +1407,10 @@ TEST(ParserTest, parseWithDatasets) {
       m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                      {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
 }
+
+TEST(ParserTest, multipleUpdatesAreForbidden) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
+      testing::HasSubstr("Multiple Updates in one request are not supported."));
+}

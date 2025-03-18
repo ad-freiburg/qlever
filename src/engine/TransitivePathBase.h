@@ -24,9 +24,11 @@ struct TransitivePathSide {
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value_); };
+  bool isVariable() const { return std::holds_alternative<Variable>(value_); }
 
-  bool isBoundVariable() const { return treeAndCol_.has_value(); };
+  bool isBoundVariable() const { return treeAndCol_.has_value(); }
+
+  bool isUnboundVariable() const { return isVariable() && !isBoundVariable(); }
 
   std::string getCacheKey() const {
     std::ostringstream os;
@@ -111,6 +113,8 @@ using NodeGenerator = cppcoro::generator<NodeWithTargets>;
  */
 class TransitivePathBase : public Operation {
  protected:
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
@@ -118,14 +122,15 @@ class TransitivePathBase : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
+  bool emptyPathBound_ = false;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist);
+                     size_t minDist, size_t maxDist, Graphs activeGraphs);
 
-  virtual ~TransitivePathBase() = 0;
+  ~TransitivePathBase() override = 0;
 
   /**
    * Returns a new TransitivePath operation that uses the fact that leftop
@@ -260,11 +265,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param useBinSearch If true, the returned object will be a
    * TransitivePathBinSearch. Else it will be a TransitivePathFallback
+   * @param activeGraphs Contains the graphs that are active in the current
+   * context.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch);
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {});
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
@@ -279,11 +286,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param maxDist Maximum distance a resulting path may have (distance =
    * number of nodes)
+   * @param activeGraphs Contains the graphs that are active in the current
+   * context.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist);
+      size_t maxDist, Graphs activeGraphs = {});
 
   vector<QueryExecutionTree*> getChildren() override;
 

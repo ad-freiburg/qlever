@@ -672,13 +672,13 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                parsedQuery::SparqlValues parsedValues)
         : Values(qec, parsedValues) {}
 
-    ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
-      ProtoResult res = Values::computeResult(false);
+    Result computeResult([[maybe_unused]] bool requestLaziness) override {
+      Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return ProtoResult(Result::IdTableVocabPair(res.idTable().clone(),
-                                                    res.localVocab().clone()),
-                           res.sortedBy());
+        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+                                               res.localVocab().clone()),
+                      res.sortedBy());
       }
 
       // yield each row individually

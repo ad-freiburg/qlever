@@ -312,6 +312,11 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
+  // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
+  // `!<a>` and similar.
+  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
+                                            const PropertyPath& path,
+                                            const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right);
@@ -572,6 +577,7 @@ class QueryPlanner {
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
+    void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
