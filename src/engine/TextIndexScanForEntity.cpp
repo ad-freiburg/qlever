@@ -6,19 +6,35 @@
 
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
+    QueryExecutionContext* qec, TextIndexScanForEntityConfiguration config)
+    : Operation(qec), config_(std::move(config)) {
+  config_.varOrFixed_ = VarOrFixedEntity(qec, config_.entity_);
+  setVariableToColumnMap();
+}
+
+// _____________________________________________________________________________
+TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
-      textRecordVar_(std::move(textRecordVar)),
-      varOrFixed_(qec, std::move(entity)),
-      word_(std::move(word)) {}
+      config_(TextIndexScanForEntityConfiguration{
+          std::move(textRecordVar), std::move(entity), std::move(word)}) {
+  config_.scoreVar_ =
+      config_.varToBindText_.getEntityScoreVariable(config_.entity_);
+  config_.varOrFixed_ = VarOrFixedEntity(qec, config_.entity_);
+  setVariableToColumnMap();
+}
 
 // _____________________________________________________________________________
 Result TextIndexScanForEntity::computeResult(
     [[maybe_unused]] bool requestLaziness) {
+  std::ostringstream oss;
+  oss << config_;
+  runtimeInfo().addDetail("text-index-scan-for-entity-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
-      word_, getExecutionContext()->getAllocator());
+      config_.word_, getExecutionContext()->getAllocator());
 
+  std::vector<ColumnIndex> cols{0};
   if (hasFixedEntity()) {
     auto beginErase = ql::ranges::remove_if(idTable, [this](const auto& row) {
       return row[1].getVocabIndex() != getVocabIndexOfFixedEntity();
@@ -28,8 +44,13 @@ Result TextIndexScanForEntity::computeResult(
 #else
     idTable.erase(beginErase.begin(), idTable.end());
 #endif
-    idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
+  } else {
+    cols.push_back(1);
   }
+  if (config_.scoreVar_.has_value()) {
+    cols.push_back(2);
+  }
+  idTable.setColumnSubset(cols);
 
   // Add details to the runtimeInfo. This is has no effect on the result.
   if (hasFixedEntity()) {
@@ -37,32 +58,38 @@ Result TextIndexScanForEntity::computeResult(
   } else {
     runtimeInfo().addDetail("entity var: ", entityVariable().name());
   }
-  runtimeInfo().addDetail("word: ", word_);
+  runtimeInfo().addDetail("word: ", config_.word_);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
-  VariableToColumnMap vcmap;
-  auto addDefinedVar = [&vcmap,
-                        index = ColumnIndex{0}](const Variable& var) mutable {
-    vcmap[var] = makeAlwaysDefinedColumn(index);
-    ++index;
-  };
-  addDefinedVar(textRecordVar_);
-  if (hasFixedEntity()) {
-    addDefinedVar(textRecordVar_.getEntityScoreVariable(fixedEntity()));
-  } else {
-    addDefinedVar(entityVariable());
-    addDefinedVar(textRecordVar_.getEntityScoreVariable(entityVariable()));
+void TextIndexScanForEntity::setVariableToColumnMap() {
+  config_.variableColumns_ = VariableToColumnMap{};
+  auto index = ColumnIndex{0};
+  config_.variableColumns_.value()[config_.varToBindText_] =
+      makeAlwaysDefinedColumn(index);
+  index++;
+  if (!hasFixedEntity()) {
+    config_.variableColumns_.value()[entityVariable()] =
+        makeAlwaysDefinedColumn(index);
+    index++;
   }
-  return vcmap;
+  if (config_.scoreVar_.has_value()) {
+    config_.variableColumns_.value()[config_.scoreVar_.value()] =
+        makeAlwaysDefinedColumn(index);
+  }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
+  return config_.variableColumns_.value();
 }
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getResultWidth() const {
-  return 2 + (hasFixedEntity() ? 0 : 1);
+  return 1 + (hasFixedEntity() ? 0 : 1) +
+         (config_.scoreVar_.has_value() ? 1 : 0);
 }
 
 // _____________________________________________________________________________
@@ -71,10 +98,10 @@ size_t TextIndexScanForEntity::getCostEstimate() {
     // We currently have to first materialize and then filter the complete list
     // for the fixed entity
     return 2 * getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-                   word_);
+                   config_.word_);
   } else {
     return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        word_);
+        config_.word_);
   }
 }
 
@@ -85,14 +112,14 @@ uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
         getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
     return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        word_);
+        config_.word_);
   }
 }
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
   return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-             word_) == 0;
+             config_.word_) == 0;
 }
 
 // _____________________________________________________________________________
@@ -102,14 +129,15 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForEntity on ", textRecordVar_.name());
+  return absl::StrCat("TextIndexScanForEntity on ",
+                      config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
-     << " with word: \"" << word_ << "\" and fixed-entity: \""
+     << " with word: \"" << config_.word_ << "\" and fixed-entity: \""
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity") << " \"";
   return std::move(os).str();
 }

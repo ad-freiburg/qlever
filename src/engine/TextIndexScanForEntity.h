@@ -7,72 +7,41 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "parser/TextSearchQuery.h"
 
 // This operation retrieves all text records and their corresponding
 // entities from the fulltext index that contain a certain word or prefix.
 // The entities are saved to the entityVar_. If the operation is called on a
 // fixed entity instead, it only returns entries that contain this entity.
 class TextIndexScanForEntity : public Operation {
-  using FixedEntity = std::pair<std::string, VocabIndex>;
-
-  struct VarOrFixedEntity {
-    std::variant<Variable, FixedEntity> entity_;
-
-    static std::variant<Variable, FixedEntity> makeEntityVariant(
-        const QueryExecutionContext* qec,
-        std::variant<Variable, std::string> entity) {
-      if (std::holds_alternative<std::string>(entity)) {
-        VocabIndex index;
-        std::string fixedEntity = std::move(std::get<std::string>(entity));
-        bool success = qec->getIndex().getVocab().getId(fixedEntity, &index);
-        if (!success) {
-          throw std::runtime_error(
-              "The entity " + fixedEntity +
-              " is not part of the underlying knowledge graph and can "
-              "therefore not be used as the object of ql:contains-entity");
-        }
-        return FixedEntity(std::move(fixedEntity), std::move(index));
-      } else {
-        return std::get<Variable>(entity);
-      }
-    };
-
-    VarOrFixedEntity(const QueryExecutionContext* qec,
-                     std::variant<Variable, std::string> entity)
-        : entity_(makeEntityVariant(qec, std::move(entity))) {}
-
-    ~VarOrFixedEntity() = default;
-
-    bool hasFixedEntity() const {
-      return std::holds_alternative<FixedEntity>(entity_);
-    }
-  };
-
-  const Variable textRecordVar_;
-  const VarOrFixedEntity varOrFixed_;
-  const string word_;
+  TextIndexScanForEntityConfiguration config_;
 
  public:
+  TextIndexScanForEntity(QueryExecutionContext* qec,
+                         TextIndexScanForEntityConfiguration config);
+
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
                          std::variant<Variable, std::string> entity,
                          string word);
   ~TextIndexScanForEntity() override = default;
 
-  bool hasFixedEntity() const { return varOrFixed_.hasFixedEntity(); }
+  bool hasFixedEntity() const {
+    return config_.varOrFixed_.value().hasFixedEntity();
+  }
 
   const std::string& fixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());
-    return std::get<FixedEntity>(varOrFixed_.entity_).first;
+    return std::get<FixedEntity>(config_.varOrFixed_.value().entity_).first;
   }
 
   const Variable& entityVariable() const {
     AD_CONTRACT_CHECK(!hasFixedEntity());
-    return std::get<Variable>(varOrFixed_.entity_);
+    return std::get<Variable>(config_.varOrFixed_.value().entity_);
   }
 
-  const Variable& textRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return config_.varToBindText_; }
 
-  const std::string& word() const { return word_; }
+  const std::string& word() const { return config_.word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -92,15 +61,21 @@ class TextIndexScanForEntity : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  const TextIndexScanForEntityConfiguration& getConfig() const {
+    return config_;
+  }
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   const VocabIndex& getVocabIndexOfFixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());
-    return std::get<FixedEntity>(varOrFixed_.entity_).second;
+    return std::get<FixedEntity>(config_.varOrFixed_.value().entity_).second;
   }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
+
+  void setVariableToColumnMap();
 };
