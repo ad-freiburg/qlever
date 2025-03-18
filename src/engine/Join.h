@@ -115,16 +115,15 @@ class Join : public Operation {
   CPP_template_2(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>>) ProtoResult
+          std::function<void(IdTable&, LocalVocab&)>>) Result
       createResult(bool requestedLaziness, ActionT action,
                    OptionalPermutation permutation = {}) const;
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
   // don't have any optimization left to try.
-  ProtoResult lazyJoin(std::shared_ptr<const Result> a,
-                       std::shared_ptr<const Result> b,
-                       bool requestLaziness) const;
+  Result lazyJoin(std::shared_ptr<const Result> a,
+                  std::shared_ptr<const Result> b, bool requestLaziness) const;
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
@@ -148,14 +147,14 @@ class Join : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
+  Result computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when exactly one of the children is
   // an `IndexScan` and the other one is a fully materialized result. The
@@ -163,7 +162,7 @@ class Join : public Operation {
   // left or the right child of this `Join`. This needs to be known to determine
   // the correct order of the columns in the result.
   template <bool idTableIsRightInput>
-  ProtoResult computeResultForIndexScanAndIdTable(
+  Result computeResultForIndexScanAndIdTable(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
 
@@ -171,12 +170,12 @@ class Join : public Operation {
   // `IndexScan` and the left child is a lazy result. (The constructor will
   // ensure the correct order if they are initially swapped). This allows the
   // `IndexScan` to skip rows that won't match in the join operation.
-  ProtoResult computeResultForIndexScanAndLazyOperation(
+  Result computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
 
   // Default case where both inputs are fully materialized.
-  ProtoResult computeResultForTwoMaterializedInputs(
+  Result computeResultForTwoMaterializedInputs(
       std::shared_ptr<const Result> leftRes,
       std::shared_ptr<const Result> rightRes) const;
 
@@ -206,7 +205,7 @@ class Join : public Operation {
                            IdTable* dynRes);
 
   // Commonly used code for the various known-to-be-empty cases.
-  ProtoResult createEmptyResult() const;
+  Result createEmptyResult() const;
 
   // Get permutation of input and output columns to apply before and after
   // joining. This is required because the join algorithms expect the join

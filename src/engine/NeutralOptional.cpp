@@ -105,7 +105,7 @@ bool NeutralOptional::singleRowCroppedByLimit() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult NeutralOptional::computeResult(bool requestLaziness) {
+Result NeutralOptional::computeResult(bool requestLaziness) {
   const auto& limit = getLimit();
   tree_->setLimit(limit);
 
