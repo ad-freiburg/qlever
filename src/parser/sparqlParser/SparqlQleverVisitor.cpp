@@ -2589,11 +2589,12 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   SelectClause& selectClause = argumentOfExists.selectClause();
   selectClause.setAsterisk();
   for (const Variable& variable : visibleVariables_) {
-    // If we're not negated, we can safely add all visible variables to the
+    // If we're not negated, we could safely add all visible variables to the
     // expression, resulting in this filter to be optimized away if no variables
-    // match in the main pattern. For the negative case a variable is a wildcard
-    // match, so we just ignore this variable.
-    if (!negate || ad_utility::contains(visibleVariablesBackup, variable)) {
+    // match in the main pattern. However, if the EXISTS expression is ever
+    // negated in a way before being applied to a filter variables are a
+    // wildcard match, so we just ignore them to prevent this optimization.
+    if (ad_utility::contains(visibleVariablesBackup, variable)) {
       selectClause.addVisibleVariable(variable);
     }
   }

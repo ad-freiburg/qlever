@@ -2081,8 +2081,9 @@ TEST(SparqlParser, Exists) {
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
                     notExistsMatcher(selectABarFooMatcher()));
 
-  expectBuiltInCallNoVars("EXISTS {?a <bar> ?foo}",
-                          existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCallNoVars(
+      "EXISTS {?a <bar> ?foo}",
+      existsMatcher(selectABarFooMatcher(std::nullopt, std::nullopt, {})));
   expectBuiltInCallNoVars(
       "NOT EXISTS {?a <bar> ?foo}",
       notExistsMatcher(selectABarFooMatcher(std::nullopt, std::nullopt, {})));
