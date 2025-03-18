@@ -54,6 +54,28 @@ using SparqlValues = parsedQuery::SparqlValues;
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
+namespace {
+constexpr std::string_view a =
+    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+}
+
+// _____________________________________________________________________________
+BlankNode Visitor::newBlankNode() {
+  std::string label = std::to_string(_blankNodeCounter);
+  _blankNodeCounter++;
+  // true means automatically generated
+  return {true, std::move(label)};
+}
+
+// _____________________________________________________________________________
+GraphTerm Visitor::newBlankNodeOrVariable() {
+  if (isInsideConstructTriples_) {
+    return GraphTerm{newBlankNode()};
+  } else {
+    return parsedQuery_.getNewInternalVariable();
+  }
+}
+
 // _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
     const antlr4::ParserRuleContext* context) {
@@ -233,8 +255,19 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && !ctx->update()->update1()) {
+void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  _blankNodeCounter = 0;
+  numGraphPatterns_ = 0;
+  visibleVariables_ = {};
+  activeDatasetClauses_ = {};
+  prologueString_ = {};
+  parsedQuery_ = {};
+  isInsideConstructTriples_ = false;
+}
+
+// ____________________________________________________________________________________
+std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
+  if (ctx->update() && ctx->update()->update1().empty()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
     // have an `update1()`, then it consists of a (possibly empty) prologue, but
@@ -244,7 +277,8 @@ ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
                 "Empty query (this includes queries that only consist "
                 "of comments or prefix declarations).");
   }
-  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
+  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
+                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -508,23 +542,29 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
-  // The prologue (BASE and PREFIX declarations)  only affects the internal
-  // state of the visitor.
-  visit(ctx->prologue());
+std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
+  std::vector<ParsedQuery> updates{};
 
-  auto update = visit(ctx->update1());
-
-  // More than one operation in a single update request is not yet supported,
-  // but a semicolon after a single update is allowed.
-  if (ctx->update() && !ctx->update()->getText().empty()) {
-    parsedQuery_ = ParsedQuery{};
-    reportNotSupported(ctx->update(), "Multiple updates in one query are");
+  AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
+  for (size_t i = 0; i < ctx->update1().size(); ++i) {
+    // The prologue (BASE and PREFIX declarations) only affects the internal
+    // state of the visitor. The standard mentions that prefixes are shared
+    // between consecutive updates.
+    visit(ctx->prologue(i));
+    auto thisUpdate = visit(ctx->update1(i));
+    // The string representation of the Update is from the beginning of that
+    // updates prologue to the end of the update. The `;` between queries is
+    // ignored in the string representation.
+    const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
+    const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
+    thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
+        ctx->getStart()->getInputStream()->toString(), updateStartPos,
+        updateEndPos - updateStartPos + 1)};
+    updates.push_back(std::move(thisUpdate));
+    resetStateForMultipleUpdates();
   }
 
-  update._originalString = ctx->getStart()->getInputStream()->toString();
-
-  return update;
+  return updates;
 }
 
 // ____________________________________________________________________________________
@@ -537,7 +577,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
   }
 
-  return parsedQuery_;
+  return std::move(parsedQuery_);
 }
 
 // ____________________________________________________________________________________
@@ -827,22 +867,21 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
     }
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
-  } else {
-    AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
-    auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
-    pattern._graphPatterns = std::move(subOps);
-    for (auto& filter : filters) {
-      if (auto langFilterData =
-              filter.expression_.getLanguageFilterExpression();
-          langFilterData.has_value()) {
-        const auto& [variable, language] = langFilterData.value();
-        pattern.addLanguageFilter(variable, language);
-      } else {
-        pattern._filters.push_back(std::move(filter));
+  }
+  AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
+  auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
+  pattern._graphPatterns = std::move(subOps);
+  for (auto& filter : filters) {
+    if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
+        langFilterData.has_value()) {
+      const auto& [variable, language] = langFilterData.value();
+      if (pattern.addLanguageFilter(variable, language)) {
+        continue;
       }
     }
-    return pattern;
+    pattern._filters.push_back(std::move(filter));
   }
+  return pattern;
 }
 
 Visitor::OperationsAndFilters Visitor::visit(
@@ -998,6 +1037,31 @@ GraphPatternOperation Visitor::visitSpatialQuery(
   return spatialQuery;
 }
 
+GraphPatternOperation Visitor::visitTextSearchQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parseTextSearchQuery =
+      [ctx](parsedQuery::TextSearchQuery& textSearchQuery,
+            const parsedQuery::GraphPatternOperation& op) {
+        if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+          textSearchQuery.addBasicPattern(
+              std::get<parsedQuery::BasicGraphPattern>(op));
+        } else {
+          reportError(
+              ctx,
+              "Unsupported element in textSearchQuery. "
+              "textSearchQuery may only consist of triples for configuration");
+        }
+      };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::TextSearchQuery textSearchQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parseTextSearchQuery(textSearchQuery, op);
+  }
+
+  return textSearchQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
@@ -1022,6 +1086,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitPathQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitSpatialQuery(ctx);
+  } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
+    return visitTextSearchQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
@@ -1573,7 +1639,7 @@ GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
+    return GraphTerm{Iri{std::string{a}}};
   }
 }
 
@@ -1866,21 +1932,27 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+    return PropertyPath::fromIri(std::string{a});
   }
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(const Parser::PathNegatedPropertySetContext* ctx) {
-  reportNotSupported(ctx, "\"!\" inside a property path is ");
+PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
+  return PropertyPath::makeNegated(visitVector(ctx->pathOneInPropertySet()));
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext*) {
-  // This rule is only used by the `PathNegatedPropertySet` rule which also is
-  // not supported and should already have thrown an exception.
-  AD_FAIL();
+PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
+  std::string iri = ctx->iri()
+                        ? std::move(visit(ctx->iri()).toStringRepresentation())
+                        : std::string{a};
+  const std::string& text = ctx->getText();
+  AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
+  auto propertyPath = PropertyPath::fromIri(std::move(iri));
+  if (text.starts_with("^")) {
+    return PropertyPath::makeInverse(propertyPath);
+  }
+  return propertyPath;
 }
 
 // ____________________________________________________________________________________
@@ -1907,13 +1979,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
-  GraphTerm term = [this]() -> GraphTerm {
-    if (isInsideConstructTriples_) {
-      return GraphTerm{newBlankNode()};
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
-  }();
+  GraphTerm term = newBlankNodeOrVariable();
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
   for (auto& [predicate, object] : propertyList.first) {
@@ -1941,23 +2007,23 @@ SubjectOrObjectAndPathTriples Visitor::visit(
   return {std::move(subject), triples};
 }
 
-// ____________________________________________________________________________________
-SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
-  Triples triples;
+// _____________________________________________________________________________
+template <typename TripleType, typename Func>
+TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
+                                    Func iriStringToPredicate) {
+  typename TripleType::second_type triples;
   GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
-  auto nodes = ctx->graphNode();
-  for (auto context : Reversed{nodes}) {
-    GraphTerm currentTerm{newBlankNode()};
-    auto graphNode = visit(context);
-
+  for (auto graphNode : Reversed{elements}) {
+    GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
         {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}},
+         iriStringToPredicate(
+             "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"),
          std::move(graphNode.first)});
-    triples.push_back(
-        {currentTerm,
-         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}},
-         std::move(nextTerm)});
+    triples.push_back({currentTerm,
+                       iriStringToPredicate(
+                           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"),
+                       std::move(nextTerm)});
     nextTerm = std::move(currentTerm);
 
     ad_utility::appendVector(triples, std::move(graphNode.second));
@@ -1965,10 +2031,19 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   return {std::move(nextTerm), std::move(triples)};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
+  return toRdfCollection(visitVector(ctx->graphNode()), [](std::string iri) {
+    return GraphTerm{Iri{std::move(iri)}};
+  });
+}
+
+// _____________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
-  throwCollectionsNotSupported(ctx);
+  return toRdfCollection(
+      visitVector(ctx->graphNodePath()),
+      [](std::string iri) { return PropertyPath::fromIri(std::move(iri)); });
 }
 
 // ____________________________________________________________________________________
@@ -2675,11 +2750,7 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
-    if (isInsideConstructTriples_) {
-      return newBlankNode();
-    } else {
-      return parsedQuery_.getNewInternalVariable();
-    }
+    return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
     if (isInsideConstructTriples_) {

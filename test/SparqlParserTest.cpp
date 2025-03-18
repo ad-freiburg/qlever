@@ -1255,6 +1255,41 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
+  // Ensure filter is applied regularly if variable does not originate from
+  // triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { VALUES ?x { \"test\"@en } . FILTER (LANG(?x) = \"en\")}");
+
+    EXPECT_TRUE(std::holds_alternative<parsedQuery::Values>(
+        q._rootGraphPattern._graphPatterns[0]));
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) = \"en\")");
+  }
+  // Verify the filter is not applied as a regular filter if it is used
+  // somewhere in a triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . ?a ?b ?c ."
+        "?d <a> ?f . FILTER (LANG(?a) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
 }
 
 // _____________________________________________________________________________
@@ -1406,4 +1441,11 @@ TEST(ParserTest, parseWithDatasets) {
                                        DatasetClause{Iri("<baz>"), false}}),
       m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                      {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
+}
+
+TEST(ParserTest, multipleUpdatesAreForbidden) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
+      testing::HasSubstr("Multiple Updates in one request are not supported."));
 }

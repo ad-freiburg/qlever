@@ -94,7 +94,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
   // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
     auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
@@ -120,7 +120,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+Result Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
@@ -188,9 +188,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   auto generator =
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{cppcoro::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 template <size_t I>
@@ -405,7 +405,7 @@ TripleComponent Service::bindingToTripleComponent(
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+Result Service::makeNeutralElementResultForSilentFail() const {
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   idTable.emplace_back();
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
