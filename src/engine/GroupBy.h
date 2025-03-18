@@ -100,7 +100,7 @@ class GroupBy : public Operation {
   sparqlExpression::EvaluationContext createEvaluationContext(
       const LocalVocab& localVocab, const IdTable& idTable) const;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -575,6 +575,9 @@ class GroupBy : public Operation {
   // Return true if the `variable` is part of the result of the subtree of this
   // GROUP BY. This is used by some of the optimizations above.
   bool isVariableBoundInSubtree(const Variable& variable) const;
+
+ private:
+  std::unique_ptr<Operation> cloneImpl() const override;
 
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.

@@ -113,12 +113,15 @@ class ValuesForTesting : public Operation {
     variables_ = computeVarMapFromVector(variables);
   }
 
+  ValuesForTesting(ValuesForTesting&&) = default;
+  ValuesForTesting& operator=(ValuesForTesting&&) = default;
+
   // Accessors for the estimates for manual testing.
   size_t& sizeEstimate() { return sizeEstimate_; }
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_ && tables_.size() != 1) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
@@ -257,6 +260,29 @@ class ValuesForTesting : public Operation {
     return variables_;
   }
 
+  // _____________________________________________________________________________
+  ValuesForTesting(const ValuesForTesting& other)
+      : Operation{other._executionContext},
+        variables_{other.variables_},
+        supportsLimit_{other.supportsLimit_},
+        sizeEstimate_{other.sizeEstimate_},
+        costEstimate_{other.costEstimate_},
+        unlikelyToFitInCache_{other.unlikelyToFitInCache_},
+        resultSortedColumns_{other.resultSortedColumns_},
+        localVocab_{other.localVocab_.clone()},
+        multiplicity_{other.multiplicity_},
+        forceFullyMaterialized_{other.forceFullyMaterialized_} {
+    for (const auto& idTable : other.tables_) {
+      tables_.push_back(std::make_shared<IdTable>(idTable->clone()));
+    }
+  }
+
+  ValuesForTesting& operator=(const ValuesForTesting&) = delete;
+
+  std::unique_ptr<Operation> cloneImpl() const override {
+    return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
+  }
+
   std::vector<ColumnIndex> resultSortedColumns_;
   LocalVocab localVocab_;
   std::optional<float> multiplicity_;
@@ -270,4 +296,5 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
  public:
   using ValuesForTesting::ValuesForTesting;
   bool knownEmptyResult() override { return false; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };

@@ -82,7 +82,7 @@ size_t ExistsJoin::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   auto leftRes = left_->getResult();
   auto rightRes = right_->getResult();
   const auto& left = leftRes->idTable();
@@ -204,4 +204,12 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
   return subtree;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
+  auto newJoin = std::make_unique<ExistsJoin>(*this);
+  newJoin->left_ = left_->clone();
+  newJoin->right_ = right_->clone();
+  return newJoin;
 }

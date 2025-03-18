@@ -61,8 +61,7 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult MultiColumnJoin::computeResult(
-    [[maybe_unused]] bool requestLaziness) {
+Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -287,4 +286,12 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // `JoinColumnMapping` for details.
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
+  auto copy = std::make_unique<MultiColumnJoin>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

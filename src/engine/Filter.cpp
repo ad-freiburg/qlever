@@ -60,7 +60,7 @@ void Filter::setPrefilterExpressionForChildren() {
 }
 
 // _____________________________________________________________________________
-ProtoResult Filter::computeResult(bool requestLaziness) {
+Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
   LOG(DEBUG) << "Filter result computation..." << endl;
@@ -239,4 +239,10 @@ size_t Filter::getCostEstimate() {
                  _subtree->getSizeEstimate(),
                  _subtree->getRootOperation()->getPrimarySortKeyVariable())
              .costEstimate;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneImpl() const {
+  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+                                  _expression);
 }

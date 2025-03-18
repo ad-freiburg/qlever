@@ -61,6 +61,8 @@ class CartesianProductJoin : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::unique_ptr<Operation> cloneImpl() const override;
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 
@@ -79,7 +81,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip

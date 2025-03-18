@@ -14,6 +14,7 @@
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -917,7 +918,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   nlohmann::json jsonPrefix;
 
-  jsonPrefix["query"] = query._originalString;
+  jsonPrefix["query"] =
+      ad_utility::truncateOperationString(query._originalString);
   jsonPrefix["status"] = "OK";
   jsonPrefix["warnings"] = qet.collectWarnings();
   if (query.hasSelectClause()) {

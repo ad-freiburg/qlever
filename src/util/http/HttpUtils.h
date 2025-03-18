@@ -93,7 +93,32 @@ CPP_concept HttpRequest = detail::isHttpRequest<T>;
  * @brief Create a http::response from a string, which will become the body
  * @param body The body of the response
  * @param status The http status.
- * @param request The request to which the response belongs.
+ * @param mediaType The media type of the response.
+ * @param keepAlive Whether to set the keep alive header and if to which value
+ * (default: don't set it).
+ * @param version The HTTP version (default: HTTP 1.1).
+ * @return A http::response<http::string_body> which is ready to be sent.
+ */
+inline http::response<http::string_body> createHttpResponseFromString(
+    std::string body, http::status status, MediaType mediaType,
+    std::optional<bool> keepAlive, unsigned version) {
+  http::response<http::string_body> response{status, version};
+  response.set(http::field::content_type, toString(mediaType));
+  response.body() = std::move(body);
+  if (keepAlive.has_value()) {
+    response.keep_alive(keepAlive.value());
+  }
+  // Set Content-Length and Transfer-Encoding.
+  response.prepare_payload();
+  return response;
+}
+
+/**
+ * @brief Create a http::response from a string, which will become the body
+ * @param body The body of the response
+ * @param status The http status.
+ * @param request The request to which the response belongs, keep alive and HTTP
+ * version are copied from it.
  * @param mediaType The media type of the response.
  * @return A http::response<http::string_body> which is ready to be sent.
  */
@@ -104,13 +129,8 @@ CPP_template(typename RequestType)(
                                                         const RequestType&
                                                             request,
                                                         MediaType mediaType) {
-  http::response<http::string_body> response{status, request.version()};
-  response.set(http::field::content_type, toString(mediaType));
-  response.keep_alive(request.keep_alive());
-  response.body() = std::move(body);
-  // Set Content-Length and Transfer-Encoding.
-  response.prepare_payload();
-  return response;
+  return createHttpResponseFromString(std::move(body), status, mediaType,
+                                      request.keep_alive(), request.version());
 }
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves

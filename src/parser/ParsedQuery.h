@@ -90,6 +90,7 @@ class ParsedQuery {
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
+  std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -171,16 +172,6 @@ class ParsedQuery {
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
     return _rootGraphPattern._graphPatterns;
-  }
-
-  // TODO<joka921> This is currently necessary because of the missing scoping of
-  // subqueries
-  [[nodiscard]] int64_t getNumInternalVariables() const {
-    return numInternalVariables_;
-  }
-
-  void setNumInternalVariables(int64_t numInternalVariables) {
-    numInternalVariables_ = numInternalVariables;
   }
 
  private:

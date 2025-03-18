@@ -309,7 +309,7 @@ sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
-ProtoResult GroupBy::computeResult(bool requestLaziness) {
+Result GroupBy::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
@@ -411,9 +411,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(groupByCols), !requestLaziness);
 
     return requestLaziness
-               ? ProtoResult{std::move(generator), resultSortedOn()}
-               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                             resultSortedOn()};
+               ? Result{std::move(generator), resultSortedOn()}
+               : Result{cppcoro::getSingleElement(std::move(generator)),
+                        resultSortedOn()};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
@@ -1623,4 +1623,10 @@ GroupBy::getVariableForCountOfSingleAlias() const {
 // _____________________________________________________________________________
 bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
   return _subtree->getVariableColumnOrNullopt(variable).has_value();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> GroupBy::cloneImpl() const {
+  return std::make_unique<GroupBy>(_executionContext, _groupByVariables,
+                                   _aliases, _subtree->clone());
 }

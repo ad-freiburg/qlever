@@ -33,6 +33,7 @@ class Bind : public Operation {
   bool supportsLimit() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
@@ -43,7 +44,7 @@ class Bind : public Operation {
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   static IdTable cloneSubView(const IdTable& idTable,
                               const std::pair<size_t, size_t>& subrange);

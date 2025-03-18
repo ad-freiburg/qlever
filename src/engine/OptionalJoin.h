@@ -67,9 +67,11 @@ class OptionalJoin : public Operation {
       Implementation implementation = Implementation::GeneralCase);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   void computeSizeEstimateAndMultiplicities();
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

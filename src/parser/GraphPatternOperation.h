@@ -16,6 +16,7 @@
 #include "parser/NamedCachedQuery.h"
 #include "parser/PathQuery.h"
 #include "parser/SpatialQuery.h"
+#include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
@@ -179,8 +180,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, SpatialQuery, NamedCachedQuery,
-                 Minus, GroupGraphPattern, Describe>;
+                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
+                 Minus, GroupGraphPattern, Describe, NamedCachedQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
