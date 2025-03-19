@@ -637,11 +637,6 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
-  auto registerIfVariable = [this](const TripleComponent& component) {
-    if (component.isVariable()) {
-      addVisibleVariable(component.getVariable());
-    }
-  };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
@@ -670,7 +665,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto visitTemplateClause = [&ensureVariableIsVisible, this](auto* ctx,
                                                               auto* target) {
     if (ctx) {
-      auto quads = visit(ctx);
+      auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
       *target = quads.toTriplesWithGraph();
     }
