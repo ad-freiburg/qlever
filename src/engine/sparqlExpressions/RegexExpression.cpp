@@ -113,11 +113,12 @@ namespace sparqlExpression {
 // ___________________________________________________________________________
 RegexExpression::RegexExpression(Ptr child, Ptr regex,
                                  std::optional<Ptr> optionalFlags)
-    : child_{std::move(child)} {
+    : children_{std::move(child), nullptr} {
   // If we have a `STR()` expression, remove the `STR()` and remember that it
   // was there.
-  if (child_->isStrExpression()) {
-    child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
+  if (children_.at(0)->isStrExpression()) {
+    children_.at(0) =
+        std::move(std::move(*children_.at(0)).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }
 
@@ -168,7 +169,7 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
   // store the prefix in `prefixRegex_` (otherwise that becomes `std::nullopt`).
   prefixRegex_ = detail::getPrefixRegex(regexString);
   if (!regexString.empty()) {
-    const auto& compiledRegex = regex_.emplace<RE2>(regexString, RE2::Quiet);
+    const auto& compiledRegex = regex_.emplace(regexString, RE2::Quiet);
     if (!compiledRegex.ok()) {
       throw std::runtime_error{absl::StrCat(
           "The regex \"", regexString,
@@ -178,10 +179,10 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
     }
   } else {
     if (optionalFlags.has_value()) {
-      regex_ = makeMergeRegexPatternAndFlagsExpression(
+      children_.at(1) = makeMergeRegexPatternAndFlagsExpression(
           std::move(regex), std::move(optionalFlags.value()));
     } else {
-      regex_ = std::move(regex);
+      children_.at(1) = std::move(regex);
     }
   }
 }
@@ -189,17 +190,19 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
 // ___________________________________________________________________________
 string RegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  return absl::StrCat("REGEX expression ", child_->getCacheKey(varColMap),
-                      " with ",
-                      std::holds_alternative<RE2>(regex_)
-                          ? std::get<RE2>(regex_).pattern()
-                          : std::get<Ptr>(regex_)->getCacheKey(varColMap),
-                      "str:", childIsStrExpression_);
+  return absl::StrCat(
+      "REGEX expression ", children_.at(0)->getCacheKey(varColMap), " with ",
+      regex_.has_value() ? regex_.value().pattern()
+                         : children_.at(1)->getCacheKey(varColMap),
+      "str:", childIsStrExpression_);
 }
 
 // ___________________________________________________________________________
 std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
-  return {&child_, 1};
+  if (children_.at(1) != nullptr) {
+    return {&children_.at(0), 1};
+  }
+  return children_;
 }
 
 // ___________________________________________________________________________
@@ -334,21 +337,19 @@ CPP_template_def(typename T, typename F)(requires SingleExpressionResult<T>)
 
 // ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluate(EvaluationContext* context) const {
-  auto resultAsVariant = child_->evaluate(context);
+  auto resultAsVariant = children_.at(0)->evaluate(context);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
 
   if (prefixRegex_.has_value() && variablePtr != nullptr) {
     return evaluatePrefixRegex(*variablePtr, context);
   }
-  AD_CORRECTNESS_CHECK(std::holds_alternative<RE2>(regex_) ||
-                       std::get<Ptr>(regex_));
+  AD_CORRECTNESS_CHECK(regex_.has_value() || children_.at(1));
 
   return std::visit(
       [this, context](auto&& input) {
-        if (std::holds_alternative<RE2>(regex_)) {
-          return evaluateGeneralCase(AD_FWD(input), context, [this]() {
-            return &std::get<RE2>(regex_);
-          });
+        if (regex_.has_value()) {
+          return evaluateGeneralCase(AD_FWD(input), context,
+                                     [this]() { return &regex_.value(); });
         }
         return std::visit(
             [this, context, &input](auto&& regexInput) {
@@ -388,7 +389,7 @@ ExpressionResult RegexExpression::evaluate(EvaluationContext* context) const {
               return this->evaluateGeneralCase(AD_FWD(input), context,
                                                std::move(getNextRegex));
             },
-            std::get<Ptr>(regex_)->evaluate(context));
+            children_.at(1)->evaluate(context));
       },
       std::move(resultAsVariant));
 }
@@ -412,7 +413,7 @@ auto RegexExpression::getEstimatesForFilterExpression(
     reductionFactor = std::min(100000000.0, reductionFactor);
     reductionFactor = std::max(1.0, reductionFactor);
     size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
-    auto varPtr = dynamic_cast<VariableExpression*>(child_.get());
+    auto varPtr = dynamic_cast<VariableExpression*>(children_.at(0).get());
     size_t costEstimate = (varPtr && firstSortedVariable == varPtr->value())
                               ? sizeEstimate
                               : sizeEstimate + inputSize;

@@ -16,9 +16,13 @@ namespace sparqlExpression {
 // (an expression and a regex) and one optional argument (a string of flags).
 class RegexExpression : public SparqlExpression {
  private:
-  Ptr child_;
-  // The reguar expression.
-  std::variant<Ptr, RE2> regex_;
+  // Array to both children of this expression. The first child represent the
+  // string to be matched. The second child represents the regex, it is null if
+  // the regex can be precomputed, in which case the regex is stored in the
+  // member variable `regex_`.
+  std::array<Ptr, 2> children_;
+  // The regular expression if precomputed.
+  std::optional<RE2> regex_;
   // If this `std::optional` holds a string, we have a simple prefix regex
   // (which translates to a range search) and this string holds the prefix.
   std::optional<std::string> prefixRegex_;
