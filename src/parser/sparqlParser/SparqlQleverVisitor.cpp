@@ -557,13 +557,10 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
   using Updates = std::vector<ParsedQuery>;
   if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
-      ctx->create() || ctx->copy() || ctx->move()) {
+      ctx->create() || ctx->copy() || ctx->move() || ctx->add()) {
     return visitAlternative<Updates>(ctx->deleteWhere(), ctx->modify(),
                                      ctx->clear(), ctx->drop(), ctx->create(),
-                                     ctx->copy(), ctx->move());
-  } else if (ctx->add()) {
-    auto value = visitAlternative<std::optional<ParsedQuery>>(ctx->add());
-    return value.has_value() ? Updates{std::move(*value)} : Updates{};
+                                     ctx->copy(), ctx->move(), ctx->add());
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->insertData(), ctx->deleteData());
@@ -574,13 +571,11 @@ std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
 
 // ____________________________________________________________________________________
 Load Visitor::visit(Parser::LoadContext* ctx) {
-  return Load{
-      static_cast<bool>(ctx->SILENT()), visit(ctx->iri()),
-      ctx->graphRef() ? visit(ctx->graphRef()) : std::optional<GraphRef>{}};
+  reportNotSupported(ctx, "LOAD Update is");
 }
 
 parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
-    GraphRefAll graph) {
+    const GraphRefAll& graph) {
   using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
   return std::visit(
       ad_utility::OverloadCallOperator{
@@ -594,7 +589,7 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
 }
 
 parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
-    GraphOrDefault graph) {
+    const GraphOrDefault& graph) {
   using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
   return std::visit(
       ad_utility::OverloadCallOperator{
@@ -605,7 +600,7 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
       graph);
 }
 
-GraphPatternOperation makeAllTripleGraphPattern(auto graph) {
+GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
   GraphPattern inner;
   inner._graphPatterns.emplace_back(
       BasicGraphPattern{{{{Variable("?s")}, "?p", {Variable("?o")}}}});
@@ -626,7 +621,7 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(GraphRefAll graph) {
       graph);
 }
 
-SparqlTripleSimpleWithGraph::Graph transformGraph(GraphOrDefault graph) {
+SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphOrDefault& graph) {
   using Graph = SparqlTripleSimpleWithGraph::Graph;
   return std::visit(
       ad_utility::OverloadCallOperator{
@@ -637,7 +632,7 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(GraphOrDefault graph) {
       graph);
 }
 
-SparqlTripleSimpleWithGraph makeAllTripleTemplate(auto graph) {
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
   return {{Variable("?s")},
           {Variable("?p")},
           {Variable("?o")},
@@ -647,9 +642,6 @@ SparqlTripleSimpleWithGraph makeAllTripleTemplate(auto graph) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
   GraphRefAll graph = visit(ctx->graphRefAll());
-  if (holds_alternative<NAMED>(graph)) {
-    reportNotSupported(ctx->graphRefAll(), "Clearing only the named graphs is");
-  }
   if (holds_alternative<DEFAULT>(graph)) {
     reportNotSupported(
         ctx->graphRefAll(),
@@ -662,7 +654,7 @@ ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
   return makeClear(graph);
 }
 
-ParsedQuery Visitor::makeClear(GraphOrDefault graph) {
+ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
   AD_CORRECTNESS_CHECK(!std::holds_alternative<DEFAULT>(graph));
 
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
@@ -672,9 +664,23 @@ ParsedQuery Visitor::makeClear(GraphOrDefault graph) {
   return parsedQuery_;
 }
 
-ParsedQuery Visitor::makeClear(GraphRefAll graph) {
-  AD_CORRECTNESS_CHECK(!std::holds_alternative<NAMED>(graph));
+ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   AD_CORRECTNESS_CHECK(!std::holds_alternative<DEFAULT>(graph));
+  if (std::holds_alternative<NAMED>(graph)) {
+    parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+        makeAllTripleGraphPattern(ALL{}));
+    auto e = SparqlExpressionPimpl{
+        createExpression<sparqlExpression::NotEqualExpression>(
+            std::make_unique<sparqlExpression::VariableExpression>(
+                Variable("?g")),
+            std::make_unique<sparqlExpression::IriExpression>(
+                TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))),
+        absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
+    parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
+    parsedQuery_._clause = parsedQuery::UpdateClause{
+        GraphUpdate{{}, {makeAllTripleTemplate(ALL{})}}};
+    return parsedQuery_;
+  }
 
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
@@ -683,7 +689,8 @@ ParsedQuery Visitor::makeClear(GraphRefAll graph) {
   return parsedQuery_;
 }
 
-ParsedQuery Visitor::makeCopyAll(GraphOrDefault source, GraphOrDefault target) {
+ParsedQuery Visitor::makeCopyAll(const GraphOrDefault& source,
+                                 const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(source));
   parsedQuery_._clause = parsedQuery::UpdateClause{
@@ -713,16 +720,16 @@ ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
 std::vector<ParsedQuery> Visitor::visit(Parser::CreateContext*) { return {}; }
 
 // ____________________________________________________________________________________
-std::optional<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
+std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
   AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
   auto from = visit(ctx->graphOrDefault()[0]);
   auto to = visit(ctx->graphOrDefault()[1]);
 
   if (from == to) {
-    return std::nullopt;
+    return {};
   }
 
-  return makeCopyAll(from, to);
+  return {makeCopyAll(from, to)};
 }
 
 // ____________________________________________________________________________________

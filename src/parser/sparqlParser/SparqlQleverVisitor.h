@@ -222,7 +222,9 @@ class SparqlQleverVisitor {
 
   std::vector<ParsedQuery> visit(Parser::CreateContext* ctx);
 
-  std::optional<ParsedQuery> visit(Parser::AddContext* ctx);
+  // Although only 0 or 1 ParsedQuery are ever returned, the vector makes the
+  // interface much simpler.
+  std::vector<ParsedQuery> visit(Parser::AddContext* ctx);
 
   std::vector<ParsedQuery> visit(Parser::MoveContext* ctx);
 
@@ -636,9 +638,10 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
-  ParsedQuery makeClear(GraphRefAll graph);
-  ParsedQuery makeClear(GraphOrDefault graph);
-  ParsedQuery makeCopyAll(GraphOrDefault source, GraphOrDefault target);
+  ParsedQuery makeClear(const GraphRefAll& graph);
+  ParsedQuery makeClear(const GraphOrDefault& graph);
+  ParsedQuery makeCopyAll(const GraphOrDefault& source,
+                          const GraphOrDefault& target);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
