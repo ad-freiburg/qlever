@@ -20,7 +20,7 @@ class NeutralOptional : public Operation {
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   std::unique_ptr<Operation> cloneImpl() const override;
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return true, if `_limit` is configured in a way that will prevent the
