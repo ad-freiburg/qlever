@@ -4,26 +4,24 @@
 
 #pragma once
 
+#include <re2/re2.h>
+
 #include <string>
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "re2/re2.h"
 
 namespace sparqlExpression {
 // Class implementing the REGEX function, which takes two mandatory arguments
 // (an expression and a regex) and one optional argument (a string of flags).
 class RegexExpression : public SparqlExpression {
  private:
-  SparqlExpression::Ptr child_;
-  // The reguar expression. It needs to be a `std::optional` because `RE2`
-  // objects do not have a default constructor.
-  std::optional<RE2> regex_;
+  Ptr child_;
+  // The reguar expression.
+  std::variant<Ptr, RE2> regex_;
   // If this `std::optional` holds a string, we have a simple prefix regex
   // (which translates to a range search) and this string holds the prefix.
   std::optional<std::string> prefixRegex_;
-  // The regex as a string, used for the cache key.
-  std::string regexAsString_;
 
   // True iff the expression is enclosed in `STR()`.
   bool childIsStrExpression_ = false;
@@ -32,8 +30,7 @@ class RegexExpression : public SparqlExpression {
   // The `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, otherwise an exception will be
   // thrown.
-  RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
-                  std::optional<SparqlExpression::Ptr> optionalFlags);
+  RegexExpression(Ptr child, Ptr regex, std::optional<Ptr> optionalFlags);
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
@@ -50,26 +47,25 @@ class RegexExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  std::span<Ptr> childrenImpl() override;
 
   // Evaluate for the special case, where the expression is a variable and we
   // have a simple prefix regex (in which case the regex match translates to a
   // simple range check).
-  ExpressionResult evaluatePrefixRegex(
-      const Variable& variable,
-      sparqlExpression::EvaluationContext* context) const;
+  ExpressionResult evaluatePrefixRegex(const Variable& variable,
+                                       EvaluationContext* context) const;
 
   // Evaluate for the general case.
-  CPP_template(typename T)(requires SingleExpressionResult<T>) ExpressionResult
-      evaluateGeneralCase(T&& input,
-                          sparqlExpression::EvaluationContext* context) const;
+  CPP_template(typename T,
+               typename F)(requires SingleExpressionResult<T>) ExpressionResult
+      evaluateGeneralCase(T&& input, EvaluationContext* context,
+                          F getNextRegex) const;
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.
-  static void checkCancellation(
-      const sparqlExpression::EvaluationContext* context,
-      ad_utility::source_location location =
-          ad_utility::source_location::current());
+  static void checkCancellation(const EvaluationContext* context,
+                                ad_utility::source_location location =
+                                    ad_utility::source_location::current());
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and

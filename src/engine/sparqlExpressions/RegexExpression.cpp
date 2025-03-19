@@ -6,6 +6,7 @@
 
 #include "./RegexExpression.h"
 
+#include <absl/container/flat_hash_map.h>
 #include <re2/re2.h>
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -17,6 +18,42 @@
 using namespace std::literals;
 
 namespace sparqlExpression::detail {
+
+template <typename K, typename V>
+class LRUCache {
+ private:
+  size_t capacity_;
+  // Stores keys in order of usage (MRU at front)
+  std::list<K> keys_;
+  absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
+
+ public:
+  explicit LRUCache(size_t cap) : capacity_{cap} {}
+
+  template <typename Func>
+  const V& getOrCompute(const K& key, Func computeFunction) {
+    auto it = cache_.find(key);
+    if (it != cache_.end()) {
+      // Move accessed key to front (most recently used)
+      keys_.erase(it->second.second);
+      keys_.push_front(key);
+      it->second.second = keys_.begin();
+
+      return it->second.first;
+    }
+    // Evict LRU if cache is full
+    if (cache_.size() >= capacity_) {
+      K lruKey = keys_.back();
+      keys_.pop_back();
+      cache_.erase(lruKey);
+    }
+    // Insert new element
+    keys_.push_front(key);
+    auto result = cache_.try_emplace(key, computeFunction(key), keys_.begin());
+    AD_CORRECTNESS_CHECK(result.second);
+    return result.first->second.first;
+  }
+};
 
 // ____________________________________________________________________________
 std::optional<std::string> getPrefixRegex(std::string regex) {
@@ -74,9 +111,8 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
 namespace sparqlExpression {
 
 // ___________________________________________________________________________
-RegexExpression::RegexExpression(
-    SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
-    std::optional<SparqlExpression::Ptr> optionalFlags)
+RegexExpression::RegexExpression(Ptr child, Ptr regex,
+                                 std::optional<Ptr> optionalFlags)
     : child_{std::move(child)} {
   // If we have a `STR()` expression, remove the `STR()` and remember that it
   // was there.
@@ -97,15 +133,11 @@ RegexExpression::RegexExpression(
           "The second argument to the REGEX function (which contains the "
           "regular expression) must not contain a language tag or a datatype");
     }
-  } else {
-    throw std::runtime_error(
-        "The second argument to the REGEX function must be a "
-        "string literal (which contains the regular expression)");
   }
 
   // Parse the flags. The optional argument for that must, again, be a
   // string literal without a datatype or language tag.
-  if (optionalFlags.has_value()) {
+  if (!regexString.empty() && optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringLiteralExpression*>(
             optionalFlags.value().get())) {
       const auto& flagsLiteral = flagsPtr->value();
@@ -121,7 +153,7 @@ RegexExpression::RegexExpression(
         throw std::runtime_error{absl::StrCat(
             "Invalid regex flag '", std::string{flags[firstInvalidFlag]},
             "' found in \"", flags,
-            "\". The only supported flags are 'i', 's', 'm', 's', 'u', and any "
+            "\". The only supported flags are 'i', 'm', 's', 'u', and any "
             "combination of them")};
       }
 
@@ -129,25 +161,29 @@ RegexExpression::RegexExpression(
       if (!flags.empty()) {
         regexString = absl::StrCat("(?", flags, ":", regexString + ")");
       }
-    } else {
-      throw std::runtime_error(
-          "The optional third argument to the REGEX function must be a string "
-          "literal (which contains the configuration flags)");
     }
   }
 
   // Create RE2 object from the regex string. If it is a simple prefix regex,
   // store the prefix in `prefixRegex_` (otherwise that becomes `std::nullopt`).
-  regexAsString_ = regexString;
   prefixRegex_ = detail::getPrefixRegex(regexString);
-  regex_.emplace(regexString, RE2::Quiet);
-  const auto& r = regex_.value();
-  if (r.error_code() != RE2::NoError) {
-    throw std::runtime_error{absl::StrCat(
-        "The regex \"", regexString,
-        "\" is not supported by QLever (which uses Google's RE2 library); "
-        "the error from RE2 is: ",
-        r.error())};
+  if (!regexString.empty()) {
+    regex_.emplace<RE2>(regexString, RE2::Quiet);
+    const auto& r = std::get<RE2>(regex_);
+    if (!r.ok()) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex \"", regexString,
+          "\" is not supported by QLever (which uses Google's RE2 library); "
+          "the error from RE2 is: ",
+          r.error())};
+    }
+  } else {
+    if (optionalFlags.has_value()) {
+      regex_ = makeMergeRegexPatternAndFlagsExpression(
+          std::move(regex), std::move(optionalFlags.value()));
+    } else {
+      regex_ = std::move(regex);
+    }
   }
 }
 
@@ -155,7 +191,11 @@ RegexExpression::RegexExpression(
 string RegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("REGEX expression ", child_->getCacheKey(varColMap),
-                      " with ", regexAsString_, "str:", childIsStrExpression_);
+                      " with ",
+                      std::holds_alternative<RE2>(regex_)
+                          ? std::get<RE2>(regex_).pattern()
+                          : std::get<Ptr>(regex_)->getCacheKey(varColMap),
+                      "str:", childIsStrExpression_);
 }
 
 // ___________________________________________________________________________
@@ -165,11 +205,10 @@ std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
 
 // ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluatePrefixRegex(
-    const Variable& variable,
-    sparqlExpression::EvaluationContext* context) const {
+    const Variable& variable, EvaluationContext* context) const {
   // This function must only be called if we have a simple prefix regex.
   AD_CORRECTNESS_CHECK(prefixRegex_.has_value());
-  std::string prefixRegex = prefixRegex_.value();
+  const std::string& prefixRegex = prefixRegex_.value();
 
   // If the expression is enclosed in `STR()`, we have two ranges: for the
   // prefix with and without leading "<".
@@ -257,14 +296,13 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
 }
 
 // ___________________________________________________________________________
-CPP_template_def(typename T)(requires SingleExpressionResult<T>)
+CPP_template_def(typename T, typename F)(requires SingleExpressionResult<T>)
     ExpressionResult RegexExpression::evaluateGeneralCase(
-        T&& input, sparqlExpression::EvaluationContext* context) const {
+        T&& input, EvaluationContext* context, F getNextRegex) const {
   // We have one result for each row of the input.
   auto resultSize = context->size();
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
-  AD_CORRECTNESS_CHECK(regex_.has_value());
 
   // Compute the result using the given value getter. If the getter returns
   // `std::nullopt` for a row, the result is `UNDEF`. Otherwise, we have a
@@ -272,13 +310,14 @@ CPP_template_def(typename T)(requires SingleExpressionResult<T>)
   auto computeResult = [&]<typename ValueGetter>(const ValueGetter& getter) {
     ql::ranges::for_each(
         detail::makeGenerator(AD_FWD(input), resultSize, context),
-        [&getter, &context, &result, this](const auto& id) {
+        [&getter, &context, &result, &getNextRegex](const auto& id) {
           auto str = getter(id, context);
-          if (!str.has_value()) {
+          auto* nextRegex = getNextRegex();
+          if (!str.has_value() || !nextRegex) {
             result.push_back(Id::makeUndefined());
           } else {
-            result.push_back(Id::makeFromBool(
-                RE2::PartialMatch(str.value(), regex_.value())));
+            result.push_back(
+                Id::makeFromBool(RE2::PartialMatch(str.value(), *nextRegex)));
           }
           checkCancellation(context);
         });
@@ -295,20 +334,64 @@ CPP_template_def(typename T)(requires SingleExpressionResult<T>)
 }
 
 // ___________________________________________________________________________
-ExpressionResult RegexExpression::evaluate(
-    sparqlExpression::EvaluationContext* context) const {
+ExpressionResult RegexExpression::evaluate(EvaluationContext* context) const {
   auto resultAsVariant = child_->evaluate(context);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
 
   if (prefixRegex_.has_value() && variablePtr != nullptr) {
     return evaluatePrefixRegex(*variablePtr, context);
-  } else {
-    return std::visit(
-        [this, context](auto&& input) {
-          return evaluateGeneralCase(AD_FWD(input), context);
-        },
-        std::move(resultAsVariant));
   }
+  AD_CORRECTNESS_CHECK(std::holds_alternative<RE2>(regex_) ||
+                       std::get<Ptr>(regex_));
+
+  return std::visit(
+      [this, context](auto&& input) {
+        if (std::holds_alternative<RE2>(regex_)) {
+          return evaluateGeneralCase(AD_FWD(input), context, [this]() {
+            return &std::get<RE2>(regex_);
+          });
+        }
+        return std::visit(
+            [this, context, &input](auto&& regexInput) {
+              auto generator = detail::makeGenerator(AD_FWD(regexInput),
+                                                     context->size(), context);
+
+              std::optional<ql::ranges::iterator_t<decltype(generator)>>
+                  resultIterator = std::nullopt;
+
+              detail::LRUCache<std::string, std::unique_ptr<RE2>> regexCache{
+                  100};
+
+              auto getNextRegex = [&generator, &resultIterator, context,
+                                   &regexCache]() -> const RE2* {
+                if (resultIterator.has_value()) {
+                  AD_CORRECTNESS_CHECK(resultIterator.value() !=
+                                       generator.end());
+                  ++resultIterator.value();
+                } else {
+                  resultIterator = generator.begin();
+                  AD_CORRECTNESS_CHECK(resultIterator.value() !=
+                                       generator.end());
+                }
+                auto regexString = detail::LiteralFromIdGetter{}(
+                    *resultIterator.value(), context);
+                if (regexString.has_value()) {
+                  const auto& regex = regexCache.getOrCompute(
+                      regexString.value(), [](const std::string& string) {
+                        return std::make_unique<RE2>(string, RE2::Quiet);
+                      });
+                  if (regex->ok()) {
+                    return regex.get();
+                  }
+                }
+                return nullptr;
+              };
+              return this->evaluateGeneralCase(AD_FWD(input), context,
+                                               std::move(getNextRegex));
+            },
+            std::get<Ptr>(regex_)->evaluate(context));
+      },
+      std::move(resultAsVariant));
 }
 
 // ____________________________________________________________________________
@@ -353,9 +436,8 @@ auto RegexExpression::getEstimatesForFilterExpression(
 }
 
 // ____________________________________________________________________________
-void RegexExpression::checkCancellation(
-    const sparqlExpression::EvaluationContext* context,
-    ad_utility::source_location location) {
+void RegexExpression::checkCancellation(const EvaluationContext* context,
+                                        ad_utility::source_location location) {
   context->cancellationHandle_->throwIfCancelled(location);
 }
 
