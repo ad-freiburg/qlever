@@ -616,7 +616,9 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(GraphRefAll graph) {
             return ::Iri(iri.toStringRepresentation());
           },
           [](const ALL&) -> Graph { return Variable("?g"); },
-          [](const DEFAULT&) -> Graph { AD_FAIL(); },
+          [](const DEFAULT&) -> Graph {
+            return ::Iri(std::string{DEFAULT_GRAPH_IRI});
+          },
           [](const NAMED&) -> Graph { AD_FAIL(); }},
       graph);
 }
@@ -628,8 +630,18 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphOrDefault& graph) {
           [](const ad_utility::triple_component::Iri& iri) -> Graph {
             return ::Iri(iri.toStringRepresentation());
           },
-          [](const DEFAULT&) -> Graph { AD_FAIL(); }},
+          [](const DEFAULT&) -> Graph {
+            return ::Iri(std::string{DEFAULT_GRAPH_IRI});
+          }},
       graph);
+}
+
+SparqlTripleSimpleWithGraph Visitor::makeAllTripleTemplatee(
+    const GraphRefAll& graph) {
+  return {{Variable("?s")},
+          {Variable("?p")},
+          {Variable("?o")},
+          transformGraph(graph)};
 }
 
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
@@ -678,14 +690,14 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
         absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
     parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
     parsedQuery_._clause = parsedQuery::UpdateClause{
-        GraphUpdate{{}, {makeAllTripleTemplate(ALL{})}}};
+        GraphUpdate{{}, {makeAllTripleTemplatee(ALL{})}}};
     return parsedQuery_;
   }
 
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+      GraphUpdate{{}, {makeAllTripleTemplatee(graph)}}};
   return parsedQuery_;
 }
 
@@ -701,9 +713,6 @@ ParsedQuery Visitor::makeCopyAll(const GraphOrDefault& source,
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
   GraphRefAll graph = visit(ctx->graphRefAll());
-  if (holds_alternative<NAMED>(graph)) {
-    reportNotSupported(ctx->graphRefAll(), "Clearing only the named graphs is");
-  }
   if (holds_alternative<DEFAULT>(graph)) {
     reportNotSupported(
         ctx->graphRefAll(),

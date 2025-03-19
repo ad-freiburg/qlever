@@ -11,6 +11,7 @@
 #include "PropertyPath.h"
 #include "TripleComponent.h"
 #include "global/Id.h"
+#include "parser/data/Iri.h"
 #include "parser/data/Variable.h"
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }

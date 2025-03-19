@@ -638,6 +638,11 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
+ public:
+  static SparqlTripleSimpleWithGraph makeAllTripleTemplatee(
+      const GraphRefAll& graph);
+
+ private:
   ParsedQuery makeClear(const GraphRefAll& graph);
   ParsedQuery makeClear(const GraphOrDefault& graph);
   ParsedQuery makeCopyAll(const GraphOrDefault& source,
