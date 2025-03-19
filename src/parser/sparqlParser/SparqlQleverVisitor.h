@@ -40,6 +40,7 @@ class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using VarOrIri = ad_utility::sparql_types::VarOrIri;
   using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
       ad_utility::sparql_types::PathObjectPairsAndTriples;
@@ -401,7 +402,7 @@ class SparqlQleverVisitor {
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  GraphTerm visit(Parser::VarOrIriContext* ctx);
+  VarOrIri visit(Parser::VarOrIriContext* ctx);
 
   static Variable visit(Parser::VarContext* ctx);
 

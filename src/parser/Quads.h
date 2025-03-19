@@ -16,12 +16,10 @@
 // `vector<SparqlTripleSimpleWithGraph>` (Quad Template in many Update
 // Operations).
 struct Quads {
-  using IriOrVariable =
-      std::variant<ad_utility::triple_component::Iri, Variable>;
   // A single block of triples wrapped in a `GRAPH ... { ... }`. Corresponds to
   // the `quadsNotTriples` grammar rule.
-  using GraphBlock =
-      std::tuple<IriOrVariable, ad_utility::sparql_types::Triples>;
+  using GraphBlock = std::tuple<ad_utility::sparql_types::VarOrIri,
+                                ad_utility::sparql_types::Triples>;
 
   bool operator==(const Quads&) const = default;
 

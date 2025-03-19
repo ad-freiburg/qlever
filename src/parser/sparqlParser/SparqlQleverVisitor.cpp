@@ -373,16 +373,16 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // Convert the describe resources (variables or IRIs) from the format that the
   // parser delivers to the one that the `parsedQuery::Describe` struct expects.
   std::vector<Variable> describedVariables;
-  for (GraphTerm& resource : describedResources) {
+  for (VarOrIri& resource : describedResources) {
     if (std::holds_alternative<Variable>(resource)) {
       const auto& variable = std::get<Variable>(resource);
       describeClause.resources_.emplace_back(variable);
       describedVariables.push_back(variable);
     } else {
-      AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(resource));
-      auto iri =
-          TripleComponent::Iri::fromIriref(std::get<Iri>(resource).toSparql());
-      describeClause.resources_.emplace_back(std::move(iri));
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<TripleComponent::Iri>(resource));
+      describeClause.resources_.emplace_back(
+          std::get<TripleComponent::Iri>(resource));
     }
   }
 
@@ -742,22 +742,7 @@ Quads Visitor::visit(Parser::QuadsContext* ctx) {
 
 // ____________________________________________________________________________________
 Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
-  auto graphTerm = visit(ctx->varOrIri());
-  Quads::IriOrVariable graph = graphTerm.visit(
-      [&ctx]<typename T>(const T& element) -> Quads::IriOrVariable {
-        if constexpr (std::is_same_v<T, Variable>) {
-          return element;
-        } else if constexpr (std::is_same_v<T, Iri>) {
-          return TripleComponent::Iri::fromIriref(element.iri());
-        } else {
-          static_assert(std::is_same_v<T, BlankNode> ||
-                        std::is_same_v<T, Literal>);
-          reportError(ctx->varOrIri(),
-                      "Internal Error: got unexpected type. Please report this "
-                      "to the developers.");
-        }
-      });
-
+  auto graph = visit(ctx->varOrIri());
   // Short circuit when the triples section is empty
   if (!ctx->triplesTemplate()) {
     return {graph, {}};
@@ -976,13 +961,12 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   //
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
-  GraphTerm varOrIri = visit(ctx->varOrIri());
+  VarOrIri varOrIri = visit(ctx->varOrIri());
   if (std::holds_alternative<Variable>(varOrIri)) {
     reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
   }
-  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
-  auto serviceIri =
-      TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
+  AD_CONTRACT_CHECK(std::holds_alternative<TripleComponent::Iri>(varOrIri));
+  auto serviceIri = std::get<TripleComponent::Iri>(varOrIri);
 
   if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
     return visitPathQuery(ctx);
@@ -1020,10 +1004,9 @@ parsedQuery::GraphPatternOperation Visitor::visit(
     addVisibleVariable(graphVar);
     return parsedQuery::GroupGraphPattern{std::move(group), graphVar};
   }
-  AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(varOrIri));
-  auto& iri = std::get<Iri>(varOrIri);
+  AD_CORRECTNESS_CHECK(std::holds_alternative<TripleComponent::Iri>(varOrIri));
   return parsedQuery::GroupGraphPattern{
-      std::move(group), TripleComponent::Iri::fromIriref(iri.toSparql())};
+      std::move(group), std::get<TripleComponent::Iri>(varOrIri)};
 }
 
 // Parsing for the `expression` rule.
@@ -1535,7 +1518,13 @@ PredicateObjectPairsAndTriples Visitor::visit(
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    return visit(ctx->varOrIri());
+    // This is an artefact of there being two distinct Iri types.
+    return std::visit(ad_utility::OverloadCallOperator{
+                          [](const Variable& v) -> GraphTerm { return v; },
+                          [](const TripleComponent::Iri& i) -> GraphTerm {
+                            return Iri(i.toStringRepresentation());
+                          }},
+                      visit(ctx->varOrIri()));
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
@@ -1970,20 +1959,8 @@ GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
-  if (ctx->var()) {
-    return visit(ctx->var());
-  } else {
-    AD_CORRECTNESS_CHECK(ctx->iri());
-    // TODO<qup42> If `visit` returns an `Iri` and `GraphTerm` can be
-    // constructed from an `Iri`, this whole function becomes
-    // `visitAlternative`.
-    // TODO<joka921> If we unify the two IRI and Literal types (the ones from
-    // the parser and from the `TripleComponent`, then this becomes much
-    // simpler.
-    return GraphTerm{
-        Iri{std::string{visit(ctx->iri()).toStringRepresentation()}}};
-  }
+VarOrIri Visitor::visit(Parser::VarOrIriContext* ctx) {
+  return visitAlternative<VarOrIri>(ctx->var(), ctx->iri());
 }
 
 // ____________________________________________________________________________________

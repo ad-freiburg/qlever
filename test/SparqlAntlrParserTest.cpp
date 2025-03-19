@@ -2475,7 +2475,7 @@ TEST(SparqlParser, QuadsNotTriples) {
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
   const auto Iri = TripleComponent::Iri::fromIriref;
-  auto GraphBlock = [](const Quads::IriOrVariable& graph,
+  auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
                        const ad_utility::sparql_types::Triples& triples)
       -> testing::Matcher<const Quads::GraphBlock&> {
     return testing::FieldsAre(testing::Eq(graph),
