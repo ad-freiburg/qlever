@@ -89,6 +89,41 @@ void testWithExplicitResult(
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
+// Test that the expression works with variables which cannot be evaluated
+// during creation of the expression.
+void testValuesInVariables(
+    const std::vector<std::array<std::string, 3>>& inputValues,
+    const std::vector<Id>& expected, bool flagsUsed,
+    source_location l = source_location::current()) {
+  TestContext ctx;
+  auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
+  ctx.varToColMap.clear();
+  ctx.varToColMap[Variable{"?string"}] = makeAlwaysDefinedColumn(0);
+  ctx.varToColMap[Variable{"?regex"}] = makeAlwaysDefinedColumn(1);
+  ctx.varToColMap[Variable{"?flags"}] = makeAlwaysDefinedColumn(2);
+  ctx.table.clear();
+  ctx.table.setNumColumns(3);
+  auto toLiteralId = [&ctx](const std::string& value) {
+    return Id::makeFromLocalVocabIndex(
+        ctx.localVocab.getIndexAndAddIfNotContained(
+            ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+                value)));
+  };
+  for (const auto& value : inputValues) {
+    ctx.table.push_back({toLiteralId(value.at(0)), toLiteralId(value.at(1)),
+                         toLiteralId(value.at(2))});
+  }
+  ctx.context._endIndex = inputValues.size();
+  auto resultAsVariant =
+      makeRegexExpression(
+          variable("?string"), variable("?regex"),
+          flagsUsed ? std::optional{variable("?flags")} : std::nullopt)
+          .evaluate(&ctx.context);
+  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
+
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+}
+
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
@@ -129,9 +164,24 @@ TEST(RegexExpression, nonPrefixRegex) {
   // The IRI is only considered when testing with a STR expression
   test("?localVocab", "Vocab[AD]", {T, F, T}, true);
 
-  auto expr = makeRegexExpression(variable("?vocab"), variable("?vocab"));
-  ASSERT_FALSE(expr.isPrefixExpression());
-  testWithExplicitResult(expr, {T, T, T});
+  {
+    auto expr = makeRegexExpression(variable("?vocab"), variable("?vocab"));
+    ASSERT_FALSE(expr.isPrefixExpression());
+    testWithExplicitResult(expr, {T, T, T});
+  }
+
+  // Values that are not simple literals should result in undefined
+  {
+    auto expr = makeRegexExpression(variable("?vocab"), variable("?doubles"));
+    ASSERT_FALSE(expr.isPrefixExpression());
+    testWithExplicitResult(expr, {U, U, U});
+  }
+
+  testValuesInVariables({{"Abc", "[A-Z]", ""},
+                         {"abc", "[A-Z]", ""},
+                         {"aBc", "[A-Z]", ""},
+                         {"abC", "[A-Z]", ""}},
+                        {T, F, T, T}, false);
 }
 
 // Test where the expression is not simply a variable.
@@ -199,6 +249,23 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
     ASSERT_FALSE(expr.isPrefixExpression());
     testWithExplicitResult(expr, {U, U, U});
   }
+  // Values that are not simple literals should result in undefined
+  {
+    auto expr = makeRegexExpression(variable("?vocab"), literal("\"b\""),
+                                    variable("?ints"));
+    ASSERT_FALSE(expr.isPrefixExpression());
+    testWithExplicitResult(expr, {U, U, U});
+  }
+  {
+    auto expr = makeRegexExpression(variable("?vocab"), variable("?ints"),
+                                    literal("i"));
+    ASSERT_FALSE(expr.isPrefixExpression());
+    testWithExplicitResult(expr, {U, U, U});
+  }
+
+  testValuesInVariables(
+      {{"Abc", "[A-Z]", ""}, {"abc", "[A-Z]", ""}, {"abc", "[A-Z]", "i"}},
+      {T, F, T}, true);
 }
 
 // Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
