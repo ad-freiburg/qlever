@@ -199,7 +199,7 @@ string RegexExpression::getCacheKey(
 
 // ___________________________________________________________________________
 std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
-  if (children_.at(1) != nullptr) {
+  if (children_.at(1) == nullptr) {
     return {&children_.at(0), 1};
   }
   return children_;
