@@ -127,12 +127,12 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
     const auto& regexLiteral = regexPtr->value();
-    regexString = asStringViewUnsafe(regexLiteral.getContent());
     if (regexLiteral.hasDatatype() || regexLiteral.hasLanguageTag()) {
       throw std::runtime_error(
           "The second argument to the REGEX function (which contains the "
           "regular expression) must not contain a language tag or a datatype");
     }
+    regexString = asStringViewUnsafe(regexLiteral.getContent());
   }
 
   // Parse the flags. The optional argument for that must, again, be a
@@ -141,13 +141,13 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
     if (auto flagsPtr = dynamic_cast<const StringLiteralExpression*>(
             optionalFlags.value().get())) {
       const auto& flagsLiteral = flagsPtr->value();
-      std::string_view flags = asStringViewUnsafe(flagsLiteral.getContent());
       if (flagsLiteral.hasDatatype() || flagsLiteral.hasLanguageTag()) {
         throw std::runtime_error(
             "The third argument to the REGEX function (which contains optional "
             "flags to configure the evaluation) must not contain a language "
             "tag or a datatype");
       }
+      std::string_view flags = asStringViewUnsafe(flagsLiteral.getContent());
       auto firstInvalidFlag = flags.find_first_not_of("imsu");
       if (firstInvalidFlag != std::string::npos) {
         throw std::runtime_error{absl::StrCat(
@@ -168,14 +168,13 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
   // store the prefix in `prefixRegex_` (otherwise that becomes `std::nullopt`).
   prefixRegex_ = detail::getPrefixRegex(regexString);
   if (!regexString.empty()) {
-    regex_.emplace<RE2>(regexString, RE2::Quiet);
-    const auto& r = std::get<RE2>(regex_);
-    if (!r.ok()) {
+    const auto& compiledRegex = regex_.emplace<RE2>(regexString, RE2::Quiet);
+    if (!compiledRegex.ok()) {
       throw std::runtime_error{absl::StrCat(
           "The regex \"", regexString,
           "\" is not supported by QLever (which uses Google's RE2 library); "
           "the error from RE2 is: ",
-          r.error())};
+          compiledRegex.error())};
     }
   } else {
     if (optionalFlags.has_value()) {
