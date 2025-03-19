@@ -122,7 +122,8 @@ class ValuesForTesting : public Operation {
 
   // ___________________________________________________________________________
   Result computeResult(bool requestLaziness) override {
-    if (requestLaziness && !forceFullyMaterialized_ && tables_.size() != 1) {
+    if (requestLaziness && !forceFullyMaterialized_ &&
+        (tables_.size() != 1 || !forceFullyMaterializedSingleTable())) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
       std::vector<IdTable> clones;
@@ -175,6 +176,14 @@ class ValuesForTesting : public Operation {
   bool supportsLimit() const override { return supportsLimit_; }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
+
+  // If there is only a single `IdTable` specified, the default is to yield it
+  // fully materialized which is more performant in many cases because only a
+  // shared_ptr has to be copied. This member function allows to change this
+  // behavior, e.g. for unit tests.
+  bool& forceFullyMaterializedSingleTable() {
+    return forceFullyMaterializedSingleTable_;
+  }
 
  private:
   // ___________________________________________________________________________
@@ -287,6 +296,7 @@ class ValuesForTesting : public Operation {
   LocalVocab localVocab_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
+  bool forceFullyMaterializedSingleTable_ = false;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns

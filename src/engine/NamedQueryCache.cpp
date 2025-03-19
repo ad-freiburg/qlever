@@ -11,7 +11,9 @@ std::shared_ptr<ValuesForTesting> NamedQueryCache ::getOperation(
   const auto& [table, map, sortedOn] = *ptr;
   // TODO<joka921> Add a local vocab, and consider also passing a shared_ptr for
   // the local vocab.
-  return std::make_shared<ValuesForTesting>(ctx, table, map, sortedOn);
+  auto res = std::make_shared<ValuesForTesting>(ctx, table, map, sortedOn);
+  res->forceFullyMaterializedSingleTable() = true;
+  return res;
 }
 
 // _____________________________________________________________________________
