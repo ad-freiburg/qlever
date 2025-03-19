@@ -309,7 +309,7 @@ sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
-ProtoResult GroupBy::computeResult(bool requestLaziness) {
+Result GroupBy::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
@@ -411,9 +411,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(groupByCols), !requestLaziness);
 
     return requestLaziness
-               ? ProtoResult{std::move(generator), resultSortedOn()}
-               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                             resultSortedOn()};
+               ? Result{std::move(generator), resultSortedOn()}
+               : Result{cppcoro::getSingleElement(std::move(generator)),
+                        resultSortedOn()};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
