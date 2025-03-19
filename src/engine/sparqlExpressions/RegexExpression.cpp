@@ -136,6 +136,8 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
     regexString = asStringViewUnsafe(regexLiteral.getContent());
   }
 
+  bool hasUnappliedFlags = false;
+
   // Parse the flags. The optional argument for that must, again, be a
   // string literal without a datatype or language tag.
   if (!regexString.empty() && optionalFlags.has_value()) {
@@ -162,13 +164,15 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
       if (!flags.empty()) {
         regexString = absl::StrCat("(?", flags, ":", regexString + ")");
       }
+    } else {
+      hasUnappliedFlags = true;
     }
   }
 
   // Create RE2 object from the regex string. If it is a simple prefix regex,
   // store the prefix in `prefixRegex_` (otherwise that becomes `std::nullopt`).
   prefixRegex_ = detail::getPrefixRegex(regexString);
-  if (!regexString.empty()) {
+  if (!regexString.empty() && !hasUnappliedFlags) {
     const auto& compiledRegex = regex_.emplace(regexString, RE2::Quiet);
     if (!compiledRegex.ok()) {
       throw std::runtime_error{absl::StrCat(

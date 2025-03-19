@@ -23,31 +23,28 @@ constexpr auto T = Id::makeFromBool(true);
 constexpr auto F = Id::makeFromBool(false);
 constexpr Id U = Id::makeUndefined();
 
+auto literal(const std::string& literal,
+             std::string_view langtagOrDatatype = "") {
+  return std::make_unique<StringLiteralExpression>(
+      lit(literal, langtagOrDatatype));
+}
+
+auto variable(std::string literal) {
+  return std::make_unique<VariableExpression>(Variable{std::move(literal)});
+};
+
 // Make `RegexExpression` from given the `child` (the expression on which to
 // apply the regex), `regex`, and optional `flags`. The argument `childAsStr` is
 // true iff the expression is enclosed in a `STR()` function.
 RegexExpression makeRegexExpression(
-    SparqlExpression::Ptr child, std::string regex,
-    std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
-  // The regex and the flags both have to be enquoted. This is normally ensured
-  // by the SPARQL parser. For easier readability of the tests we add those
-  // quotes here.
-  regex = absl::StrCat("\"", regex, "\"");
-  if (flags.has_value()) {
-    flags.value() = absl::StrCat("\"", flags.value(), "\"");
-  }
+    SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
+    std::optional<SparqlExpression::Ptr> flags = std::nullopt,
+    bool childAsStr = false) {
   if (childAsStr) {
     child = makeStrExpression(std::move(child));
   }
-  auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
-  std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
-  if (flags.has_value()) {
-    flagsExpression = SparqlExpression::Ptr{
-        std::make_unique<StringLiteralExpression>(lit(flags.value()))};
-  }
 
-  return {std::move(child), std::move(regexExpression),
-          std::move(flagsExpression)};
+  return {std::move(child), std::move(regex), std::move(flags)};
 }
 
 // Special case of the `makeRegexExpression` above, where the `child`
@@ -57,19 +54,32 @@ RegexExpression makeRegexExpression(
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
   SparqlExpression::Ptr variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
-  return makeRegexExpression(std::move(variableExpression), std::move(regex),
-                             std::move(flags), childAsStr);
+  // The regex and the flags both have to be enquoted. This is normally ensured
+  // by the SPARQL parser. For easier readability of the tests we add those
+  // quotes here.
+  regex = absl::StrCat("\"", regex, "\"");
+  SparqlExpression::Ptr regexExpression =
+      std::make_unique<StringLiteralExpression>(lit(std::move(regex)));
+  std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
+  if (flags.has_value()) {
+    flagsExpression =
+        SparqlExpression::Ptr{std::make_unique<StringLiteralExpression>(
+            lit(absl::StrCat("\"", flags.value(), "\"")))};
+  }
+  return makeRegexExpression(std::move(variableExpression),
+                             std::move(regexExpression),
+                             std::move(flagsExpression), childAsStr);
 }
 }  // namespace
 
 // Test that the expression `leftValue Comparator rightValue`, when evaluated on
 // the `TestContext` (see above), yields the `expected` result.
-void testWithExplicitResult(const SparqlExpression& expression,
-                            std::vector<Id> expected,
-                            std::optional<size_t> numInputs = std::nullopt,
-                            source_location l = source_location::current()) {
+void testWithExplicitResult(
+    const SparqlExpression& expression, const std::vector<Id>& expected,
+    const std::optional<size_t>& numInputs = std::nullopt,
+    source_location l = source_location::current()) {
   TestContext ctx;
-  auto trace = generateLocationTrace(l, "testWithExplicitResult");
+  auto trace = generateLocationTrace(std::move(l), "testWithExplicitResult");
   if (numInputs.has_value()) {
     ctx.context._endIndex = numInputs.value();
   }
@@ -83,7 +93,7 @@ auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
                              source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "testNonPrefixRegex");
+  auto trace = generateLocationTrace(std::move(l), "testNonPrefixRegex");
   auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                   std::nullopt, childAsStr);
   ASSERT_FALSE(expr.isPrefixExpression());
@@ -118,6 +128,10 @@ TEST(RegexExpression, nonPrefixRegex) {
 
   // The IRI is only considered when testing with a STR expression
   test("?localVocab", "Vocab[AD]", {T, F, T}, true);
+
+  auto expr = makeRegexExpression(variable("?vocab"), variable("?vocab"));
+  ASSERT_FALSE(expr.isPrefixExpression());
+  testWithExplicitResult(expr, {T, T, T});
 }
 
 // Test where the expression is not simply a variable.
@@ -130,7 +144,8 @@ TEST(RegexExpression, inputNotVariable) {
       input.clone());
 
   // "hallo" matches the regex "ha".
-  auto expr = makeRegexExpression(std::move(child), "ha", "");
+  auto expr =
+      makeRegexExpression(std::move(child), literal("\"ha\""), literal("\"\""));
   std::vector<Id> expected;
   expected.push_back(Id::makeFromBool(true));
   testWithExplicitResult(expr, expected, input.size());
@@ -176,6 +191,14 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   test("?vocab", "^alp", "i", {F, T, F});
 
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
+
+  // Undefined variable should result in undefined results
+  {
+    auto expr = makeRegexExpression(variable("?vocab"), literal("\"b\""),
+                                    variable("?b"));
+    ASSERT_FALSE(expr.isPrefixExpression());
+    testWithExplicitResult(expr, {U, U, U});
+  }
 }
 
 // Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
@@ -295,19 +318,6 @@ TEST(RegexExpression, getChildren) {
 }
 
 TEST(RegexExpression, invalidConstruction) {
-  auto literal = [](const std::string& literal,
-                    std::string_view langtagOrDatatype = "") {
-    return std::make_unique<StringLiteralExpression>(
-        lit(literal, langtagOrDatatype));
-  };
-  auto variable = [](std::string literal) {
-    return std::make_unique<VariableExpression>(Variable{std::move(literal)});
-  };
-
-  // The second argument must be a string literal.
-  EXPECT_THROW(RegexExpression(variable("?a"), variable("?b"), std::nullopt),
-               std::runtime_error);
-
   // The second argument must not have a datatype or langtag
   EXPECT_THROW(
       RegexExpression(variable("?a"), literal("\"b\"", "@en"), std::nullopt),
@@ -315,11 +325,6 @@ TEST(RegexExpression, invalidConstruction) {
   EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\"", "^^<someType>"),
                                std::nullopt),
                std::runtime_error);
-
-  // The third argument must be a string literal.
-  EXPECT_THROW(
-      RegexExpression(variable("?a"), literal("\"b\""), variable("?b")),
-      std::runtime_error);
   // The third argument must not have a language tag or datatype
   EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\""),
                                literal("\"i\"", "@en")),
