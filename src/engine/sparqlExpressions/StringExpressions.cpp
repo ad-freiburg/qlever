@@ -381,11 +381,10 @@ using StrBeforeExpression =
 };
 
 using MergeRegexPatternAndFlagsExpression =
-    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), StringValueGetter>;
+    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input,
-       const std::unique_ptr<re2::RE2>& pattern,
+    [](std::optional<std::string> input, const std::unique_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!input.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
@@ -397,7 +396,7 @@ using MergeRegexPatternAndFlagsExpression =
     return Id::makeUndefined();
   }
   const auto& repl = replacement.value();
-  re2::RE2::GlobalReplace(&in, pat, repl);
+  RE2::GlobalReplace(&in, pat, repl);
   return toLiteral(in);
 };
 

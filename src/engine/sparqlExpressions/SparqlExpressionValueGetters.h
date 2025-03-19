@@ -144,22 +144,6 @@ struct StringValueGetter : Mixin<StringValueGetter> {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
-// Similar to `StringValueGetter`, but correctly preprocesses strings so that
-// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
-// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
-// the latter represents the format that re2 expects.
-struct ReplacementStringGetter : StringValueGetter,
-                                 Mixin<ReplacementStringGetter> {
-  using Mixin<ReplacementStringGetter>::operator();
-  std::optional<std::string> operator()(ValueId,
-                                        const EvaluationContext*) const;
-
-  std::optional<std::string> operator()(const LiteralOrIri& s,
-                                        const EvaluationContext*) const;
-
- private:
-  static std::string convertToReplacementString(std::string_view view);
-};
 
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
@@ -267,19 +251,36 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   }
 };
 
+// Similar to `LiteralFromIdGetter`, but correctly preprocesses strings so that
+// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
+// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
+// the latter represents the format that re2 expects.
+struct ReplacementStringGetter : LiteralFromIdGetter,
+                                 Mixin<ReplacementStringGetter> {
+  using Mixin<ReplacementStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+ private:
+  static std::string convertToReplacementString(std::string_view view);
+};
+
 // Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
 // not convertible to a string.
 struct RegexValueGetter {
   template <typename S>
-  auto operator()(S&& input, const EvaluationContext* context) const -> CPP_ret(
-      std::unique_ptr<re2::RE2>)(
-      requires SingleExpressionResult<S>&&
-          ranges::invocable<StringValueGetter, S&&, const EvaluationContext*>) {
-    auto str = StringValueGetter{}(AD_FWD(input), context);
+  auto operator()(S&& input, const EvaluationContext* context) const
+      -> CPP_ret(std::unique_ptr<re2::RE2>)(
+          requires SingleExpressionResult<S>&& ranges::invocable<
+              LiteralFromIdGetter, S&&, const EvaluationContext*>) {
+    auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
     }
-    return std::make_unique<re2::RE2>(str.value(), re2::RE2::Quiet);
+    return std::make_unique<RE2>(str.value(), RE2::Quiet);
   }
 };
 

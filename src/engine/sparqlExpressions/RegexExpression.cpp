@@ -28,7 +28,7 @@ class LRUCache {
   absl::flat_hash_map<K, std::pair<V, typename std::list<K>::iterator>> cache_;
 
  public:
-  explicit LRUCache(size_t cap) : capacity_{cap} {}
+  explicit LRUCache(size_t capacity) : capacity_{capacity} {}
 
   template <typename Func>
   const V& getOrCompute(const K& key, Func computeFunction) {
@@ -116,9 +116,9 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
     : children_{std::move(child), nullptr} {
   // If we have a `STR()` expression, remove the `STR()` and remember that it
   // was there.
-  if (children_.at(0)->isStrExpression()) {
-    children_.at(0) =
-        std::move(std::move(*children_.at(0)).moveChildrenOut().at(0));
+  auto& firstChild = children_.at(0);
+  if (firstChild->isStrExpression()) {
+    firstChild = std::move(std::move(*firstChild).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }
 
