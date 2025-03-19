@@ -6,9 +6,9 @@
 
 #include <vector>
 
-#include "GraphPatternOperation.h"
-#include "SparqlTriple.h"
-#include "data/Types.h"
+#include "parser/GraphPatternOperation.h"
+#include "parser/SparqlTriple.h"
+#include "parser/data/Types.h"
 
 // A class for the intermediate parsing results of `quads`. Provides utilities
 // for converting the quads into the required formats. The Quads/Triples can be
@@ -23,9 +23,16 @@ struct Quads {
   using GraphBlock =
       std::tuple<IriOrVariable, ad_utility::sparql_types::Triples>;
 
+  bool operator==(const Quads&) const = default;
+
+  // Free triples are outside a `GRAPH ...` clause.
   ad_utility::sparql_types::Triples freeTriples_{};
+  // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 
-  std::vector<SparqlTripleSimpleWithGraph> getQuads() const;
-  std::vector<parsedQuery::GraphPatternOperation> getOperations() const;
+  void forAllVariables(std::function<void(const Variable&)> f);
+
+  std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph() const;
+  std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
+      const;
 };

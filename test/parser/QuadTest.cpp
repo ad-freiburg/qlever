@@ -21,7 +21,7 @@ TEST(QuadTest, getQuads) {
              ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.getQuads(),
+        EXPECT_THAT(quads.toTriplesWithGraph(),
                     testing::UnorderedElementsAreArray(expected));
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
@@ -59,7 +59,7 @@ TEST(QuadTest, getOperations) {
              ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.getOperations(), m);
+        EXPECT_THAT(quads.toGraphPatternOperations(), m);
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
     return {t, t, t};

@@ -20,13 +20,19 @@ vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
 
 // Re-wraps the value into a variant `T` which has additional values.
 template <typename T>
-T expandVariant(const Quads::IriOrVariable& graph) {
+static T expandVariant(const Quads::IriOrVariable& graph) {
   return std::visit([](const auto& graph) -> T { return graph; }, graph);
 };
 
 // ____________________________________________________________________________________
-std::vector<SparqlTripleSimpleWithGraph> Quads::getQuads() const {
+std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph() const {
   std::vector<SparqlTripleSimpleWithGraph> quads;
+  size_t numTriplesInGraphs = std::accumulate(
+      graphTriples_.begin(), graphTriples_.end(), 0,
+      [](size_t acc, const GraphBlock& block) {
+        return acc + get<ad_utility::sparql_types::Triples>(block).size();
+      });
+  quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
       quads, transformTriplesTemplate(freeTriples_, std::monostate{}));
   for (const auto& [graph, triples] : graphTriples_) {
@@ -39,26 +45,52 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::getQuads() const {
 }
 
 // ____________________________________________________________________________________
-std::vector<parsedQuery::GraphPatternOperation> Quads::getOperations() const {
+std::vector<parsedQuery::GraphPatternOperation>
+Quads::toGraphPatternOperations() const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
     return SparqlTriple::fromSimple(SparqlTripleSimple(
         triple[0].toTripleComponent(), triple[1].toTripleComponent(),
         triple[2].toTripleComponent()));
   };
 
-  std::vector<parsedQuery::GraphPatternOperation> operations;
-  operations.emplace_back(parsedQuery::BasicGraphPattern{
-      ad_utility::transform(freeTriples_, toSparqlTriple)});
+  using namespace parsedQuery;
+  std::vector<GraphPatternOperation> operations;
+  operations.emplace_back(
+      BasicGraphPattern{ad_utility::transform(freeTriples_, toSparqlTriple)});
 
-  using GraphSpec = parsedQuery::GroupGraphPattern::GraphSpec;
   for (const auto& [graph, triples] : graphTriples_) {
     // We need a `GroupGraphPattern` where the graph is set. This contains the
     // triples inside another `GraphPattern`.
-    parsedQuery::GraphPattern tripleSubPattern;
-    tripleSubPattern._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
-        ad_utility::transform(triples, toSparqlTriple)});
-    operations.emplace_back(parsedQuery::GroupGraphPattern{
-        std::move(tripleSubPattern), expandVariant<GraphSpec>(graph)});
+    GraphPattern tripleSubPattern;
+    tripleSubPattern._graphPatterns.emplace_back(
+        BasicGraphPattern{ad_utility::transform(triples, toSparqlTriple)});
+    operations.emplace_back(
+        GroupGraphPattern{std::move(tripleSubPattern),
+                          expandVariant<GroupGraphPattern::GraphSpec>(graph)});
   }
   return operations;
+}
+
+// ____________________________________________________________________________________
+void Quads::forAllVariables(std::function<void(const Variable&)> f) {
+  auto visitGraphTerm = [&f](const GraphTerm& t) {
+    if (std::holds_alternative<Variable>(t)) {
+      f(std::get<Variable>(t));
+    }
+  };
+  auto visitTriple = [&visitGraphTerm](const std::array<GraphTerm, 3>& triple) {
+    const auto& [s, p, o] = triple;
+    visitGraphTerm(s);
+    visitGraphTerm(p);
+    visitGraphTerm(o);
+  };
+  auto visitGraphBlock = [&visitTriple, &f](const GraphBlock& block) {
+    const auto& [graph, triples] = block;
+    if (holds_alternative<Variable>(graph)) {
+      f(get<Variable>(graph));
+    }
+    ql::ranges::for_each(triples, visitTriple);
+  };
+  ql::ranges::for_each(graphTriples_, visitGraphBlock);
+  ql::ranges::for_each(freeTriples_, visitTriple);
 }

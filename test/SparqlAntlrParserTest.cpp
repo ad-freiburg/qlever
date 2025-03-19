@@ -2216,13 +2216,9 @@ TEST(SparqlParser, QuadData) {
   auto expectQuadData =
       ExpectCompleteParse<&Parser::quadData>{defaultPrefixMap};
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
 
   expectQuadData("{ <a> <b> <c> }",
-                 ElementsAre(SparqlTripleSimpleWithGraph(
-                     Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{})));
+                 Quads{{{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {}});
   expectQuadDataFails("{ <a> <b> ?c }");
   expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
   expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
@@ -2324,9 +2320,10 @@ TEST(SparqlParser, Update) {
                        {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
                        std::nullopt),
                    m::GraphPattern()));
-  expectUpdate(
+  expectUpdateFails(
       "INSERT DATA { GRAPH ?f { } }",
-      m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
+      testing::HasSubstr(
+          "Invalid SPARQL query: Variables (?f) are not allowed here."));
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(

@@ -610,12 +610,12 @@ Copy Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  return {visit(ctx->quadData()), {}};
+  return {visit(ctx->quadData()).toTriplesWithGraph(), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  return {{}, visit(ctx->quadData())};
+  return {{}, visit(ctx->quadData()).toTriplesWithGraph()};
 }
 
 // ____________________________________________________________________________________
@@ -627,62 +627,37 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
-  const auto triples = visit(ctx->quadPattern());
-  pattern._graphPatterns = triples.getOperations();
+  auto triples = visit(ctx->quadPattern());
+  pattern._graphPatterns = triples.toGraphPatternOperations();
   parsedQuery_._rootGraphPattern = std::move(pattern);
   // The query body and template are identical. No need to check that variables
   // are visible. But they need to be registered.
-  auto quads = triples.getQuads();
-  for (const auto& quad : quads) {
-    registerIfVariable(quad.s_);
-    registerIfVariable(quad.p_);
-    registerIfVariable(quad.o_);
-    if (std::holds_alternative<Variable>(quad.g_)) {
-      addVisibleVariable(std::get<Variable>(quad.g_));
-    }
-  }
+  triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, std::move(quads)}};
+      parsedQuery::UpdateClause{GraphUpdate{{}, triples.toTriplesWithGraph()}};
 
   return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
-  auto isVisibleIfVariable = [this](const TripleComponent& component) {
-    if (component.isVariable()) {
-      return ql::ranges::find(parsedQuery_.getVisibleVariables(),
-                              component.getVariable()) !=
-             parsedQuery_.getVisibleVariables().end();
-    } else {
-      return true;
+  auto ensureVariableIsVisible = [&ctx, this](const Variable& v) {
+    if (ql::ranges::find(parsedQuery_.getVisibleVariables(), v) ==
+        parsedQuery_.getVisibleVariables().end()) {
+      reportError(ctx, absl::StrCat("Variable ", v.name(),
+                                    " was not bound in the query body."));
     }
   };
-  auto isVisibleIfVariableGraph =
-      [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
-        if (std::holds_alternative<Variable>(graph)) {
-          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
-                                      std::get<Variable>(graph));
-        } else {
-          return true;
-        }
-      };
-  auto checkVariableVisibility =
-      [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
-          const std::vector<SparqlTripleSimpleWithGraph>& triples) {
-        for (auto& triple : triples) {
-          if (!(isVisibleIfVariable(triple.s_) &&
-                isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_) &&
-                isVisibleIfVariableGraph(triple.g_))) {
-            reportError(ctx,
-                        absl::StrCat("A triple contains a variable that was "
-                                     "not bound in the query body."));
-          }
-        }
-      };
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](auto* ctx,
+                                                              auto* target) {
+    if (ctx) {
+      auto quads = visit(ctx);
+      quads.forAllVariables(ensureVariableIsVisible);
+      *target = quads.toTriplesWithGraph();
+    }
+  };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_.datasetClauses_ =
@@ -691,10 +666,8 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
-  visitIf(&op.toInsert_, ctx->insertClause());
-  checkVariableVisibility(op.toInsert_);
-  visitIf(&op.toDelete_, ctx->deleteClause());
-  checkVariableVisibility(op.toDelete_);
+  visitTemplateClause(ctx->insertClause(), &op.toInsert_);
+  visitTemplateClause(ctx->deleteClause(), &op.toDelete_);
   visitIf(&op.with_, ctx->iri());
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
@@ -702,15 +675,13 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::DeleteClauseContext* ctx) {
-  return visit(ctx->quadPattern()).getQuads();
+Quads Visitor::visit(Parser::DeleteClauseContext* ctx) {
+  return visit(ctx->quadPattern());
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::InsertClauseContext* ctx) {
-  return visit(ctx->quadPattern()).getQuads();
+Quads Visitor::visit(Parser::InsertClauseContext* ctx) {
+  return visit(ctx->quadPattern());
 }
 
 // ____________________________________________________________________________________
@@ -748,25 +719,12 @@ Quads Visitor::visit(Parser::QuadPatternContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadDataContext* ctx) {
-  auto quads = visit(ctx->quads()).getQuads();
-  auto checkAndReportVar = [&ctx](const TripleComponent& term) {
-    if (term.isVariable()) {
-      reportError(ctx->quads(), "Variables (" + term.getVariable().name() +
-                                    ") are not allowed here.");
-    }
-  };
-
-  for (const auto& quad : quads) {
-    checkAndReportVar(quad.s_);
-    checkAndReportVar(quad.p_);
-    checkAndReportVar(quad.o_);
-    if (std::holds_alternative<Variable>(quad.g_)) {
-      reportError(ctx->quads(), "Variables are not allowed as graph names.");
-    }
-  }
-
+Quads Visitor::visit(Parser::QuadDataContext* ctx) {
+  auto quads = visit(ctx->quads());
+  quads.forAllVariables([&ctx](const Variable& v) {
+    reportError(ctx->quads(),
+                "Variables (" + v.name() + ") are not allowed here.");
+  });
   return quads;
 }
 

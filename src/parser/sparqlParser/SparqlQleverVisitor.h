@@ -237,9 +237,9 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
+  Quads visit(Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::InsertClauseContext* ctx);
+  Quads visit(Parser::InsertClauseContext* ctx);
 
   GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
@@ -249,7 +249,7 @@ class SparqlQleverVisitor {
 
   Quads visit(Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
+  Quads visit(Parser::QuadDataContext* ctx);
 
   Quads visit(Parser::QuadsContext* ctx);
 
