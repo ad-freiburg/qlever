@@ -122,6 +122,7 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
     childIsStrExpression_ = true;
   }
 
+  bool precomputeRegex = false;
   // Get the regex string, which must be a string literal without a datatype or
   // language tag.
   std::string regexString;
@@ -134,13 +135,12 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
           "regular expression) must not contain a language tag or a datatype");
     }
     regexString = asStringViewUnsafe(regexLiteral.getContent());
+    precomputeRegex = true;
   }
-
-  bool hasUnappliedFlags = false;
 
   // Parse the flags. The optional argument for that must, again, be a
   // string literal without a datatype or language tag.
-  if (!regexString.empty() && optionalFlags.has_value()) {
+  if (precomputeRegex && optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringLiteralExpression*>(
             optionalFlags.value().get())) {
       const auto& flagsLiteral = flagsPtr->value();
@@ -165,14 +165,14 @@ RegexExpression::RegexExpression(Ptr child, Ptr regex,
         regexString = absl::StrCat("(?", flags, ":", regexString + ")");
       }
     } else {
-      hasUnappliedFlags = true;
+      precomputeRegex = false;
     }
   }
 
   // Create RE2 object from the regex string. If it is a simple prefix regex,
   // store the prefix in `prefixRegex_` (otherwise that becomes `std::nullopt`).
   prefixRegex_ = detail::getPrefixRegex(regexString);
-  if (!regexString.empty() && !hasUnappliedFlags) {
+  if (precomputeRegex) {
     const auto& compiledRegex = regex_.emplace(regexString, RE2::Quiet);
     if (!compiledRegex.ok()) {
       throw std::runtime_error{absl::StrCat(

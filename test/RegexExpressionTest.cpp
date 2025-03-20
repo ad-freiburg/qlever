@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
+
 #include <optional>
 #include <string>
 
@@ -11,7 +13,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
-#include "gtest/gtest.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -180,8 +181,18 @@ TEST(RegexExpression, nonPrefixRegex) {
   testValuesInVariables({{"Abc", "[A-Z]", ""},
                          {"abc", "[A-Z]", ""},
                          {"aBc", "[A-Z]", ""},
-                         {"abC", "[A-Z]", ""}},
-                        {T, F, T, T}, false);
+                         {"abC", "[A-Z]", ""},
+                         {"", "", ""}},
+                        {T, F, T, T, T}, false);
+
+  std::vector<std::array<std::string, 3>> values;
+  std::vector<Id> expected;
+  // Make sure to exceed the cache limit
+  for (size_t i = 0; i < 101; i++) {
+    values.push_back({std::to_string(i), std::to_string(i), ""});
+    expected.push_back(T);
+  }
+  testValuesInVariables(values, expected, false);
 }
 
 // Test where the expression is not simply a variable.
@@ -263,9 +274,11 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
     testWithExplicitResult(expr, {U, U, U});
   }
 
-  testValuesInVariables(
-      {{"Abc", "[A-Z]", ""}, {"abc", "[A-Z]", ""}, {"abc", "[A-Z]", "i"}},
-      {T, F, T}, true);
+  testValuesInVariables({{"Abc", "[A-Z]", ""},
+                         {"abc", "[A-Z]", ""},
+                         {"abc", "[A-Z]", "i"},
+                         {"", "", ""}},
+                        {T, F, T, T}, true);
 }
 
 // Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
@@ -375,13 +388,40 @@ TEST(RegexExpression, getCacheKey) {
   map2[Variable{"?otherFirst"}] = makeAlwaysDefinedColumn(0);
   auto exp6 = makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
+
+  auto exp7 = makeRegexExpression(variable("?first"), literal("alp"),
+                                  variable("?second"));
+  EXPECT_NE(exp6.getCacheKey(map), exp7.getCacheKey(map));
+
+  auto exp8 = makeRegexExpression(variable("?first"), variable("?second"),
+                                  literal("i"));
+  EXPECT_NE(exp7.getCacheKey(map), exp8.getCacheKey(map));
+
+  map[Variable{"?third"}] = makeAlwaysDefinedColumn(1);
+  auto exp9 = makeRegexExpression(variable("?first"), variable("?second"),
+                                  variable("?third"));
+  EXPECT_NE(exp8.getCacheKey(map), exp9.getCacheKey(map));
 }
 
 TEST(RegexExpression, getChildren) {
-  auto expression = makeRegexExpression("?a", "someRegex");
-  auto vars = expression.containedVariables();
-  ASSERT_EQ(vars.size(), 1);
-  ASSERT_EQ(*vars[0], Variable{"?a"});
+  using namespace ::testing;
+  EXPECT_THAT(makeRegexExpression("?a", "someRegex").containedVariables(),
+              ElementsAre(Pointee(Variable{"?a"})));
+  EXPECT_THAT(
+      makeRegexExpression("?a", "someRegex", "ims").containedVariables(),
+      ElementsAre(Pointee(Variable{"?a"})));
+  EXPECT_THAT(
+      makeRegexExpression(variable("?a"), literal("someRegex"), variable("?c"))
+          .containedVariables(),
+      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?c"})));
+  EXPECT_THAT(
+      makeRegexExpression(variable("?a"), variable("?b")).containedVariables(),
+      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"})));
+  EXPECT_THAT(
+      makeRegexExpression(variable("?a"), variable("?b"), variable("?c"))
+          .containedVariables(),
+      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"}),
+                  Pointee(Variable{"?c"})));
 }
 
 TEST(RegexExpression, invalidConstruction) {
