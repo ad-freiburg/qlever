@@ -386,6 +386,16 @@ inline constexpr bool
 #endif
 
 namespace ad_utility {
+// This class is similar to `ql::views::transform` with the following
+// differences:
+// 1. The new values are computed when the iterators are advanced, not when they
+// are dereferenced.
+// 2. The computed values are therefore cached (using the `InputRangeFromGet`
+// facility), which might
+//    have a small performance overhead, as results that are used only once have
+//    to be moved and can't benefit from return value optimization (RVO).
+// 3. This class only yields an input range, independent of the range category
+// of the input.
 CPP_template(typename View, typename F)(
     requires ql::ranges::input_range<View> CPP_and ql::ranges::view<View>
         CPP_and std::is_object_v<F>)  // TODO requires clause for `F is callabel
@@ -425,6 +435,8 @@ template <typename Range, typename F>
 CachingTransformInputRange(Range&&, F)
     -> CachingTransformInputRange<all_t<Range>, F>;
 
+// Classes and types to represent control flows in generator-like statemachines,
+// like `break`, `continue`, and `return`.
 namespace loopControl {
 struct Continue {};
 struct Break {};
@@ -432,6 +444,10 @@ template <typename T>
 struct BreakWithValue {
   T value_;
 };
+
+// The central class to use the control flow mechanics.
+// For now, see the examples in the tests for the usage.
+// TODO<joka921> Write more documentation.
 template <typename T>
 struct LoopControl {
   using type = T;
@@ -471,6 +487,24 @@ template <typename T>
 using loopControlValueT = typename LoopControlValue<T>::type;
 
 }  // namespace loopControl
+
+// This class can be used to simulate a generator that consists of a single
+// for-loop, but where the loop contains control-flows such as `break` and
+// `continue`. It is given an `View` and a functor `F` which must return a
+// `LoopControl` object (see above) when being called with the values of the
+// `View` with the following semantics:
+// 1. In principle the functor `F` is called for each element in the input
+// (unless there is a `break`, see below).
+// 2. If the value of `F(curElement)` is a `Continue` object, then the current
+// element is skipped, and nothing is yielded.
+// 3. If the value of `F(curElement)` is a `Break` object, then nothing is
+// yielded in the current step, and the iteration stops completely.
+// 4. If the value of `F(curElement)` is a `BreakWithValue` object, then the
+// value is yielded, but the iteration stops afterward (this is similar to a
+// `return` statement in a for-loop).
+// 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
+// is yielded and the iteration resumes.
+
 CPP_template(typename View, typename F,
              typename Res = loopControl::loopControlValueT<
                  std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>)(

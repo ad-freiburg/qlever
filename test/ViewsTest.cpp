@@ -333,10 +333,73 @@ TEST(Views, CachingContinuableTransformInputRange) {
   };
 
   using V = std::vector<std::vector<int>>;
-  V input{{1, 2}, {1, 3}, {3, 4}, {3, 9}};
+  V input{{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
   const V inputCopy = input;
   const V expected{{3, 2}, {5, 4}};
-  const V elementwiseMovedFrom{{}, {1, 3}, {}, {3, 9}};
+  const V elementwiseMovedFrom{{}, {1, 3}, {}, {3, 8}, {1, 2}};
+
+  // Store all the elements of the `view` in a vector for easier testing.
+  auto toVec = [](auto&& view) {
+    V res;
+    for (auto& v : view) {
+      res.push_back(std::move(v));
+    }
+    return res;
+  };
+
+  // As we pass in the input as a const value, it cannot be moved out.
+  {
+    auto view = CachingContinuableTransformInputRange(std::as_const(input),
+                                                      firstPlusTwo);
+    auto res = toVec(view);
+    EXPECT_EQ(res, expected);
+    EXPECT_EQ(input, inputCopy);
+  }
+
+  // As the `input` is not const, its individual elements are going to be moved.
+  {
+    auto view = CachingContinuableTransformInputRange(input, firstPlusTwo);
+    auto res = toVec(view);
+    EXPECT_EQ(res, expected);
+    EXPECT_EQ(input, elementwiseMovedFrom);
+    input = inputCopy;
+  }
+
+  // We move the input, so it is of course being moved.
+  {
+    auto view =
+        CachingContinuableTransformInputRange(std::move(input), firstPlusTwo);
+    auto res = toVec(view);
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(input.empty());
+    input = inputCopy;
+  }
+}
+
+// Same as the tests above, but check the `breakWithValue`.
+TEST(Views, CachingContinuableTransformInputRangeBreakWithValue) {
+  // This function will move the vector if possible (i.e. if it is not const)
+  // and then increment the first element by `2`.
+  using namespace ad_utility;
+  using namespace loopControl;
+  using L = LoopControl<std::vector<int>>;
+  auto firstPlusTwo = [](auto& vec) -> L {
+    if (vec.at(1) % 2 == 1) {
+      return L{Continue{}};
+    }
+    auto copy = std::move(vec);
+    copy.at(0) += 2;
+    if (copy.at(1) > 5) {
+      return L{BreakWithValue<std::vector<int>>{std::move(copy)}};
+    }
+    return loopControl::LoopControl<std::vector<int>>{std::move(copy)};
+  };
+
+  using V = std::vector<std::vector<int>>;
+  V input{{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
+  const V inputCopy = input;
+  const V expected{{3, 2}, {5, 4}, {5, 8}};
+  const V elementwiseMovedFrom{{}, {1, 3}, {}, {}, {1, 2}};
 
   // Store all the elements of the `view` in a vector for easier testing.
   auto toVec = [](auto&& view) {
