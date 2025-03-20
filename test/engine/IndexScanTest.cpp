@@ -526,7 +526,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
   SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -548,7 +548,7 @@ TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
