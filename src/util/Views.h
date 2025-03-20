@@ -102,7 +102,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
  public:
   OwningView() = default;
 
-  constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
+  constexpr OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
       : underlyingRange_(std::move(underlyingRange)) {}
 
@@ -199,9 +199,13 @@ constexpr auto allView(Range&& range) {
   } else if constexpr (detail::can_ref_view<Range>) {
     return ql::ranges::ref_view{AD_FWD(range)};
   } else {
-    return ad_utility::OwningView{AD_FWD(range)};
+    // return std::ranges::owning_view{AD_FWD(range)};
+    return ad_utility::OwningView<std::remove_reference_t<Range>>{
+        AD_FWD(range)};
   }
 }
+template <typename Range>
+using all_t = decltype(allView(std::declval<Range>()));
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -380,3 +384,141 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
 #endif
+
+namespace ad_utility {
+CPP_template(typename View, typename F)(
+    requires ql::ranges::input_range<View> CPP_and ql::ranges::view<View>
+        CPP_and std::is_object_v<F>)  // TODO requires clause for `F is callabel
+                                      // with the range reference  of `View` and
+                                      // is an object.
+    struct CachingTransformInputRange
+    : InputRangeFromGet<std::decay_t<
+          std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>> {
+ private:
+  View view_;
+  F f_;
+  using It = ql::ranges::iterator_t<View>;
+  using Res = std::decay_t<
+      std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>;
+  std::optional<It> it_;
+
+ public:
+  explicit CachingTransformInputRange(View view, F f = {})
+      : view_{std::move(view)}, f_(std::move(f)) {}
+
+ private:
+  std::optional<Res> get() {
+    if (!it_.has_value()) {
+      it_ = view_.begin();
+    } else {
+      ++(it_.value());
+    }
+    if (*it_ == view_.end()) {
+      return std::nullopt;
+    }
+    return std::invoke(f_, *it_.value());
+  }
+  friend class InputRangeFromGet<Res>;
+};
+
+template <typename Range, typename F>
+CachingTransformInputRange(Range&&, F)
+    -> CachingTransformInputRange<all_t<Range>, F>;
+
+namespace loopControl {
+struct Continue {};
+struct Break {};
+template <typename T>
+struct BreakWithValue {
+  T value_;
+};
+template <typename T>
+struct LoopControl {
+  using type = T;
+  using V = std::variant<T, Continue, Break, BreakWithValue<T>>;
+  V v_;
+  bool isContinue() const { return std::holds_alternative<Continue>(v_); }
+  bool isBreak() const {
+    return std::holds_alternative<Break>(v_) ||
+           std::holds_alternative<BreakWithValue<T>>(v_);
+  }
+
+  std::optional<T> moveValueIfPresent() {
+    auto visitor = [](auto& v) -> std::optional<T> {
+      using U = std::remove_reference_t<decltype(v)>;
+      if constexpr (ad_utility::SimilarToAny<U, Continue, Break>) {
+        return std::nullopt;
+      } else if constexpr (ad_utility::SimilarTo<U, T>) {
+        return std::move(v);
+      } else {
+        static_assert(ad_utility::SimilarTo<U, BreakWithValue<T>>);
+        return std::move(v.value_);
+      }
+    };
+    return std::visit(visitor, v_);
+  }
+};
+
+template <typename T>
+struct LoopControlValue {};
+
+template <typename T>
+struct LoopControlValue<LoopControl<T>> {
+  using type = typename LoopControl<T>::type;
+};
+
+template <typename T>
+using loopControlValueT = typename LoopControlValue<T>::type;
+
+}  // namespace loopControl
+CPP_template(typename View, typename F,
+             typename Res = loopControl::loopControlValueT<
+                 std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>)(
+    requires ql::ranges::input_range<View> CPP_and ql::ranges::view<View>
+        CPP_and std::is_object_v<F>)  // TODO requires clause for `F is
+                                      // with the range reference  of `View` and
+                                      // returns a `LoopControl`.
+    struct CachingContinuableTransformInputRange : InputRangeFromGet<Res> {
+ private:
+  View view_;
+  F f_;
+  bool receivedBreak_ = false;
+  using It = ql::ranges::iterator_t<View>;
+  std::optional<It> it_;
+
+ public:
+  explicit CachingContinuableTransformInputRange(View view, F f = {})
+      : view_{std::move(view)}, f_(std::move(f)) {}
+
+ private:
+  std::optional<Res> get() {
+    if (receivedBreak_) {
+      return std::nullopt;
+    }
+    while (true) {
+      if (!it_.has_value()) {
+        it_ = view_.begin();
+      } else {
+        ++(it_.value());
+      }
+      if (*it_ == view_.end()) {
+        return std::nullopt;
+      }
+      loopControl::LoopControl<Res> v = std::invoke(f_, *it_.value());
+      if (v.isContinue()) {
+        continue;
+      }
+      if (v.isBreak()) {
+        receivedBreak_ = true;
+      }
+      return v.moveValueIfPresent();
+    }
+  }
+  friend class InputRangeFromGet<Res>;
+};
+
+template <typename Range, typename F>
+CachingContinuableTransformInputRange(Range&&, F)
+    -> CachingContinuableTransformInputRange<all_t<Range>, F>;
+
+}  // namespace ad_utility
