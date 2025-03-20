@@ -8,8 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "../src/util/Random.h"
-#include "../src/util/Views.h"
+#include "util/InputRangeUtils.h"
+#include "util/Random.h"
+#include "util/Views.h"
 
 TEST(Views, BufferedAsyncView) {
   auto testWithVector = []<typename T>(const T& inputVector) {
@@ -318,18 +319,17 @@ TEST(Views, CachingContinuableTransformInputRange) {
   // This function will move the vector if possible (i.e. if it is not const)
   // and then increment the first element by `2`.
   using namespace ad_utility;
-  using namespace loopControl;
   using L = LoopControl<std::vector<int>>;
   auto firstPlusTwo = [](auto& vec) -> L {
     if (vec.at(1) % 2 == 1) {
-      return L{Continue{}};
+      return L::makeContinue();
     }
     if (vec.at(1) > 5) {
-      return L{Break{}};
+      return L::makeBreak();
     }
     auto copy = std::move(vec);
     copy.at(0) += 2;
-    return loopControl::LoopControl<std::vector<int>>{std::move(copy)};
+    return L::yieldValue(std::move(copy));
   };
 
   using V = std::vector<std::vector<int>>;
@@ -381,18 +381,17 @@ TEST(Views, CachingContinuableTransformInputRangeBreakWithValue) {
   // This function will move the vector if possible (i.e. if it is not const)
   // and then increment the first element by `2`.
   using namespace ad_utility;
-  using namespace loopControl;
   using L = LoopControl<std::vector<int>>;
   auto firstPlusTwo = [](auto& vec) -> L {
     if (vec.at(1) % 2 == 1) {
-      return L{Continue{}};
+      return L::makeContinue();
     }
     auto copy = std::move(vec);
     copy.at(0) += 2;
     if (copy.at(1) > 5) {
-      return L{BreakWithValue<std::vector<int>>{std::move(copy)}};
+      return L::breakWithValue(std::move(copy));
     }
-    return loopControl::LoopControl<std::vector<int>>{std::move(copy)};
+    return L::yieldValue(std::move(copy));
   };
 
   using V = std::vector<std::vector<int>>;
