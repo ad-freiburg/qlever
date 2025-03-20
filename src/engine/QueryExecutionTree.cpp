@@ -153,6 +153,21 @@ void QueryExecutionTree::readFromCache() {
 }
 
 // ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree>
+QueryExecutionTree::createSortedTreeAnyPermutation(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const vector<ColumnIndex>& sortColumns) {
+  const auto& sortedOn = qet->resultSortedOn();
+  std::span relevantSortedCols{sortedOn.begin(),
+                               std::min(sortedOn.size(), sortColumns.size())};
+  bool isSorted = ql::ranges::all_of(
+      sortColumns, [relevantSortedCols](ColumnIndex distinctCol) {
+        return ad_utility::contains(relevantSortedCols, distinctCol);
+      });
+  return isSorted ? qet : createSortedTree(std::move(qet), sortColumns);
+}
+
+// ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<ColumnIndex>& sortColumns) {
