@@ -2461,9 +2461,9 @@ TEST(SparqlParser, Drop) {
                                     "?g != "
                                     "<http://qlever.cs.uni-freiburg.de/"
                                     "builtin-functions/default-graph>"));
-  // Disabled to avoid confusion in different interpretation of the default
-  // graph between query and update.
-  expectDropFails("DROP DEFAULT");
+  expectDrop("DROP DEFAULT",
+             m::Clear(Iri(std::string{DEFAULT_GRAPH_IRI}),
+                      TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI)));
 }
 
 TEST(SparqlParser, Move) {

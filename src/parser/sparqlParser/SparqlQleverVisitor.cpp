@@ -705,17 +705,7 @@ ParsedQuery Visitor::makeCopyAll(const GraphOrDefault& source,
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
-  GraphRefAll graph = visit(ctx->graphRefAll());
-  if (holds_alternative<DEFAULT>(graph)) {
-    reportNotSupported(
-        ctx->graphRefAll(),
-        // This is unspecified behaviour, because we deviate from the standard
-        // by using the union graph instead of the unnamed graph. Either use
-        // `ALL` or explicitly name `ql:default-graph`.
-        "Clearing the default graph is");
-  }
-
-  return makeClear(graph);
+  return makeClear(visit(ctx->graphRefAll()));
 }
 
 // ____________________________________________________________________________________
