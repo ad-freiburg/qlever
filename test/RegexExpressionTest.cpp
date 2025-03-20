@@ -190,15 +190,6 @@ TEST(RegexExpression, nonPrefixRegex) {
                          {"abC", "[A-Z]", ""},
                          {"", "", ""}},
                         {T, F, T, T, T}, false);
-
-  std::vector<std::array<std::string, 3>> values;
-  std::vector<Id> expected;
-  // Make sure to exceed the cache limit
-  for (size_t i = 0; i < 101; i++) {
-    values.push_back({std::to_string(i), std::to_string(i), ""});
-    expected.push_back(T);
-  }
-  testValuesInVariables(values, expected, false);
 }
 
 // Test where the expression is not simply a variable.

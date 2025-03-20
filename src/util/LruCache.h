@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <list>
 
+#include "util/Exception.h"
+
 namespace ad_utility::util {
 
 template <typename K, typename V>
