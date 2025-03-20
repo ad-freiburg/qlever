@@ -64,8 +64,6 @@ void testTransformView(const TransformViewTestHelpers<T>& inAndOutputs,
 
 // Tests for ad_utility::CachingTransformInputRange
 TEST(CachingTransformInputRange, BasicTests) {
-  using V = std::vector<std::vector<int>>;
-
   // This function will move the `vec` if possible (i.e. if it is not const)
   // and then increment the first element by `2`.
   auto firstPlusTwo = [](auto& vec) {
