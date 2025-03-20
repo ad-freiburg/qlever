@@ -133,17 +133,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   using namespace sparqlExpression;
   // Create `SparqlExpression` with one child.
-  auto createUnary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     checkNumArgs(1);  // Check is unary.
     return function(std::move(argList[0]));
   };
   // Create `SparqlExpression` with two children.
-  auto createBinary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
@@ -2398,22 +2397,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
 
-  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
 
-  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr>) {
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr, ExpressionPtr,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
@@ -2533,8 +2534,9 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   AD_CONTRACT_CHECK(numArgs >= 2 && numArgs <= 3);
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
-    return std::make_unique<sparqlExpression::RegexExpression>(
-        visit(exp[0]), visit(exp[1]), std::move(flags));
+    return makeRegexExpression(
+        visit(exp[0]), visit(exp[1]),
+        flags.has_value() ? std::move(flags.value()) : nullptr);
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }

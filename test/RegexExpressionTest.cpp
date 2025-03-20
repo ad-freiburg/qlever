@@ -32,25 +32,29 @@ auto literal(const std::string& literal,
 
 auto variable(std::string literal) {
   return std::make_unique<VariableExpression>(Variable{std::move(literal)});
-};
+}
+
+bool isPrefixExpression(const SparqlExpression::Ptr& expression) {
+  return dynamic_cast<PrefixRegexExpression*>(expression.get());
+}
 
 // Make `RegexExpression` from given the `child` (the expression on which to
 // apply the regex), `regex`, and optional `flags`. The argument `childAsStr` is
 // true iff the expression is enclosed in a `STR()` function.
-RegexExpression makeRegexExpression(
+SparqlExpression::Ptr makeTestRegexExpression(
     SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
-    std::optional<SparqlExpression::Ptr> flags = std::nullopt,
-    bool childAsStr = false) {
+    SparqlExpression::Ptr flags = nullptr, bool childAsStr = false) {
   if (childAsStr) {
     child = makeStrExpression(std::move(child));
   }
 
-  return {std::move(child), std::move(regex), std::move(flags)};
+  return makeRegexExpression(std::move(child), std::move(regex),
+                             std::move(flags));
 }
 
 // Special case of the `makeRegexExpression` above, where the `child`
 // expression is a variable.
-RegexExpression makeRegexExpression(
+SparqlExpression::Ptr makeRegexExpression(
     std::string variable, std::string regex,
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
   SparqlExpression::Ptr variableExpression =
@@ -61,15 +65,15 @@ RegexExpression makeRegexExpression(
   regex = absl::StrCat("\"", regex, "\"");
   SparqlExpression::Ptr regexExpression =
       std::make_unique<StringLiteralExpression>(lit(std::move(regex)));
-  std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
+  SparqlExpression::Ptr flagsExpression = nullptr;
   if (flags.has_value()) {
     flagsExpression =
         SparqlExpression::Ptr{std::make_unique<StringLiteralExpression>(
             lit(absl::StrCat("\"", flags.value(), "\"")))};
   }
-  return makeRegexExpression(std::move(variableExpression),
-                             std::move(regexExpression),
-                             std::move(flagsExpression), childAsStr);
+  return makeTestRegexExpression(std::move(variableExpression),
+                                 std::move(regexExpression),
+                                 std::move(flagsExpression), childAsStr);
 }
 }  // namespace
 
@@ -85,6 +89,8 @@ void testWithExplicitResult(
     ctx.context._endIndex = numInputs.value();
   }
   auto resultAsVariant = expression.evaluate(&ctx.context);
+  ASSERT_TRUE(
+      std::holds_alternative<VectorWithMemoryLimit<Id>>(resultAsVariant));
   const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -116,10 +122,9 @@ void testValuesInVariables(
   }
   ctx.context._endIndex = inputValues.size();
   auto resultAsVariant =
-      makeRegexExpression(
-          variable("?string"), variable("?regex"),
-          flagsUsed ? std::optional{variable("?flags")} : std::nullopt)
-          .evaluate(&ctx.context);
+      makeRegexExpression(variable("?string"), variable("?regex"),
+                          flagsUsed ? variable("?flags") : nullptr)
+          ->evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
@@ -132,8 +137,8 @@ auto testNonPrefixRegex = [](std::string variable, std::string regex,
   auto trace = generateLocationTrace(std::move(l), "testNonPrefixRegex");
   auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                   std::nullopt, childAsStr);
-  ASSERT_FALSE(expr.isPrefixExpression());
-  testWithExplicitResult(expr, expectedResult);
+  EXPECT_FALSE(isPrefixExpression(expr));
+  testWithExplicitResult(*expr, expectedResult);
 };
 
 // Tests where the expression is a variable and the regex is not a simple prefix
@@ -166,16 +171,17 @@ TEST(RegexExpression, nonPrefixRegex) {
   test("?localVocab", "Vocab[AD]", {T, F, T}, true);
 
   {
-    auto expr = makeRegexExpression(variable("?vocab"), variable("?vocab"));
-    ASSERT_FALSE(expr.isPrefixExpression());
-    testWithExplicitResult(expr, {T, T, T});
+    auto expr = makeTestRegexExpression(variable("?vocab"), variable("?vocab"));
+    EXPECT_FALSE(isPrefixExpression(expr));
+    testWithExplicitResult(*expr, {T, T, T});
   }
 
   // Values that are not simple literals should result in undefined
   {
-    auto expr = makeRegexExpression(variable("?vocab"), variable("?doubles"));
-    ASSERT_FALSE(expr.isPrefixExpression());
-    testWithExplicitResult(expr, {U, U, U});
+    auto expr =
+        makeTestRegexExpression(variable("?vocab"), variable("?doubles"));
+    EXPECT_FALSE(isPrefixExpression(expr));
+    testWithExplicitResult(*expr, {U, U, U});
   }
 
   testValuesInVariables({{"Abc", "[A-Z]", ""},
@@ -209,7 +215,7 @@ TEST(RegexExpression, inputNotVariable) {
       makeRegexExpression(std::move(child), literal("\"ha\""), literal("\"\""));
   std::vector<Id> expected;
   expected.push_back(Id::makeFromBool(true));
-  testWithExplicitResult(expr, expected, input.size());
+  testWithExplicitResult(*expr, expected, input.size());
 }
 
 auto testNonPrefixRegexWithFlags =
@@ -219,8 +225,8 @@ auto testNonPrefixRegexWithFlags =
       auto trace = generateLocationTrace(l, "testNonPrefixRegexWithFlags");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::move(flags));
-      ASSERT_FALSE(expr.isPrefixExpression());
-      testWithExplicitResult(expr, expectedResult);
+      EXPECT_FALSE(isPrefixExpression(expr));
+      testWithExplicitResult(*expr, expectedResult);
     };
 
 // Fun with flags.
@@ -257,21 +263,21 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   {
     auto expr = makeRegexExpression(variable("?vocab"), literal("\"b\""),
                                     variable("?b"));
-    ASSERT_FALSE(expr.isPrefixExpression());
-    testWithExplicitResult(expr, {U, U, U});
+    EXPECT_FALSE(isPrefixExpression(expr));
+    testWithExplicitResult(*expr, {U, U, U});
   }
   // Values that are not simple literals should result in undefined
   {
     auto expr = makeRegexExpression(variable("?vocab"), literal("\"b\""),
                                     variable("?ints"));
-    ASSERT_FALSE(expr.isPrefixExpression());
-    testWithExplicitResult(expr, {U, U, U});
+    EXPECT_FALSE(isPrefixExpression(expr));
+    testWithExplicitResult(*expr, {U, U, U});
   }
   {
     auto expr = makeRegexExpression(variable("?vocab"), variable("?ints"),
                                     literal("i"));
-    ASSERT_FALSE(expr.isPrefixExpression());
-    testWithExplicitResult(expr, {U, U, U});
+    EXPECT_FALSE(isPrefixExpression(expr));
+    testWithExplicitResult(*expr, {U, U, U});
   }
 
   testValuesInVariables({{"Abc", "[A-Z]", ""},
@@ -281,20 +287,23 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
                         {T, F, T, T}, true);
 }
 
+namespace sparqlExpression {
 // Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
 // is not a simple prefix regex).
 TEST(RegexExpression, getPrefixRegex) {
-  using namespace sparqlExpression::detail;
-  ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^al.ha"));
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^alh*"));
-  ASSERT_EQ(std::nullopt, getPrefixRegex("^a(lh)"));
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("alpha"));
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^al.ha"));
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^alh*"));
+  ASSERT_EQ(std::nullopt, PrefixRegexExpression::getPrefixRegex("^a(lh)"));
 
-  ASSERT_EQ("alpha", getPrefixRegex("^alpha"));
-  ASSERT_EQ(R"(\al*ph.a()", getPrefixRegex(R"(^\\al\*ph\.a\()"));
+  ASSERT_EQ("alpha", PrefixRegexExpression::getPrefixRegex("^alpha"));
+  ASSERT_EQ(R"(\al*ph.a()",
+            PrefixRegexExpression::getPrefixRegex(R"(^\\al\*ph\.a\()"));
   // Invalid escaping of `"` (no need to escape it).
-  ASSERT_THROW(getPrefixRegex(R"(^\")"), std::runtime_error);
+  ASSERT_THROW(PrefixRegexExpression::getPrefixRegex(R"(^\")"),
+               std::runtime_error);
 }
+}  // namespace sparqlExpression
 
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
@@ -303,8 +312,8 @@ auto testPrefixRegexUnorderedColumn =
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::nullopt, childAsStr);
-      ASSERT_TRUE(expr.isPrefixExpression());
-      testWithExplicitResult(expr, expectedResult);
+      EXPECT_TRUE(isPrefixExpression(expr));
+      testWithExplicitResult(*expr, expectedResult);
     };
 
 TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
@@ -338,8 +347,8 @@ auto testPrefixRegexOrderedColumn =
       TestContext ctx = TestContext::sortedBy(variable);
       auto expression = makeRegexExpression(variableAsString, regex,
                                             std::nullopt, childAsStr);
-      ASSERT_TRUE(expression.isPrefixExpression());
-      auto resultAsVariant = expression.evaluate(&ctx.context);
+      EXPECT_TRUE(isPrefixExpression(expression));
+      auto resultAsVariant = expression->evaluate(&ctx.context);
       const auto& result =
           std::get<ad_utility::SetOfIntervals>(resultAsVariant);
       ASSERT_EQ(result, expected);
@@ -368,85 +377,83 @@ TEST(RegexExpression, getCacheKey) {
   VariableToColumnMap map;
   map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
   map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
-  ASSERT_EQ(exp1.getCacheKey(map), exp2.getCacheKey(map));
+  ASSERT_EQ(exp1->getCacheKey(map), exp2->getCacheKey(map));
 
   // Different regex, different cache key.
   auto exp3 = makeRegexExpression("?first", "alk");
-  ASSERT_NE(exp1.getCacheKey(map), exp3.getCacheKey(map));
+  ASSERT_NE(exp1->getCacheKey(map), exp3->getCacheKey(map));
 
   // Different variable, different cache key.
   auto exp4 = makeRegexExpression("?second", "alp");
-  ASSERT_NE(exp1.getCacheKey(map), exp4.getCacheKey(map));
+  ASSERT_NE(exp1->getCacheKey(map), exp4->getCacheKey(map));
 
   // Different flags, different cache key.
   auto exp5 = makeRegexExpression("?first", "alp", "im");
-  ASSERT_NE(exp1.getCacheKey(map), exp5.getCacheKey(map));
+  ASSERT_NE(exp1->getCacheKey(map), exp5->getCacheKey(map));
 
   // Different variable name, but the variable is stored in the same column ->
   // same cache key.
   auto map2 = map;
   map2[Variable{"?otherFirst"}] = makeAlwaysDefinedColumn(0);
   auto exp6 = makeRegexExpression("?otherFirst", "alp");
-  ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
+  ASSERT_EQ(exp1->getCacheKey(map), exp6->getCacheKey(map2));
 
   auto exp7 = makeRegexExpression(variable("?first"), literal("alp"),
                                   variable("?second"));
-  EXPECT_NE(exp6.getCacheKey(map), exp7.getCacheKey(map));
+  EXPECT_NE(exp6->getCacheKey(map), exp7->getCacheKey(map));
 
   auto exp8 = makeRegexExpression(variable("?first"), variable("?second"),
                                   literal("i"));
-  EXPECT_NE(exp7.getCacheKey(map), exp8.getCacheKey(map));
+  EXPECT_NE(exp7->getCacheKey(map), exp8->getCacheKey(map));
 
   map[Variable{"?third"}] = makeAlwaysDefinedColumn(1);
   auto exp9 = makeRegexExpression(variable("?first"), variable("?second"),
                                   variable("?third"));
-  EXPECT_NE(exp8.getCacheKey(map), exp9.getCacheKey(map));
+  EXPECT_NE(exp8->getCacheKey(map), exp9->getCacheKey(map));
 }
 
 TEST(RegexExpression, getChildren) {
   using namespace ::testing;
-  EXPECT_THAT(makeRegexExpression("?a", "someRegex").containedVariables(),
+  EXPECT_THAT(makeRegexExpression("?a", "someRegex")->containedVariables(),
               ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(
-      makeRegexExpression("?a", "someRegex", "ims").containedVariables(),
+      makeRegexExpression("?a", "someRegex", "ims")->containedVariables(),
       ElementsAre(Pointee(Variable{"?a"})));
+  EXPECT_THAT(makeTestRegexExpression(variable("?a"), literal("someRegex"),
+                                      variable("?c"))
+                  ->containedVariables(),
+              ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?c"})));
+  EXPECT_THAT(makeTestRegexExpression(variable("?a"), variable("?b"))
+                  ->containedVariables(),
+              ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"})));
   EXPECT_THAT(
-      makeRegexExpression(variable("?a"), literal("someRegex"), variable("?c"))
-          .containedVariables(),
-      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?c"})));
-  EXPECT_THAT(
-      makeRegexExpression(variable("?a"), variable("?b")).containedVariables(),
-      ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"})));
-  EXPECT_THAT(
-      makeRegexExpression(variable("?a"), variable("?b"), variable("?c"))
-          .containedVariables(),
+      makeTestRegexExpression(variable("?a"), variable("?b"), variable("?c"))
+          ->containedVariables(),
       ElementsAre(Pointee(Variable{"?a"}), Pointee(Variable{"?b"}),
                   Pointee(Variable{"?c"})));
 }
 
 TEST(RegexExpression, invalidConstruction) {
   // The second argument must not have a datatype or langtag
+  EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"b\"", "@en")),
+               std::runtime_error);
   EXPECT_THROW(
-      RegexExpression(variable("?a"), literal("\"b\"", "@en"), std::nullopt),
+      makeTestRegexExpression(variable("?a"), literal("\"b\"", "^^<someType>")),
       std::runtime_error);
-  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\"", "^^<someType>"),
-                               std::nullopt),
-               std::runtime_error);
   // The third argument must not have a language tag or datatype
-  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\""),
-                               literal("\"i\"", "@en")),
+  EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"b\""),
+                                       literal("\"i\"", "@en")),
                std::runtime_error);
-  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\""),
-                               literal("\"i\"", "^^<someType>")),
+  EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"b\""),
+                                       literal("\"i\"", "^^<someType>")),
                std::runtime_error);
 
   // Invalid regex (parentheses that are never closed).
-  EXPECT_THROW(
-      RegexExpression(variable("?a"), literal("\"(open\""), std::nullopt),
-      std::runtime_error);
+  EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"(open\"")),
+               std::runtime_error);
 
   // Invalid option flag.
-  EXPECT_THROW(
-      RegexExpression(variable("?a"), literal("\"a\""), literal("\"x\"")),
-      std::runtime_error);
+  EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"a\""),
+                                       literal("\"x\"")),
+               std::runtime_error);
 }

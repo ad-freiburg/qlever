@@ -384,7 +384,7 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, const std::unique_ptr<RE2>& pattern,
+    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!input.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();

@@ -1792,7 +1792,22 @@ TEST(SparqlParser, builtInCall) {
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
-  expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
+  auto makeRegexExpressionTwoArgs = [](auto&& arg0, auto&& arg1) {
+    return makeRegexExpression(AD_FWD(arg0), AD_FWD(arg1), nullptr);
+  };
+  expectBuiltInCall(
+      "regex(?x, \"ab\")",
+      matchNaryWithChildrenMatchers(makeRegexExpressionTwoArgs,
+                                    variableExpressionMatcher(Var{"?x"}),
+                                    matchLiteralExpression(lit("ab"))));
+  expectBuiltInCall(
+      "regex(?x, \"ab\", \"imsu\")",
+      matchNaryWithChildrenMatchers(
+          makeRegexExpressionTwoArgs, variableExpressionMatcher(Var{"?x"}),
+          matchNaryWithChildrenMatchers(
+              &makeMergeRegexPatternAndFlagsExpression,
+              matchLiteralExpression(lit("ab")),
+              matchLiteralExpression(lit("imsu")))));
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));

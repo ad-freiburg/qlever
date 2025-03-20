@@ -9,11 +9,11 @@
 #include <re2/re2.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/Result.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
 #include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
+#include "util/LruCache.h"
 #include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
@@ -268,19 +268,23 @@ struct ReplacementStringGetter : LiteralFromIdGetter,
   static std::string convertToReplacementString(std::string_view view);
 };
 
-// Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
+// Convert the input into a `shared_ptr<RE2>`. Return nullptr if the input is
 // not convertible to a string.
 struct RegexValueGetter {
+  mutable ad_utility::util::LRUCache<std::string, std::shared_ptr<RE2>> cache_{
+      100};
   template <typename S>
   auto operator()(S&& input, const EvaluationContext* context) const
-      -> CPP_ret(std::unique_ptr<re2::RE2>)(
+      -> CPP_ret(std::shared_ptr<RE2>)(
           requires SingleExpressionResult<S>&& ranges::invocable<
               LiteralFromIdGetter, S&&, const EvaluationContext*>) {
     auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
     }
-    return std::make_unique<RE2>(str.value(), RE2::Quiet);
+    return cache_.getOrCompute(str.value(), [](const std::string& value) {
+      return std::make_shared<RE2>(value, RE2::Quiet);
+    });
   }
 };
 
