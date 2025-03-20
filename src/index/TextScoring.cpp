@@ -16,6 +16,7 @@ void ScoreData::calculateScoreData(const string& docsFileName,
     return;
   }
 
+  size_t wordsNotFoundFromDocuments = 0;
   invertedIndex_.reserve(textVocab.size());
   DocumentIndex docId = DocumentIndex::make(0);
   DocsFileParser docsFileParser(docsFileName, textVocab.getLocaleManager());
@@ -26,13 +27,20 @@ void ScoreData::calculateScoreData(const string& docsFileName,
     docId = line.docId_;
     // Parse docText for invertedIndex
     addDocumentOrLiteralToScoreDataInvertedIndex(std::move(line.docContent_),
-                                                 docId, textVocab);
+                                                 docId, textVocab,
+                                                 wordsNotFoundFromDocuments);
   }
 
   // Parse literals if added
   if (!addWordsFromLiterals) {
     return;
   }
+  if (wordsNotFoundFromDocuments > 0) {
+    LOG(WARN)
+        << "Number of words not found in vocabulary during score calculation: "
+        << wordsNotFoundFromDocuments << std::endl;
+  }
+  size_t wordsNotFoundFromLiterals = 0;
   for (VocabIndex index = VocabIndex::make(0); index.get() < vocab.size();
        index = index.incremented()) {
     auto text = vocab[index];
@@ -44,18 +52,36 @@ void ScoreData::calculateScoreData(const string& docsFileName,
     std::string_view textView = text;
 
     // Parse words in literal
-    addDocumentOrLiteralToScoreDataInvertedIndex(textView, docId, textVocab);
+    addDocumentOrLiteralToScoreDataInvertedIndex(textView, docId, textVocab,
+                                                 wordsNotFoundFromLiterals);
   }
+  AD_CORRECTNESS_CHECK(wordsNotFoundFromLiterals == 0, "There were",
+                       wordsNotFoundFromLiterals,
+                       " words from literals not found in the inverted scoring "
+                       "index. One reason may be the tokenizer for creating "
+                       "the text vocab from literals and the one used during "
+                       "score calculation being different which shouldn't be.");
 }
 
 // ____________________________________________________________________________
 void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
     std::string_view text, DocumentIndex docId,
-    const Index::TextVocab& textVocab) {
+    const Index::TextVocab& textVocab, size_t& wordNotFoundErrorMsgCount) {
   WordVocabIndex wvi;
   for (const auto& word : tokenizeAndNormalizeText(text, localeManager_)) {
     // Check if word exists and retrieve wordId
     if (!textVocab.getId(word, &wvi)) {
+      if (wordNotFoundErrorMsgCount < 20) {
+        LOG(WARN) << "Word from text not in KB during score calculation: "
+                  << word << '\n';
+        if (++wordNotFoundErrorMsgCount == 20) {
+          LOG(WARN) << "There are more words not in the KB during score "
+                       "calculation..."
+                    << " suppressing further warnings...\n";
+        }
+      } else {
+        wordNotFoundErrorMsgCount++;
+      }
       continue;
     }
     WordIndex currentWordId = wvi.get();

@@ -66,7 +66,7 @@ class ScoreData {
   // and the current TextVocab
   void addDocumentOrLiteralToScoreDataInvertedIndex(
       std::string_view text, DocumentIndex docId,
-      const Index::TextVocab& textVocab);
+      const Index::TextVocab& textVocab, size_t& wordNotFoundErrorMsgCount);
 
   void calculateAVDL() {
     averageDocumentLength_ =
