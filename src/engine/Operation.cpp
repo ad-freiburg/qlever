@@ -350,10 +350,10 @@ std::shared_ptr<const Result> Operation::getResult(
       // return the result, but only pin it.
       const auto& actualResult = result._resultPointer->resultTable();
       AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
-      // TODO<joka921> probably we don't need to `clone()` the IdTable here.
-      auto t = NamedQueryCache::Value(
+      auto t = NamedQueryCache::Value{
           std::make_shared<const IdTable>(actualResult.idTable().clone()),
-          getExternallyVisibleVariableColumns(), actualResult.sortedBy());
+          getExternallyVisibleVariableColumns(), actualResult.sortedBy(),
+          actualResult.localVocab().clone()};
       _executionContext->namedQueryCache().store(name, std::move(t));
 
       runtimeInfo().addDetail("pinned-with-explicit-name", name);

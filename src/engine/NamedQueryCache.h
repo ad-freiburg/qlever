@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 #pragma once
 
+#include "engine/LocalVocab.h"
 #include "engine/ValuesForTesting.h"
 #include "util/Cache.h"
 #include "util/Synchronized.h"
@@ -13,11 +14,11 @@ class NamedQueryCache {
  public:
   // The cache value. It stores all the information required to construct a
   // proper `QueryExecutionTree` later on.
-  // TODO<joka921> We definitely need the local vocab here...
   struct Value {
     std::shared_ptr<const IdTable> result_;
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
+    LocalVocab localVocab_;
   };
 
   // TODO<joka921> Use a better size getter for better statistics.
