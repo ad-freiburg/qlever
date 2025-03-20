@@ -116,6 +116,12 @@ class SparqlQleverVisitor {
   // prefix and base, because those are shared between consecutive updates.
   void resetStateForMultipleUpdates();
 
+  // Turns a vector of `SubjectOrObjectAndTriples` into a single
+  // `SubjectsOrObjectsAndTriples` object that represents an RDF collection.
+  template <typename TripleType, typename Func>
+  TripleType toRdfCollection(std::vector<TripleType> elements,
+                             Func iriStringToPredicate);
+
  public:
   SparqlQleverVisitor() = default;
   explicit SparqlQleverVisitor(
@@ -400,8 +406,7 @@ class SparqlQleverVisitor {
 
   SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] SubjectOrObjectAndPathTriples visit(
-      Parser::CollectionPathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::CollectionPathContext* ctx);
 
   SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
 
@@ -524,12 +529,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
-  BlankNode newBlankNode() {
-    std::string label = std::to_string(_blankNodeCounter);
-    _blankNodeCounter++;
-    // true means automatically generated
-    return {true, std::move(label)};
-  }
+  // Create a new generated blank node.
+  BlankNode newBlankNode();
+
+  // Create a distinct `GraphTerm` that represents a blank node, when calling
+  // this inside of a CONSTRUCT block, and a new variable otherwise, which is
+  // required for graph pattern matching inside `WHERE` clauses.
+  GraphTerm newBlankNodeOrVariable();
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
@@ -547,10 +553,6 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
-
-  [[noreturn]] static void throwCollectionsNotSupported(auto* ctx) {
-    reportError(ctx, "( ... ) in triples is not yet supported by QLever.");
-  }
 
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
