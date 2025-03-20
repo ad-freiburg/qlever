@@ -85,10 +85,7 @@ TEST(ExecuteUpdate, executeUpdate) {
   expectExecuteUpdateFails(
       "SELECT * WHERE { ?s ?p ?o }",
       testing::HasSubstr("Assertion `query.hasUpdateClause()` failed."));
-  expectExecuteUpdateFails(
-      "CLEAR DEFAULT",
-      testing::HasSubstr(
-          "Only INSERT/DELETE update operations are currently supported."));
+  expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 8, 8));
 }
 
 // _____________________________________________________________________________
@@ -169,24 +166,21 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
       IsEmpty());
-  expectComputeGraphUpdateQuads(
-      "DELETE WHERE { ?s ?p ?o }", IsEmpty(),
-      UnorderedElementsAreArray(
-          {IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\"")),
-           IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\"")),
-           IdTriple(Id("<x>"), Id("<label>"), Id("\"A\"")),
-           IdTriple(Id("<x>"), Id("<label>"), Id("\"Beta\"")),
-           IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-           IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>")),
-           IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en")),
-           IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))}));
+  auto allTriples = UnorderedElementsAreArray(
+      {IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\"")),
+       IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\"")),
+       IdTriple(Id("<x>"), Id("<label>"), Id("\"A\"")),
+       IdTriple(Id("<x>"), Id("<label>"), Id("\"Beta\"")),
+       IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+       IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>")),
+       IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en")),
+       IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))});
+  expectComputeGraphUpdateQuads("DELETE WHERE { ?s ?p ?o }", IsEmpty(),
+                                allTriples);
   expectComputeGraphUpdateQuadsFails(
       "SELECT * WHERE { ?s ?p ?o }",
       HasSubstr("Assertion `query.hasUpdateClause()` failed."));
-  expectComputeGraphUpdateQuadsFails(
-      "CLEAR DEFAULT",
-      HasSubstr(
-          "Only INSERT/DELETE update operations are currently supported."));
+  expectComputeGraphUpdateQuads("CLEAR DEFAULT", IsEmpty(), allTriples);
 }
 
 // _____________________________________________________________________________

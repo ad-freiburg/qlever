@@ -1001,4 +1001,25 @@ inline auto Quad = [](const TripleComponent& s, const TripleComponent& p,
       AD_FIELD(SparqlTripleSimpleWithGraph, g_, testing::Eq(g)));
 };
 
+// TODO: fix this duplicated parameter by merging the two iri classes and the
+// graph types
+inline auto Clear = [](const SparqlTripleSimpleWithGraph::Graph& templateGraph,
+                       const parsedQuery::GroupGraphPattern::GraphSpec& graph,
+                       std::optional<std::string>&& filter = std::nullopt) {
+  return UpdateClause(GraphUpdate({{{::Variable("?s")},
+                                    {::Variable("?p")},
+                                    {::Variable("?o")},
+                                    templateGraph}},
+                                  {}, std::nullopt),
+                      SelectAllPattern(graph, AD_FWD(filter)));
+};
+
+inline auto CopyAll = [](const TripleComponent::Iri& from,
+                         const TripleComponent::Iri& to) {
+  return UpdateClause(
+      GraphUpdate({}, {SparqlQleverVisitor::makeAllTripleTemplatee(to)},
+                  std::nullopt),
+      SelectAllPattern(from));
+};
+
 }  // namespace matchers

@@ -583,7 +583,10 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
             return iri;
           },
           [](const ALL&) -> Graph { return Variable("?g"); },
-          [](const DEFAULT&) -> Graph { AD_FAIL(); },
+          [](const DEFAULT&) -> Graph {
+            return ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+          },
           [](const NAMED&) -> Graph { AD_FAIL(); }},
       graph);
 }
@@ -596,7 +599,10 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
           [](const ad_utility::triple_component::Iri& iri) -> Graph {
             return iri;
           },
-          [](const DEFAULT&) -> Graph { AD_FAIL(); }},
+          [](const DEFAULT&) -> Graph {
+            return ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+          }},
       graph);
 }
 
@@ -653,22 +659,10 @@ SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
-  GraphRefAll graph = visit(ctx->graphRefAll());
-  if (holds_alternative<DEFAULT>(graph)) {
-    reportNotSupported(
-        ctx->graphRefAll(),
-        // This is unspecified behaviour, because we deviate from the standard
-        // by using the union graph instead of the unnamed graph. Either use
-        // `ALL` or explicitly name `ql:default-graph`.
-        "Clearing the default graph is");
-  }
-
-  return makeClear(graph);
+  return makeClear(visit(ctx->graphRefAll()));
 }
 
 ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
-  AD_CORRECTNESS_CHECK(!std::holds_alternative<DEFAULT>(graph));
-
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
@@ -677,7 +671,6 @@ ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
 }
 
 ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
-  AD_CORRECTNESS_CHECK(!std::holds_alternative<DEFAULT>(graph));
   if (std::holds_alternative<NAMED>(graph)) {
     parsedQuery_._rootGraphPattern._graphPatterns.push_back(
         makeAllTripleGraphPattern(ALL{}));
