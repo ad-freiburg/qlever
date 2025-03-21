@@ -301,13 +301,11 @@ TEST(LiteralTest, SetSubstr) {
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  ASSERT_DEATH(literal.getLiteral().setSubstr(12, 5),
-               "Start index out of range.");
+  EXPECT_THROW(literal.getLiteral().setSubstr(12, 5), ad_utility::Exception);
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  ASSERT_DEATH(literal.getLiteral().setSubstr(6, 10),
-               "Length exceeds valid range.");
+  EXPECT_THROW(literal.getLiteral().setSubstr(6, 10), ad_utility::Exception);
 }
 
 // _______________________________________________________________________
