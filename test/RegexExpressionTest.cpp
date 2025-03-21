@@ -24,16 +24,19 @@ constexpr auto T = Id::makeFromBool(true);
 constexpr auto F = Id::makeFromBool(false);
 constexpr Id U = Id::makeUndefined();
 
+// _____________________________________________________________________________
 auto literal(const std::string& literal,
              std::string_view langtagOrDatatype = "") {
   return std::make_unique<StringLiteralExpression>(
       lit(literal, langtagOrDatatype));
 }
 
+// _____________________________________________________________________________
 auto variable(std::string literal) {
   return std::make_unique<VariableExpression>(Variable{std::move(literal)});
 }
 
+// _____________________________________________________________________________
 bool isPrefixExpression(const SparqlExpression::Ptr& expression) {
   return dynamic_cast<PrefixRegexExpression*>(expression.get());
 }
@@ -130,6 +133,7 @@ void testValuesInVariables(
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
+// _____________________________________________________________________________
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Id>& expectedResult,
                              bool childAsStr = false,
@@ -210,6 +214,7 @@ TEST(RegexExpression, inputNotVariable) {
   testWithExplicitResult(*expr, expected, input.size());
 }
 
+// _____________________________________________________________________________
 auto testNonPrefixRegexWithFlags =
     [](std::string variable, std::string regex, std::string flags,
        const std::vector<Id>& expectedResult,
@@ -299,6 +304,7 @@ TEST(RegexExpression, getPrefixRegex) {
 }
 }  // namespace sparqlExpression
 
+// _____________________________________________________________________________
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
        const std::vector<Id>& expectedResult, bool childAsStr = false,
@@ -310,6 +316,7 @@ auto testPrefixRegexUnorderedColumn =
       testWithExplicitResult(*expr, expectedResult);
     };
 
+// _____________________________________________________________________________
 TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   auto test = testPrefixRegexUnorderedColumn;
   // ?vocab column is `"Beta", "alpha", "älpha"
@@ -332,6 +339,7 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   // TODO<joka921> Prefix filters on numbers do not yet work.
 }
 
+// _____________________________________________________________________________
 auto testPrefixRegexOrderedColumn =
     [](std::string variableAsString, std::string regex,
        ad_utility::SetOfIntervals expected, bool childAsStr = false,
@@ -348,6 +356,7 @@ auto testPrefixRegexOrderedColumn =
       ASSERT_EQ(result, expected);
     };
 
+// _____________________________________________________________________________
 TEST(RegexExpression, prefixRegexOrderedColumn) {
   auto test = testPrefixRegexOrderedColumn;
   // Sorted order (by bits of the valueIds):
@@ -364,6 +373,7 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
   test("?mixed", "^x", {{{2, 3}}}, true);
 }
 
+// _____________________________________________________________________________
 TEST(RegexExpression, getCacheKey) {
   auto exp0 = makeRegexExpression("?first", "^alp");
   auto exp1 = makeRegexExpression("?first", "alp");
@@ -416,6 +426,7 @@ TEST(RegexExpression, getCacheKey) {
   EXPECT_NE(exp0->getCacheKey(map), exp10->getCacheKey(map));
 }
 
+// _____________________________________________________________________________
 TEST(RegexExpression, getChildren) {
   using namespace ::testing;
   EXPECT_THAT(makeRegexExpression("?a", "someRegex")->containedVariables(),
@@ -439,6 +450,7 @@ TEST(RegexExpression, getChildren) {
                   Pointee(Variable{"?c"})));
 }
 
+// _____________________________________________________________________________
 TEST(RegexExpression, invalidConstruction) {
   // The second argument must not have a datatype or langtag
   EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"b\"", "@en")),
@@ -462,4 +474,48 @@ TEST(RegexExpression, invalidConstruction) {
   EXPECT_THROW(makeTestRegexExpression(variable("?a"), literal("\"a\""),
                                        literal("\"x\"")),
                std::runtime_error);
+}
+
+// _____________________________________________________________________________
+TEST(RegexExpression, getEstimatesForFilterExpression) {
+  using Estimates = SparqlExpressionPimpl::Estimates;
+  auto hasEstimate = [](size_t sizeEstimate, size_t costEstimate) {
+    using namespace ::testing;
+    return AllOf(AD_FIELD(Estimates, sizeEstimate, Eq(sizeEstimate)),
+                 AD_FIELD(Estimates, costEstimate, Eq(costEstimate)));
+  };
+  auto expression = makeRegexExpression("?a", "^abc");
+  EXPECT_THAT(expression->getEstimatesForFilterExpression(10000, std::nullopt),
+              hasEstimate(10, 10010));
+  EXPECT_THAT(expression->getEstimatesForFilterExpression(100000, std::nullopt),
+              hasEstimate(100, 100100));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(10000, Variable{"?b"}),
+      hasEstimate(10, 10010));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(100000, Variable{"?b"}),
+      hasEstimate(100, 100100));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(10000, Variable{"?a"}),
+      hasEstimate(10, 10));
+  EXPECT_THAT(
+      expression->getEstimatesForFilterExpression(100000, Variable{"?a"}),
+      hasEstimate(100, 100));
+
+  auto longRegexExpression = makeRegexExpression("?a", "^thisisverylong");
+  EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
+                  1000000000, std::nullopt),
+              hasEstimate(10, 1000000010));
+  EXPECT_THAT(longRegexExpression->getEstimatesForFilterExpression(
+                  1000000000, Variable{"?a"}),
+              hasEstimate(10, 10));
+
+  auto zeroLengthExpression = makeRegexExpression("?a", "^");
+  ASSERT_TRUE(isPrefixExpression(zeroLengthExpression));
+  EXPECT_THAT(
+      zeroLengthExpression->getEstimatesForFilterExpression(100, std::nullopt),
+      hasEstimate(100, 200));
+  EXPECT_THAT(zeroLengthExpression->getEstimatesForFilterExpression(
+                  1000000000, Variable{"?a"}),
+              hasEstimate(1000000000, 1000000000));
 }
