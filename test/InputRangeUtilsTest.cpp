@@ -169,8 +169,8 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
   // Semantically this is similar to `input | views::join | views::drop(3) |
   // views::take(4)`, but keeps the structure of the original batches intact
   // (aside from the first and last one which have to be truncated.
-  auto applyLimit4Offset3 = [offset = size_t{3},
-                             limit = size_t{4}](auto& vec) mutable -> L {
+  auto applyLimit4Offset3 = [limit = size_t{4},
+                             offset = size_t{3}](auto& vec) mutable -> L {
     if (limit == 0) {
       return L::makeBreak();
     }

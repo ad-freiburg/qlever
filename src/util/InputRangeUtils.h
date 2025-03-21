@@ -24,7 +24,7 @@ namespace ad_utility {
 // optimization (RVO).
 // 3. This class only yields an input range, independent of the range category
 // of the input.
-CPP_variadic_class_template(typename View, typename F)(requires(
+CPP_class_template(typename View, typename F)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
@@ -163,17 +163,20 @@ using LoopControl = loopControl::LoopControl<T>;
 // 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
 // is yielded and the iteration resumes.
 
-// Note: The third template argument should be left at the default value, or
-// compilation will break. It is only there for better readability.
-CPP_variadic_class_template(
-    typename View, typename F,
-    typename Res = loopControl::loopControlValueT<
-        std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>)(
-    requires(
-        ql::ranges::input_range<View>&& ql::ranges::view<View>&&
-            std::is_object_v<F>)) struct CachingContinuableTransformInputRange
-    : InputRangeFromGet<Res> {
+// First a small helper to get the actual value type of the class below.
+namespace detail {
+template <typename View, typename F>
+using Res = loopControl::loopControlValueT<
+    std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>;
+}
+
+// Actual class definition.
+CPP_class_template(typename View, typename F)(requires(
+    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+        std::is_object_v<F>)) struct CachingContinuableTransformInputRange
+    : InputRangeFromGet<detail::Res<View, F>> {
  private:
+  using Res = detail::Res<View, F>;
   static_assert(
       std::is_object_v<Res>,
       "The functor of `CachingContinuableTransformInputRange` must yield an "
