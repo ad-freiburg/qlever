@@ -18,18 +18,6 @@
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
 
-template <typename T>
-class Reversed {
-  T& _iterable;
-
- public:
-  explicit Reversed(T& iterable) : _iterable(iterable) {}
-
-  auto begin() { return _iterable.rbegin(); };
-
-  auto end() { return _iterable.rend(); }
-};
-
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
  * a `ParsedQuery`.
