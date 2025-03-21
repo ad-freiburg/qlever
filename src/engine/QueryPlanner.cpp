@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "NamedQueryCache.h"
 #include "backports/algorithm.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -2691,6 +2692,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitSpatialSearch(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::NamedCachedQuery>) {
+    visitNamedCachedQuery(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2888,6 +2891,15 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitNamedCachedQuery(
+    const parsedQuery::NamedCachedQuery& arg) {
+  auto candidate = SubtreePlan{
+      planner_._qec, planner_._qec->namedQueryCache().getOperation(
+                         arg.validateAndGetIdentifier(), planner_._qec)};
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _______________________________________________________________
