@@ -8,8 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "../src/util/Random.h"
-#include "../src/util/Views.h"
+#include "util/InputRangeUtils.h"
+#include "util/Random.h"
+#include "util/Views.h"
 
 TEST(Views, BufferedAsyncView) {
   auto testWithVector = []<typename T>(const T& inputVector) {
