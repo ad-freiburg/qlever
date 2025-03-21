@@ -277,7 +277,7 @@ CPP_template(template <typename Sc, typename Val, typename Comp>
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second.value().value());
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
