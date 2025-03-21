@@ -32,6 +32,7 @@ add_library(parser
         LiteralOrIri.cpp
         DatasetClauses.cpp
         TextSearchQuery.cpp
+        Quads.cpp
 )
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
 
