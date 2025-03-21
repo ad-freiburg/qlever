@@ -1,13 +1,15 @@
-//
-// Created by kalmbacj on 2/6/25.
-//
+//  Copyright 2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
+#include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/NamedQueryCache.h"
 
+namespace {
 TEST(NamedQueryCache, basicWorkflow) {
   NamedQueryCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
@@ -50,3 +52,17 @@ TEST(NamedQueryCache, basicWorkflow) {
       cache.get("query-1"),
       ::testing::HasSubstr("was not pinned to the named query cache"));
 }
+
+TEST(NamedQueryCache, E2E) {
+  auto qec = ad_utility::testing::getQec(
+      "<s> <p> <o>. <s2> <p> <o> . <s3> <p2> <o2>.");
+  std::string pinnedQuery =
+      "SELECT ?s { {?s <p> <o> } UNION {BIND ( <notInVocab> as ?s)}}";
+  qec->pinWithExplicitName() = "dummyQuery";
+  auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
+  [[maybe_unused]] auto pinnedResult = qet.getResult();
+  qec->pinWithExplicitName() = std::nullopt;
+
+  squery = "SELECT * { SERVICE ql:named-cached-query-dummyQuery {}}";
+}
+}  // namespace
