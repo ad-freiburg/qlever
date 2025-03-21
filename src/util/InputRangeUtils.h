@@ -24,12 +24,11 @@ namespace ad_utility {
 // optimization (RVO).
 // 3. This class only yields an input range, independent of the range category
 // of the input.
-CPP_template(typename View, typename F)(
-    requires ql::ranges::input_range<View> CPP_and ql::ranges::view<View>
-        CPP_and std::is_object_v<F>
-            CPP_and ranges::invocable<
-                F, ql::ranges::range_reference_t<
-                       View>>) struct CachingTransformInputRange
+CPP_variadic_class_template(typename View, typename F)(requires(
+    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+        std::is_object_v<F>&&
+            ranges::invocable<F, ql::ranges::range_reference_t<
+                                     View>>)) struct CachingTransformInputRange
     : InputRangeFromGet<std::decay_t<
           std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>> {
  private:
@@ -41,13 +40,13 @@ CPP_template(typename View, typename F)(
   // The input view, the function, and the current iterator into the `view_`.
   // The iterator is `nullopt` before the first call to `get`.
   View view_;
-  F function_;
+  F transfomation_;
   std::optional<ql::ranges::iterator_t<View>> it_;
 
  public:
   // Constructor.
-  explicit CachingTransformInputRange(View view, F function = {})
-      : view_{std::move(view)}, function_(std::move(function)) {}
+  explicit CachingTransformInputRange(View view, F transformation = {})
+      : view_{std::move(view)}, transfomation_(std::move(transformation)) {}
 
   // TODO<joka921> Make this private again and give explicit access to low-level
   // tools like the ones below.
@@ -64,7 +63,7 @@ CPP_template(typename View, typename F)(
     if (*it_ == view_.end()) {
       return std::nullopt;
     }
-    return std::invoke(function_, *it_.value());
+    return std::invoke(transfomation_, *it_.value());
   }
   // Give the mixin access to the private `get` function.
   friend class InputRangeFromGet<Res>;
@@ -149,7 +148,7 @@ using LoopControl = loopControl::LoopControl<T>;
 
 // This class can be used to simulate a generator that consists of a single
 // for-loop, but where the loop contains control-flows such as `break` and
-// `continue`. It is given an `View` and a functor `F` which must return a
+// `continue`. It is given a `View` and a functor `F` which must return a
 // `LoopControl` object (see above) when being called with the elements of the
 // `View`. It has the following semantics:
 // 1. In principle the functor `F` is called for each element in the input
@@ -166,12 +165,13 @@ using LoopControl = loopControl::LoopControl<T>;
 
 // Note: The third template argument should be left at the default value, or
 // compilation will break. It is only there for better readability.
-CPP_template(typename View, typename F,
-             typename Res = loopControl::loopControlValueT<
-                 std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>)(
-    requires ql::ranges::input_range<View> CPP_and ql::ranges::view<View>
-        CPP_and
-            std::is_object_v<F>) struct CachingContinuableTransformInputRange
+CPP_variadic_class_template(
+    typename View, typename F,
+    typename Res = loopControl::loopControlValueT<
+        std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>)(
+    requires(
+        ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+            std::is_object_v<F>)) struct CachingContinuableTransformInputRange
     : InputRangeFromGet<Res> {
  private:
   static_assert(
@@ -188,8 +188,9 @@ CPP_template(typename View, typename F,
 
  public:
   // Constructor.
-  explicit CachingContinuableTransformInputRange(View view, F function = {})
-      : impl_{std::move(view), std::move(function)} {}
+  explicit CachingContinuableTransformInputRange(View view,
+                                                 F transformation = {})
+      : impl_{std::move(view), std::move(transformation)} {}
 
  private:
   // The central `get` function, required by the mixin.

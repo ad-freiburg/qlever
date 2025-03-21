@@ -154,4 +154,45 @@ TEST(CachingContinuableTransformInputRange, NoBreak) {
   testTransformView<ad_utility::CachingContinuableTransformInputRange>(
       helpers, firstPlusTwo);
 }
+
+// This is an example on how a stateful functor can be used to implement more
+// complex control flows.
+TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
+  // This function will move the vector if possible (i.e. if it is not const)
+  // and then increment the first element by `2`. Never break.
+  using namespace ad_utility;
+  using L = LoopControl<std::vector<int>>;
+
+  // Pass the vectors on unchanged in principle, but
+  // skip the first 3 vector elements (not vectors!), and after that
+  // yield only 4 additional elements.
+  // Semantically this is similar to `input | views::join | views::drop(3) |
+  // views::take(4)`, but keeps the structure of the original batches intact
+  // (aside from the first and last one which have to be truncated.
+  auto applyLimit4Offset3 = [offset = size_t{3},
+                             limit = size_t{4}](auto& vec) mutable -> L {
+    if (limit == 0) {
+      return L::makeBreak();
+    }
+    if (vec.size() <= offset) {
+      offset -= vec.size();
+      return L::makeContinue();
+    }
+    auto copy = std::move(vec);
+    if (offset > 0) {
+      copy.erase(copy.begin(), copy.begin() + offset);
+      offset = 0;
+    }
+    copy.resize(std::min(copy.size(), limit));
+    limit -= copy.size();
+    return L::yieldValue(std::move(copy));
+  };
+
+  TransformViewTestHelpers<std::vector<int>> helpers;
+  helpers.input_ = {{1, 2}, {3, 4}, {5, 6}, {7, 8}, {9, 10}};
+  helpers.expected_ = {{4}, {5, 6}, {7}};
+  helpers.elementwiseMoved_ = {{1, 2}, {}, {}, {}, {9, 10}};
+  testTransformView<ad_utility::CachingContinuableTransformInputRange>(
+      helpers, applyLimit4Offset3);
+}
 }  // namespace
