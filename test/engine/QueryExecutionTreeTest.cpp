@@ -8,6 +8,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Sort.h"
 #include "engine/Union.h"
 
 using namespace ad_utility::testing;
@@ -47,4 +48,44 @@ TEST(QueryExecutionTree, sortedUnionSpecialCase) {
   qec->getQueryTreeCache().clearAll();
   auto result = sortedTree->getResult(false);
   EXPECT_EQ(result->idTable(), makeIdTableFromVector({{0}, {1}}));
+}
+
+// _____________________________________________________________________________
+TEST(QueryExecutionTree, createSortedTreeAnyPermutation) {
+  using Vars = std::vector<std::optional<Variable>>;
+  Vars vars{std::nullopt, std::nullopt, std::nullopt};
+  using SC = std::vector<ColumnIndex>;
+  auto* qec = getQec();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1, 2}}), vars, false, SC{0, 1, 2});
+
+  EXPECT_EQ(QueryExecutionTree::createSortedTreeAnyPermutation(values, {0, 1}),
+            values);
+
+  EXPECT_EQ(
+      QueryExecutionTree::createSortedTreeAnyPermutation(values, {1, 0, 2}),
+      values);
+
+  {
+    auto sortedTree =
+        QueryExecutionTree::createSortedTreeAnyPermutation(values, {2});
+    EXPECT_NE(sortedTree, values);
+    auto castTree =
+        std::dynamic_pointer_cast<Sort>(sortedTree->getRootOperation());
+    ASSERT_TRUE(castTree);
+    EXPECT_EQ(castTree->getResultSortedOn(), (SC{2}));
+  }
+
+  {
+    auto valuesNotSorted = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 1, 2}}), vars);
+    auto sortedTree = QueryExecutionTree::createSortedTreeAnyPermutation(
+        valuesNotSorted, {0, 1});
+    EXPECT_NE(sortedTree, valuesNotSorted);
+    auto castTree =
+        std::dynamic_pointer_cast<Sort>(sortedTree->getRootOperation());
+    ASSERT_TRUE(castTree);
+    EXPECT_EQ(castTree->getResultSortedOn(), (SC{0, 1}));
+  }
 }
