@@ -185,7 +185,6 @@ bool SparqlExpression::isInsideAggregate() const {
 bool SparqlExpression::isExistsExpression() const { return false; }
 
 //______________________________________________________________________________
-namespace {
 template <typename SparqlExpressionT>
 void getExistsExpressionsImpl(SparqlExpressionT& self,
                               std::vector<SparqlExpressionT*>& result) {
@@ -197,7 +196,7 @@ void getExistsExpressionsImpl(SparqlExpressionT& self,
     child->getExistsExpressions(result);
   }
 }
-}  // namespace
+
 //______________________________________________________________________________
 void SparqlExpression::getExistsExpressions(
     std::vector<const SparqlExpression*>& result) const {

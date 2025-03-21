@@ -2137,8 +2137,8 @@ TEST(SparqlParser, Exists) {
                               std::nullopt, std::nullopt, {{"?a"}})));
 
   auto doesNotBindExists = [&]() {
-    auto innerMatcher = containsExistsClause(
-        selectABarFooMatcher(std::nullopt, std::nullopt, {{}}));
+    auto innerMatcher = containsExistsClause(selectABarFooMatcher(
+        std::nullopt, std::nullopt, std::vector<std::string>{}));
     using parsedQuery::GroupGraphPattern;
     return AD_FIELD(GraphPattern, _graphPatterns,
                     ::testing::ElementsAre(
