@@ -1575,6 +1575,7 @@ TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
   ParsedQuery pq;
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
+  pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};
   auto var = exists.variable();
   TestContext context;

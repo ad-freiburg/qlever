@@ -841,7 +841,18 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
   return transformTriplesTemplate(ctx->triplesTemplate(), graph);
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+void Visitor::selectExistsVariables(SparqlFilter& filter) const {
+  std::vector<SparqlExpression*> existsExpressions;
+  filter.expression_.getPimpl()->getExistsExpressions(existsExpressions);
+  for (SparqlExpression* sparqlExpression : existsExpressions) {
+    auto* existsExpression = dynamic_cast<ExistsExpression*>(sparqlExpression);
+    AD_CORRECTNESS_CHECK(existsExpression);
+    existsExpression->selectVariables(visibleVariables_);
+  }
+}
+
+// _____________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
@@ -872,6 +883,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
   pattern._graphPatterns = std::move(subOps);
   for (auto& filter : filters) {
+    selectExistsVariables(filter);
     if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
         langFilterData.has_value()) {
       const auto& [variable, language] = langFilterData.value();
@@ -2587,16 +2599,12 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   ParsedQuery argumentOfExists =
       std::exchange(parsedQuery_, std::move(queryBackup));
   SelectClause& selectClause = argumentOfExists.selectClause();
+  // Even though we set the `SELECT` clause to `*`, we will limit the visible
+  // variables to a potentially smaller subset when finishing the parsing of the
+  // current group.
   selectClause.setAsterisk();
   for (const Variable& variable : visibleVariables_) {
-    // If we're not negated, we could safely add all visible variables to the
-    // expression, resulting in this filter to be optimized away if no variables
-    // match in the main pattern. However, if the EXISTS expression is ever
-    // negated in a way before being applied to a filter variables are a
-    // wildcard match, so we just ignore them to prevent this optimization.
-    if (ad_utility::contains(visibleVariablesBackup, variable)) {
-      selectClause.addVisibleVariable(variable);
-    }
+    selectClause.addVisibleVariable(variable);
   }
   argumentOfExists._rootGraphPattern = std::move(group);
 
