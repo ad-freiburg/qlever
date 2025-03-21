@@ -72,9 +72,16 @@ void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
     // Check if word exists and retrieve wordId
     if (!textVocab.getId(word, &wvi)) {
       if (wordNotFoundErrorMsgCount < 20) {
-        LOG(WARN) << "Word from text not in KB during score calculation: "
+        LOG(WARN) << "The following word was found in the docsfile but not in "
+                     "the wordsfile: "
                   << word << '\n';
-        if (++wordNotFoundErrorMsgCount == 20) {
+        ++wordNotFoundErrorMsgCount;
+        if (wordNotFoundErrorMsgCount == 1) {
+          LOG(WARN)
+              << "Note that this might be intentional if for example stop "
+                 "words from the documents where omitted in the wordsfile to "
+                 "make the text index more efficient and effective. \n";
+        } else if (wordNotFoundErrorMsgCount == 20) {
           LOG(WARN) << "There are more words not in the KB during score "
                        "calculation..."
                     << " suppressing further warnings...\n";
