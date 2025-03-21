@@ -62,9 +62,6 @@ class CacheValue {
   };
 };
 
-// Forward declaration because of cyclic dependencies
-class NamedQueryCache;
-
 // The key for the `QueryResultCache` below. It consists of a `string` (the
 // actual cache key of a `QueryExecutionTree` and the index of the
 // `LocatedTriplesSnapshot` that was used to create the corresponding value.

@@ -25,7 +25,7 @@ class NamedQueryCache {
   // size of the explicit cache. In the future we could make the size more
   // accurate and also report statistics about named queries.
   struct ValueSizeGetter {
-    ad_utility::MemorySize operator()(const Value&) {
+    ad_utility::MemorySize operator()(const Value&) const {
       return ad_utility::MemorySize::bytes(1);
     }
   };

@@ -13,7 +13,7 @@ class NamedCachedQuery : public MagicServiceQuery {
 
  public:
   // Construct with the name of the named query.
-  NamedCachedQuery(std::string identifier)
+  explicit NamedCachedQuery(std::string identifier)
       : identifier_{std::move(identifier)} {}
 
   // Currently the body of the SERVICE clause must be empty.

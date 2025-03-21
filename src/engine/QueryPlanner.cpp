@@ -2908,7 +2908,7 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 
 // _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitNamedCachedQuery(
-    parsedQuery::NamedCachedQuery& arg) {
+    const parsedQuery::NamedCachedQuery& arg) {
   auto candidate = SubtreePlan{
       planner_._qec, planner_._qec->namedQueryCache().getOperation(
                          arg.validateAndGetIdentifier(), planner_._qec)};
