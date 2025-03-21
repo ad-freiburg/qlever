@@ -143,10 +143,6 @@ class SparqlQleverVisitor {
     activeDatasetClauses_ = std::move(datasetClauses);
   }
 
-  void setVisibleVariablesForTesting(std::vector<Variable> visibleVariables) {
-    visibleVariables_ = std::move(visibleVariables);
-  }
-
   // ___________________________________________________________________________
   std::vector<ParsedQuery> visit(Parser::QueryOrUpdateContext* ctx);
 

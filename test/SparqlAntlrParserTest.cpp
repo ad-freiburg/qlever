@@ -54,10 +54,8 @@ auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False,
-       std::vector<Variable> variables = {}) {
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
-      p.visitor_.setVisibleVariablesForTesting(variables);
       p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
@@ -89,7 +87,6 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
-  std::vector<Variable> visibleVariables_{};
 
   auto operator()(const string& input, const Value& value,
                   ad_utility::source_location l =
@@ -118,10 +115,10 @@ struct ExpectCompleteParse {
                       ad_utility::source_location::current()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
-      return expectCompleteParse(parse<Clause, parseInsideConstructTemplate>(
-                                     input, std::move(prefixMap), {},
-                                     disableSomeChecks, visibleVariables_),
-                                 matcher, l);
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, std::move(prefixMap), {}, disableSomeChecks),
+          matcher, l);
     });
   };
 
@@ -132,10 +129,10 @@ struct ExpectCompleteParse {
                       ad_utility::source_location::current()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
-      return expectCompleteParse(parse<Clause, parseInsideConstructTemplate>(
-                                     input, {}, std::move(activeDatasetClauses),
-                                     disableSomeChecks, visibleVariables_),
-                                 matcher, l);
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
+          matcher, l);
     });
   };
 };
@@ -1166,10 +1163,10 @@ TEST(SparqlParser, SelectQuery) {
   // FROM and FROM NAMED clauses can still be specified via arguments.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
+    return m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1178,9 +1175,9 @@ TEST(SparqlParser, SelectQuery) {
       selectABarFooMatcher(m::Graphs{TripleComponent::Iri::fromIriref("<x>")},
                            m::Graphs{TripleComponent::Iri::fromIriref("<y>")}));
 
-  expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
-                    testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
-                                                  DummyGraphPatternMatcher)));
+  expectSelectQuery(
+      "SELECT * WHERE { ?x ?y ?z }",
+      m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
       testing::AllOf(
@@ -1387,9 +1384,9 @@ TEST(SparqlParser, AskQuery) {
   // the FROM NAMED parts can be specified via `namedGraphs`.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::AskQuery(
+    return m::AskQuery(
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1404,8 +1401,7 @@ TEST(SparqlParser, AskQuery) {
                  selectABarFooMatcher(defaultGraphs, namedGraphs));
 
   // ASK whether there are any triples at all.
-  expectAskQuery("ASK { ?x ?y ?z }",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher)));
+  expectAskQuery("ASK { ?x ?y ?z }", m::AskQuery(DummyGraphPatternMatcher));
 
   // ASK queries may contain neither of LIMIT, OFFSET, or TEXTLIMIT.
   expectAskQueryFails("ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10");
