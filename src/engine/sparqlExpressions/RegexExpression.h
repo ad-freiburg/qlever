@@ -31,14 +31,16 @@ class PrefixRegexExpression : public SparqlExpression {
   PrefixRegexExpression(Ptr child, std::string prefixRegex, Variable variable);
 
  public:
-  PrefixRegexExpression(PrefixRegexExpression&&) = default;
-  PrefixRegexExpression& operator=(PrefixRegexExpression&&) = default;
-  PrefixRegexExpression(const PrefixRegexExpression&) = delete;
-  PrefixRegexExpression& operator=(const PrefixRegexExpression&) = delete;
+  PrefixRegexExpression(PrefixRegexExpression&&) noexcept = default;
+  PrefixRegexExpression& operator=(PrefixRegexExpression&&) noexcept = default;
+  PrefixRegexExpression(const PrefixRegexExpression&) noexcept = delete;
+  PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
+      delete;
 
   // ___________________________________________________________________________
   static std::optional<PrefixRegexExpression>
-  makePrefixRegexExpressionIfPossible(Ptr& string, const Ptr& regex);
+  makePrefixRegexExpressionIfPossible(Ptr& string,
+                                      const SparqlExpression& regex);
 
   // ___________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;

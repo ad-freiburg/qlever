@@ -29,9 +29,9 @@ void ensureIsSimpleLiteral(
 }
 
 // _____________________________________________________________________________
-void ensureIsValidRegexIfConstant(const SparqlExpression::Ptr& expression) {
-  auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(expression.get());
+void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
+  const auto* stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
     const auto& string = asStringViewUnsafe(literal.getContent());
@@ -47,9 +47,9 @@ void ensureIsValidRegexIfConstant(const SparqlExpression::Ptr& expression) {
 }
 
 // _____________________________________________________________________________
-void ensureIsValidFlagIfConstant(const SparqlExpression::Ptr& expression) {
-  auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(expression.get());
+void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
+  const auto* stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
     const auto& string = asStringViewUnsafe(literal.getContent());
@@ -65,9 +65,8 @@ void ensureIsValidFlagIfConstant(const SparqlExpression::Ptr& expression) {
 }
 
 // _____________________________________________________________________________
-[[maybe_unused]] auto regexImpl =
-    [](const std::optional<std::string>& input,
-       const std::shared_ptr<RE2>& pattern) -> ValueId {
+[[maybe_unused]] auto regexImpl = [](const std::optional<std::string>& input,
+                                     const std::shared_ptr<RE2>& pattern) {
   if (!input.has_value() || !pattern) {
     return Id::makeUndefined();
   }
@@ -279,13 +278,13 @@ void PrefixRegexExpression::checkCancellation(
 
 // _____________________________________________________________________________
 std::optional<PrefixRegexExpression>
-PrefixRegexExpression::makePrefixRegexExpressionIfPossible(Ptr& string,
-                                                           const Ptr& regex) {
+PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
+    Ptr& string, const SparqlExpression& regex) {
   detail::ensureIsValidRegexIfConstant(regex);
-  auto* variableExpression = dynamic_cast<VariableExpression*>(
+  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
       string->isStrExpression() ? string->children()[0].get() : string.get());
-  auto* stringLiteralExpression =
-      dynamic_cast<const StringLiteralExpression*>(regex.get());
+  const auto* stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&regex);
   if (stringLiteralExpression) {
     const auto& stringLiteral = stringLiteralExpression->value();
     detail::ensureIsSimpleLiteral(stringLiteral);
@@ -310,17 +309,17 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
             dynamic_cast<const StringLiteralExpression*>(flags.get())) {
       detail::ensureIsSimpleLiteral(stringLiteralExpression->value());
     }
-    detail::ensureIsValidRegexIfConstant(regex);
-    detail::ensureIsValidFlagIfConstant(flags);
+    detail::ensureIsValidRegexIfConstant(*regex);
+    detail::ensureIsValidFlagIfConstant(*flags);
     regex = makeMergeRegexPatternAndFlagsExpression(std::move(regex),
                                                     std::move(flags));
   } else if (auto prefixExpression =
                  PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
-                     string, regex)) {
+                     string, *regex)) {
     return std::make_unique<PrefixRegexExpression>(
         std::move(prefixExpression.value()));
   } else {
-    detail::ensureIsValidRegexIfConstant(regex);
+    detail::ensureIsValidRegexIfConstant(*regex);
   }
   return std::make_unique<detail::RegexExpression>(std::move(string),
                                                    std::move(regex));

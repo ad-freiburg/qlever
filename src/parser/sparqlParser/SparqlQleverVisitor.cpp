@@ -2533,9 +2533,8 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   AD_CONTRACT_CHECK(numArgs >= 2 && numArgs <= 3);
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
-    return makeRegexExpression(
-        visit(exp[0]), visit(exp[1]),
-        flags.has_value() ? std::move(flags.value()) : nullptr);
+    return makeRegexExpression(visit(exp[0]), visit(exp[1]),
+                               std::move(flags).value_or(nullptr));
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
