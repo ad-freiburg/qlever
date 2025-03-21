@@ -11,7 +11,7 @@
 namespace {
 const std::string ttl = R"(
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-<x> <y> "anXsdString"^^xsd:string,
+<x> <y> "anXsdString"^^xsd:string, 
         "someType"^^<someType>,
         "noType".
   )";
@@ -35,42 +35,147 @@ struct TestContextWithGivenTTl {
       : turtleInput{std::move(turtle)} {}
 };
 
-}  // namespace
+// Helper function to check literal value and datatype
+void checkLiteralContentAndDatatype(
+    const std::optional<ad_utility::triple_component::Literal>& literal,
+    const std::optional<std::string>& expectedContent,
+    const std::optional<std::string>& expectedDatatype) {
+  if (literal.has_value()) {
+    ASSERT_EQ(asStringViewUnsafe(literal.value().getContent()),
+              expectedContent.value_or(""));
+
+    if (literal.value().hasDatatype()) {
+      ASSERT_TRUE(expectedDatatype.has_value());
+      ASSERT_EQ(asStringViewUnsafe(literal.value().getDatatype()),
+                expectedDatatype.value_or(""));
+    } else {
+      ASSERT_FALSE(expectedDatatype.has_value());
+    }
+  } else {
+    ASSERT_FALSE(expectedContent.has_value());
+  }
+};
+
+// Helper function to get literal from Id and then check its content and
+// datatype
+void checkLiteralContentAndDatatypeFromId(
+    const std::string& literalString,
+    const std::optional<std::string>& expectedContent,
+    const std::optional<std::string>& expectedDatatype,
+    std::variant<
+        sparqlExpression::detail::LiteralValueGetter,
+        sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter>
+        getter) {
+  TestContextWithGivenTTl testContext{ttl};
+  auto literal = std::visit(
+      [&](auto&& g) {
+        return g(testContext.getId(literalString), &testContext.context);
+      },
+      getter);
+
+  return checkLiteralContentAndDatatype(literal, expectedContent,
+                                        expectedDatatype);
+};
+
+// Helper function to get literal from LiteralOrIri and then check its content
+// and datatype
+void checkLiteralContentAndDatatypeFromLiteralOrIri(
+    const std::string_view& literalContent,
+    const std::optional<ad_utility::triple_component::Iri>& literalDescriptor,
+    const bool isIri, const std::optional<std::string>& expectedContent,
+    const std::optional<std::string>& expectedDatatype,
+    std::variant<
+        sparqlExpression::detail::LiteralValueGetter,
+        sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter>
+        getter) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  TestContextWithGivenTTl testContext{ttl};
+
+  auto toLiteralOrIri = [](std::string_view content, auto descriptor,
+                           bool isIri) {
+    if (isIri) {
+      return LiteralOrIri::iriref(std::string(content));
+    } else {
+      return LiteralOrIri{Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(content), descriptor)};
+    }
+  };
+  LiteralOrIri literalOrIri =
+      toLiteralOrIri(literalContent, literalDescriptor, isIri);
+  auto literal = std::visit(
+      [&](auto&& g) { return g(literalOrIri, &testContext.context); }, getter);
+  return checkLiteralContentAndDatatype(literal, expectedContent,
+                                        expectedDatatype);
+};
+};  // namespace
+
+// namespace
 
 TEST(LiteralValueGetter, OperatorWithId) {
-  TestContextWithGivenTTl testContext{ttl};
   sparqlExpression::detail::LiteralValueGetter literalValueGetter;
-
-  Id idLiteral = testContext.getId("\"noType\"");  // literal with no datatype
-  auto literal = literalValueGetter(idLiteral, &testContext.context);
-  ASSERT_TRUE(literal.has_value());
-  ASSERT_EQ(asStringViewUnsafe(literal.value().getContent()), "noType");
-  // TODO<Annika> Also check that the datatype is empty.
-
-  idLiteral =
-      testContext.getId("\"someType\"^^<someType>");  // literal datatype
-  literal = literalValueGetter(idLiteral, &testContext.context);
-  ASSERT_TRUE(literal.has_value());
-  ASSERT_EQ(asStringViewUnsafe(literal.value().getContent()), "someType");
-  // TODO<Annika> Also check the datatype.
-  // TODO<Annika> The above tests are very repetitive, write helper functions or
-  // matchers.
-
-  // TODO: Test Ids that hold a iri.
+  checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
+                                       literalValueGetter);
+  checkLiteralContentAndDatatypeFromId("\"someType\"^^<someType>", "someType",
+                                       std::nullopt, literalValueGetter);
+  checkLiteralContentAndDatatypeFromId(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
+      literalValueGetter);
+  checkLiteralContentAndDatatypeFromId("<x>", std::nullopt, std::nullopt,
+                                       literalValueGetter);
 }
 
 TEST(LiteralValueGetter, OperatorWithLiteralOrIri) {
-  // TODO: Test LiteralOrIris that hold a literal and that hold a iri.
+  using Iri = ad_utility::triple_component::Iri;
+  sparqlExpression::detail::LiteralValueGetter literalValueGetter;
+  checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,
+                                                 "noType", std::nullopt,
+                                                 literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri(
+      "someType", Iri::fromIriref("<someType>"), false, "someType",
+      std::nullopt, literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri(
+      "anXsdString",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"), false,
+      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
+      literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
+                                                 std::nullopt, std::nullopt,
+                                                 literalValueGetter);
 }
 
 TEST(LiteralValueGetterWithXsdStringFilter, OperatorWithId) {
-  // TODO: Test Ids that hold literals with 'xsd:string' datatype, literals with
-  // no datatype and literals with other datatypes/ iris (should not be
-  // returned)
+  sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter
+      literalValueGetter;
+  checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
+                                       literalValueGetter);
+  checkLiteralContentAndDatatypeFromId("\"someType\"^^<someType>", std::nullopt,
+                                       std::nullopt, literalValueGetter);
+  checkLiteralContentAndDatatypeFromId(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
+      literalValueGetter);
+  checkLiteralContentAndDatatypeFromId("<x>", std::nullopt, std::nullopt,
+                                       literalValueGetter);
 }
 
 TEST(LiteralValueGetterWithXsdStringFilter, OperatorWithLiteralOrIri) {
-  // TODO: Test LiteralOrIris that hold literals with 'xsd:string' datatype,
-  // literals with no datatype and literals with other datatypes/iris (should
-  // not be returned)
+  using Iri = ad_utility::triple_component::Iri;
+  sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter
+      literalValueGetter;
+  checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,
+                                                 "noType", std::nullopt,
+                                                 literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri(
+      "someType", Iri::fromIriref("<someType>"), false, std::nullopt,
+      std::nullopt, literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri(
+      "anXsdString",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"), false,
+      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
+      literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
+                                                 std::nullopt, std::nullopt,
+                                                 literalValueGetter);
 }

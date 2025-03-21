@@ -99,6 +99,21 @@ LiteralValueGetter::operator()(Id id, const EvaluationContext* context) const {
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetter::operator()(const LiteralOrIri& s,
+                               const EvaluationContext*) const {
+  if (s.isLiteral()) {
+    auto literal = s.getLiteral();
+    if (!ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
+      literal.removeDatatypeOrLanguageTag();
+    }
+    return literal;
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithXsdStringFilter::operator()(
     Id id, const EvaluationContext* context) const {
   return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
@@ -109,7 +124,8 @@ LiteralValueGetterWithXsdStringFilter::operator()(
 std::optional<ad_utility::triple_component::Literal>
 LiteralValueGetterWithXsdStringFilter::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
+  if (s.isLiteral() &&
+      ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
     return s.getLiteral();
   }
   return std::nullopt;

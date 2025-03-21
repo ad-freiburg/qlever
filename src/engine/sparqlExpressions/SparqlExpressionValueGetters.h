@@ -170,13 +170,7 @@ struct LiteralValueGetter : Mixin<LiteralValueGetter> {
       ValueId, const EvaluationContext*) const;
 
   std::optional<ad_utility::triple_component::Literal> operator()(
-      const LiteralOrIri& s, const EvaluationContext*) const {
-    if (s.isLiteral()) {
-      return s.getLiteral();
-    } else {
-      return std::nullopt;
-    }
-  }
+      const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
 // Same as above but only literals with 'xsd:string' datatype or no datatype are

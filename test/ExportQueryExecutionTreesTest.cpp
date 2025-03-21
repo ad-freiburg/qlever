@@ -1740,7 +1740,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 
           // Case: IRI
           {getId("<s>"),
-           {{false, false, "<s>"},
+           {{false, false, std::nullopt},
             {true, false, std::nullopt},
             {false, true, std::nullopt}}},
 

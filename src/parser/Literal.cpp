@@ -138,13 +138,14 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 // __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
   std::size_t contentLength = beginOfSuffix_ - 2;
+  AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
   content_.erase(1 + start + length, contentLength - start - length);
   content_.erase(1, start);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
 }
 
 // __________________________________________
-void Literal::removeDatatype() {
+void Literal::removeDatatypeOrLanguageTag() {
   content_.erase(beginOfSuffix_);
   beginOfSuffix_ = content_.size();
 }

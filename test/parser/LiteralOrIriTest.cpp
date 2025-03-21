@@ -296,14 +296,26 @@ TEST(LiteralTest, SetSubstr) {
   EXPECT_THAT("World", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
+
+  // Test with invalid values.
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  ASSERT_DEATH(literal.getLiteral().setSubstr(12, 5),
+               "Start index out of range.");
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  ASSERT_DEATH(literal.getLiteral().setSubstr(6, 10),
+               "Length exceeds valid range.");
 }
 
 // _______________________________________________________________________
-TEST(LiteralTest, RemoveDatatype) {
+TEST(LiteralTest, removeDatatypeOrLanguageTag) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  literal.getLiteral().removeDatatype();
+  literal.getLiteral().removeDatatypeOrLanguageTag();
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
   EXPECT_FALSE(literal.hasDatatype());
   EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);

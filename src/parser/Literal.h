@@ -98,6 +98,6 @@ class Literal {
   void setSubstr(std::size_t start, std::size_t length);
 
   // Remove the datatype suffix from the Literal.
-  void removeDatatype();
+  void removeDatatypeOrLanguageTag();
 };
 }  // namespace ad_utility::triple_component

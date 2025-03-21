@@ -390,7 +390,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   }
 
   if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
-    word.getLiteral().removeDatatype();
+    word.getLiteral().removeDatatypeOrLanguageTag();
   }
   return word.getLiteral();
 }
