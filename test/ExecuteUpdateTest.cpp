@@ -43,10 +43,12 @@ TEST(ExecuteUpdate, executeUpdate) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto pq = SparqlParser::parseQuery(update);
-    QueryPlanner qp{qec, sharedHandle};
-    const auto qet = qp.createExecutionTree(pq);
-    ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+    auto pqs = SparqlParser::parseUpdate(update);
+    for (auto& pq : pqs) {
+      QueryPlanner qp{qec, sharedHandle};
+      const auto qet = qp.createExecutionTree(pq);
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+    }
   };
   // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
@@ -84,8 +86,29 @@ TEST(ExecuteUpdate, executeUpdate) {
   expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8));
   expectExecuteUpdateFails(
       "SELECT * WHERE { ?s ?p ?o }",
-      testing::HasSubstr("Assertion `query.hasUpdateClause()` failed."));
+      testing::HasSubstr(
+          R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
+  expectExecuteUpdate("CLEAR SILENT GRAPH <x>", NumTriples(0, 0, 0));
   expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 8, 8));
+  expectExecuteUpdate("CLEAR SILENT NAMED", NumTriples(0, 0, 0));
+  expectExecuteUpdate("CLEAR ALL", NumTriples(0, 8, 8));
+  expectExecuteUpdate("DROP GRAPH <x>", NumTriples(0, 0, 0));
+  expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 8, 8));
+  expectExecuteUpdate("DROP NAMED", NumTriples(0, 0, 0));
+  expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 8, 8));
+  expectExecuteUpdate("ADD <x> TO <x>", NumTriples(0, 0, 0));
+  expectExecuteUpdate("ADD SILENT <x> TO DEFAULT", NumTriples(0, 0, 0));
+  expectExecuteUpdate("ADD DEFAULT TO <x>", NumTriples(8, 0, 8));
+  expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
+  expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
+  expectExecuteUpdate("MOVE GRAPH <x> TO <x>", NumTriples(0, 0, 0));
+  expectExecuteUpdate("MOVE <x> TO DEFAULT", NumTriples(0, 8, 8));
+  expectExecuteUpdate("MOVE DEFAULT TO GRAPH <x>", NumTriples(8, 8, 16));
+  expectExecuteUpdate("COPY DEFAULT TO <x>", NumTriples(8, 0, 8));
+  expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
+  expectExecuteUpdate("COPY <x> TO DEFAULT", NumTriples(0, 8, 8));
+  expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
+  expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
 }
 
 // _____________________________________________________________________________
@@ -115,12 +138,20 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
-    auto pq = SparqlParser::parseQuery(update);
-    QueryPlanner qp{qec, sharedHandle};
-    const auto qet = qp.createExecutionTree(pq);
-    UpdateMetadata metadata;
-    return ExecuteUpdate::computeGraphUpdateQuads(index, pq, qet, sharedHandle,
-                                                  metadata);
+    DeltaTriples deltaTriples{index};
+    auto pqs = SparqlParser::parseUpdate(update);
+    std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                          ExecuteUpdate::IdTriplesAndLocalVocab>>
+        results;
+    for (auto& pq : pqs) {
+      QueryPlanner qp{qec, sharedHandle};
+      const auto qet = qp.createExecutionTree(pq);
+      UpdateMetadata metadata;
+      results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
+          index, pq, qet, sharedHandle, metadata));
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+    }
+    return results;
   };
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
@@ -129,11 +160,17 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
           const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
-        EXPECT_THAT(executeComputeGraphUpdateQuads(update),
-                    Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                  idTriples_, toInsertMatcher),
-                         AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                  idTriples_, toDeleteMatcher)));
+        auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
+        // Some operations are translated to multiple updates in qlever. We only
+        // care about the end effect here and not the break-down.
+        std::vector<::IdTriple<>> insertions;
+        std::vector<::IdTriple<>> deletions;
+        for (auto& updateQuads : graphUpdateQuads) {
+          ad_utility::appendVector(insertions, updateQuads.first.idTriples_);
+          ad_utility::appendVector(deletions, updateQuads.second.idTriples_);
+        }
+        EXPECT_THAT(insertions, toInsertMatcher);
+        EXPECT_THAT(deletions, toDeleteMatcher);
       };
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
@@ -163,24 +200,50 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
-      IsEmpty());
-  auto allTriples = UnorderedElementsAreArray(
-      {IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\"")),
-       IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\"")),
-       IdTriple(Id("<x>"), Id("<label>"), Id("\"A\"")),
-       IdTriple(Id("<x>"), Id("<label>"), Id("\"Beta\"")),
-       IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-       IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>")),
-       IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en")),
-       IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))});
+      {ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))})},
+      {IsEmpty()});
+  auto allTriplesWith = [&Id, &IdTriple](std::optional<::Id> g = std::nullopt) {
+    return std::vector{IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\""), g),
+                       IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\""), g),
+                       IdTriple(Id("<x>"), Id("<label>"), Id("\"A\""), g),
+                       IdTriple(Id("<x>"), Id("<label>"), Id("\"Beta\""), g),
+                       IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>"), g),
+                       IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"), g),
+                       IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"), g),
+                       IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"), g)};
+  };
+  auto allTriples = UnorderedElementsAreArray(allTriplesWith(std::nullopt));
   expectComputeGraphUpdateQuads("DELETE WHERE { ?s ?p ?o }", IsEmpty(),
                                 allTriples);
   expectComputeGraphUpdateQuadsFails(
       "SELECT * WHERE { ?s ?p ?o }",
       HasSubstr("Assertion `query.hasUpdateClause()` failed."));
   expectComputeGraphUpdateQuads("CLEAR DEFAULT", IsEmpty(), allTriples);
+  expectComputeGraphUpdateQuads("CLEAR GRAPH <x>", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("CLEAR NAMED", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("CLEAR ALL", IsEmpty(), allTriples);
+  expectComputeGraphUpdateQuads("DROP DEFAULT", IsEmpty(), allTriples);
+  expectComputeGraphUpdateQuads("DROP GRAPH <x>", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("DROP NAMED", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("DROP ALL", IsEmpty(), allTriples);
+  expectComputeGraphUpdateQuads(
+      "ADD DEFAULT TO GRAPH <x>",
+      UnorderedElementsAreArray(allTriplesWith(Id("<x>"))), IsEmpty());
+  expectComputeGraphUpdateQuads("ADD <x> TO DEFAULT", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("MOVE DEFAULT TO DEFAULT", IsEmpty(),
+                                IsEmpty());
+  expectComputeGraphUpdateQuads("MOVE <x> TO GRAPH <x>", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads(
+      "MOVE DEFAULT TO <y>",
+      UnorderedElementsAreArray(allTriplesWith(Id("<y>"))), allTriples);
+  expectComputeGraphUpdateQuads("MOVE GRAPH <y> TO DEFAULT", IsEmpty(),
+                                allTriples);
+  expectComputeGraphUpdateQuads(
+      "COPY DEFAULT TO GRAPH <x>",
+      UnorderedElementsAreArray(allTriplesWith(Id("<x>"))), IsEmpty());
+  expectComputeGraphUpdateQuads("CREATE GRAPH <x>", IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads("CREATE GRAPH <foo>", IsEmpty(), IsEmpty());
 }
 
 // _____________________________________________________________________________
