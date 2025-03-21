@@ -135,6 +135,8 @@ class SparqlExpression {
   // implementation.
   virtual void getExistsExpressions(
       std::vector<const SparqlExpression*>& result) const final;
+  virtual void getExistsExpressions(
+      std::vector<SparqlExpression*>& result) final;
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;

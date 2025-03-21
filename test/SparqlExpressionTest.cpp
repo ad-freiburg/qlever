@@ -1572,7 +1572,11 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `ExistsJoin` class, most of the testing happens in
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
-  ExistsExpression exists{ParsedQuery{}};
+  using namespace ::testing;
+  ParsedQuery pq;
+  pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
+  pq.selectClause().setAsterisk();
+  ExistsExpression exists{std::move(pq)};
   auto var = exists.variable();
   TestContext context;
   EXPECT_ANY_THROW(exists.evaluate(&context.context));
@@ -1583,4 +1587,6 @@ TEST(ExistsExpression, basicFunctionality) {
   EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
   EXPECT_THAT(exists.getCacheKey(context.varToColMap),
               HasSubstr("ExistsExpression col# 437"));
+  EXPECT_THAT(exists.containedVariables(),
+              ElementsAre(Pointee(Eq(Variable{"?testVar42"}))));
 }
