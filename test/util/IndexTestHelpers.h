@@ -43,16 +43,18 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // The concrete triple contents are currently used in `GroupByTest.cpp`. Using
 // the parameter parserBufferSize the buffer size can be increased, when needed
 // for larger tests (like polygon testing in Spatial Joins).
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput = std::nullopt,
-                    bool loadAllPermutations = true, bool usePatterns = true,
-                    bool usePrefixCompression = true,
-                    ad_utility::MemorySize blocksizePermutations = 16_B,
-                    bool createTextIndex = false,
-                    bool addWordsFromLiterals = true,
-                    std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsfile = std::nullopt,
-                    ad_utility::MemorySize parserBufferSize = 1_kB);
+Index makeTestIndex(
+    const std::string& indexBasename,
+    std::optional<std::string> turtleInput = std::nullopt,
+    bool loadAllPermutations = true, bool usePatterns = true,
+    bool usePrefixCompression = true,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
+    bool createTextIndex = false, bool addWordsFromLiterals = true,
+    std::optional<std::pair<std::string, std::string>>
+        contentsOfWordsFileAndDocsfile = std::nullopt,
+    ad_utility::MemorySize parserBufferSize = 1_kB,
+    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -68,7 +70,9 @@ QueryExecutionContext* getQec(
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsfile = std::nullopt,
-    ad_utility::MemorySize parserBufferSize = 1_kB);
+    ad_utility::MemorySize parserBufferSize = 1_kB,
+    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
