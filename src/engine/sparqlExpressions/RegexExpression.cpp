@@ -258,13 +258,11 @@ ExpressionResult PrefixRegexExpression::evaluate(
 auto PrefixRegexExpression::getEstimatesForFilterExpression(
     uint64_t inputSize,
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
-  // Assume that only 10^-k entries remain, where k is the length of the prefix.
+  // Assume that only 10^-k entries remain, where k is the length of the prefix
+  // and cap to reasonable maximal values to prevent numerical stability
+  // problems.
   double reductionFactor =
-      std::pow(10, std::max(0, static_cast<int>(prefixRegex_.size())));
-  // Cap to reasonable minimal and maximal values to prevent numerical
-  // stability problems.
-  reductionFactor = std::min(100000000.0, reductionFactor);
-  reductionFactor = std::max(1.0, reductionFactor);
+      std::pow(10, std::min<size_t>(8, prefixRegex_.size()));
   size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
   size_t costEstimate = firstSortedVariable == variable_
                             ? sizeEstimate
