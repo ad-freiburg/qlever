@@ -188,8 +188,9 @@ TEST(RegexExpression, nonPrefixRegex) {
                          {"abc", "[A-Z]", ""},
                          {"aBc", "[A-Z]", ""},
                          {"abC", "[A-Z]", ""},
-                         {"", "", ""}},
-                        {T, F, T, T, T}, false);
+                         {"", "", ""},
+                         {"", "(invalid", ""}},
+                        {T, F, T, T, T, U}, false);
 }
 
 // Test where the expression is not simply a variable.
@@ -274,8 +275,10 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   testValuesInVariables({{"Abc", "[A-Z]", ""},
                          {"abc", "[A-Z]", ""},
                          {"abc", "[A-Z]", "i"},
-                         {"", "", ""}},
-                        {T, F, T, T}, true);
+                         {"", "", ""},
+                         {"", "(invalid", ""},
+                         {"", "", "invalid"}},
+                        {T, F, T, T, U, U}, true);
 }
 
 namespace sparqlExpression {
@@ -362,12 +365,18 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
 }
 
 TEST(RegexExpression, getCacheKey) {
-  const auto exp1 = makeRegexExpression("?first", "alp");
+  auto exp0 = makeRegexExpression("?first", "^alp");
+  auto exp1 = makeRegexExpression("?first", "alp");
   auto exp2 = makeRegexExpression("?first", "alp");
 
   VariableToColumnMap map;
   map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
   map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
+  EXPECT_TRUE(isPrefixExpression(exp0));
+  EXPECT_THAT(exp0->getCacheKey(map),
+              ::testing::AllOf(::testing::StartsWith("Prefix REGEX"),
+                               ::testing::HasSubstr("str:0")));
+  EXPECT_NE(exp0->getCacheKey(map), exp1->getCacheKey(map));
   ASSERT_EQ(exp1->getCacheKey(map), exp2->getCacheKey(map));
 
   // Different regex, different cache key.
@@ -401,11 +410,17 @@ TEST(RegexExpression, getCacheKey) {
   auto exp9 = makeRegexExpression(variable("?first"), variable("?second"),
                                   variable("?third"));
   EXPECT_NE(exp8->getCacheKey(map), exp9->getCacheKey(map));
+
+  auto exp10 = makeRegexExpression("?first", "^alp", std::nullopt, true);
+  EXPECT_THAT(exp10->getCacheKey(map), ::testing::HasSubstr("str:1"));
+  EXPECT_NE(exp0->getCacheKey(map), exp10->getCacheKey(map));
 }
 
 TEST(RegexExpression, getChildren) {
   using namespace ::testing;
   EXPECT_THAT(makeRegexExpression("?a", "someRegex")->containedVariables(),
+              ElementsAre(Pointee(Variable{"?a"})));
+  EXPECT_THAT(makeRegexExpression("?a", "^someRegex")->containedVariables(),
               ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(
       makeRegexExpression("?a", "someRegex", "ims")->containedVariables(),
