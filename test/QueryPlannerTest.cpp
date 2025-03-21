@@ -3839,3 +3839,49 @@ TEST(QueryPlanner, negatedPaths) {
                          h::IndexScanFromStrings(
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
 }
+
+// Test the handling of the named cached queries.
+TEST(QueryPlanner, NamedCachedQuery) {
+  // First test all the error cases that might appear during the parsing and
+  // query planning.
+  std::string query = "SELECT * { SERVICE ql:named-cached-query-3 {}}";
+  auto qec = ad_utility::testing::getQec();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr("was not pinned to the named query cache"));
+
+  query =
+      "SELECT * { SERVICE ql:named-cached-query-3 { <not> <allowed> <here> }}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr(
+          "body of a named cache query request must be empty"));
+
+  query =
+      "SELECT * { SERVICE ql:named-cached-query-3 { {<not> <allowed> <here>} "
+      "}}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr(
+          "body of a named cache query request must be empty"));
+
+  query = "SELECT * { SERVICE ql:named-cached-query-3 { VALUES ?x {3 4 5} }}";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::parseAndPlan(query, qec),
+      ::testing::HasSubstr("Unsupported element in named cached query"));
+
+  // Now pin a query to the named query cache, and check that the query planning
+  // works as expected.
+  std::string queryToPin = "SELECT ?s { ?s <p> ?o} INTERNAL SORT BY ?s";
+  qec = ad_utility::testing::getQec(
+      "<s> <p> <o>. <s> <p> <o2> . <s2> <p> <o2>. <s3> <p2> <o2>.");
+  qec->pinWithExplicitName() = "dummyQuery";
+  auto plan = h::parseAndPlan(queryToPin, qec);
+  [[maybe_unused]] auto pinResult = plan.getResult();
+
+  query = "SELECT * { SERVICE ql:named-cached-query-dummyQuery {}}";
+  // We only check the size estimate (which in this case is exact), because
+  // more detailed tests in `NamedQueryCacheTest.cpp` check the correct contents
+  // etc. of cached queries.
+  h::expect(query, h::ValuesForTesting(3), qec);
+}

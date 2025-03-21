@@ -38,6 +38,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
@@ -460,6 +461,13 @@ inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
   return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
+// Match a `ValuesForTesting`.
+inline QetMatcher ValuesForTesting(size_t sizeEstimate) {
+  auto p = AD_PROPERTY(::ValuesForTesting, getSizeEstimateForTesting,
+                       ::testing::Eq(sizeEstimate));
+  return RootOperation<::ValuesForTesting>(p);
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
@@ -480,8 +488,11 @@ inline QueryExecutionTree parseAndPlan(std::string query,
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
-  return QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
-      .createExecutionTree(pq);
+  auto tree =
+      QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
+          .createExecutionTree(pq);
+  tree.isRoot() = true;
+  return tree;
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and

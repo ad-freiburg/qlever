@@ -21,7 +21,9 @@ class NamedQueryCache {
     LocalVocab localVocab_;
   };
 
-  // TODO<joka921> Use a better size getter for better statistics.
+  // The `ValueSizeGetter` currently is a dummy, as we currently don't limit the
+  // size of the explicit cache. In the future we could make the size more
+  // accurate and also report statistics about named queries.
   struct ValueSizeGetter {
     ad_utility::MemorySize operator()(const Value&) {
       return ad_utility::MemorySize::bytes(1);
@@ -37,6 +39,9 @@ class NamedQueryCache {
   // Store an explicit query result with a given `key`. Previously stored
   // `value`s with the same `key` are overwritten.
   void store(const Key& key, Value value);
+
+  // Erase the explicit query result the the given `key`
+  void erase(const Key& key);
 
   // Clear the cache.
   void clear();

@@ -120,6 +120,10 @@ class ValuesForTesting : public Operation {
   size_t& sizeEstimate() { return sizeEstimate_; }
   size_t& costEstimate() { return costEstimate_; }
 
+  size_t getSizeEstimateForTesting() const { return sizeEstimate_; }
+
+  size_t getCostEstimateForTesting() const { return costEstimate_; }
+
   // ___________________________________________________________________________
   Result computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_ &&

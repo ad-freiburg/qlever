@@ -9,8 +9,6 @@ std::shared_ptr<ValuesForTesting> NamedQueryCache ::getOperation(
     const Key& key, QueryExecutionContext* ctx) {
   const auto& ptr = get(key);
   const auto& [table, map, sortedOn, localVocab] = *ptr;
-  // TODO<joka921> Add a local vocab, and consider also passing a shared_ptr for
-  // the local vocab.
   auto res = std::make_shared<ValuesForTesting>(ctx, table, map, sortedOn,
                                                 localVocab.clone());
   res->forceFullyMaterializedSingleTable() = true;
@@ -30,9 +28,16 @@ auto NamedQueryCache::get(const Key& key) -> std::shared_ptr<const Value> {
 
 // _____________________________________________________________________________
 void NamedQueryCache::store(const Key& key, Value value) {
-  // TODO<joka921> Check the overwrite semantics of the cache class.
-  cache_.wlock()->insert(key, std::move(value));
+  auto lock = cache_.wlock();
+  // The underlying cache throws on insert if the key is already present. We
+  // therefore first call `erase`, which silently ignores keys that are not
+  // present to avoid this behavior.
+  lock->erase(key);
+  lock->insert(key, std::move(value));
 }
+
+// _____________________________________________________________________________
+void NamedQueryCache::erase(const Key& key) { cache_.wlock()->erase(key); }
 
 // _____________________________________________________________________________
 void NamedQueryCache::clear() { cache_.wlock()->clearAll(); }
