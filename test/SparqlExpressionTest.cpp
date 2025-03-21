@@ -1365,7 +1365,8 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{lit(R"("\\$1 \\2 $1 \\")")}});
 
-  checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
+  // Only simple literals should be replaced.
+  checkReplace(idOrLitOrStringVec({U, U}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{Id::makeFromBool(true)}});

@@ -2,16 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#pragma once
+
 #include "./util/IdTestHelpers.h"
-#include "./util/TripleComponentTestHelpers.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
-#include "gtest/gtest.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
-
-#pragma once
 
 namespace sparqlExpression {
 
