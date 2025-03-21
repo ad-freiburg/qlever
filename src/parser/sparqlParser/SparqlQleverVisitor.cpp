@@ -746,7 +746,7 @@ Quads Visitor::visit(Parser::QuadsContext* ctx) {
   // relevant and also not known.
   Quads quads;
   quads.freeTriples_ = ad_utility::flatten(visitVector(ctx->triplesTemplate()));
-  for (auto [graph, triples] : visitVector(ctx->quadsNotTriples())) {
+  for (auto& [graph, triples] : visitVector(ctx->quadsNotTriples())) {
     quads.graphTriples_.emplace_back(std::move(graph), std::move(triples));
   }
   return quads;
