@@ -24,6 +24,11 @@ class alignas(16) LiteralOrIri {
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
 
+  // Return a modifiable reference to the contained Iri object if available,
+  // throw exception otherwise. Allows the caller to modify the Iri object
+  // e.g. for SubStr in StringExpressions.cpp
+  Iri& getIri();
+
   // Return contained Literal object if available, throw exception
   // otherwise
   const Literal& getLiteral() const;

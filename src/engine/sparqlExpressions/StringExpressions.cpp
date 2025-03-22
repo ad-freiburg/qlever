@@ -36,10 +36,9 @@ static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
   int64_t charCount = 0;
 
   for (char c : str) {
-    if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
-      if (charCount++ == utf8Pos) {
-        break;
-      }
+    if ((static_cast<unsigned char>(c) & 0xC0) != 0x80 &&
+        charCount++ == utf8Pos) {
+      break;
     }
     ++byteOffset;
   }

@@ -30,6 +30,16 @@ const Iri& LiteralOrIri::getIri() const {
 }
 
 // __________________________________________
+Iri& LiteralOrIri::getIri() {
+  if (!isIri()) {
+    AD_THROW(
+        "LiteralOrIri object does not contain an Iri object and thus "
+        "cannot return it");
+  }
+  return std::get<Iri>(data_);
+}
+
+// __________________________________________
 NormalizedStringView LiteralOrIri::getIriContent() const {
   return getIri().getContent();
 }

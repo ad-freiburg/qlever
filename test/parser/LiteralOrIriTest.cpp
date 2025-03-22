@@ -301,11 +301,11 @@ TEST(LiteralTest, SetSubstr) {
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  EXPECT_THROW(literal.getLiteral().setSubstr(12, 5), ad_utility::Exception);
+  EXPECT_THROW(literal.getLiteral().setSubstr(12, 1), ad_utility::Exception);
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  EXPECT_THROW(literal.getLiteral().setSubstr(6, 10), ad_utility::Exception);
+  EXPECT_THROW(literal.getLiteral().setSubstr(6, 7), ad_utility::Exception);
 }
 
 // _______________________________________________________________________
