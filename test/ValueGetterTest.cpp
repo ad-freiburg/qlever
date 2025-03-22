@@ -62,9 +62,8 @@ void checkLiteralContentAndDatatypeFromId(
     const std::string& literalString,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
-    std::variant<
-        sparqlExpression::detail::LiteralValueGetter,
-        sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter>
+    std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
+                 sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
         getter) {
   TestContextWithGivenTTl testContext{ttl};
   auto literal = std::visit(
@@ -84,9 +83,8 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
     const std::optional<ad_utility::triple_component::Iri>& literalDescriptor,
     const bool isIri, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
-    std::variant<
-        sparqlExpression::detail::LiteralValueGetter,
-        sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter>
+    std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
+                 sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
         getter) {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
@@ -112,8 +110,9 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
 
 // namespace
 
-TEST(LiteralValueGetter, OperatorWithId) {
-  sparqlExpression::detail::LiteralValueGetter literalValueGetter;
+TEST(LiteralValueGetterWithStrFunction, OperatorWithId) {
+  sparqlExpression::detail::LiteralValueGetterWithStrFunction
+      literalValueGetter;
   checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
                                        literalValueGetter);
   checkLiteralContentAndDatatypeFromId("\"someType\"^^<someType>", "someType",
@@ -122,13 +121,14 @@ TEST(LiteralValueGetter, OperatorWithId) {
       "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
       "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
       literalValueGetter);
-  checkLiteralContentAndDatatypeFromId("<x>", std::nullopt, std::nullopt,
+  checkLiteralContentAndDatatypeFromId("<x>", "x", std::nullopt,
                                        literalValueGetter);
 }
 
-TEST(LiteralValueGetter, OperatorWithLiteralOrIri) {
+TEST(LiteralValueGetterWithStrFunction, OperatorWithLiteralOrIri) {
   using Iri = ad_utility::triple_component::Iri;
-  sparqlExpression::detail::LiteralValueGetter literalValueGetter;
+  sparqlExpression::detail::LiteralValueGetterWithStrFunction
+      literalValueGetter;
   checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,
                                                  "noType", std::nullopt,
                                                  literalValueGetter);
@@ -140,13 +140,12 @@ TEST(LiteralValueGetter, OperatorWithLiteralOrIri) {
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"), false,
       "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
       literalValueGetter);
-  checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
-                                                 std::nullopt, std::nullopt,
-                                                 literalValueGetter);
+  checkLiteralContentAndDatatypeFromLiteralOrIri(
+      "<x>", std::nullopt, true, "x", std::nullopt, literalValueGetter);
 }
 
-TEST(LiteralValueGetterWithXsdStringFilter, OperatorWithId) {
-  sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter
+TEST(LiteralValueGetterWithoutStrFunction, OperatorWithId) {
+  sparqlExpression::detail::LiteralValueGetterWithoutStrFunction
       literalValueGetter;
   checkLiteralContentAndDatatypeFromId("\"noType\"", "noType", std::nullopt,
                                        literalValueGetter);
@@ -160,9 +159,9 @@ TEST(LiteralValueGetterWithXsdStringFilter, OperatorWithId) {
                                        literalValueGetter);
 }
 
-TEST(LiteralValueGetterWithXsdStringFilter, OperatorWithLiteralOrIri) {
+TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
   using Iri = ad_utility::triple_component::Iri;
-  sparqlExpression::detail::LiteralValueGetterWithXsdStringFilter
+  sparqlExpression::detail::LiteralValueGetterWithoutStrFunction
       literalValueGetter;
   checkLiteralContentAndDatatypeFromLiteralOrIri("noType", std::nullopt, false,
                                                  "noType", std::nullopt,

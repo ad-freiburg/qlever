@@ -92,29 +92,22 @@ std::optional<std::string> StringValueGetter::operator()(
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-LiteralValueGetter::operator()(Id id, const EvaluationContext* context) const {
+LiteralValueGetterWithStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
   return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
                                                 context->_localVocab);
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-LiteralValueGetter::operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const {
-  if (s.isLiteral()) {
-    auto literal = s.getLiteral();
-    if (!ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
-      literal.removeDatatypeOrLanguageTag();
-    }
-    return literal;
-  } else {
-    return std::nullopt;
-  }
+LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
+                                              const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, false);
 }
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-LiteralValueGetterWithXsdStringFilter::operator()(
+LiteralValueGetterWithoutStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
   return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
                                                 context->_localVocab, true);
@@ -122,13 +115,9 @@ LiteralValueGetterWithXsdStringFilter::operator()(
 
 // ____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
-LiteralValueGetterWithXsdStringFilter::operator()(
+LiteralValueGetterWithoutStrFunction::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  if (s.isLiteral() &&
-      ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
-    return s.getLiteral();
-  }
-  return std::nullopt;
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, true);
 }
 
 // ____________________________________________________________________________

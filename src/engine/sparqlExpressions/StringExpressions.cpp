@@ -24,13 +24,14 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
 
 // Count UTF-8 characters by skipping continuation bytes (those starting with
 // "10").
-inline std::size_t utf8Length(std::string_view s) {
+static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(
       s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
 }
 
-// Convert UTF-8 position to byte offset
-inline std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
+// Convert UTF-8 position to byte offset. If utf8Pos exceeds the
+// string length, the byte offset will be set to the strings size.
+static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
   std::size_t byteOffset = 0;
   int64_t charCount = 0;
 
@@ -115,10 +116,11 @@ template <size_t N, typename Function,
           typename... AdditionalNonStringValueGetters>
 class LiteralExpressionImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr = NARY<
-      N, FV<Function, LiteralValueGetter, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithStr =
+      NARY<N, FV<Function, LiteralValueGetterWithStrFunction,
+                 AdditionalNonStringValueGetters...>>;
   using ExpressionWithoutStr =
-      NARY<N, FV<Function, LiteralValueGetterWithXsdStringFilter,
+      NARY<N, FV<Function, LiteralValueGetterWithoutStrFunction,
                  AdditionalNonStringValueGetters...>>;
 
   SparqlExpression::Ptr impl_;
@@ -312,7 +314,7 @@ class SubstrImpl {
     std::size_t byteLength = endByteOffset - startByteOffset;
 
     s.value().setSubstr(startByteOffset, byteLength);
-    return std::move(LiteralOrIri(s.value()));
+    return LiteralOrIri(std::move(s.value()));
   }
 };
 

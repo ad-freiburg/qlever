@@ -73,11 +73,13 @@ class ExportQueryExecutionTrees {
   // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped unless
   // they are 'xsd:string', so for literals with non-'xsd:string' datatypes
   // (this includes IDs that directly store their value, like Doubles) the
-  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is true, all
-  // IRIs and literals with non'-xsd:string' datatypes (including encoded IDs)
-  // return 'std::nullopt'. These semantics are useful for the string
-  // expressions in StringExpressions.cpp.
-  template <bool returnOnlyLiterals = false>
+  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is false,
+  // IRIs are converted to literals without a datatype, which is equivalent to
+  // the behavior of the SPARQL STR(...) function. If
+  // 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with
+  // non'-xsd:string' datatypes (including encoded IDs) return 'std::nullopt'.
+  // These semantics are useful for the string expressions in
+  // StringExpressions.cpp.
   static std::optional<Literal> idToLiteral(
       const Index& index, Id id, const LocalVocab& localVocab,
       bool onlyReturnLiteralsWithXsdString = false);
@@ -99,6 +101,10 @@ class ExportQueryExecutionTrees {
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.
   static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
+
+  // Replaces angle brackets '<' and '>' with double quotes '"' to convert an
+  // IRI to a Literal.
+  static std::string replaceAnglesByQuotes(std::string iriString);
 
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.

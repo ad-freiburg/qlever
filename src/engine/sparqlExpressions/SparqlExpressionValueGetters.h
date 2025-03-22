@@ -162,9 +162,12 @@ struct ReplacementStringGetter : StringValueGetter,
 };
 
 // This class can be used as the `ValueGetter` argument of Expression
-// templates. It produces a LiteralOrIri.
-struct LiteralValueGetter : Mixin<LiteralValueGetter> {
-  using Mixin<LiteralValueGetter>::operator();
+// templates. It implicitly applies the STR() function. In particular,
+// all datatypes except for xsd:string are removed, language tags are preserved,
+// see ExportQueryExecutionTrees::idToLiteral for details.
+struct LiteralValueGetterWithStrFunction
+    : Mixin<LiteralValueGetterWithStrFunction> {
+  using Mixin<LiteralValueGetterWithStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
       ValueId, const EvaluationContext*) const;
@@ -174,10 +177,10 @@ struct LiteralValueGetter : Mixin<LiteralValueGetter> {
 };
 
 // Same as above but only literals with 'xsd:string' datatype or no datatype are
-// returned.
-struct LiteralValueGetterWithXsdStringFilter
-    : Mixin<LiteralValueGetterWithXsdStringFilter> {
-  using Mixin<LiteralValueGetterWithXsdStringFilter>::operator();
+// returned. This is used in the string expressions in `StringExpressions.cpp`.
+struct LiteralValueGetterWithoutStrFunction
+    : Mixin<LiteralValueGetterWithoutStrFunction> {
+  using Mixin<LiteralValueGetterWithoutStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
       ValueId, const EvaluationContext*) const;

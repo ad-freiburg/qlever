@@ -145,9 +145,6 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
 }
 
 // __________________________________________
-void Literal::removeDatatypeOrLanguageTag() {
-  content_.erase(beginOfSuffix_);
-  beginOfSuffix_ = content_.size();
-}
+void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
 }  // namespace ad_utility::triple_component
