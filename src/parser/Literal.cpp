@@ -135,4 +135,16 @@ Literal Literal::fromStringRepresentation(std::string internal) {
   return Literal{std::move(internal), endIdx + 1};
 }
 
+// __________________________________________
+void Literal::setSubstr(std::size_t start, std::size_t length) {
+  std::size_t contentLength = beginOfSuffix_ - 2;
+  AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
+  content_.erase(1 + start + length, contentLength - start - length);
+  content_.erase(1, start);
+  beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
+}
+
+// __________________________________________
+void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
+
 }  // namespace ad_utility::triple_component

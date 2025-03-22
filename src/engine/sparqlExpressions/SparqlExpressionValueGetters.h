@@ -161,6 +161,46 @@ struct ReplacementStringGetter : StringValueGetter,
   static std::string convertToReplacementString(std::string_view view);
 };
 
+// This class can be used as the `ValueGetter` argument of Expression
+// templates. It implicitly applies the STR() function. In particular,
+// all datatypes except for xsd:string are removed, language tags are preserved,
+// see ExportQueryExecutionTrees::idToLiteral for details.
+struct LiteralValueGetterWithStrFunction
+    : Mixin<LiteralValueGetterWithStrFunction> {
+  using Mixin<LiteralValueGetterWithStrFunction>::operator();
+
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      ValueId, const EvaluationContext*) const;
+
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      const LiteralOrIri& s, const EvaluationContext*) const;
+};
+
+// Same as above but only literals with 'xsd:string' datatype or no datatype are
+// returned. This is used in the string expressions in `StringExpressions.cpp`.
+struct LiteralValueGetterWithoutStrFunction
+    : Mixin<LiteralValueGetterWithoutStrFunction> {
+  using Mixin<LiteralValueGetterWithoutStrFunction>::operator();
+
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      ValueId, const EvaluationContext*) const;
+
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      const LiteralOrIri& s, const EvaluationContext*) const;
+};
+
+// Value getter for `isBlank`.
+struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
+  using Mixin<IsBlankNodeValueGetter>::operator();
+  Id operator()(ValueId id, const EvaluationContext*) const {
+    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
+  }
+
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
+  }
+};
+
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>
