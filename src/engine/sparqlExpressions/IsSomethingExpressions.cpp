@@ -2,6 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -23,18 +24,53 @@ namespace detail {
 //    `SparqlExpression::Ptr` and returns a `unique_ptr` to a new instance of
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
+template <typename NaryOperation, prefilterExpressions::IsDatatype Datatype>
+requires(isOperation<NaryOperation>)
+class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override {
+    using namespace prefilterExpressions;
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 1);
+    const SparqlExpression* childExpr = children[0].get();
+    // `VariableExpression` (e.g. `isLiteral(?x)`).
+    std::optional<Variable> optVar = childExpr->getVariableOrNullopt();
+    if (optVar.has_value()) {
+      prefilterVec.emplace_back(
+          std::make_unique<IsDatatypeExpression<Datatype>>(), optVar.value());
+    }
+    return prefilterVec;
+  }
+};
 
+//______________________________________________________________________________
 // Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
 // `isNumeric`, and the custom function `isWktPoint`. Note that the value
 // getters already return the correct `Id`, hence `std::identity`.
-using isIriExpression = NARY<1, FV<std::identity, IsIriValueGetter>>;
-using isLiteralExpression = NARY<1, FV<std::identity, IsLiteralValueGetter>>;
-using isNumericExpression = NARY<1, FV<std::identity, IsNumericValueGetter>>;
+template <typename Getter, prefilterExpressions::IsDatatype Datatype>
+using IsDtypeExpression =
+    IsDatatypeExpressionImpl<Operation<1, FV<std::identity, Getter>>, Datatype>;
+
+using isLiteralExpression =
+    IsDtypeExpression<IsLiteralValueGetter,
+                      prefilterExpressions::IsDatatype::LITERAL>;
+using isNumericExpression =
+    IsDtypeExpression<IsNumericValueGetter,
+                      prefilterExpressions::IsDatatype::NUMERIC>;
 using isBlankExpression =
-    NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::BlankNodeIndex>>>;
+    IsDtypeExpression<IsValueIdValueGetter<Datatype::BlankNodeIndex>,
+                      prefilterExpressions::IsDatatype::BLANK>;
+using isIriExpression =
+    IsDtypeExpression<IsIriValueGetter, prefilterExpressions::IsDatatype::IRI>;
+
+// We currently don't support pre-filtering for `isGeoPointExpression`.
 using isGeoPointExpression =
     NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
 
+//______________________________________________________________________________
 // The expression for `bound` is slightly different as `IsValidValueGetter`
 // returns a `bool` and not an `Id`.
 inline auto boolToId = [](bool b) { return Id::makeFromBool(b); };

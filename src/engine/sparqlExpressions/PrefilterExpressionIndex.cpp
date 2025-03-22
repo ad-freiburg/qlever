@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
@@ -69,9 +69,13 @@ static bool checkBlockIsInconsistent(const BlockMetadata& block,
 }
 
 //______________________________________________________________________________
-// Check required conditions.
-static void checkEvalRequirements(std::span<const BlockMetadata> input,
-                                  size_t evaluationColumn) {
+// Check for the following conditions.
+// (1) All `BlockMetadata` values in `input` must be unique.
+// (2) `input` must contain those `BlockMetadata` values in sorted order.
+// (3) Columns with `column index < evaluationColumn` must contain consistent
+// values (`ValueId`s).
+static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
+                                           size_t evaluationColumn) {
   const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
   };
@@ -119,23 +123,324 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
 };
 
 //______________________________________________________________________________
-// Given two sorted `vector`s containing `BlockMetadata`, this function
-// returns their merged `BlockMetadata` content in a `vector` which is free of
-// duplicates and ordered.
-static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
-                        const std::vector<BlockMetadata>& blocks2) {
-  std::vector<BlockMetadata> mergedVectors;
-  mergedVectors.reserve(blocks1.size() + blocks2.size());
-  const auto blockLessThanBlock = [](const BlockMetadata& b1,
-                                     const BlockMetadata& b2) {
-    return b1.blockIndex_ < b2.blockIndex_;
+static std::vector<BlockMetadata> getRelevantBlocks(
+    const RelevantBlockRanges& relevantBlockRanges,
+    std::span<const BlockMetadata> blocks) {
+  [[maybe_unused]] auto blocksEnd = blocks.size();
+  auto blocksBegin = blocks.begin();
+
+  std::vector<BlockMetadata> relevantBlocks;
+  for (const auto& [rangeBegin, rangeEnd] : relevantBlockRanges) {
+    assert(rangeBegin >= 0 && rangeBegin <= rangeEnd && rangeEnd <= blocksEnd);
+    relevantBlocks.insert(relevantBlocks.end(), blocksBegin + rangeBegin,
+                          blocksBegin + rangeEnd);
+  }
+  return relevantBlocks;
+}
+
+namespace detail::mapping {
+//______________________________________________________________________________
+// Helper for the following index-map functions that adds the relevant
+// ranges to `blockRangeIndices`. `addRangeAndSimplify` ensures that the ranges
+// added are non-overlapping and merged together if adjacent.
+auto addRangeAndSimplify = [](RelevantBlockRanges& blockRangeIndices,
+                              const size_t rangeIdxFirst,
+                              const size_t rangeIdxSecond) {
+  // Empty ranges aren't relevant.
+  if (rangeIdxFirst == rangeIdxSecond) return;
+  // Simplify the mapped ranges if adjacent or overlapping.
+  // This simplification procedure also ensures that no `BlockMetadata`
+  // value is retrieved twice later on (no overlapping indices for adjacient
+  // `BlockRange` values).
+  if (!blockRangeIndices.empty() &&
+      blockRangeIndices.back().second >= rangeIdxFirst) {
+    // They are adjacent or even overlap: merge/simplify!
+    blockRangeIndices.back().second = rangeIdxSecond;
+  } else {
+    // The new range (specified by `BlockRange`) is not adjacent and
+    // doesn't overlap.
+    blockRangeIndices.emplace_back(rangeIdxFirst, rangeIdxSecond);
+  }
+};
+
+//______________________________________________________________________________
+// For general mapping description see comment to
+// `mapRandomItRangesToBlockRanges`. The only difference here is that we map
+// over the complementing `RandomValueIdItPair`s with respect to the
+// `RandomValueIdItPair`s contained in `relevantIdRanges`.
+RelevantBlockRanges mapRandomItRangesToBlockRangesComplemented(
+    const std::vector<RandomValueIdItPair>& relevantIdRanges,
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) {
+  // The MAX index (allowed difference).
+  const auto maxIndex = std::distance(idsBegin, idsEnd) / 2;
+  if (relevantIdRanges.empty()) return {std::make_pair(0, maxIndex)};
+
+  // Vector containing the `BlockRange` mapped indices.
+  RelevantBlockRanges blockRanges;
+  blockRanges.reserve(relevantIdRanges.size());
+
+  ValueIdFromBlocksIt lastIdRangeIt = idsBegin;
+  for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRanges) {
+    addRangeAndSimplify(
+        blockRanges,
+        static_cast<size_t>(std::distance(idsBegin, lastIdRangeIt) / 2),
+        // std::min ensures that we respect the bounds of the
+        // `BlockMetadata` value span later on.
+        static_cast<size_t>(std::min(
+            (std::distance(idsBegin, firstIdRangeIt) + 1) / 2, maxIndex)));
+    // Set start index for the next complement section.
+    lastIdRangeIt = secondIdRangeIt;
+  }
+  // Handle the last complementing section.
+  const auto& mappedBlockRangeFirst =
+      std::distance(idsBegin, lastIdRangeIt) / 2;
+  if (mappedBlockRangeFirst < maxIndex) {
+    addRangeAndSimplify(blockRanges, static_cast<size_t>(mappedBlockRangeFirst),
+                        static_cast<size_t>(maxIndex));
+  }
+  return blockRanges;
+}
+
+//______________________________________________________________________________
+// EXAMPLE MAPPING PROCEDURE AND WIDER CONTEXT
+//
+// (1)
+// Assume for simplicity that the following construct (only one column)
+// represents the `BlockMetadata` span (`input`) provided to
+// `PrefilterExpression::evaluate` earlier on. Each bracket representing the
+// relevant first and last `ValueId` for a single `BlockMetadata` value. Lets
+// assume `std::span<const BlockMetadata> input` is:
+// `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150, 1158]}`
+//
+// (2)
+// The iterators `ValueIdFromBlocksIt idsBegin` and `ValueIdFromBlocksIt idsEnd`
+// provide access to the `ValueId`s over the containerized `BlockMetadata`
+// values.
+// The overall accessible `ValueId` range is:
+// `{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`
+//
+// (3)
+// Now let's assume that the reference `ValueId` for which we want to
+// pre-filter the relation `less-than` (`<`) has the value `1123`.
+//
+// (4)
+// When we analyze the total `ValueId` range `{1021, 1082, 1083, 1115, 1121,
+// 1140, 1140, 1148, 1150, 1158}`; it becomes clear that the `ValueId`s `1021 -
+// 1140` are relevant (pre-filtered values). As a consequence the `ValueId`s
+// `1140 - 1158` should be dropped (filtered out).
+//
+// (5)
+// When `valueIdComparators::getRangesForId` was applied with respect to the
+// overall `ValueId` range (in `RelationalExpression::evaluateImpl`), the
+// `iterator`s representing the range `1021 - 1140` were retrieved. Remark:
+// the second index should point to the first `ValueId` that does not satisfy
+// `< 1123` (our pre-filter reference `ValueId`).
+// `valueIdComparators::getRangesForId` returned `{std::pair<iterator(1021),
+// iterator(1140)>}`
+//
+// (6)
+// With step (5) gollows:
+// `relevantIdRanges = {std::pair<iterator(1021), iterator(1140)>}`
+//
+// (7)
+// `mapRandomItRanges` will now map the range `std::pair<iterator(1021),
+// iterator(1140)>` contained in `relevantIdRanges` to and index range
+// `std::pair<size_t, size_t>` suitable for retrieving relevant `BlockMetadata`
+// values from `std::span<const BlockMetadata> input`.
+//
+// (8)
+// Remark: For every `BlockMetadata` value we retrieved two bounding
+// `ValueId`s. This is the reason why we have to divide by two. We also round up
+// with `(std::distance(idsBegin, secondIdRangeIt) + 1) / 2` because the
+// `iterator`s specify ranges up-to-but-not-including.
+//
+// The added range is
+// `size_t begin = std::distance(iterator(1021), iterator(1021)) / 2
+//               = 0`
+// `size_t end = (std::distance(iterator(1021), iterator(1140)) + 1) / 2
+//             = (5 + 1) / 2
+//             = 3`
+//
+// (9)
+// Recap:
+// `std::pair<iterator(1021), iterator(1140)>` is mapped to
+// `std::pair<0, 3>` (`BlockRange`).
+//
+// (10)
+// With `std::pair<0, 3>` the `BlockMetadata` values `input[0, 3]` will be
+// retrieved later on.
+// `input = {[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150,
+// 1158]}`
+//
+// => return blocks `{[1021, 1082], [1083, 1115], [1121, 1140]}`
+//
+// And indeed, those blocks are relevant when pre-filtering for `< 1123`
+// (specified for (3))
+RelevantBlockRanges mapRandomItRangesToBlockRanges(
+    const std::vector<RandomValueIdItPair>& relevantIdRanges,
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) {
+  if (relevantIdRanges.empty()) return {};
+  // Vector containing the `BlockRange` mapped indices.
+  RelevantBlockRanges blockRanges;
+  blockRanges.reserve(relevantIdRanges.size());
+  // The MAX index (allowed difference).
+  const auto maxIndex = std::distance(idsBegin, idsEnd) / 2;
+
+  for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRanges) {
+    assert(firstIdRangeIt <= secondIdRangeIt);
+    addRangeAndSimplify(
+        blockRanges,
+        static_cast<size_t>(std::distance(idsBegin, firstIdRangeIt) / 2),
+        // std::min ensures that we respect the bounds of the `BlockMetadata`
+        // value span later on.
+        static_cast<size_t>(std::min(
+            (std::distance(idsBegin, secondIdRangeIt) + 1) / 2, maxIndex)));
+  }
+  return blockRanges;
+}
+}  // namespace detail::mapping
+
+// SECTION HELPER LOGICAL OPERATORS
+namespace detail::logicalOps {
+
+//______________________________________________________________________________
+// Helper for `getUnion` and `getIntersection`.
+// Add the range defined by `startIndex`/`endIndex` to `RelevantBlockRanges
+// ranges` and simplify/merge with respect to the last added range if possible.
+auto addAndSimplifyRange = [](RelevantBlockRanges& ranges, size_t startIndex,
+                              size_t endIndex) {
+  if (ranges.empty() || startIndex > ranges.back().second) {
+    ranges.emplace_back(startIndex, endIndex);
+  } else {
+    ranges.back().second = std::max(ranges.back().second, endIndex);
+  }
+};
+
+//______________________________________________________________________________
+// `getUnion` implements `logical-or (||)` on `BlockRange` values. The function
+// unifies index (`size_t`) ranges.
+// `BlockRange` is simply an alias for `std::pair<size_t, size_t>`.
+//
+// EXAMPLE
+// Given input `r1` and `r2`
+// `RelevantBlockRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `RelevantBlockRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// The result is
+// `RelevantBlocksRanges result`: `[<2, 10>, <15, 23>]`
+RelevantBlockRanges getUnion(const RelevantBlockRanges& r1,
+                             const RelevantBlockRanges& r2) {
+  // (1) Given the  ranges r1 and r2 are empty, return the empty range.
+  if (r1.empty() && r2.empty()) return {};
+  // (2) Merge, unite and simplify the ranges of r1 and r2.
+  RelevantBlockRanges unionedRanges;
+  unionedRanges.reserve(r1.size() + r2.size());
+  auto idx1 = r1.begin();
+  auto idx2 = r2.begin();
+
+  while (idx1 != r1.end() && idx2 != r2.end()) {
+    const auto& [idx1First, idx1Second] = *idx1;
+    const auto& [idx2First, idx2Second] = *idx2;
+    if (idx2Second < idx1First) {
+      // The current ranges of r1 and r2 don't intersect.
+      // BlockRange of r2 < BlockRange of r1 overall.
+      addAndSimplifyRange(unionedRanges, idx2First, idx2Second);
+      idx2++;
+    } else if (idx1Second < idx2First) {
+      // The current ranges of r1 and r2 don't intersect.
+      // BlockRange of r1 < BlockRange of r2 overall.
+      addAndSimplifyRange(unionedRanges, idx1First, idx1Second);
+      idx1++;
+    } else {
+      // Overlapping ranges r1 and r2.
+      addAndSimplifyRange(unionedRanges, std::min(idx1First, idx2First),
+                          std::max(idx1Second, idx2Second));
+      idx1++;
+      idx2++;
+    }
+  }
+  const auto optAddRestRanges = [&unionedRanges](const BlockRange& range) {
+    addAndSimplifyRange(unionedRanges, range.first, range.second);
   };
-  // Given that we have vectors with sorted (BlockMedata) values, we can
-  // use ql::ranges::set_union. Thus the complexity is O(n + m).
-  ql::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
-                        blockLessThanBlock);
-  mergedVectors.shrink_to_fit();
-  return mergedVectors;
+  // Add the additional `BlockRange`s of r1 or r2 to unionedRanges.
+  ql::ranges::for_each(idx1, r1.end(), optAddRestRanges);
+  ql::ranges::for_each(idx2, r2.end(), optAddRestRanges);
+  return unionedRanges;
+}
+
+//______________________________________________________________________________
+// `getIntersection` implements `logical-and (&&)` on `BlockRange` values. The
+// function intersects index (`size_t`) ranges. `BlockRange` is simply an alias
+// for `std::pair<size_t, size_t>`.
+//
+// EXAMPLE
+// Given input `r1` and `r2`
+// `RelevantBlockRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `RelevantBlockRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// The result is
+// `RelevantBlocksRanges result`: `[<4, 6>, <8, 9>, <15, 16>, <20, 22>]`
+RelevantBlockRanges getIntersection(const RelevantBlockRanges& r1,
+                                    const RelevantBlockRanges& r2) {
+  // If one of the ranges is empty, the intersection by definition is empty.
+  if (r1.empty() || r2.empty()) return {};
+
+  RelevantBlockRanges intersectedRanges;
+  intersectedRanges.reserve(r1.size() + r2.size());
+  auto idx1 = r1.begin();
+  auto idx2 = r2.begin();
+
+  while (idx1 != r1.end() && idx2 != r2.end()) {
+    const auto& [idx1First, idx1Second] = *idx1;
+    const auto& [idx2First, idx2Second] = *idx2;
+    // Handle no overlap w.r.t. current ranges, the intersection is empty.
+    if (idx1Second < idx2First) {
+      idx1++;
+      continue;
+    }
+    if (idx2Second < idx1First) {
+      idx2++;
+      continue;
+    }
+    // The ranges r1 and r2 overlap, add the intersction to intersectedRanges.
+    addAndSimplifyRange(intersectedRanges, std::max(idx1First, idx2First),
+                        std::min(idx1Second, idx2Second));
+    if (idx1Second < idx2Second) {
+      idx1++;
+    } else if (idx2Second < idx1Second) {
+      idx2++;
+    } else {
+      idx1++;
+      idx2++;
+    }
+  }
+  // The remaining BlockRange values from r1 or r2 are simply discarded given
+  // we completely iterated over r1 and/or r2. No additional intersections are
+  // possible.
+  return intersectedRanges;
+}
+}  // namespace detail::logicalOps
+
+//______________________________________________________________________________
+// This function retrieves the `BlockRange`s for `BlockMetadata` values that
+// contain bounding `ValueId`s with different underlying datatypes.
+static std::vector<BlockRange> getRangesMixedDatatypeBlocks(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) {
+  if (idsBegin == idsEnd) return {};
+  ValueIdFromBlocksIt beginCopy = idsBegin;
+  std::vector<RandomValueIdItPair> mixedDatatypeRanges;
+  while (idsBegin != idsEnd) {
+    ValueId firstId = *idsBegin++;
+    // We shouldn't have access to an uneven number of `ValueId`s over
+    // `BlockMetadata` values. By contract the next iterator value should be
+    // valid.
+    AD_CORRECTNESS_CHECK(idsBegin != idsEnd);
+    ValueId secondId = *idsBegin;
+    if (firstId.getDatatype() != secondId.getDatatype()) {
+      mixedDatatypeRanges.emplace_back(idsBegin - 1, idsBegin);
+    }
+    idsBegin++;
+  }
+  return detail::mapping::mapRandomItRangesToBlockRanges(mixedDatatypeRanges,
+                                                         beginCopy, idsEnd);
 }
 
 //______________________________________________________________________________
@@ -162,6 +467,24 @@ static std::string getRelationalOpStr(const CompOp relOp) {
 }
 
 //______________________________________________________________________________
+// Return `Datatype`s (for `isDatatype` pre-filter) as string.
+static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
+  using enum IsDatatype;
+  switch (isDtype) {
+    case IRI:
+      return "Iri";
+    case BLANK:
+      return "Blank";
+    case LITERAL:
+      return "Literal";
+    case NUMERIC:
+      return "Numeric";
+    default:
+      AD_FAIL();
+  }
+}
+
+//______________________________________________________________________________
 // Return `LogicalOperator`s as string.
 static std::string getLogicalOpStr(const LogicalOperator logOp) {
   using enum LogicalOperator;
@@ -175,14 +498,26 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
   }
 }
 
+// CUSTOM VALUE-ID ACCESS (STRUCT) OPERATOR
+//______________________________________________________________________________
+// Enables access to the i-th `ValueId` regarding our containerized
+// `std::span<const BlockMetadata> inputSpan`.
+// Each `BlockMetadata` value holds exactly two bound `ValueId`s (one in
+// `firstTriple_` and `lastTriple_` respectively) over the specified column
+// `evaluationColumn_`.
+// Thus, the valid index range over `i` is `[0, 2 * inputSpan.size())`.
+ValueId AccessValueIdFromBlockMetadata::operator()(
+    std::span<const BlockMetadata> randomAccessContainer, uint64_t i) const {
+  const BlockMetadata& block = randomAccessContainer[i / 2];
+  return i % 2 == 0
+             ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
+             : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);
+};
+
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    bool stripIncompleteBlocks) const {
-  if (!stripIncompleteBlocks) {
-    return evaluateAndCheckImpl(input, evaluationColumn);
-  }
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   if (input.size() < 3) {
     return std::vector<BlockMetadata>(input.begin(), input.end());
   }
@@ -198,7 +533,21 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     input = input.subspan(0, input.size() - 1);
   }
 
-  auto result = evaluateAndCheckImpl(input, evaluationColumn);
+  std::vector<BlockMetadata> result;
+  if (!input.empty()) {
+    checkRequirementsBlockMetadata(input, evaluationColumn);
+    AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
+    ValueIdFromBlocksIt idsBegin{&input, 0, accessValueIdOp};
+    ValueIdFromBlocksIt idsEnd{&input, input.size() * 2, accessValueIdOp};
+    result =
+        getRelevantBlocks(detail::logicalOps::getUnion(
+                              evaluateImpl(idsBegin, idsEnd),
+                              // always add mixed datatype blocks
+                              getRangesMixedDatatypeBlocks(idsBegin, idsEnd)),
+                          input);
+    checkRequirementsBlockMetadata(result, evaluationColumn);
+  }
+
   if (firstBlock.has_value()) {
     result.insert(result.begin(), firstBlock.value());
   }
@@ -207,15 +556,6 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
   }
   return result;
 };
-
-// _____________________________________________________________________________
-std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
-  checkEvalRequirements(input, evaluationColumn);
-  const auto& relevantBlocks = evaluateImpl(input, evaluationColumn);
-  checkEvalRequirements(relevantBlocks, evaluationColumn);
-  return relevantBlocks;
-}
 
 //______________________________________________________________________________
 ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
@@ -237,7 +577,8 @@ RelationalExpression<Comparison>::logicalComplement() const {
   using enum CompOp;
   using namespace ad_utility;
   using P = std::pair<CompOp, CompOp>;
-  // The complementation logic implemented with the following mapping procedure:
+  // The complementation logic implemented with the following mapping
+  // procedure:
   // (1) ?var < referenceValue -> ?var >= referenceValue
   // (2) ?var <= referenceValue -> ?var > referenceValue
   // (3) ?var >= referenceValue -> ?var < referenceValue
@@ -252,28 +593,13 @@ RelationalExpression<Comparison>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+RelevantBlockRanges
+RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd,
+    bool getComplementOverAllDatatypes) const {
   using namespace valueIdComparators;
-  std::vector<ValueId> valueIdsInput;
-  // For each BlockMetadata value in vector input, we have a respective Id for
-  // firstTriple and lastTriple
-  valueIdsInput.reserve(2 * input.size());
-  std::vector<BlockMetadata> mixedDatatypeBlocks;
-
-  for (const auto& block : input) {
-    const auto firstId =
-        getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
-    const auto secondId =
-        getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
-    valueIdsInput.push_back(firstId);
-    valueIdsInput.push_back(secondId);
-
-    if (firstId.getDatatype() != secondId.getDatatype()) {
-      mixedDatatypeBlocks.push_back(block);
-    }
-  }
-
+  // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
+  // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
   LocalVocab vocab{};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, vocab);
@@ -285,38 +611,21 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   // empty ranges).
   auto relevantIdRanges =
       Comparison != CompOp::EQ
-          ? getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId, Comparison)
-          : getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId, Comparison, false);
+          ? getRangesForId(idsBegin, idsEnd, referenceId, Comparison)
+          : getRangesForId(idsBegin, idsEnd, referenceId, Comparison, false);
+  valueIdComparators::detail::simplifyRanges(relevantIdRanges);
+  return getComplementOverAllDatatypes
+             ? detail::mapping::mapRandomItRangesToBlockRangesComplemented(
+                   relevantIdRanges, idsBegin, idsEnd)
+             : detail::mapping::mapRandomItRangesToBlockRanges(
+                   relevantIdRanges, idsBegin, idsEnd);
+};
 
-  // The vector for relevant BlockMetadata values which contain ValueIds
-  // defined as relevant by relevantIdRanges.
-  std::vector<BlockMetadata> relevantBlocks;
-  // Reserve memory, input.size() is upper bound.
-  relevantBlocks.reserve(input.size());
-
-  // Given the relevant Id ranges, retrieve the corresponding relevant
-  // BlockMetadata values from vector input and add them to the relevantBlocks
-  // vector.
-  auto endValueIdsInput = valueIdsInput.end();
-  for (const auto& [firstId, secondId] : relevantIdRanges) {
-    // Ensures that index is within bounds of index vector.
-    auto secondIdAdjusted =
-        secondId < endValueIdsInput ? secondId + 1 : secondId;
-    relevantBlocks.insert(
-        relevantBlocks.end(),
-        input.begin() + std::distance(valueIdsInput.begin(), firstId) / 2,
-        // Round up, for Ids contained within the bounding Ids of firstTriple
-        // and lastTriple we have to include the respective metadata block
-        // (that block is partially relevant).
-        input.begin() +
-            std::distance(valueIdsInput.begin(), secondIdAdjusted) / 2);
-  }
-  relevantBlocks.shrink_to_fit();
-  // Merge mixedDatatypeBlocks into relevantBlocks while maintaining order and
-  // avoiding duplicates.
-  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
+//______________________________________________________________________________
+template <CompOp Comparison>
+RelevantBlockRanges RelationalExpression<Comparison>::evaluateImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) const {
+  return evaluateOptGetCompleteComplementImpl(idsBegin, idsEnd, false);
 };
 
 //______________________________________________________________________________
@@ -361,6 +670,131 @@ std::string RelationalExpression<Comparison>::asString(
   return stream.str();
 };
 
+// SECTION ISDATATYPE
+//______________________________________________________________________________
+// Remark: The current `logicalComplement` implementation retrieves the full
+// complement w.r.t. the datatypes defined and represented by the `ValueId`
+// space.
+template <IsDatatype Datatype>
+std::unique_ptr<PrefilterExpression>
+IsDatatypeExpression<Datatype>::logicalComplement() const {
+  return make<IsDatatypeExpression<Datatype>>(!isNegated_);
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
+    const {
+  return make<IsDatatypeExpression<Datatype>>(*this);
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+bool IsDatatypeExpression<Datatype>::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherIsDatatype =
+      dynamic_cast<const IsDatatypeExpression<Datatype>*>(&other);
+  if (!otherIsDatatype) {
+    return false;
+  }
+  return isNegated_ == otherIsDatatype->isNegated_;
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::string IsDatatypeExpression<Datatype>::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter IsDatatypeExpression:", "\nPrefilter for datatype: ",
+      getDatatypeIsTypeStr(Datatype),
+      "\nis negated: ", isNegated_ ? "true" : "false", ".\n");
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+RelevantBlockRanges
+IsDatatypeExpression<Datatype>::evaluateIsIriOrIsLiteralImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd,
+    const bool isNegated) const {
+  using enum IsDatatype;
+  using LVE = LocalVocabEntry;
+
+  return Datatype == IRI
+             // Remark: Ids containing LITERAL values precede IRI related Ids
+             // in order. The smallest possible IRI is represented by "<>", we
+             // use its corresponding ValueId later on as a lower bound.
+             ? GreaterThanExpression(LVE::fromStringRepresentation("<>"))
+                   .evaluateOptGetCompleteComplementImpl(idsBegin, idsEnd,
+                                                         isNegated)
+             // For pre-filtering LITERAL related ValueIds we use the ValueId
+             // representing the beginning of IRI values as an upper bound.
+             : LessThanExpression(LVE::fromStringRepresentation("<"))
+                   .evaluateOptGetCompleteComplementImpl(idsBegin, idsEnd,
+                                                         isNegated);
+}
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+RelevantBlockRanges
+IsDatatypeExpression<Datatype>::evaluateIsBlankOrIsNumericImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd,
+    const bool isNegated) const {
+  using enum IsDatatype;
+
+  std::vector<RandomValueIdItPair> relevantRanges;
+  if constexpr (Datatype == BLANK) {
+    relevantRanges = {valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::BlankNodeIndex)};
+  } else {
+    // Remark: Swapping the defined relational order for Datatype::Int
+    // to Datatype::Double ValueIds (in ValueId.h) might affect the
+    // correctness of the following lines!
+    static_assert(Datatype::Int < Datatype::Double);
+
+    const auto& rangeInt = valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::Int);
+    const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::Double);
+    // Differentiate here regarding the adjacency of Int and Double
+    // datatype values. This is relevant w.r.t.
+    // getRelevantBlocksFromIdRanges(), because we technically add to
+    // .second + 1 for the first datatype range. If we simply add
+    // rangeInt and rangeDouble given that datatype Int and Double are
+    // stored directly next to each other, we potentially add a block
+    // twice (forbidden). Remark: This is necessary even if
+    // simplifyRanges(relevantRanges) is performed later on.
+    if (rangeInt.second == rangeDouble.first ||
+        rangeDouble.second == rangeInt.first) {
+      relevantRanges.emplace_back(
+          std::min(rangeInt.first, rangeDouble.first),
+          std::max(rangeInt.second, rangeDouble.second));
+    } else {
+      relevantRanges.emplace_back(rangeInt);
+      relevantRanges.emplace_back(rangeDouble);
+    }
+  }
+  // Sort and remove overlapping ranges.
+  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  return isNegated
+             ? detail::mapping::mapRandomItRangesToBlockRangesComplemented(
+                   relevantRanges, idsBegin, idsEnd)
+             : detail::mapping::mapRandomItRangesToBlockRanges(
+                   relevantRanges, idsBegin, idsEnd);
+}
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+RelevantBlockRanges IsDatatypeExpression<Datatype>::evaluateImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) const {
+  using enum IsDatatype;
+  if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
+    return evaluateIsBlankOrIsNumericImpl(idsBegin, idsEnd, isNegated_);
+  } else {
+    static_assert(Datatype == IRI || Datatype == LITERAL);
+    return evaluateIsIriOrIsLiteralImpl(idsBegin, idsEnd, isNegated_);
+  }
+};
+
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
 template <LogicalOperator Operation>
@@ -383,16 +817,18 @@ LogicalExpression<Operation>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
-std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+RelevantBlockRanges LogicalExpression<Operation>::evaluateImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
-    auto resultChild1 = child1_->evaluate(input, evaluationColumn, false);
-    return child2_->evaluate(resultChild1, evaluationColumn, false);
+    return detail::logicalOps::getIntersection(
+        child1_->evaluateImpl(idsBegin, idsEnd),
+        child2_->evaluateImpl(idsBegin, idsEnd));
   } else {
     static_assert(Operation == OR);
-    return getSetUnion(child1_->evaluate(input, evaluationColumn, false),
-                       child2_->evaluate(input, evaluationColumn, false));
+    return detail::logicalOps::getUnion(
+        child1_->evaluateImpl(idsBegin, idsEnd),
+        child2_->evaluateImpl(idsBegin, idsEnd));
   }
 };
 
@@ -441,9 +877,9 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-std::vector<BlockMetadata> NotExpression::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
-  return child_->evaluate(input, evaluationColumn, false);
+RelevantBlockRanges NotExpression::evaluateImpl(
+    ValueIdFromBlocksIt idsBegin, ValueIdFromBlocksIt idsEnd) const {
+  return child_->evaluateImpl(idsBegin, idsEnd);
 };
 
 //______________________________________________________________________________
@@ -479,18 +915,23 @@ template class RelationalExpression<CompOp::GT>;
 template class RelationalExpression<CompOp::EQ>;
 template class RelationalExpression<CompOp::NE>;
 
+template class IsDatatypeExpression<IsDatatype::IRI>;
+template class IsDatatypeExpression<IsDatatype::BLANK>;
+template class IsDatatypeExpression<IsDatatype::LITERAL>;
+template class IsDatatypeExpression<IsDatatype::NUMERIC>;
+
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
-
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
   auto viewVariable = vec | ql::views::values;
   if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
-        "The vector must contain the <PrefilterExpression, Variable> pairs in "
+        "The vector must contain the <PrefilterExpression, "
+        "Variable> pairs in "
         "sorted order w.r.t. Variable value.");
   }
   if (auto it = ql::ranges::adjacent_find(viewVariable);
