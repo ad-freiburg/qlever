@@ -150,9 +150,10 @@ void Literal::removeDatatype() {
 }
 
 // __________________________________________
-void Literal::replaceContent(const std::string& newContent) {
-  content_.erase(1, beginOfSuffix_ - 2);
-  content_.insert(1, newContent);
+void Literal::replaceContentWithSameLength(const std::string& newContent) {
+  AD_CORRECTNESS_CHECK(newContent.size() == beginOfSuffix_ - 2);
+  for (std::size_t i = 1; i < beginOfSuffix_ - 1; ++i) {
+    content_[i] = newContent[i - 1];
+  }
 }
-
 }  // namespace ad_utility::triple_component

@@ -204,10 +204,10 @@ using StrlenExpression =
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto new_content = ad_utility::utf8ToLower(
-        std::string(asStringViewUnsafe(input.value().getContent())));
-    input.value().replaceContent(new_content);
-    return std::move(LiteralOrIri(input.value()));
+    auto new_content =
+        ad_utility::utf8ToLower(asStringViewUnsafe(input.value().getContent()));
+    input.value().replaceContentWithSameLength(new_content);
+    return LiteralOrIri(std::move(input.value()));
   }
 };
 using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
@@ -219,10 +219,10 @@ using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto new_content = ad_utility::utf8ToUpper(
-        std::string(asStringViewUnsafe(input.value().getContent())));
-    input.value().replaceContent(new_content);
-    return std::move(LiteralOrIri(input.value()));
+    auto new_content =
+        ad_utility::utf8ToUpper(asStringViewUnsafe(input.value().getContent()));
+    input.value().replaceContentWithSameLength(new_content);
+    return LiteralOrIri(std::move(input.value()));
   }
 };
 using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
