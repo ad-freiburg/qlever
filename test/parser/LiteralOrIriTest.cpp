@@ -297,6 +297,10 @@ TEST(LiteralTest, SetSubstr) {
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
 
+  literal = LiteralOrIri::literalWithoutQuotes("Äpfel");
+  literal.getLiteral().setSubstr(0, 2, 6);
+  EXPECT_THAT("Ä", asStringViewUnsafe(literal.getContent()));
+
   // Test with invalid values.
   literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",
@@ -304,8 +308,6 @@ TEST(LiteralTest, SetSubstr) {
   EXPECT_THROW(literal.getLiteral().setSubstr(12, 1, 12),
                ad_utility::Exception);
   EXPECT_THROW(literal.getLiteral().setSubstr(6, 7, 12), ad_utility::Exception);
-  literal = LiteralOrIri::literalWithoutQuotes("Ä");
-  EXPECT_THROW(literal.getLiteral().setSubstr(1, 2, 2), ad_utility::Exception);
 }
 
 // _______________________________________________________________________
