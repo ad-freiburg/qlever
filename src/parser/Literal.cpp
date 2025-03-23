@@ -136,9 +136,9 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // __________________________________________
-void Literal::setSubstr(std::size_t start, std::size_t length) {
-  std::size_t contentLength = beginOfSuffix_ - 2;
-  AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
+void Literal::setSubstr(std::size_t start, std::size_t length,
+                        std::size_t contentLength) {
+  AD_CONTRACT_CHECK(start < contentLength && start + length <= contentLength);
   std::size_t index = 1;
   if (start != 0) {
     for (size_t i = start + 1; i < start + length + 1; ++i) {

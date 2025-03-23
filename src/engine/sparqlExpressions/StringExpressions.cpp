@@ -311,8 +311,9 @@ class SubstrImpl {
     std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
     std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
     std::size_t byteLength = endByteOffset - startByteOffset;
+    std::size_t contentLengthByteOffset = utf8ToByteOffset(str, utf8len - 1);
 
-    s.value().setSubstr(startByteOffset, byteLength);
+    s.value().setSubstr(startByteOffset, byteLength, contentLengthByteOffset);
     return LiteralOrIri(std::move(s.value()));
   }
 };
