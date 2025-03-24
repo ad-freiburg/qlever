@@ -113,4 +113,19 @@ SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(
     const Variable& variable) {
   return {std::make_unique<VariableExpression>(variable), variable.name()};
 }
+
+// _____________________________________________________________________________
+std::vector<const SparqlExpression*>
+SparqlExpressionPimpl::getExistsExpressions() const {
+  std::vector<const SparqlExpression*> result;
+  _pimpl->getExistsExpressions(result);
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<SparqlExpression*> SparqlExpressionPimpl::getExistsExpressions() {
+  std::vector<SparqlExpression*> result;
+  _pimpl->getExistsExpressions(result);
+  return result;
+}
 }  // namespace sparqlExpression

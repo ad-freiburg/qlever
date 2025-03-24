@@ -1163,10 +1163,10 @@ TEST(SparqlParser, SelectQuery) {
   // FROM and FROM NAMED clauses can still be specified via arguments.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
+    return m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1175,9 +1175,9 @@ TEST(SparqlParser, SelectQuery) {
       selectABarFooMatcher(m::Graphs{TripleComponent::Iri::fromIriref("<x>")},
                            m::Graphs{TripleComponent::Iri::fromIriref("<y>")}));
 
-  expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
-                    testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
-                                                  DummyGraphPatternMatcher)));
+  expectSelectQuery(
+      "SELECT * WHERE { ?x ?y ?z }",
+      m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
       testing::AllOf(
@@ -1384,9 +1384,9 @@ TEST(SparqlParser, AskQuery) {
   // the FROM NAMED parts can be specified via `namedGraphs`.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::AskQuery(
+    return m::AskQuery(
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1401,8 +1401,7 @@ TEST(SparqlParser, AskQuery) {
                  selectABarFooMatcher(defaultGraphs, namedGraphs));
 
   // ASK whether there are any triples at all.
-  expectAskQuery("ASK { ?x ?y ?z }",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher)));
+  expectAskQuery("ASK { ?x ?y ?z }", m::AskQuery(DummyGraphPatternMatcher));
 
   // ASK queries may contain neither of LIMIT, OFFSET, or TEXTLIMIT.
   expectAskQueryFails("ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10");
@@ -2052,6 +2051,20 @@ auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
   return builtInCallTestHelpers::matchNaryWithChildrenMatchers(
       &makeUnaryNegateExpression, existsMatcher(pattern));
 }
+
+// Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
+// that matches the given `matcher` when comparing the inner parsed query of the
+// `ExistsExpression`.
+using parsedQuery::GraphPattern;
+Matcher<const GraphPattern&> containsExistsFilter(
+    const Matcher<const ParsedQuery&>& matcher) {
+  return AD_FIELD(
+      GraphPattern, _filters,
+      ::testing::ElementsAre(AD_FIELD(
+          SparqlFilter, expression_,
+          AD_PROPERTY(SparqlExpressionPimpl, getExistsExpressions,
+                      ::testing::ElementsAre(existsMatcher(matcher))))));
+}
 }  // namespace existsTestHelpers
 
 // _____________________________________________________________________________
@@ -2062,13 +2075,19 @@ TEST(SparqlParser, Exists) {
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
   // FROM and FROM NAMED clauses can be specified as arguments.
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
-        m::AsteriskSelect(),
-        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
-  };
+  auto selectABarFooMatcher =
+      [](Graphs defaultGraphs = std::nullopt, Graphs namedGraphs = std::nullopt,
+         const std::optional<std::vector<std::string>>& variables =
+             std::nullopt) {
+        auto selectMatcher = variables.has_value()
+                                 ? m::VariablesSelect(variables.value())
+                                 : AllOf(m::AsteriskSelect(),
+                                         m::VariablesSelect({"?a", "?foo"}));
+        return m::SelectQuery(
+            selectMatcher,
+            m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+            defaultGraphs, namedGraphs);
+      };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     existsMatcher(selectABarFooMatcher()));
@@ -2097,6 +2116,39 @@ TEST(SparqlParser, Exists) {
       "NOT EXISTS {?a <bar> ?foo}",
       notExistsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
       datasetClauses);
+
+  auto expectGroupGraphPattern =
+      ExpectCompleteParse<&Parser::groupGraphPattern>{};
+  expectGroupGraphPattern("{ ?a ?b ?c . FILTER EXISTS {?a <bar> ?foo} }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ ?a ?b ?c . FILTER NOT EXISTS {?a <bar> ?foo} }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ FILTER EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ FILTER NOT EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+
+  auto doesNotBindExists = [&]() {
+    auto innerMatcher = containsExistsFilter(selectABarFooMatcher(
+        std::nullopt, std::nullopt, std::vector<std::string>{}));
+    using parsedQuery::GroupGraphPattern;
+    return AD_FIELD(GraphPattern, _graphPatterns,
+                    ::testing::ElementsAre(
+                        ::testing::VariantWith<GroupGraphPattern>(
+                            AD_FIELD(GroupGraphPattern, _child, innerMatcher)),
+                        ::testing::_));
+  };
+
+  expectGroupGraphPattern(
+      "{ { FILTER EXISTS {?a <bar> ?foo} . ?d ?e ?f } . ?a ?b ?c }",
+      doesNotBindExists());
+  expectGroupGraphPattern(
+      "{ { FILTER NOT EXISTS {?a <bar> ?foo} . ?d ?e ?f  } ?a ?b ?c }",
+      doesNotBindExists());
 }
 
 namespace aggregateTestHelpers {
