@@ -180,12 +180,8 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
-  // Extract all `EXISTS` functions from the given `expression`.
-  std::vector<const sparqlExpression::SparqlExpression*> existsExpressions;
-  expression.getPimpl()->getExistsExpressions(existsExpressions);
-
   // For each `EXISTS` function, add the corresponding `ExistsJoin`.
-  for (auto* expr : existsExpressions) {
+  for (auto* expr : expression.getExistsExpressions()) {
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
     // If we have already considered this `EXIST` (which we can detect by its
