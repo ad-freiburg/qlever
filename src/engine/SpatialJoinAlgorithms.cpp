@@ -3,6 +3,8 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include "engine/SpatialJoinAlgorithms.h"
+
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
@@ -18,7 +20,6 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -39,7 +40,10 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 util::geo::I32Box SpatialJoinAlgorithms::lsjParse(bool side,
                                                   const IdTable* restable,
                                                   ColumnIndex col,
-                                                  sj::WKTParser& parser) const {
+                                                  sj::Sweeper& sweeper,
+                                                  size_t numThreads) const {
+  sj::WKTParser parser(&sweeper, numThreads);
+
   for (size_t row = 0; row < restable->size(); row++) {
     auto id = restable->at(row, col);
     if (id.getDatatype() == Datatype::VocabIndex) {
@@ -338,10 +342,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
        {}},
       ".", "");
 
-  sj::WKTParser wktParser(&sweeper, NUM_THREADS);
-
-  util::geo::I32Box filterBox;
-
   AD_LOG_INFO << "Parsing " << idTableLeft->size() << "x"
               << idTableRight->size() << " geometries..." << std::endl;
 
@@ -349,19 +349,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // smaller one and calculate a bbox on the fly to be used as a filter for the
   // larger one
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = lsjParse(false, idTableLeft, leftJoinCol, wktParser);
-
+    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
     sweeper.setFilterBox(box);
-
-    sj::WKTParser bParser(&sweeper, NUM_THREADS);
-    lsjParse(true, idTableRight, rightJoinCol, bParser);
+    lsjParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
   } else {
-    auto box = lsjParse(true, idTableRight, rightJoinCol, wktParser);
-
+    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
     sweeper.setFilterBox(box);
-
-    sj::WKTParser bParser(&sweeper, NUM_THREADS);
-    lsjParse(false, idTableLeft, leftJoinCol, bParser);
+    lsjParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
   }
 
   // flush geometries

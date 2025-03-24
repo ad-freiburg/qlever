@@ -111,8 +111,9 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG a3c5305dca98a51cda10096d64d35becf4f52a8d
+        GIT_TAG 70e2be63f1e07ac048f24bbc54240f61b754f3bc
 )
+add_definitions("-DSPATIALJOIN_NO_BZIP2=True -DSPATIALJOIN_NO_ZLIB=True")
 
 ################################
 # Threading

@@ -199,8 +199,14 @@ class SpatialJoinAlgorithms {
   // cartesian coordinates. The boxes themselves are disjoint to each other.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
+  // this helper functions parses WKT geometries from the column col in
+  // restable and adds them to the libspatialjoin sweeper. The side specifies
+  // whether we are parsing the left, or right side of the spatial join. The
+  // parsing is multithreaded, numThreads specifies the number of threads to
+  // be used.
   util::geo::I32Box lsjParse(bool side, const IdTable* restable,
-                             ColumnIndex col, sj::WKTParser& parser) const;
+                             ColumnIndex col, sj::Sweeper& sweeper,
+                             size_t numThreads) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
