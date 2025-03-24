@@ -317,9 +317,6 @@ TEST(LiteralOrIriTest, GetIri) {
 
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
   EXPECT_THROW(literal.getIri(), ad_utility::Exception);
-  AD_CONTRACT_CHECK(literal.isIri(),
-                    "LiteralOrIri object does not contain an Iri object and "
-                    "thus cannot return it");
 }
 
 // _______________________________________________________________________
