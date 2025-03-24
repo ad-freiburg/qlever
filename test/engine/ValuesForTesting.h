@@ -83,7 +83,7 @@ class ValuesForTesting : public Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);

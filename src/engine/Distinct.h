@@ -28,6 +28,11 @@ class Distinct : public Operation {
     return subtree_->resultSortedOn();
   }
 
+  // Get all columns that need to be distinct.
+  const std::vector<ColumnIndex>& getDistinctColumns() const {
+    return keepIndices_;
+  }
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
@@ -53,7 +58,7 @@ class Distinct : public Operation {
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
