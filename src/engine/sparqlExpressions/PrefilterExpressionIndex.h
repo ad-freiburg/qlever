@@ -62,12 +62,11 @@ using RelevantBlockItRanges = std::vector<BlockItRange>;
 // respectively) over the specified column `evaluationColumn_`. This leads to an
 // valid index range `[0, 2 * inputSpan.size())` for `i`. Under those conditions
 // and an given `ValueId` index `i`, we can simply determine that the
-// corresponding `ValueId` must be contained in `BlockMetadata` value at position
-// `i/2`. `i % 2` specifies in the following if we have to access the ValueId
-// from `fristTriple_` or `lastTriple_` of previously determined `BlockMetadata`
-// value.
-// (1) `i % 2 == 0`: retrieve `ValueId` from `firstTriple_`.
-// (2) `i % 2 != 0`: retrieve `ValueId` from `lastTriple_`.
+// corresponding `ValueId` must be contained in `BlockMetadata` value at
+// position `i/2`. `i % 2` specifies in the following if we have to access the
+// ValueId from `fristTriple_` or `lastTriple_` of previously determined
+// `BlockMetadata` value. (1) `i % 2 == 0`: retrieve `ValueId` from
+// `firstTriple_`. (2) `i % 2 != 0`: retrieve `ValueId` from `lastTriple_`.
 struct AccessValueIdFromBlockMetadata {
   size_t evaluationColumn_ = 0;
   // `ql::ranges::subrange` requires default constructor
