@@ -5,16 +5,11 @@
 #pragma once
 #include <gtest/gtest_prod.h>
 
-// Fixes an error with boost versions < 1.84,
-// more information: https://github.com/boostorg/beast/issues/2661
-#define BOOST_ASIO_DISABLE_CONCEPTS
-
-#include <util/http/beast.h>
-
 #include <boost/beast/ssl.hpp>
 #include <functional>
 
 #include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
 
 namespace ad_utility::websocket {
 namespace beast = boost::beast;
@@ -25,6 +20,9 @@ using tcp = net::ip::tcp;
 
 /*
  * Class managing a WebSocketClient.
+ * Calling the start function initializes the WebSocket connection in a
+ * background thread. All incoming messages are passed to the `msgHandler_`
+ * callback function, if previously set by the user.
  */
 template <typename StreamType>
 class WebSocketClientImpl {
@@ -103,6 +101,6 @@ WebSocketClientVariant getWebSocketClient(
     const std::function<void(const std::string&)>& msgHandler);
 
 // Concatenates two url paths, expects both of them to start with a '/'.
-std::string concatUrlPaths(const std::string& a, const std::string& b);
+std::string concatUrlPaths(std::string_view a, std::string_view b);
 
 }  // namespace ad_utility::websocket

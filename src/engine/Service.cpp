@@ -4,6 +4,7 @@
 
 #include "engine/Service.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
@@ -135,8 +136,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
   const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
   auto runtimeInfoClient = networkFunctions_.getRuntimeInfoClient_(
       serviceUrl, wsTarget,
-      std::bind(&Service::handleChildRuntimeInfoUpdate, this,
-                std::placeholders::_1));
+      absl::bind_front(&Service::handleChildRuntimeInfoUpdate, this));
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(

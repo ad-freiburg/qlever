@@ -32,7 +32,8 @@ class RuntimeInformation {
   static constexpr auto ZERO = Milliseconds::zero();
 
   /// The computation status of an operation.
-  /// Note: changes have to be reflected in `toString()`/`fromString()` methods
+  /// Note: changes have to be reflected in `toString`/`stringToStatus`
+  /// methods
   enum struct Status {
     notStarted,
     inProgress,
@@ -142,7 +143,7 @@ class RuntimeInformation {
 
   static std::string_view toString(Status status);
 
-  static Status fromString(std::string_view str);
+  static Status stringToStatus(std::string_view str);
 
   // A helper function for printing the details as a string.
   static void formatDetailValue(std::ostream& out, std::string_view key,

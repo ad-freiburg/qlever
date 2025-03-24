@@ -122,8 +122,8 @@ class Operation {
     return {interm.begin(), interm.end()};
   }
 
-  // Get access to the children's RuntimeInfo. Overridden by the `Service`, as
-  // it's children can't be accessed using `getChildren()` above.
+  // Get access to the RuntimeInfo of the children. Overridden by the `Service`,
+  // as its children can't be accessed using `getChildren()` above.
   virtual absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
   getRuntimeInfoChildren();
 

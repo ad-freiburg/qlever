@@ -189,7 +189,7 @@ std::string_view RuntimeInformation::toString(Status status) {
 }
 
 // __________________________________________________________________________
-RuntimeInformation::Status RuntimeInformation::fromString(
+RuntimeInformation::Status RuntimeInformation::stringToStatus(
     std::string_view str) {
   static const ad_utility::HashMap<std::string, RuntimeInformation::Status>
       statusMap = {
@@ -204,9 +204,10 @@ RuntimeInformation::Status RuntimeInformation::fromString(
           {"cancelled", RuntimeInformation::cancelled}};
 
   auto it = statusMap.find(str);
-  if (it == statusMap.end()) {
-    AD_FAIL();
-  }
+  AD_CORRECTNESS_CHECK(it != statusMap.end(), [&str]() {
+    return absl::StrCat("The string '", str,
+                        "' does not match any RuntimeInformation status.");
+  });
   return it->second;
 }
 
@@ -279,7 +280,7 @@ void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
   tryGet(rti.multiplicityEstimates_, "estimated_column_multiplicities");
   tryGet(rti.sizeEstimate_, "estimated_size");
   if (auto it = j.find("status"); it != j.end()) {
-    rti.status_ = RuntimeInformation::fromString(it->get<std::string>());
+    rti.status_ = RuntimeInformation::stringToStatus(it->get<std::string>());
   }
   if (auto it = j.find("children"); it != j.end()) {
     for (const auto& child : *it) {

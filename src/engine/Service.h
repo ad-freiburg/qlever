@@ -44,16 +44,17 @@ class Service : public Operation {
           const ad_utility::httpUtils::Url&, const std::string& target,
           std::function<void(const std::string&)>)>;
 
+  // Convenience struct for the network functions defined above.
+  struct NetworkFunctions {
+    GetResultFunction getResultFunction_;
+    GetRuntimeInfoClient getRuntimeInfoClient_;
+  };
+
   // Information on a Sibling operation.
   struct SiblingInfo {
     std::shared_ptr<const Result> precomputedResult_;
     VariableToColumnMap variables_;
     std::string cacheKey_;
-  };
-
-  struct NetworkFunctions {
-    GetResultFunction getResultFunction_;
-    GetRuntimeInfoClient getRuntimeInfoClient_;
   };
 
  private:

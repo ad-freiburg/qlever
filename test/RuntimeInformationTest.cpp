@@ -103,17 +103,17 @@ TEST(RuntimeInformation, statusToString) {
 }
 
 // ________________________________________________________________
-TEST(RuntimeInformation, statusFromString) {
-  using enum RuntimeInformation::Status;
+TEST(RuntimeInformation, stringToStatus) {
   using R = RuntimeInformation;
-  EXPECT_EQ(R::fromString("fully materialized"), fullyMaterialized);
-  EXPECT_EQ(R::fromString("lazily materialized"), lazilyMaterialized);
-  EXPECT_EQ(R::fromString("not started"), notStarted);
-  EXPECT_EQ(R::fromString("optimized out"), optimizedOut);
-  EXPECT_EQ(R::fromString("failed"), failed);
-  EXPECT_EQ(R::fromString("failed because child failed"),
+  using enum R::Status;
+  EXPECT_EQ(R::stringToStatus("fully materialized"), fullyMaterialized);
+  EXPECT_EQ(R::stringToStatus("lazily materialized"), lazilyMaterialized);
+  EXPECT_EQ(R::stringToStatus("not started"), notStarted);
+  EXPECT_EQ(R::stringToStatus("optimized out"), optimizedOut);
+  EXPECT_EQ(R::stringToStatus("failed"), failed);
+  EXPECT_EQ(R::stringToStatus("failed because child failed"),
             failedBecauseChildFailed);
-  EXPECT_ANY_THROW(R::fromString(""));
+  EXPECT_ANY_THROW(R::stringToStatus(""));
 }
 
 // ________________________________________________________________

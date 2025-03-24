@@ -51,18 +51,19 @@ void WebSocketClientImpl<StreamType>::start() {
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::close() {
   if (isConnected_) {
-    stream_.async_close(
-        websocket::close_code::normal, [this](beast::error_code ec) {
-          if (ec) {
-            LOG(ERROR) << "WebSocketClient: " << ec.message() << '\n';
-          }
-          ioContext_.stop();
-        });
+    net::post(ioContext_, [this]() {
+      stream_.async_close(
+          websocket::close_code::normal, [this](beast::error_code ec) {
+            if (ec) {
+              LOG(ERROR) << "WebSocketClient: " << ec.message() << '\n';
+            }
+            ioContext_.stop();
+          });
+    });
   } else {
     ioContext_.stop();
   }
   if (ioThread_.joinable()) ioThread_.join();
-  AD_CONTRACT_CHECK(ioContext_.stopped());
   isConnected_ = false;
 }
 
@@ -177,10 +178,9 @@ template class WebSocketClientImpl<tcp::socket>;
 template class WebSocketClientImpl<beast::ssl_stream<tcp::socket>>;
 
 // ____________________________________________________________________________
-std::string concatUrlPaths(const std::string& a, const std::string& b) {
-  AD_CONTRACT_CHECK(!a.empty() && !b.empty() && a.at(0) == '/' &&
-                    b.at(0) == '/');
-  return (a.back() == '/' ? a.substr(0, a.size() - 1) : a) + b;
+std::string concatUrlPaths(std::string_view a, std::string_view b) {
+  AD_CONTRACT_CHECK(a.starts_with('/') && b.starts_with('/'));
+  return absl::StrCat((a.back() == '/' ? a.substr(0, a.size() - 1) : a), b);
 }
 
 // ____________________________________________________________________________
@@ -188,16 +188,12 @@ WebSocketClientVariant getWebSocketClient(
     const ad_utility::httpUtils::Url& url, const std::string& webSocketPath,
     const std::function<void(const std::string&)>& msgHandler) {
   using namespace ad_utility::use_type_identity;
-  auto getClient = [&]<typename T>(TI<T>) {
-    WebSocketClientVariant c = std::make_unique<T>(
+  auto getClient = [&]<typename T>(TI<T>) -> WebSocketClientVariant {
+    auto client = std::make_unique<T>(
         url.host(), url.port(), concatUrlPaths(url.target(), webSocketPath));
-    std::visit(
-        [&](auto& client) {
-          client->setMessageHandler(msgHandler);
-          client->start();
-        },
-        c);
-    return c;
+    client->setMessageHandler(msgHandler);
+    client->start();
+    return client;
   };
 
   return url.protocol() == ad_utility::httpUtils::Url::Protocol::HTTP

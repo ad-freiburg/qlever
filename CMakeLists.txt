@@ -162,6 +162,11 @@ endif ()
 find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+# Fixes an error with boost versions < 1.84,
+# more information: https://github.com/boostorg/beast/issues/2661
+if (Boost_Version LESS 108400)
+add_definitions("-DBOOST_ASIO_DISABLE_CONCEPTS")
+endif ()
 
 ######################################
 # SSL

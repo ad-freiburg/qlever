@@ -47,8 +47,8 @@ TEST(WebSocketClient, HttpConnection) {
 
       std::visit([&](auto& client) { EXPECT_FALSE(isConnected(*client)); }, w);
     };
-    check("http://localhost:" + std::to_string(httpServer.getPort()) + "/");
-    check("https://localhost:" + std::to_string(httpServer.getPort()) + "/");
+    check(absl::StrCat("http://localhost:", httpServer.getPort(), "/"));
+    check(absl::StrCat("https://localhost:", httpServer.getPort(), "/"));
   }
 
   httpServer.runInOwnThread();

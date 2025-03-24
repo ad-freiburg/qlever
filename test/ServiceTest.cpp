@@ -37,9 +37,11 @@ class ServiceTest : public ::testing::Test {
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
 
-  // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
-  // is used by default by a `Service` operation (see the constructor in
-  // `Service.h`). Each mock does the following:
+  // Factory for generating mocks of the `NetworkFunctions` that are used by
+  // default by a `Service` operation (see the constructor in `Service.h`).
+  // The `getWebSocketClient` function is not tested here and its mock just
+  // returns a WebSocketClient without actually starting it.
+  // Each mock of the `sendHttpOrHttpsRequest` function does the following:
   //
   // 1. It tests that the request method is POST, the content-type header is
   //    `application/sparql-query`, and the accept header is
@@ -525,8 +527,8 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   Service serviceOperation{
       testQec, parsedServiceClause,
-      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
-                               genJsonResult({"a"}, {{"a"}}))};
+      getNetworkFunctionsFactory("http://localhost:80/api", expectedSparqlQuery,
+                                 genJsonResult({"a"}, {{"a"}}))};
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
@@ -552,7 +554,7 @@ TEST_F(ServiceTest, getCacheKey) {
 
   Service service2{
       testQec, parsedServiceClause,
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult(
