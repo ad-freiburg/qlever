@@ -96,10 +96,8 @@ class Literal {
   // Erase everything but the substring in the range ['start', 'start'+'length')
   // from the inner content. Note that the start position does not count the
   // leading quotes, so the first character after the quote has index 0.
-  // The 'contentLength' parameter represents the length of the entire string in
-  // bytes. Throws if either 'start' or 'start' + 'length' is out of bounds.
-  void setSubstr(std::size_t start, std::size_t length,
-                 std::size_t contentLength);
+  // Throws if either 'start' or 'start' + 'length' is out of bounds.
+  void setSubstr(std::size_t start, std::size_t length);
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();

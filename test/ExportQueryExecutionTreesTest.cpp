@@ -1619,6 +1619,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       toChrono(timingInformation["computeResult"].get<std::string_view>()));
 }
 
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   using S = ad_utility::streams::stream_generator;
   auto throwEarly = []() -> S {
@@ -1668,6 +1669,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
                     HasSubstr("A very strange")));
 }
 
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
@@ -1677,6 +1679,9 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   using enum Datatype;
 
+  // Helper function that takes an ID and a vector of test cases and checks
+  // if the ID is correctly converted. A more detailed explanation of the test
+  // logic is below with the test cases.
   auto checkIdToLiteralOrIri =
       [&](Id id,
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
@@ -1735,6 +1740,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
   using Iri = ad_utility::triple_component::Iri;
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -1760,8 +1766,14 @@ TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
       toLiteralOrIri(
           "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
       false);
+
+  EXPECT_THROW(
+      verify(LiteralOrIri{Iri::fromIriref("<http://www.example.com/someIri>")},
+             false),
+      ad_utility::Exception);
 }
 
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
   std::string input = "<s>";
   std::string expected = "\"s\"";

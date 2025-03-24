@@ -47,7 +47,7 @@ void checkLiteralContentAndDatatype(
     if (literal.value().hasDatatype()) {
       ASSERT_TRUE(expectedDatatype.has_value());
       ASSERT_EQ(asStringViewUnsafe(literal.value().getDatatype()),
-                expectedDatatype.value_or(""));
+                expectedDatatype.value());
     } else {
       ASSERT_FALSE(expectedDatatype.has_value());
     }

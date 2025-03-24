@@ -30,7 +30,7 @@ static std::size_t utf8Length(std::string_view s) {
 }
 
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
-// string length, the byte offset will be set to the strings size.
+// string length, the byte offset will be set to the size of the string.
 static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
   std::size_t byteOffset = 0;
   int64_t charCount = 0;
@@ -297,13 +297,8 @@ class SubstrImpl {
     // starting position and length since all the other corner cases have been
     // dealt with above.
     auto clamp = [utf8len](int64_t n) -> std::size_t {
-      if (n < 0) {
-        return 0;
-      }
-      if (static_cast<size_t>(n) > utf8len) {
-        return utf8len;
-      }
-      return static_cast<size_t>(n);
+      return static_cast<size_t>(
+          std::clamp(n, int64_t{0}, static_cast<int64_t>(utf8len)));
     };
 
     startInt = clamp(startInt);
@@ -311,9 +306,8 @@ class SubstrImpl {
     std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
     std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
     std::size_t byteLength = endByteOffset - startByteOffset;
-    std::size_t contentLengthByte = utf8ToByteOffset(str, utf8len);
 
-    s.value().setSubstr(startByteOffset, byteLength, contentLengthByte);
+    s.value().setSubstr(startByteOffset, byteLength);
     return LiteralOrIri(std::move(s.value()));
   }
 };

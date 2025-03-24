@@ -32,9 +32,9 @@ const Iri& LiteralOrIri::getIri() const {
 // __________________________________________
 Iri& LiteralOrIri::getIri() {
   if (!isIri()) {
-    AD_THROW(
-        "LiteralOrIri object does not contain an Iri object and thus "
-        "cannot return it");
+    AD_CONTRACT_CHECK(isIri(),
+                      "LiteralOrIri object does not contain an Iri object and "
+                      "thus cannot return it");
   }
   return std::get<Iri>(data_);
 }

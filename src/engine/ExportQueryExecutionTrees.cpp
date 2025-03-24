@@ -370,6 +370,7 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
 // _____________________________________________________________________________
 bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
     const LiteralOrIri& word) {
+  AD_CORRECTNESS_CHECK(word.isLiteral());
   return !word.hasDatatype() ||
          asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
 }
@@ -377,7 +378,6 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 // _____________________________________________________________________________
 std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
     std::string iriString) {
-  std::string result;
   AD_CORRECTNESS_CHECK(iriString.starts_with('<'));
   AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
   iriString[0] = '"';
@@ -389,7 +389,7 @@ std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
 std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::handleIriOrLiteral(
     LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
-  if (!word.isLiteral()) {
+  if (word.isIri()) {
     if (onlyReturnLiteralsWithXsdString) {
       return std::nullopt;
     }
@@ -397,7 +397,7 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
         replaceAnglesByQuotes(
             std::move(word.getIri().toStringRepresentation())));
   }
-
+  AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
       return std::move(word.getLiteral());

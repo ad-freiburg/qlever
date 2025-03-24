@@ -102,8 +102,9 @@ class ExportQueryExecutionTrees {
   // or a literal with the `xsd:string` datatype.
   static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
 
-  // Replaces angle brackets '<' and '>' with double quotes '"' to convert an
-  // IRI to a Literal.
+  // Replaces the first character '<' and the last character '>' with double
+  // quotes '"' to convert an IRI to a Literal, ensuring only the angle brackets
+  // are replaced.
   static std::string replaceAnglesByQuotes(std::string iriString);
 
   // Acts as a helper to retrieve an LiteralOrIri object

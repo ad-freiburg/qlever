@@ -136,16 +136,12 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // __________________________________________
-void Literal::setSubstr(std::size_t start, std::size_t length,
-                        std::size_t contentLength) {
+void Literal::setSubstr(std::size_t start, std::size_t length) {
+  std::size_t contentLength =
+      beginOfSuffix_ - 2;  // Ignore the two quotation marks
   AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
-  std::size_t index = 1;
-  if (start != 0) {
-    for (size_t i = start + 1; i < start + length + 1; ++i) {
-      content_[index] = content_[i];
-      index += 1;
-    }
-  }
+  auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
+  std::shift_left(contentBegin, contentBegin + start + length, start);
   content_.erase(length + 1, contentLength - length);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
 }
