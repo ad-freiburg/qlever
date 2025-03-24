@@ -32,7 +32,7 @@ class RuntimeInformation {
   static constexpr auto ZERO = Milliseconds::zero();
 
   /// The computation status of an operation.
-  /// Note: changes have to be reflected in `toString`/`stringToStatus`
+  /// Note: changes have to be reflected in `statusToString`/`stringToStatus`
   /// methods
   enum struct Status {
     notStarted,
@@ -141,7 +141,7 @@ class RuntimeInformation {
   void addLimitOffsetRow(const LimitOffsetClause& l,
                          bool fullResultIsNotCached);
 
-  static std::string_view toString(Status status);
+  static std::string_view statusToString(Status status);
 
   static Status stringToStatus(std::string_view str);
 

@@ -22,26 +22,22 @@ using tcp = net::ip::tcp;
  * Class managing a WebSocketClient.
  * Calling the start function initializes the WebSocket connection in a
  * background thread. All incoming messages are passed to the `msgHandler_`
- * callback function, if previously set by the user.
+ * callback function.
  */
 template <typename StreamType>
 class WebSocketClientImpl {
-  using MessageHandler = std::function<void(const std::string&)>;
+  using MessageHandlerFunction = std::function<void(const std::string&)>;
 
  public:
   WebSocketClientImpl(std::string_view hostname, std::string_view port,
-                      std::string_view target);
+                      std::string_view target,
+                      MessageHandlerFunction msgHandler);
 
   // Destructor gracefully closes the connection.
   ~WebSocketClientImpl() { close(); }
 
   // Start the websocket connection.
   void start();
-
-  // Setter for the `msgHandler_`.
-  void setMessageHandler(const MessageHandler& handler) {
-    msgHandler_ = handler;
-  }
 
   // Closes the connection.
   void close();
@@ -77,7 +73,7 @@ class WebSocketClientImpl {
   std::string target_;
 
   // Handler function to handle received messages in `readMessages()`.
-  MessageHandler msgHandler_;
+  MessageHandlerFunction msgHandler_;
 
   // Connection indicator for thread-safe testing.
   std::atomic<bool> isConnected_{false};

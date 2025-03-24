@@ -71,6 +71,12 @@ class Service : public Operation {
   // RuntimeInformation of the service-query computation on the endpoint.
   std::shared_ptr<RuntimeInformation> childRuntimeInformation_;
 
+  // Variables allowing for thread-safe access to `childRuntimeInformation_`
+  // required in `handleChildRuntimeInfoUpdate()` callback function.
+  std::mutex childRuntimeInfoLock_;
+  bool childRuntimeInfoAllowWrite_{false};
+  std::string childRuntimeInfoBuffer_;
+
   // Counter to generate fresh ids for each instance of the class.
   static inline std::atomic_uint32_t counter_ = 0;
 

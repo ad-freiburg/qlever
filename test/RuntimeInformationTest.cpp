@@ -90,16 +90,17 @@ TEST(RuntimeInformation, setColumnNames) {
 
 // ________________________________________________________________
 TEST(RuntimeInformation, statusToString) {
-  using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
-  EXPECT_EQ(R::toString(fullyMaterialized), "fully materialized");
-  EXPECT_EQ(R::toString(lazilyMaterialized), "lazily materialized");
-  EXPECT_EQ(R::toString(notStarted), "not started");
-  EXPECT_EQ(R::toString(optimizedOut), "optimized out");
-  EXPECT_EQ(R::toString(failed), "failed");
-  EXPECT_EQ(R::toString(failedBecauseChildFailed),
+  using enum R::Status;
+  EXPECT_EQ(R::statusToString(fullyMaterialized), "fully materialized");
+  EXPECT_EQ(R::statusToString(lazilyMaterialized), "lazily materialized");
+  EXPECT_EQ(R::statusToString(notStarted), "not started");
+  EXPECT_EQ(R::statusToString(optimizedOut), "optimized out");
+  EXPECT_EQ(R::statusToString(failed), "failed");
+  EXPECT_EQ(R::statusToString(failedBecauseChildFailed),
             "failed because child failed");
-  EXPECT_ANY_THROW(R::toString(static_cast<RuntimeInformation::Status>(72)));
+  EXPECT_ANY_THROW(
+      R::statusToString(static_cast<RuntimeInformation::Status>(72)));
 }
 
 // ________________________________________________________________

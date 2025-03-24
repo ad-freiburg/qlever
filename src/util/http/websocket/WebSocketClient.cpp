@@ -4,8 +4,6 @@
 
 #include "WebSocketClient.h"
 
-#include <variant>
-
 #include "util/Log.h"
 #include "util/TypeIdentity.h"
 
@@ -15,19 +13,22 @@ namespace ad_utility::websocket {
 template <>
 HttpWebSocketClient::WebSocketClientImpl(std::string_view hostname,
                                          std::string_view port,
-                                         std::string_view target)
+                                         std::string_view target,
+                                         MessageHandlerFunction msgHandler)
     : ioContext_(),
       resolver_(ioContext_),
       stream_(ioContext_),
       host_(hostname),
       port_(port),
-      target_(target) {}
+      target_(target),
+      msgHandler_(msgHandler) {}
 
 // ____________________________________________________________________________
 template <>
 HttpsWebSocketClient::WebSocketClientImpl(std::string_view hostname,
                                           std::string_view port,
-                                          std::string_view target)
+                                          std::string_view target,
+                                          MessageHandlerFunction msgHandler)
     : ioContext_(),
       resolver_(ioContext_),
       sslContext_([]() {
@@ -38,7 +39,8 @@ HttpsWebSocketClient::WebSocketClientImpl(std::string_view hostname,
       stream_(ioContext_, sslContext_.value()),
       host_(hostname),
       port_(port),
-      target_(target) {}
+      target_(target),
+      msgHandler_(msgHandler) {}
 
 // ____________________________________________________________________________
 template <typename StreamType>
@@ -190,8 +192,8 @@ WebSocketClientVariant getWebSocketClient(
   using namespace ad_utility::use_type_identity;
   auto getClient = [&]<typename T>(TI<T>) -> WebSocketClientVariant {
     auto client = std::make_unique<T>(
-        url.host(), url.port(), concatUrlPaths(url.target(), webSocketPath));
-    client->setMessageHandler(msgHandler);
+        url.host(), url.port(), concatUrlPaths(url.target(), webSocketPath),
+        msgHandler);
     client->start();
     return client;
   };

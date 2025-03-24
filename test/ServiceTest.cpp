@@ -887,7 +887,13 @@ TEST_F(ServiceTest, ChildRuntimeInformation) {
             childRTI->totalTime_);
 
   // 1. Handle update of the `childRuntimeInformation_`.
+  service.childRuntimeInfoAllowWrite_ = true;
   EXPECT_NO_THROW(service.handleChildRuntimeInfoUpdate("invalid-json"));
+
   service.handleChildRuntimeInfoUpdate(R"({"description": "child"})");
   EXPECT_EQ(service.childRuntimeInformation_->descriptor_, "child");
+
+  service.childRuntimeInfoAllowWrite_ = false;
+  service.handleChildRuntimeInfoUpdate(R"({"description": "child2"})");
+  EXPECT_NE(service.childRuntimeInformation_->descriptor_, "child2");
 }

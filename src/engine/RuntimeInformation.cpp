@@ -78,7 +78,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "operation_time: " << toMs(getOperationTime())
       << " ms" << '\n';
-  out << indentStr(indent) << "status: " << toString(status_) << '\n';
+  out << indentStr(indent) << "status: " << statusToString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
@@ -166,7 +166,7 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
 }
 
 // __________________________________________________________________________
-std::string_view RuntimeInformation::toString(Status status) {
+std::string_view RuntimeInformation::statusToString(Status status) {
   switch (status) {
     case fullyMaterialized:
       return "fully materialized";
@@ -204,10 +204,8 @@ RuntimeInformation::Status RuntimeInformation::stringToStatus(
           {"cancelled", RuntimeInformation::cancelled}};
 
   auto it = statusMap.find(str);
-  AD_CORRECTNESS_CHECK(it != statusMap.end(), [&str]() {
-    return absl::StrCat("The string '", str,
-                        "' does not match any RuntimeInformation status.");
-  });
+  AD_CORRECTNESS_CHECK(it != statusMap.end(), "The string '", str,
+                       "' does not match any RuntimeInformation status.");
   return it->second;
 }
 
@@ -235,7 +233,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
       {"estimated_column_multiplicities", rti.multiplicityEstimates_},
       {"estimated_size", rti.sizeEstimate_},
-      {"status", RuntimeInformation::toString(rti.status_)},
+      {"status", RuntimeInformation::statusToString(rti.status_)},
       {"children", rti.children_}};
 }
 

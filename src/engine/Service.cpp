@@ -254,8 +254,21 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
     ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
+  auto childRtiAllowWrite = [&](bool b) {
+    auto lock = std::lock_guard{childRuntimeInfoLock_};
+    childRuntimeInfoAllowWrite_ = b;
+
+    if (b && !childRuntimeInfoBuffer_.empty()) {
+      childRuntimeInformation_ = std::make_shared<RuntimeInformation>(
+          nlohmann::json::parse(childRuntimeInfoBuffer_));
+      signalQueryUpdate();
+      childRuntimeInfoBuffer_.clear();
+    }
+  };
+
   LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  childRtiAllowWrite(true);
 
   size_t rowIdx = 0;
   bool varsChecked{false};
@@ -273,7 +286,9 @@ Result::Generator Service::computeResultLazily(
       if (!singleIdTable) {
         Result::IdTableVocabPair pair{std::move(idTable),
                                       std::move(localVocab)};
+        childRtiAllowWrite(false);
         co_yield pair;
+        childRtiAllowWrite(true);
         // Move back to reuse buffer if not moved out.
         idTable = std::move(pair.idTable_);
         idTable.clear();
@@ -310,6 +325,7 @@ Result::Generator Service::computeResultLazily(
   if (singleIdTable) {
     co_yield {std::move(idTable), std::move(localVocab)};
   }
+  childRtiAllowWrite(false);
 }
 
 // ____________________________________________________________________________
@@ -646,8 +662,14 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
 // _____________________________________________________________________________
 void Service::handleChildRuntimeInfoUpdate(const std::string& msg) {
   try {
-    childRuntimeInformation_ =
-        std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+    auto lock = std::lock_guard{childRuntimeInfoLock_};
+    if (childRuntimeInfoAllowWrite_) {
+      childRuntimeInformation_ =
+          std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+      signalQueryUpdate();
+    } else {
+      childRuntimeInfoBuffer_ = msg;
+    }
   } catch (const nlohmann::json::parse_error&) {
   }
 }

@@ -13,10 +13,8 @@ CacheStatus fromString(std::string_view str) {
       {"not_in_cache_not_computed", notInCacheAndNotComputed}};
 
   auto it = m.find(str);
-  AD_CORRECTNESS_CHECK(it != m.end(), [&str]() {
-    return absl::StrCat("The string '", str,
-                        "' does not match any cache status.");
-  });
+  AD_CORRECTNESS_CHECK(it != m.end(), "The string '", str,
+                       "' does not match any cache status.");
   return it->second;
 }
 }  // namespace ad_utility

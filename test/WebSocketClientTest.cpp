@@ -15,6 +15,11 @@
 namespace ad_utility::websocket {
 // _____________________________________________________________________________
 TEST(WebSocketClient, HttpConnection) {
+  auto WSClient = [](std::string_view hostname, std::string_view port,
+                     std::string_view target) {
+    return HttpWebSocketClient(hostname, port, target,
+                               [](const std::string&) {});
+  };
   auto isConnected = []<typename T>(const T& w) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     return w.isConnected_.load();
@@ -22,14 +27,14 @@ TEST(WebSocketClient, HttpConnection) {
 
   // 0. Close without established connection.
   {
-    HttpWebSocketClient w("localhost", "1", "/");
+    auto w = WSClient("localhost", "1", "/");
     EXPECT_NO_THROW(w.close());
     EXPECT_NO_THROW(w.readMessages());
   }
 
   // 1. Can't resolve hostname
   {
-    HttpWebSocketClient w("invalid.hostname", "9999", "/");
+    auto w = WSClient("invalid.hostname", "9999", "/");
     w.start();
     EXPECT_FALSE(isConnected(w));
   }
@@ -55,16 +60,16 @@ TEST(WebSocketClient, HttpConnection) {
 
   // 3. WebSocket handshake failed (wrong path)
   {
-    HttpWebSocketClient w("localhost", std::to_string(httpServer.getPort()),
-                          "/wrong-path");
+    auto w = WSClient("localhost", std::to_string(httpServer.getPort()),
+                      "/wrong-path");
     w.start();
     EXPECT_FALSE(isConnected(w));
   }
 
   // 4. WebSocket handshake worked
   {
-    HttpWebSocketClient w("localhost", std::to_string(httpServer.getPort()),
-                          absl::StrCat(WEBSOCKET_PATH, "some-id"));
+    auto w = WSClient("localhost", std::to_string(httpServer.getPort()),
+                      absl::StrCat(WEBSOCKET_PATH, "some-id"));
     w.start();
     EXPECT_TRUE(isConnected(w));
 
