@@ -117,6 +117,9 @@ class LocalVocab {
       const R& vocabs) {
     using ql::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      if (set == primaryWordSet_) {
+        return;
+      }
       bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
     };

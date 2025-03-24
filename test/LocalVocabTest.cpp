@@ -441,14 +441,17 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   clone2.mergeWith(std::span{&original, 1});
   original.mergeWith(std::span{&clone1, 1});
 
-  // Implementation detail, merging does add to the "other word set" but does
-  // not deduplicate with the primary word set.
-  EXPECT_EQ(original.size(), 2);
+  // Make sure we deduplicate `otherWordSets_` with the primary word set.
+  EXPECT_EQ(original.size(), 1);
   EXPECT_THAT(original.getAllWordsForTesting(),
-              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
-                                   LiteralOrIri::literalWithoutQuotes("test")));
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 
   EXPECT_EQ(clone2.size(), 1);
   EXPECT_THAT(clone2.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+
+  LocalVocab clone3 = original.clone();
+  EXPECT_EQ(clone3.size(), 1);
+  EXPECT_THAT(clone3.getAllWordsForTesting(),
               UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 }
