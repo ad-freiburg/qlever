@@ -72,7 +72,7 @@ class alignas(16) LocalVocabEntry
   template <typename H, typename V>
   friend auto AbslHashValue(H h, const V& entry)
       -> CPP_ret(H)(requires ranges::same_as<V, LocalVocabEntry>) {
-    return AbslHashValue(std::move(h), static_cast<const Base&>(entry));
+    return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
   // Comparison between two entries could in theory also be sped up using the
