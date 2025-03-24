@@ -25,7 +25,7 @@ LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
 
 // _____________________________________________________________________________
 void LocalVocab::mergeWith(const LocalVocab& other) {
-  mergeWith(std::span{&other, 1});
+  mergeWith(std::span<const LocalVocab, 1>{&other, 1});
 }
 
 // _____________________________________________________________________________
