@@ -30,7 +30,7 @@ struct Quads {
 
   // Run the function for all variables in the quads. The function may be called
   // twice for the same variable.
-  void forAllVariables(std::function<void(const Variable&)> f);
+  void forAllVariables(const std::function<void(const Variable&)>& f);
 
   // Return the quads in a format for use as an update template.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph() const;
