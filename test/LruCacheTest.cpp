@@ -37,3 +37,9 @@ TEST(LRUCache, testLruCache) {
     return 10;
   }));
 }
+
+// _____________________________________________________________________________
+TEST(LRUCache, testEmptyCapacityForbidden) {
+  EXPECT_THROW((ad_utility::util::LRUCache<int, int>{0}),
+               ad_utility::Exception);
+}

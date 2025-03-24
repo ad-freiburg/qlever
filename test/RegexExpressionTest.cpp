@@ -203,15 +203,30 @@ TEST(RegexExpression, inputNotVariable) {
   VectorWithMemoryLimit<IdOrLiteralOrIri> input{
       ad_utility::testing::getQec()->getAllocator()};
   input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
-  auto child = std::make_unique<sparqlExpression::detail::SingleUseExpression>(
-      input.clone());
 
-  // "hallo" matches the regex "ha".
-  auto expr =
-      makeRegexExpression(std::move(child), literal("\"ha\""), literal("\"\""));
-  std::vector<Id> expected;
-  expected.push_back(Id::makeFromBool(true));
-  testWithExplicitResult(*expr, expected, input.size());
+  {
+    auto child =
+        std::make_unique<sparqlExpression::detail::SingleUseExpression>(
+            input.clone());
+
+    // "hallo" matches the regex "ha".
+    auto expr = makeRegexExpression(std::move(child), literal("\"ha\""),
+                                    literal("\"\""));
+    std::vector<Id> expected;
+    expected.push_back(Id::makeFromBool(true));
+    testWithExplicitResult(*expr, expected, input.size());
+  }
+
+  // Without variable it cannot be a prefix regex expression.
+  {
+    auto child =
+        std::make_unique<sparqlExpression::detail::SingleUseExpression>(
+            input.clone());
+
+    auto expr =
+        makeTestRegexExpression(std::move(child), literal("\"^ha\""), nullptr);
+    EXPECT_FALSE(isPrefixExpression(expr));
+  }
 }
 
 // _____________________________________________________________________________
