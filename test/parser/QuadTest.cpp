@@ -93,3 +93,42 @@ TEST(QuadTest, getOperations) {
                                 SparqlTriple(tc::Iri("<c>"))},
                                tc::Iri("<b>"))));
 }
+
+TEST(QuadTest, forAllVariables) {
+  auto expectForAllVariables =
+      [](Quads quads, const ad_utility::HashSet<Variable>& expectVariables,
+         ad_utility::source_location l =
+             ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        ad_utility::HashSet<Variable> calledVariables;
+        quads.forAllVariables([&calledVariables](const Variable& var) {
+          calledVariables.insert(var);
+        });
+        EXPECT_THAT(calledVariables, testing::Eq(expectVariables));
+      };
+  auto TCIri = ad_utility::triple_component::Iri::fromIriref;
+  using Var = Variable;
+
+  using Triple = std::array<GraphTerm, 3>;
+  Triple noVars{GraphTerm(Iri("<a>")), GraphTerm(Iri("<b>")),
+                GraphTerm(Iri("<c>"))};
+  Triple differentVars{GraphTerm(Var("?a")), GraphTerm(Var("?b")),
+                       GraphTerm(Var("?c"))};
+  Triple sameVar{GraphTerm(Var("?a")), GraphTerm(Var("?a")),
+                 GraphTerm(Var("?a"))};
+  expectForAllVariables({}, {});
+  expectForAllVariables({{noVars}, {}}, {});
+  expectForAllVariables({{differentVars}, {}},
+                        {Var("?a"), Var("?b"), Var("?c")});
+  expectForAllVariables({{sameVar}, {}}, {Var("?a")});
+  expectForAllVariables({{}, {{{TCIri("<a>"), {}}}}}, {});
+  expectForAllVariables({{}, {{{TCIri("<a>"), {noVars}}}}}, {});
+  expectForAllVariables({{}, {{{TCIri("<a>"), {differentVars}}}}},
+                        {Var("?a"), Var("?b"), Var("?c")});
+  expectForAllVariables({{}, {{{TCIri("<a>"), {sameVar}}}}}, {Var("?a")});
+  // Even if the graph block is empty, the variable is still omitted.
+  expectForAllVariables({{}, {{{Var("?d"), {}}}}}, {Var("?d")});
+  expectForAllVariables(
+      {{noVars, differentVars, sameVar}, {{{Var("?d"), {differentVars}}}}},
+      {Var("?a"), Var("?b"), Var("?c"), Var("?d")});
+}

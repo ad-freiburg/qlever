@@ -28,9 +28,13 @@ struct Quads {
   // Graph triples are inside a `GRAPH ...` clause.
   std::vector<GraphBlock> graphTriples_{};
 
+  // Run the function for all variables in the quads. The function may be called
+  // twice for the same variable.
   void forAllVariables(std::function<void(const Variable&)> f);
 
+  // Return the quads in a format for use as an update template.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph() const;
+  // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;
 };

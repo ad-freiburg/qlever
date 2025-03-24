@@ -391,16 +391,15 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // parser delivers to the one that the `parsedQuery::Describe` struct expects.
   std::vector<Variable> describedVariables;
   for (VarOrIri& resource : describedResources) {
-    if (std::holds_alternative<Variable>(resource)) {
-      const auto& variable = std::get<Variable>(resource);
-      describeClause.resources_.emplace_back(variable);
-      describedVariables.push_back(variable);
-    } else {
-      AD_CORRECTNESS_CHECK(
-          std::holds_alternative<TripleComponent::Iri>(resource));
-      describeClause.resources_.emplace_back(
-          std::get<TripleComponent::Iri>(resource));
-    }
+    std::visit(ad_utility::OverloadCallOperator{
+                   [&describeClause, &describedVariables](const Variable& var) {
+                     describeClause.resources_.emplace_back(var);
+                     describedVariables.push_back(var);
+                   },
+                   [&describeClause](const TripleComponent::Iri& iri) {
+                     describeClause.resources_.emplace_back(iri);
+                   }},
+               resource);
   }
 
   // Parse the FROM and FROM NAMED clauses.
@@ -656,8 +655,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto ensureVariableIsVisible = [&ctx, this](const Variable& v) {
-    if (ql::ranges::find(parsedQuery_.getVisibleVariables(), v) ==
-        parsedQuery_.getVisibleVariables().end()) {
+    if (!ad_utility::contains(parsedQuery_.getVisibleVariables(), v)) {
       reportError(ctx, absl::StrCat("Variable ", v.name(),
                                     " was not bound in the query body."));
     }
@@ -998,11 +996,15 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
   VarOrIri varOrIri = visit(ctx->varOrIri());
-  if (std::holds_alternative<Variable>(varOrIri)) {
-    reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
-  }
-  AD_CONTRACT_CHECK(std::holds_alternative<TripleComponent::Iri>(varOrIri));
-  auto serviceIri = std::get<TripleComponent::Iri>(varOrIri);
+  using Iri = TripleComponent::Iri;
+  auto serviceIri =
+      std::visit(ad_utility::OverloadCallOperator{
+                     [&ctx](const Variable&) -> Iri {
+                       reportNotSupported(ctx->varOrIri(),
+                                          "Variable endpoint in SERVICE is");
+                     },
+                     [](const Iri& iri) -> Iri { return iri; }},
+                 varOrIri);
 
   if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
     return visitPathQuery(ctx);
@@ -1037,14 +1039,16 @@ parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
   auto varOrIri = visit(ctx->varOrIri());
   auto group = visit(ctx->groupGraphPattern());
-  if (std::holds_alternative<Variable>(varOrIri)) {
-    const auto& graphVar = std::get<Variable>(varOrIri);
-    addVisibleVariable(graphVar);
-    return parsedQuery::GroupGraphPattern{std::move(group), graphVar};
-  }
-  AD_CORRECTNESS_CHECK(std::holds_alternative<TripleComponent::Iri>(varOrIri));
-  return parsedQuery::GroupGraphPattern{
-      std::move(group), std::get<TripleComponent::Iri>(varOrIri)};
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [this, &group](const Variable& graphVar) {
+            addVisibleVariable(graphVar);
+            return parsedQuery::GroupGraphPattern{std::move(group), graphVar};
+          },
+          [&group](const TripleComponent::Iri& graphIri) {
+            return parsedQuery::GroupGraphPattern{std::move(group), graphIri};
+          }},
+      varOrIri);
 }
 
 // Parsing for the `expression` rule.
