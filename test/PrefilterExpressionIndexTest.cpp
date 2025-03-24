@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include <ranges>
 #include <vector>
 
 #include "./PrefilterExpressionTestHelpers.h"
@@ -40,6 +41,23 @@ using DateT = DateYearOrDuration::Type;
 const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
   return Id::makeFromDate(DateYearOrDuration(year, type));
 };
+
+//______________________________________________________________________________
+using IdxPair = std::pair<size_t, size_t>;
+using IdxPairRanges = std::vector<IdxPair>;
+// Convert `IdxPairRanges` to `RelevantBlockItRanges` with respect to `BlockIt
+// beginBlockSpan` (first possible `std::span<const BlockMetadata>::iterator`).
+static RelevantBlockItRanges convertFromSpanIdxToSpanBlockItRanges(
+    const BlockIt& beginBlockSpan, const IdxPairRanges idxRanges) {
+  RelevantBlockItRanges blockItRanges;
+  blockItRanges.reserve(idxRanges.size());
+  ql::ranges::for_each(idxRanges, [&](const IdxPair& idxPair) {
+    const auto& [beginIdx, endIdx] = idxPair;
+    blockItRanges.emplace_back(BlockIt{beginBlockSpan + beginIdx},
+                               BlockIt{beginBlockSpan + endIdx});
+  });
+  return blockItRanges;
+}
 
 //______________________________________________________________________________
 /*
@@ -341,36 +359,69 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         adjustedExpected);
   }
 
-  // Test the `mapRandomItRangesToBlockRangesComplemented` (if
-  // `testComplement = true`) or `mapRandomItRangesToBlockRanges` helper
+  // Check if `RelevantBlockItRanges r1` and `RelevantBlockItRanges r2` contain
+  // equivalent sub-ranges.
+  bool assertEqRelevantBlockItRanges(const RelevantBlockItRanges& r1,
+                                     const RelevantBlockItRanges& r2) {
+    return ql::ranges::equal(r1, r2, ql::ranges::equal);
+  }
+
+  // Test the `mapValueIdItRangesToBlockItRangesComplemented` (if
+  // `testComplement = true`) or `mapValueIdItRangesToBlockItRanges` helper
   // function of `PrefilterExpression`s. We assert that the retrieved
   // relevant iterators with respect to the containerized `std::span<const
   // BlockMetadata> evalBlocks` are correctly mapped back to
   // `RelevantBlockRange`s (index values regarding `evalBlocks`).
   auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
-                                  RelevantBlockRanges&& relevantRanges,
+                                  IdxPairRanges&& relevantIdxRanges,
                                   bool testComplement) {
+    std::span<const BlockMetadata> evalBlocks(allTestBlocksIsDatatype);
     // Make `ValueId`s of `evalBlocks` accessible by iterators.
     // For the defined `BlockMetadata` values above, evaluation column at index
     // 2 is relevant.
-    std::span<const BlockMetadata> evalBlocks{allTestBlocksIsDatatype};
     AccessValueIdFromBlockMetadata accessValueIdOp(2);
-    ValueIdFromBlocksIt idsBegin{&evalBlocks, 0, accessValueIdOp};
-    ValueIdFromBlocksIt idsEnd{&evalBlocks, evalBlocks.size() * 2,
-                               accessValueIdOp};
-    std::vector<RandomValueIdItPair> iteratorRanges =
-        getRangesForId(idsBegin, idsEnd, referenceId, compOp);
+    ValueIdItRange inputRange{
+        ValueIdIt{&evalBlocks, 0, accessValueIdOp},
+        ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
+    std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
+        inputRange.begin(), inputRange.end(), referenceId, compOp);
     using namespace prefilterExpressions::detail::mapping;
-    EXPECT_EQ(relevantRanges, testComplement
-                                  ? mapRandomItRangesToBlockRangesComplemented(
-                                        iteratorRanges, idsBegin, idsEnd)
-                                  : mapRandomItRangesToBlockRanges(
-                                        iteratorRanges, idsBegin, idsEnd));
+    ASSERT_TRUE(assertEqRelevantBlockItRanges(
+        convertFromSpanIdxToSpanBlockItRanges(evalBlocks.begin(),
+                                              relevantIdxRanges),
+        testComplement ? mapValueIdItRangesToBlockItRangesComplemented(
+                             iteratorRanges, inputRange, evalBlocks)
+                       : mapValueIdItRangesToBlockItRanges(
+                             iteratorRanges, inputRange, evalBlocks)));
   }
+
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<BlockMetadata>&& expected) {
     ASSERT_EQ(expr->evaluate(dateBlocks, 2), expected);
+  }
+
+  // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
+  // The `IdxPairRanges` will be mapped to their corresponding
+  // `RelevantBlockItRanges`.
+  // (1) Set `TestUnion = true`: test logical union (`OR(||)`) on
+  // `BlockItRange`s.
+  // (2) Set `TestUnion = false`: test logical intersection (`AND(&&)`) on
+  // `BlockItRanges`s.
+  template <bool TestUnion>
+  auto makeTestAndOrOrMergeBlocks(IdxPairRanges&& r1, IdxPairRanges&& r2,
+                                  IdxPairRanges&& rExpected) {
+    std::span<const BlockMetadata> blockSpan(allTestBlocksIsDatatype);
+    auto spanBegin = blockSpan.begin();
+    auto mergedBlockItRanges =
+        prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<
+            TestUnion>(convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1),
+                       convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2));
+    auto expectedBlockItRanges =
+        convertFromSpanIdxToSpanBlockItRanges(spanBegin, rExpected);
+    ASSERT_EQ(mergedBlockItRanges.size(), expectedBlockItRanges.size());
+    ASSERT_TRUE(assertEqRelevantBlockItRanges(mergedBlockItRanges,
+                                              expectedBlockItRanges));
   }
 };
 
@@ -407,9 +458,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
 
 //______________________________________________________________________________
 // Test PrefilterExpression helper functions
-// mapRandomItRangesToBlockRangesComplemented and
-// mapRandomItRangesToBlockRanges.
-TEST_F(PrefilterExpressionOnMetadataTest, testValueIdIteratorToIndexMapping) {
+// mapValueIdItRangesToBlockItRangesComplemented and
+// mapValueIdItRangesToBlockItRanges.
+TEST_F(PrefilterExpressionOnMetadataTest, testValueIdItToBlockItRangeMapping) {
   // Remark: If testComplement is set to true, the complement over all datatypes
   // is computed.
   makeTestDetailIndexMapping(CompOp::LT, IntId(10), {{3, 18}}, false);
@@ -1016,51 +1067,41 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 }
 
 //______________________________________________________________________________
-// Test `getUnion` over `BlockRange` values.
-TEST(PrefilterExpressionOnMetadataDetailTest, testGetUnionOnBlockRanges) {
-  const auto makeTestOrRanges = [](RelevantBlockRanges&& r1,
-                                   RelevantBlockRanges&& r2,
-                                   RelevantBlockRanges&& rExpected) {
-    EXPECT_EQ(prefilterExpressions::detail::logicalOps::getUnion(r1, r2),
-              rExpected);
-  };
-  // RelevantBlockRanges r1 UNION RelevantBlockRanges r2 should yield:
-  // RelevantBlockRanges rExpected.
-  makeTestOrRanges({}, {}, {});
-  makeTestOrRanges({{0, 5}}, {}, {{0, 5}});
-  makeTestOrRanges({{0, 5}}, {{4, 7}}, {{0, 7}});
-  makeTestOrRanges({}, {{0, 1}, {3, 10}}, {{0, 1}, {3, 10}});
-  makeTestOrRanges({{0, 1}, {3, 10}}, {}, {{0, 1}, {3, 10}});
-  makeTestOrRanges({{0, 10}}, {{2, 3}, {4, 8}, {9, 12}}, {{0, 12}});
-  makeTestOrRanges({{0, 1}, {1, 8}, {8, 9}}, {}, {{0, 9}});
-  makeTestOrRanges({{2, 10}, {15, 16}, {20, 23}}, {{4, 6}, {8, 9}, {15, 22}},
-                   {{2, 10}, {15, 23}});
-  makeTestOrRanges({{0, 5}}, {{0, 5}}, {{0, 5}});
-  makeTestOrRanges({{1, 4}}, {{10, 25}, {25, 33}}, {{1, 4}, {10, 33}});
+// Test `mergeRelevantBlockItRanges<true>` over `BlockItRange` values.
+TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
+  // r1 UNION r2 should yield rExpected.
+  makeTestAndOrOrMergeBlocks<true>({}, {}, {});
+  makeTestAndOrOrMergeBlocks<true>({{0, 5}}, {}, {{0, 5}});
+  makeTestAndOrOrMergeBlocks<true>({{0, 5}}, {{4, 7}}, {{0, 7}});
+  makeTestAndOrOrMergeBlocks<true>({}, {{0, 1}, {3, 10}}, {{0, 1}, {3, 10}});
+  makeTestAndOrOrMergeBlocks<true>({{0, 1}, {3, 10}}, {}, {{0, 1}, {3, 10}});
+  makeTestAndOrOrMergeBlocks<true>({{0, 10}}, {{2, 3}, {4, 8}, {9, 12}},
+                                   {{0, 12}});
+  makeTestAndOrOrMergeBlocks<true>({{0, 1}, {1, 8}, {8, 9}}, {}, {{0, 9}});
+  makeTestAndOrOrMergeBlocks<true>({{2, 10}, {15, 16}, {20, 23}},
+                                   {{4, 6}, {8, 9}, {15, 22}},
+                                   {{2, 10}, {15, 23}});
+  makeTestAndOrOrMergeBlocks<true>({{0, 5}}, {{0, 5}}, {{0, 5}});
+  makeTestAndOrOrMergeBlocks<true>({{1, 4}}, {{10, 25}, {25, 27}},
+                                   {{1, 4}, {10, 27}});
 }
 
 //______________________________________________________________________________
-// Test `getIntersection` over `BlockRange` values.
-TEST(PrefilterExpressionOnMetadataDetailTest,
-     testGetIntersectionOnBlockRanges) {
-  const auto makeTestAndRanges = [](RelevantBlockRanges&& r1,
-                                    RelevantBlockRanges&& r2,
-                                    RelevantBlockRanges&& rExpected) {
-    EXPECT_EQ(prefilterExpressions::detail::logicalOps::getIntersection(r1, r2),
-              rExpected);
-  };
-  // RelevantBlockRanges r1 INTERSECTION RelevantBlockRanges r2 should yield:
-  // RelevantBlockRanges rExpected.
-  makeTestAndRanges({}, {}, {});
-  makeTestAndRanges({{0, 3}, {3, 5}}, {}, {});
-  makeTestAndRanges({{3, 9}}, {{3, 9}}, {{3, 9}});
-  makeTestAndRanges({{0, 10}}, {{2, 4}}, {{2, 4}});
-  makeTestAndRanges({{3, 9}, {9, 12}}, {{0, 10}, {10, 14}}, {{3, 12}});
-  makeTestAndRanges({{0, 33}}, {{0, 9}, {9, 11}, {30, 33}},
-                    {{0, 11}, {30, 33}});
-  makeTestAndRanges({{0, 9}, {9, 11}, {30, 33}}, {{0, 33}},
-                    {{0, 11}, {30, 33}});
-  makeTestAndRanges({{0, 8}, {10, 14}}, {{6, 12}}, {{6, 8}, {10, 12}});
+// Test `mergeRelevantBlockItRanges<false>` over `BlockItRange` values.
+TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
+  // r1 INTERSECTION r2 should yield rExpected.
+  makeTestAndOrOrMergeBlocks<false>({}, {}, {});
+  makeTestAndOrOrMergeBlocks<false>({{0, 3}, {3, 5}}, {}, {});
+  makeTestAndOrOrMergeBlocks<false>({{3, 9}}, {{3, 9}}, {{3, 9}});
+  makeTestAndOrOrMergeBlocks<false>({{0, 10}}, {{2, 4}}, {{2, 4}});
+  makeTestAndOrOrMergeBlocks<false>({{3, 9}, {9, 12}}, {{0, 10}, {10, 14}},
+                                    {{3, 12}});
+  makeTestAndOrOrMergeBlocks<false>({{0, 26}}, {{0, 9}, {9, 11}, {20, 26}},
+                                    {{0, 11}, {20, 26}});
+  makeTestAndOrOrMergeBlocks<false>({{0, 9}, {9, 11}, {20, 26}}, {{0, 26}},
+                                    {{0, 11}, {20, 26}});
+  makeTestAndOrOrMergeBlocks<false>({{0, 8}, {10, 14}}, {{6, 12}},
+                                    {{6, 8}, {10, 12}});
 }
 
 //______________________________________________________________________________
