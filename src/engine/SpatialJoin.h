@@ -15,7 +15,16 @@
 #include "parser/data/Variable.h"
 
 // Selection of a SpatialJoin join type
-enum class SpatialJoinJoinType { INTERSECTS, CONTAINS, COVERS, CROSSES, TOUCHES, EQUALS, OVERLAPS, WITHIN_DIST };
+enum class SpatialJoinJoinType {
+  INTERSECTS,
+  CONTAINS,
+  COVERS,
+  CROSSES,
+  TOUCHES,
+  EQUALS,
+  OVERLAPS,
+  WITHIN_DIST
+};
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -35,10 +44,16 @@ struct SJConfig {
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig, SJConfig>;
+using SpatialJoinTask =
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SJConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX, LIBSPATIALJOIN };
+enum class SpatialJoinAlgorithm {
+  BASELINE,
+  S2_GEOMETRY,
+  BOUNDING_BOX,
+  LIBSPATIALJOIN
+};
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 

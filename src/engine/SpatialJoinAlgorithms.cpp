@@ -39,7 +39,6 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 util::geo::I32Box SpatialJoinAlgorithms::lsjParse(bool side,
                                                   const IdTable* restable,
                                                   ColumnIndex col,
-                                                  sj::Sweeper& sweeper,
                                                   sj::WKTParser& parser) const {
   for (size_t row = 0; row < restable->size(); row++) {
     auto id = restable->at(row, col);
@@ -350,19 +349,19 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // smaller one and calculate a bbox on the fly to be used as a filter for the
   // larger one
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, wktParser);
+    auto box = lsjParse(false, idTableLeft, leftJoinCol, wktParser);
 
     sweeper.setFilterBox(box);
 
     sj::WKTParser bParser(&sweeper, NUM_THREADS);
-    lsjParse(true, idTableRight, rightJoinCol, sweeper, bParser);
+    lsjParse(true, idTableRight, rightJoinCol, bParser);
   } else {
-    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, wktParser);
+    auto box = lsjParse(true, idTableRight, rightJoinCol, wktParser);
 
     sweeper.setFilterBox(box);
 
     sj::WKTParser bParser(&sweeper, NUM_THREADS);
-    lsjParse(false, idTableLeft, leftJoinCol, sweeper, bParser);
+    lsjParse(false, idTableLeft, leftJoinCol, bParser);
   }
 
   // flush geometries

@@ -200,8 +200,7 @@ class SpatialJoinAlgorithms {
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
 
   util::geo::I32Box lsjParse(bool side, const IdTable* restable,
-                             ColumnIndex col, sj::Sweeper& sweeper,
-                             sj::WKTParser& parser) const;
+                             ColumnIndex col, sj::WKTParser& parser) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
