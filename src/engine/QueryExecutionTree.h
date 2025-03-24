@@ -154,6 +154,14 @@ class QueryExecutionTree {
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
+  // sorted accordingly, or sorted by another permutation of the same columns,
+  // it is simply returned.
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::vector<ColumnIndex>& sortColumns);
+
+  // Create a `QueryExecutionTree` that produces exactly the same result as
+  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
