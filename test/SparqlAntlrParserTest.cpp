@@ -2052,22 +2052,18 @@ auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
       &makeUnaryNegateExpression, existsMatcher(pattern));
 }
 
-// _____________________________________________________________________________
-std::vector<const SparqlExpression*> getExistsExpressions(
-    const SparqlFilter& filter) {
-  std::vector<const SparqlExpression*> result;
-  filter.expression_.getPimpl()->getExistsExpressions(result);
-  return result;
-}
-
-// _____________________________________________________________________________
+// Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
+// that matches the given `matcher` when comparing the inner parsed query of the
+// `ExistsExpression`.
 using parsedQuery::GraphPattern;
-Matcher<const GraphPattern&> containsExistsClause(
+Matcher<const GraphPattern&> containsExistsFilter(
     const Matcher<const ParsedQuery&>& matcher) {
-  return AD_FIELD(GraphPattern, _filters,
-                  ::testing::ElementsAre(::testing::ResultOf(
-                      getExistsExpressions,
-                      ::testing::ElementsAre(existsMatcher(matcher)))));
+  return AD_FIELD(
+      GraphPattern, _filters,
+      ::testing::ElementsAre(AD_FIELD(
+          SparqlFilter, expression_,
+          AD_PROPERTY(SparqlExpressionPimpl, getExistsExpressions,
+                      ::testing::ElementsAre(existsMatcher(matcher))))));
 }
 }  // namespace existsTestHelpers
 
@@ -2124,20 +2120,20 @@ TEST(SparqlParser, Exists) {
   auto expectGroupGraphPattern =
       ExpectCompleteParse<&Parser::groupGraphPattern>{};
   expectGroupGraphPattern("{ ?a ?b ?c . FILTER EXISTS {?a <bar> ?foo} }",
-                          containsExistsClause(selectABarFooMatcher(
+                          containsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ ?a ?b ?c . FILTER NOT EXISTS {?a <bar> ?foo} }",
-                          containsExistsClause(selectABarFooMatcher(
+                          containsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ FILTER EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
-                          containsExistsClause(selectABarFooMatcher(
+                          containsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ FILTER NOT EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
-                          containsExistsClause(selectABarFooMatcher(
+                          containsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
 
   auto doesNotBindExists = [&]() {
-    auto innerMatcher = containsExistsClause(selectABarFooMatcher(
+    auto innerMatcher = containsExistsFilter(selectABarFooMatcher(
         std::nullopt, std::nullopt, std::vector<std::string>{}));
     using parsedQuery::GroupGraphPattern;
     return AD_FIELD(GraphPattern, _graphPatterns,

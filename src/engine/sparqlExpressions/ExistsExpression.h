@@ -69,8 +69,8 @@ class ExistsExpression : public SparqlExpression {
     return argument_.selectClause().getSelectedVariables();
   }
 
-  // Select all visible variables of the `EXISTS` expression that are present in
-  // `variables`.
+  // Set the `SELECT` of the argument of this exists expression to all the
+  // variables that are visible in the argument AND contained in variables.
   void selectVariables(std::span<const Variable> variables) {
     std::vector<parsedQuery::SelectClause::VarOrAlias> intersection;
     const auto& visibleVariables = argument_.getVisibleVariables();

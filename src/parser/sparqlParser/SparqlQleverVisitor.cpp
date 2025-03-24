@@ -843,9 +843,8 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
 
 // _____________________________________________________________________________
 void Visitor::selectExistsVariables(SparqlFilter& filter) const {
-  std::vector<SparqlExpression*> existsExpressions;
-  filter.expression_.getPimpl()->getExistsExpressions(existsExpressions);
-  for (SparqlExpression* sparqlExpression : existsExpressions) {
+  for (SparqlExpression* sparqlExpression :
+       filter.expression_.getExistsExpressions()) {
     auto* existsExpression = dynamic_cast<ExistsExpression*>(sparqlExpression);
     AD_CORRECTNESS_CHECK(existsExpression);
     existsExpression->selectVariables(visibleVariables_);
@@ -2603,6 +2602,10 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   // variables to a potentially smaller subset when finishing the parsing of the
   // current group.
   selectClause.setAsterisk();
+  // `ExistsExpression`s are not parsed like regular `SparqlExpression`s, so
+  // they don't have a proper hierarchy of dependent variables. Because of that,
+  // we need to manually add all variables that are visible after parsing the
+  // body of `EXISTS`.
   for (const Variable& variable : visibleVariables_) {
     selectClause.addVisibleVariable(variable);
   }
