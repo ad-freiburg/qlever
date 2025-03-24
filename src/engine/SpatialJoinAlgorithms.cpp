@@ -3,8 +3,6 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#include "engine/SpatialJoinAlgorithms.h"
-
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
@@ -20,6 +18,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -325,8 +324,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
        false,
        false,
        withinDist,
-       [this, &results, &resultDists, joinTypeVal, withinDist](
-           size_t t, const char* a, const char* b, const char* pred) {
+       [&results, &resultDists, joinTypeVal](size_t t, const char* a,
+                                             const char* b, const char* pred) {
          if (joinTypeVal == SpatialJoinJoinType::WITHIN_DIST) {
            results[t].push_back({std::atoi(a), std::atoi(b)});
            resultDists[t].push_back(atof(pred));
