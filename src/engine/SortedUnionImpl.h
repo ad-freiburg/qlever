@@ -64,7 +64,7 @@ struct IterationData {
   void appendCurrent(IdTable& resultTable, LocalVocab& localVocab) {
     resultTable.insertAtEnd(it_.value()->idTable_, index_, std::nullopt,
                             permutation_, Id::makeUndefined());
-    localVocab.mergeWith(std::span{&it_.value()->localVocab_, 1});
+    localVocab.mergeWith(it_.value()->localVocab_);
     index_ = 0;
     ++it_.value();
   }
@@ -192,8 +192,8 @@ struct SortedUnionImpl
            data2_.it_ != data2_.range_.end()) {
       auto& idTable1 = data1_.it_.value()->idTable_;
       auto& idTable2 = data2_.it_.value()->idTable_;
-      localVocab_.mergeWith(std::span{&data1_.it_.value()->localVocab_, 1});
-      localVocab_.mergeWith(std::span{&data2_.it_.value()->localVocab_, 1});
+      localVocab_.mergeWith(data1_.it_.value()->localVocab_);
+      localVocab_.mergeWith(data2_.it_.value()->localVocab_);
       size_t& index1 = data1_.index_;
       size_t& index2 = data2_.index_;
       while (index1 < idTable1.size() && index2 < idTable2.size()) {
