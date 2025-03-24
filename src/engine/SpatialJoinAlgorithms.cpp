@@ -24,8 +24,6 @@
 
 using namespace BoostGeometryNamespace;
 
-const static size_t BATCH_SIZE = 10000;
-
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
