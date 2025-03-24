@@ -3,6 +3,8 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include "engine/SpatialJoin.h"
+
 #include <absl/container/flat_hash_set.h>
 #include <absl/strings/charconv.h>
 
@@ -16,7 +18,6 @@
 #include <variant>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"

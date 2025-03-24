@@ -2,13 +2,14 @@
 // Chair of Algorithms and Data Structures
 // Authors: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include "parser/SpatialQuery.h"
+
 #include <type_traits>
 #include <variant>
 
 #include "engine/SpatialJoin.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
-#include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
 
 namespace parsedQuery {
