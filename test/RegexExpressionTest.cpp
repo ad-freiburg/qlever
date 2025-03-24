@@ -375,6 +375,7 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
 
 // _____________________________________________________________________________
 TEST(RegexExpression, getCacheKey) {
+  using namespace ::testing;
   auto exp0 = makeRegexExpression("?first", "^alp");
   auto exp1 = makeRegexExpression("?first", "alp");
   auto exp2 = makeRegexExpression("?first", "alp");
@@ -383,9 +384,10 @@ TEST(RegexExpression, getCacheKey) {
   map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
   map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
   EXPECT_TRUE(isPrefixExpression(exp0));
-  EXPECT_THAT(exp0->getCacheKey(map),
-              ::testing::AllOf(::testing::StartsWith("Prefix REGEX"),
-                               ::testing::HasSubstr("str:0")));
+  EXPECT_THAT(
+      exp0->getCacheKey(map),
+      AllOf(StartsWith("Prefix REGEX"), HasSubstr("str:0"), HasSubstr("alp"),
+            HasSubstr(exp0->children()[0]->getCacheKey(map))));
   EXPECT_NE(exp0->getCacheKey(map), exp1->getCacheKey(map));
   ASSERT_EQ(exp1->getCacheKey(map), exp2->getCacheKey(map));
 
@@ -422,7 +424,9 @@ TEST(RegexExpression, getCacheKey) {
   EXPECT_NE(exp8->getCacheKey(map), exp9->getCacheKey(map));
 
   auto exp10 = makeRegexExpression("?first", "^alp", std::nullopt, true);
-  EXPECT_THAT(exp10->getCacheKey(map), ::testing::HasSubstr("str:1"));
+  EXPECT_THAT(exp10->getCacheKey(map),
+              AllOf(HasSubstr("str:1"), HasSubstr("alp"),
+                    HasSubstr(exp10->children()[0]->getCacheKey(map))));
   EXPECT_NE(exp0->getCacheKey(map), exp10->getCacheKey(map));
 }
 

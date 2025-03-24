@@ -12,8 +12,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
-// Class implementing the REGEX function, which takes two mandatory arguments
-// (an expression and a regex) and one optional argument (a string of flags).
+// Class implementing a specialization of the REGEX function. This optimization
+// is possible if the regex is known in advance and is a simple prefix regex.
 class PrefixRegexExpression : public SparqlExpression {
  private:
   Ptr child_;
@@ -37,7 +37,9 @@ class PrefixRegexExpression : public SparqlExpression {
   PrefixRegexExpression& operator=(const PrefixRegexExpression&) noexcept =
       delete;
 
-  // ___________________________________________________________________________
+  // Check if the children of this expression allow for the prefix regex
+  // optimization. If this is the case, a `PrefixRegexExpression` is returned,
+  // otherwise `std::nullopt`.
   static std::optional<PrefixRegexExpression>
   makePrefixRegexExpressionIfPossible(Ptr& string,
                                       const SparqlExpression& regex);

@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "global/ValueIdComparators.h"
 
 using namespace std::literals;
@@ -78,7 +79,8 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
 };
 
 using RegexExpression =
-    NARY<2, FV<decltype(regexImpl), LiteralFromIdGetter, RegexValueGetter>>;
+    string_expressions::StringExpressionImpl<2, decltype(regexImpl),
+                                             RegexValueGetter>;
 
 }  // namespace sparqlExpression::detail
 
@@ -153,8 +155,8 @@ PrefixRegexExpression::PrefixRegexExpression(Ptr child, std::string prefixRegex,
 // _____________________________________________________________________________
 string PrefixRegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  return absl::StrCat("Prefix REGEX expression ",
-                      child_->getCacheKey(varColMap),
+  return absl::StrCat("Prefix REGEX expression: ", prefixRegex_,
+                      " child:", child_->getCacheKey(varColMap),
                       " str:", childIsStrExpression_);
 }
 
@@ -205,8 +207,8 @@ ExpressionResult PrefixRegexExpression::evaluate(
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   if (context->isResultSortedBy(variable_)) {
+    std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
     auto optColumn = context->getColumnIndexForVariable(variable_);
     AD_CORRECTNESS_CHECK(optColumn.has_value(),
                          "We have previously asserted that the input is sorted "
@@ -283,19 +285,21 @@ PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
   detail::ensureIsValidRegexIfConstant(regex);
   const auto* variableExpression = dynamic_cast<const VariableExpression*>(
       string->isStrExpression() ? string->children()[0].get() : string.get());
+  if (!variableExpression) {
+    return std::nullopt;
+  }
   const auto* stringLiteralExpression =
       dynamic_cast<const StringLiteralExpression*>(&regex);
-  if (stringLiteralExpression) {
-    const auto& stringLiteral = stringLiteralExpression->value();
-    detail::ensureIsSimpleLiteral(stringLiteral);
-    if (variableExpression) {
-      if (std::optional<std::string> prefixRegex = getPrefixRegex(
-              std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
-        return PrefixRegexExpression{std::move(string),
-                                     std::move(prefixRegex.value()),
-                                     variableExpression->value()};
-      }
-    }
+  if (!stringLiteralExpression) {
+    return std::nullopt;
+  }
+  const auto& stringLiteral = stringLiteralExpression->value();
+  detail::ensureIsSimpleLiteral(stringLiteral);
+  if (std::optional<std::string> prefixRegex = getPrefixRegex(
+          std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
+    return PrefixRegexExpression{std::move(string),
+                                 std::move(prefixRegex.value()),
+                                 variableExpression->value()};
   }
   return std::nullopt;
 }
