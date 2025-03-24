@@ -612,7 +612,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   for (auto& pair : resultPairs) {
     siblingPair.idTable_.insertAtEnd(pair.idTable_);
-    siblingPair.localVocab_.mergeWith(std::span{&pair.localVocab_, 1});
+    siblingPair.localVocab_.mergeWith(pair.localVocab_);
   }
 
   service->siblingInfo_.emplace(

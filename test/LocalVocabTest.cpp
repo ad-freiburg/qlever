@@ -420,7 +420,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
-  mergeCandidate.mergeWith(std::span{&clone, 1});
+  mergeCandidate.mergeWith(clone);
 
   EXPECT_EQ(mergeCandidate.size(), 1);
   EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
@@ -438,8 +438,8 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();
-  clone2.mergeWith(std::span{&original, 1});
-  original.mergeWith(std::span{&clone1, 1});
+  clone2.mergeWith(original);
+  original.mergeWith(clone1);
 
   // Make sure we deduplicate `otherWordSets_` with the primary word set.
   EXPECT_EQ(original.size(), 1);

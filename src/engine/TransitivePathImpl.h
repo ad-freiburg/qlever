@@ -236,7 +236,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(std::span{&edgesVocab, 1});
+      mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
         Set connectedNodes = findConnectedNodes(edges, startNode, target);

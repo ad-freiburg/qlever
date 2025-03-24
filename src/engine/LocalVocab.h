@@ -153,6 +153,9 @@ class LocalVocab {
     localBlankNodeManager_->mergeWith(localManagersView);
   }
 
+  // Convenience function for a single `LocalVocab`.
+  void mergeWith(const LocalVocab& other);
+
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.
   static LocalVocab merge(std::span<const LocalVocab*> vocabs);

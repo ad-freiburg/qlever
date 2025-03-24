@@ -347,7 +347,7 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
       continue;
     }
     idTables.emplace_back(idTable);
-    localVocab.mergeWith(std::span{&staticMergedVocab, 1});
+    localVocab.mergeWith(staticMergedVocab);
     size_t producedTableSize = 0;
     for (auto& idTableAndVocab : produceTablesLazily(
              std::move(localVocab),
