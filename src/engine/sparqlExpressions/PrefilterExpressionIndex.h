@@ -53,7 +53,7 @@ using RelevantBlockItRanges = std::vector<BlockItRange>;
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
 // containierized `std::span<cont BlockMetadata>` objects. This (indexable)
 // containerization procedure allows us to efficiently define relevant ranges by
-// indices/iterators, instead of returning the relvant `BlockMetadata` values
+// indices/iterators, instead of returning the relevant `BlockMetadata` values
 // itself.
 // `operator()(std::span<const BlockMetadata> randomAccessContainer,uint64_t i)`
 // implements access to the i-th `ValueId` regarding our containerized
@@ -62,7 +62,7 @@ using RelevantBlockItRanges = std::vector<BlockItRange>;
 // respectively) over the specified column `evaluationColumn_`. This leads to an
 // valid index range `[0, 2 * inputSpan.size())` for `i`. Under those conditions
 // and an given `ValueId` index `i`, we can simply determine that the
-// corrsponding `ValueId` must be contained in `BlockMetadata` value at position
+// corresponding `ValueId` must be contained in `BlockMetadata` value at position
 // `i/2`. `i % 2` specifies in the following if we have to access the ValueId
 // from `fristTriple_` or `lastTriple_` of previously determined `BlockMetadata`
 // value.
@@ -94,7 +94,7 @@ using ValueIdItRange = ql::ranges::subrange<ValueIdIt>;
 //______________________________________________________________________________
 // Required because `valueIdComparators::getRangesForId` directly returns pairs
 // of `ValueIdIt`s, and not sub ranges (`ValueIdItRange`).
-// Remark: The pair defines a relavant range of `ValueId`s over containerized
+// Remark: The pair defines a relevant range of `ValueId`s over containerized
 // `std::span<const BlockMetadata> input` by iterators.
 using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;
 
