@@ -223,16 +223,33 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  if (childLeft_ && childRight_) {
-    size_t inputEstimate =
-        childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+  if (!childLeft_ || !childRight_) {
+    return 1;  // dummy return, as the class does not have its children yet
+  }
+
+  size_t spatialJoinCostEst = [this]() {
+    auto n = childLeft_->getSizeEstimate();
+    auto m = childRight_->getSizeEstimate();
+
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
-      return inputEstimate * inputEstimate;
+      return n * m;
+    } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      // Let n be the size of the left table and m the size of the right table
+      // and o = n + m.
+      // We first sort these objects in O(n log n), afterwards we iterate over
+      // the sorted list of objects, keeping track of the active boxes. This can
+      // be done in O(o log i), where i is the maximum number of active boxes
+      // at any time. For a full self-join on planet.osm, i was upper-bounded
+      // by around 10,000, so log i can - for all practical purposes - be
+      // considered a constant of 4.
+      // The actual cost of comparing the candidate geometries cannot be
+      // meaningfully estimated here, as we know nothing about the invidiual
+      // geometries
+      auto numObjects = (n + m) * 4;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX ||
-              config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN,
+              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
@@ -241,14 +258,14 @@ size_t SpatialJoin::getCostEstimate() {
       // for each item do a lookup on the index for the right table in O(log m).
       // Together we have O(n log(m) + m log(m)), because in general we can't
       // draw conclusions about the relation between the sizes of n and m.
-      auto n = childLeft_->getSizeEstimate();
-      auto m = childRight_->getSizeEstimate();
-      auto logm = static_cast<size_t>(
-          log(static_cast<double>(childRight_->getSizeEstimate())));
+      auto logm = static_cast<size_t>(std::log(static_cast<double>(m)));
       return (n * logm) + (m * logm);
     }
-  }
-  return 1;  // dummy return, as the class does not have its children yet
+  }();
+
+  // The cost to compute the children needs to be taken into account.
+  return spatialJoinCostEst + childLeft_->getCostEstimate() +
+         childRight_->getCostEstimate();
 }
 
 // ____________________________________________________________________________

@@ -40,23 +40,25 @@ util::geo::I32Box SpatialJoinAlgorithms::lsjParse(bool side,
                                                   ColumnIndex col,
                                                   sj::Sweeper& sweeper,
                                                   size_t numThreads) const {
+  // initialize WKT parser
   sj::WKTParser parser(&sweeper, numThreads);
 
+  // iterate over all rows and add them to the parser
   for (size_t row = 0; row < restable->size(); row++) {
     auto id = restable->at(row, col);
     if (id.getDatatype() == Datatype::VocabIndex) {
       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
-
-      // +1 because of leading quote
-      parser.parseWKT(wkt.c_str() + 1, row, side);
+      parser.parseWKT(wkt.c_str(), row, side);
     } else if (id.getDatatype() == Datatype::GeoPoint) {
       const auto& p = id.getGeoPoint();
       parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row, side);
     }
   }
 
+  // wait for all parse threads to finish
   parser.done();
 
+  // return the bounding box of the geometries parsed so far
   return parser.getBoundingBox();
 }
 

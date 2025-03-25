@@ -2044,8 +2044,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex(
-          "Neither <numNearestNeighbors> nor <maxDistance> were provided"));
+      ::testing::ContainsRegex("Neither <numNearestNeighbors> nor "
+                               "<maxDistance> nor <joinType> were provided"));
 }
 
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
