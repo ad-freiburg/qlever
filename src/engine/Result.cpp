@@ -11,6 +11,7 @@
 
 #include "util/Exception.h"
 #include "util/Generators.h"
+#include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
@@ -62,42 +63,6 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
-
-// _____________________________________________________________________________
-struct ResultDataGenerator
-    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
-  Result::LazyResult idTables_;
-  const std::vector<ColumnIndex> sortedBy;
-  std::optional<Result::LazyResult::iterator> idTablesNext_{};
-  std::optional<IdTable::row_type> previousId = std::nullopt;
-
-  ResultDataGenerator(Result::LazyResult idTables,
-                      std::vector<ColumnIndex> sortedBy)
-      : idTables_(std::move(idTables)),
-        sortedBy{std::move(sortedBy)} {}
-
-  std::optional<Result::IdTableVocabPair> get() {
-    if (!idTablesNext_.has_value()) {
-      idTablesNext_ = idTables_.begin();
-    } else if (idTablesNext_.value() != idTables_.end()) {
-      idTablesNext_.value()++;
-    }
-    if (idTablesNext_.value() == idTables_.end()) {
-      return std::nullopt;
-    }
-    Result::IdTableVocabPair& pair = *(idTablesNext_.value());
-    auto& idTable = pair.idTable_;
-    if (!idTable.empty()) {
-      if (previousId.has_value()) {
-        AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
-            idTable.at(0), previousId.value()));
-      }
-      previousId = idTable.at(idTable.size() - 1);
-    }
-    assertSortOrderIsRespected(idTable, sortedBy);
-    return std::optional{std::move(pair)};
-  }
-};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -128,8 +93,23 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{Result::LazyResult{
-          ResultDataGenerator{std::move(idTables), sortedBy}}}},
+    : data_{GenContainer{
+          Result::LazyResult{ad_utility::CachingTransformInputRange(
+              std::move(idTables),
+              [sortedBy](Result::IdTableVocabPair& pair) {
+                static std::optional<IdTable::row_type> previousId =
+                    std::nullopt;
+                auto& idTable = pair.idTable_;
+                if (!idTable.empty()) {
+                  if (previousId.has_value()) {
+                    AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
+                        idTable.at(0), previousId.value()));
+                  }
+                  previousId = idTable.at(idTable.size() - 1);
+                }
+                assertSortOrderIsRespected(idTable, sortedBy);
+                return std::move(pair);
+              })}}},
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
