@@ -53,12 +53,32 @@ inline string getWordFromResultTable(const QueryExecutionContext* qec,
       result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
-inline size_t getScoreFromResultTable(
+inline Score getScoreFromResultTable(
     [[maybe_unused]] const QueryExecutionContext* qec, const Result& result,
-    const size_t& rowIndex, bool wasPrefixSearch) {
+    const size_t& rowIndex, bool wasPrefixSearch, bool scoreIsInt = true) {
   size_t colToRetrieve = wasPrefixSearch ? 2 : 1;
-  return static_cast<size_t>(
-      result.idTable().getColumn(colToRetrieve)[rowIndex].getInt());
+  if (scoreIsInt) {
+    return static_cast<Score>(
+        result.idTable().getColumn(colToRetrieve)[rowIndex].getInt());
+  } else {
+    return static_cast<Score>(
+        result.idTable().getColumn(colToRetrieve)[rowIndex].getDouble());
+  }
+}
+
+inline float calculateBM25FromParameters(size_t tf, size_t df, size_t nofDocs,
+                                         size_t avdl, size_t dl, float b,
+                                         float k) {
+  float idf = log2f(nofDocs / df);
+  float alpha = 1 - b + b * dl / avdl;
+  float tf_star = (tf * (k + 1)) / (k * alpha + tf);
+  return tf_star * idf;
+}
+
+inline float calculateTFIDFFromParameters(size_t tf, size_t df,
+                                          size_t nofDocs) {
+  float idf = log2f(nofDocs / df);
+  return tf * idf;
 }
 
 inline string combineToString(const string& text, const string& word) {
