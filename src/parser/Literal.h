@@ -102,5 +102,11 @@ class Literal {
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
 
+  // Replaces the string content with a new string of the same length.Throws
+  // error if the length of the new string differs from the original. Used in
+  // UCASE/LCASE functions in StringExpressions.cpp.
+  void replaceContentWithSameLength(const std::string& newContent);
+
+
 };
 }  // namespace ad_utility::triple_component
