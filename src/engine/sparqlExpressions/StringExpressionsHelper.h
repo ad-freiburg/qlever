@@ -14,15 +14,14 @@ namespace sparqlExpression::detail::string_expressions {
 // `STR()` expression, then the `StringValueGetter` will be used (which also
 // returns string values for IRIs, numeric literals, etc.), otherwise the
 // `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-class StringExpressionImpl : public SparqlExpression {
+template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
+          typename Function, typename... AdditionalNonStringValueGetters>
+class StringExpressionImplImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr =
-      NARY<N,
-           FV<Function, StringValueGetter, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<
-      N, FV<Function, LiteralFromIdGetter, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithStr = NARY<
+      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
+                                          AdditionalNonStringValueGetters...>>;
 
   Ptr impl_;
 
@@ -30,7 +29,8 @@ class StringExpressionImpl : public SparqlExpression {
   CPP_template(typename... C)(
       requires(concepts::same_as<C, SparqlExpression::Ptr>&&...)
           CPP_and(sizeof...(C) + 1 ==
-                  N)) explicit StringExpressionImpl(Ptr child, C... children) {
+                  N)) explicit StringExpressionImplImpl(Ptr child,
+                                                        C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
@@ -53,4 +53,20 @@ class StringExpressionImpl : public SparqlExpression {
  private:
   std::span<Ptr> childrenImpl() override { return impl_->children(); }
 };
+
+// Impl class for expressions that work on plain strings.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+using StringExpressionImpl =
+    StringExpressionImplImpl<StringValueGetter, LiteralFromIdGetter, N,
+                             Function, AdditionalNonStringValueGetters...>;
+
+// Impl class for expressions that work on literals with datatypes and language
+// tags.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+using LiteralExpressionImpl =
+    StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
+                             LiteralValueGetterWithoutStrFunction, N, Function,
+                             AdditionalNonStringValueGetters...>;
 }  // namespace sparqlExpression::detail::string_expressions
