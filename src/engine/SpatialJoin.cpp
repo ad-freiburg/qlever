@@ -245,7 +245,8 @@ size_t SpatialJoin::getCostEstimate() {
       // The actual cost of comparing the candidate geometries cannot be
       // meaningfully estimated here, as we know nothing about the invidiual
       // geometries
-      auto numObjects = (n + m) * 4;
+      auto numObjects = n + m;
+      return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
