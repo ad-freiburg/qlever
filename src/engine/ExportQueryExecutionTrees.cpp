@@ -18,7 +18,6 @@
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.

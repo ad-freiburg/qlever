@@ -106,7 +106,5 @@ class Literal {
   // error if the length of the new string differs from the original. Used in
   // UCASE/LCASE functions in StringExpressions.cpp.
   void replaceContentWithSameLength(const std::string& newContent);
-
-
 };
 }  // namespace ad_utility::triple_component
