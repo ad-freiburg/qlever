@@ -294,7 +294,8 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
         // Add the union of r1 and r2.
         addRange(BlockSubrange{std::min(idx1Begin, idx2Begin),
                                std::max(idx1End, idx2End)});
-        (idx1++, idx2++);
+        idx1++;
+        idx2++;
       } else {
         // Add the intersection of r1 and r2.
         addRange(BlockSubrange{std::max(idx1Begin, idx2Begin),
