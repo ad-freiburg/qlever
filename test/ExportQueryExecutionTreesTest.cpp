@@ -1619,6 +1619,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
       toChrono(timingInformation["computeResult"].get<std::string_view>()));
 }
 
+// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   using S = ad_utility::streams::stream_generator;
   auto throwEarly = []() -> S {
@@ -1666,4 +1667,121 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   EXPECT_THAT(consume(std::move(res)),
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+  std::string kg =
+      "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
+      "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
+      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using enum Datatype;
+
+  // Helper function that takes an ID and a vector of test cases and checks
+  // if the ID is correctly converted. A more detailed explanation of the test
+  // logic is below with the test cases.
+  auto checkIdToLiteralOrIri =
+      [&](Id id,
+          const std::vector<std::tuple<bool, std::optional<std::string>>>&
+              cases) {
+        for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
+          auto result = ExportQueryExecutionTrees::idToLiteral(
+              qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
+          if (expected) {
+            EXPECT_THAT(result,
+                        ::testing::Optional(::testing::ResultOf(
+                            [](const auto& literalOrIri) {
+                              return literalOrIri.toStringRepresentation();
+                            },
+                            ::testing::StrEq(*expected))));
+          } else {
+            EXPECT_EQ(result, std::nullopt);
+          }
+        }
+      };
+
+  // Test cases: Each tuple describes one test case.
+  // The first element is the ID of the element to test.
+  // The second element is a list of 2 configurations:
+  // 1. for literals all datatypes except for xsd:string are removed, IRIs
+  // are converted to literals
+  // 2. only literals with `xsd:string` or no datatype are returned
+  std::vector<
+      std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
+      testCases = {
+          // Case: Literal without datatype
+          {getId("\"something\""),
+           {{false, "\"something\""}, {true, "\"something\""}}},
+
+          // Case: Literal with datatype `xsd:string`
+          {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
+           {{false, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
+            {true, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"}}},
+
+          // Case: Literal with unknown datatype
+          {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
+           {{false, "\"dadudeldu\""}, {true, std::nullopt}}},
+
+          // Case: IRI
+          {getId("<s>"), {{false, "\"s\""}, {true, std::nullopt}}},
+
+          // Case: datatype `Int`
+          {ad_utility::testing::IntId(1),
+           {{false, "\"1\""}, {true, std::nullopt}}},
+
+          // Case: Undefined ID
+          {ad_utility::testing::UndefId(),
+           {{false, std::nullopt}, {true, std::nullopt}}}};
+
+  for (const auto& [id, cases] : testCases) {
+    checkIdToLiteralOrIri(id, cases);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
+  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+
+  auto toLiteralOrIri = [](std::string_view content, auto descriptor) {
+    return LiteralOrIri{Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(content), descriptor)};
+  };
+
+  auto verify = [](const LiteralOrIri& input, bool expected) {
+    EXPECT_EQ(
+        ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(input),
+        expected);
+  };
+
+  verify(toLiteralOrIri("Hallo", std::nullopt), true);
+  verify(toLiteralOrIri(
+             "Hallo",
+             Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>")),
+         true);
+  verify(
+      toLiteralOrIri(
+          "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
+      false);
+
+  EXPECT_THROW(
+      verify(LiteralOrIri{Iri::fromIriref("<http://www.example.com/someIri>")},
+             false),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
+  std::string input = "<s>";
+  std::string expected = "\"s\"";
+  EXPECT_EQ(ExportQueryExecutionTrees::replaceAnglesByQuotes(input), expected);
+  input = "s>";
+  EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
+               ad_utility::Exception);
+  input = "<s";
+  EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
+               ad_utility::Exception);
 }
