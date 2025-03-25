@@ -248,6 +248,7 @@ class SubstrImpl {
   IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
       NumericValue start, NumericValue length) const {
+
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
