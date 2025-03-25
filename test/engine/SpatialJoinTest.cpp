@@ -262,7 +262,9 @@ class SpatialJoinVarColParamTest
 
   std::shared_ptr<SpatialJoin> makeSpatialJoin(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
-      bool addDist = true, PayloadVariables pv = PayloadVariables::all(), SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM, SpatialJoinJoinType joinType = SpatialJoinJoinType::WITHIN_DIST) {
+      bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
+      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM,
+      SpatialJoinJoinType joinType = SpatialJoinJoinType::WITHIN_DIST) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -276,7 +278,8 @@ class SpatialJoinVarColParamTest
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg, joinType},
+                                     Variable{"?point2"}, dist, pv, alg,
+                                     joinType},
             std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -296,11 +299,13 @@ class SpatialJoinVarColParamTest
   // failed, instead of failing for both getResultWidth() and
   // computeVariableToColumnMap() if only one of them is wrong
   void testGetResultWidthOrVariableToColumnMap(
-      VarColTestSuiteParam parameters, SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+      VarColTestSuiteParam parameters,
+      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildTestQEC();
-    auto spJoin2 = makeSpatialJoin(qec, parameters, true, PayloadVariables::all(), alg);
+    auto spJoin2 =
+        makeSpatialJoin(qec, parameters, true, PayloadVariables::all(), alg);
     auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
@@ -370,7 +375,9 @@ class SpatialJoinVarColParamTest
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildTestQEC();
-    auto spJoin2 = makeSpatialJoin(qec, parameters, false, PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinJoinType::INTERSECTS);
+    auto spJoin2 = makeSpatialJoin(
+        qec, parameters, false, PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinJoinType::INTERSECTS);
     auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
@@ -586,10 +593,12 @@ TEST_P(SpatialJoinVarColParamTest, variableToColumnMap) {
 }
 
 TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoin) {
-  testGetResultWidthOrVariableToColumnMap(GetParam(), SpatialJoinAlgorithm::LIBSPATIALJOIN);
+  testGetResultWidthOrVariableToColumnMap(GetParam(),
+                                          SpatialJoinAlgorithm::LIBSPATIALJOIN);
 }
 
-TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinIntersects) {
+TEST_P(SpatialJoinVarColParamTest,
+       variableToColumnMapLibspatialjoinIntersects) {
   testGetResultWidthOrVariableToColumnMapSpatialJoinIntersects(GetParam());
 }
 
