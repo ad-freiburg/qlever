@@ -54,12 +54,12 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
     const auto& string = asStringViewUnsafe(literal.getContent());
-    auto firstInvalidFlag = string.find_first_not_of("imsu");
+    auto firstInvalidFlag = string.find_first_not_of("imsU");
     if (firstInvalidFlag != std::string::npos) {
       throw std::runtime_error{absl::StrCat(
           "Invalid regex flag '", string.substr(firstInvalidFlag, 1),
           "' found in \"", string,
-          "\". The only supported flags are 'i', 'm', 's', 'u', and any "
+          "\". The only supported flags are 'i', 'm', 's', 'U', and any "
           "combination of them")};
     }
   }

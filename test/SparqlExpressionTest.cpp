@@ -1383,6 +1383,13 @@ TEST(SparqlExpression, ReplaceExpression) {
       std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
                  IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
                  IdOrLiteralOrIri{lit("i")}});
+
+  // Matching using the all the flags
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("imsU")}});
   // Empty flag
   checkReplaceWithFlags(
       idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),

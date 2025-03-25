@@ -1752,13 +1752,13 @@ TEST(SparqlParser, builtInCall) {
                     matchNary(makeReplaceExpressionThreeArgs, Var{"?x"},
                               Var{"?y"}, Var{"?z"}));
   expectBuiltInCall(
-      "replace(?x, ?y, ?z, \"imsu\")",
+      "replace(?x, ?y, ?z, \"imsU\")",
       matchNaryWithChildrenMatchers(
           makeReplaceExpressionThreeArgs, variableExpressionMatcher(Var{"?x"}),
           matchNaryWithChildrenMatchers(
               &makeMergeRegexPatternAndFlagsExpression,
               variableExpressionMatcher(Var{"?y"}),
-              matchLiteralExpression(lit("imsu"))),
+              matchLiteralExpression(lit("imsU"))),
           variableExpressionMatcher(Var{"?z"})));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
@@ -1800,13 +1800,13 @@ TEST(SparqlParser, builtInCall) {
                                     variableExpressionMatcher(Var{"?x"}),
                                     matchLiteralExpression(lit("ab"))));
   expectBuiltInCall(
-      "regex(?x, \"ab\", \"imsu\")",
+      "regex(?x, \"ab\", \"imsU\")",
       matchNaryWithChildrenMatchers(
           makeRegexExpressionTwoArgs, variableExpressionMatcher(Var{"?x"}),
           matchNaryWithChildrenMatchers(
               &makeMergeRegexPatternAndFlagsExpression,
               matchLiteralExpression(lit("ab")),
-              matchLiteralExpression(lit("imsu")))));
+              matchLiteralExpression(lit("imsU")))));
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));

@@ -319,7 +319,7 @@ using StrBeforeExpression =
   if (!flags.has_value() || !regex.has_value()) {
     return Id::makeUndefined();
   }
-  auto firstInvalidFlag = flags.value().find_first_not_of("imsu");
+  auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
   if (firstInvalidFlag != std::string::npos) {
     return Id::makeUndefined();
   }

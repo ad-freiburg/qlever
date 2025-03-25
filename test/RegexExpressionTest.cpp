@@ -295,10 +295,11 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   testValuesInVariables({{"Abc", "[A-Z]", ""},
                          {"abc", "[A-Z]", ""},
                          {"abc", "[A-Z]", "i"},
+                         {"abc", "[A-Z]", "imsU"},
                          {"", "", ""},
                          {"", "(invalid", ""},
                          {"", "", "invalid"}},
-                        {T, F, T, T, U, U}, true);
+                        {T, F, T, T, T, U, U}, true);
 }
 
 namespace sparqlExpression {
@@ -453,7 +454,7 @@ TEST(RegexExpression, getChildren) {
   EXPECT_THAT(makeRegexExpression("?a", "^someRegex")->containedVariables(),
               ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(
-      makeRegexExpression("?a", "someRegex", "ims")->containedVariables(),
+      makeRegexExpression("?a", "someRegex", "imsU")->containedVariables(),
       ElementsAre(Pointee(Variable{"?a"})));
   EXPECT_THAT(makeTestRegexExpression(variable("?a"), literal("someRegex"),
                                       variable("?c"))
