@@ -58,7 +58,8 @@ class HttpClientImpl {
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
-      std::string_view acceptHeader = "text/plain");
+      std::string_view acceptHeader = "text/plain",
+      std::vector<std::pair<std::string, std::string>> customHeaders = {});
 
   // Simple way to establish a websocket connection
   boost::beast::http::response<boost::beast::http::string_body>
@@ -94,4 +95,5 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const boost::beast::http::verb& method = boost::beast::http::verb::get,
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
-    std::string_view acceptHeader = "text/plain");
+    std::string_view acceptHeader = "text/plain",
+    std::vector<std::pair<std::string, std::string>> customHeaders = {});

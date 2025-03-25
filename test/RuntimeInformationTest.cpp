@@ -90,16 +90,31 @@ TEST(RuntimeInformation, setColumnNames) {
 
 // ________________________________________________________________
 TEST(RuntimeInformation, statusToString) {
-  using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
-  EXPECT_EQ(R::toString(fullyMaterialized), "fully materialized");
-  EXPECT_EQ(R::toString(lazilyMaterialized), "lazily materialized");
-  EXPECT_EQ(R::toString(notStarted), "not started");
-  EXPECT_EQ(R::toString(optimizedOut), "optimized out");
-  EXPECT_EQ(R::toString(failed), "failed");
-  EXPECT_EQ(R::toString(failedBecauseChildFailed),
+  using enum R::Status;
+  EXPECT_EQ(R::statusToString(fullyMaterialized), "fully materialized");
+  EXPECT_EQ(R::statusToString(lazilyMaterialized), "lazily materialized");
+  EXPECT_EQ(R::statusToString(notStarted), "not started");
+  EXPECT_EQ(R::statusToString(optimizedOut), "optimized out");
+  EXPECT_EQ(R::statusToString(failed), "failed");
+  EXPECT_EQ(R::statusToString(failedBecauseChildFailed),
             "failed because child failed");
-  EXPECT_ANY_THROW(R::toString(static_cast<RuntimeInformation::Status>(72)));
+  EXPECT_ANY_THROW(
+      R::statusToString(static_cast<RuntimeInformation::Status>(72)));
+}
+
+// ________________________________________________________________
+TEST(RuntimeInformation, stringToStatus) {
+  using R = RuntimeInformation;
+  using enum R::Status;
+  EXPECT_EQ(R::stringToStatus("fully materialized"), fullyMaterialized);
+  EXPECT_EQ(R::stringToStatus("lazily materialized"), lazilyMaterialized);
+  EXPECT_EQ(R::stringToStatus("not started"), notStarted);
+  EXPECT_EQ(R::stringToStatus("optimized out"), optimizedOut);
+  EXPECT_EQ(R::stringToStatus("failed"), failed);
+  EXPECT_EQ(R::stringToStatus("failed because child failed"),
+            failedBecauseChildFailed);
+  EXPECT_ANY_THROW(R::stringToStatus(""));
 }
 
 // ________________________________________________________________
@@ -133,7 +148,7 @@ TEST(RuntimeInformation, formatDetailValue) {
 }
 
 // ________________________________________________________________
-TEST(RuntimeInformation, toStringAndJson) {
+TEST(RuntimeInformation, stringAndJsonConversion) {
   RuntimeInformation child;
   child.descriptor_ = "child";
   child.numCols_ = 2;
@@ -227,4 +242,36 @@ TEST(RuntimeInformation, toStringAndJson) {
 }
 )";
   ASSERT_EQ(j, nlohmann::ordered_json::parse(expectedJson));
+
+  // Check conversion from JSON to `RuntimeInformation`.
+  auto rtiFieldsCheck = [](const RuntimeInformation& a,
+                           const RuntimeInformation& b) {
+    ASSERT_EQ(a.descriptor_, b.descriptor_);
+    ASSERT_EQ(a.numCols_, b.numCols_);
+    ASSERT_EQ(a.numRows_, b.numRows_);
+    ASSERT_EQ(a.columnNames_, b.columnNames_);
+    ASSERT_EQ(a.totalTime_, b.totalTime_);
+    ASSERT_EQ(a.details_, b.details_);
+    ASSERT_EQ(a.cacheStatus_, b.cacheStatus_);
+    ASSERT_EQ(a.status_, b.status_);
+    ASSERT_EQ(a.children_.size(), b.children_.size());
+  };
+
+  auto rtiEqual = [rtiFieldsCheck](const RuntimeInformation& a,
+                                   const RuntimeInformation& b) {
+    rtiFieldsCheck(a, b);
+    for (size_t i = 0; i < a.children_.size(); ++i) {
+      rtiFieldsCheck(*a.children_[i], *b.children_[i]);
+    }
+  };
+
+  // Check 1: Normal RuntimeInformation.
+  RuntimeInformation rti;
+  from_json(j, rti);
+  rtiEqual(rti, parent);
+
+  // Check 2: Missing keys or values with wrong type -> ignore and use defaults.
+  RuntimeInformation rti2;
+  from_json({"description", 42}, rti2);
+  ASSERT_NO_THROW(rtiEqual(rti2, RuntimeInformation()));
 }

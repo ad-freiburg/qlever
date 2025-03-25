@@ -18,12 +18,11 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::QueryId;
-using websocket = beast::websocket::stream<tcp::socket>;
 
 /// Class to manage the lifecycle of a single websocket.
 class WebSocketSession {
   UpdateFetcher updateFetcher_;
-  websocket ws_;
+  beast::websocket::stream<tcp::socket> ws_;
   const QueryRegistry& queryRegistry_;
   QueryId queryId_;
   bool cancelOnClose_ = false;

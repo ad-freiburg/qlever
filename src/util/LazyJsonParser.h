@@ -66,7 +66,7 @@ class LazyJsonParser {
 
   // Context for the 3 parsing sections.
   struct BeforeArrayPath {
-    // Indices of the latest parsed literal, used to add keys to the curPath_.
+    // Indices of the latest parsed literal, used to add keys to the `curPath_`.
     struct LiteralView {
       size_t start_{0};
       size_t length_{0};

@@ -4,6 +4,7 @@
 
 #include "engine/Service.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
@@ -23,10 +24,10 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 NetworkFunctions networkFunctions)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
-      getResultFunction_{std::move(getResultFunction)} {}
+      networkFunctions_{std::move(networkFunctions)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -113,7 +114,7 @@ Result Service::computeResult(bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
+    // If the `SILENT` keyword is set in the service clause, catch the error and
     // return a neutral Element.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
@@ -128,6 +129,15 @@ Result Service::computeResultImpl(bool requestLaziness) {
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
+  // Receive updates about the RuntimeInformation from the service endpoint.
+  // Note: Regular SPARQL endpoints do not support RTI retrieval using
+  // a websocket connection, this works for QLever endpoints only.
+  const std::string queryId = ad_utility::UuidGenerator()();
+  const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
+  auto runtimeInfoClient = networkFunctions_.getRuntimeInfoClient_(
+      serviceUrl, wsTarget,
+      absl::bind_front(&Service::handleChildRuntimeInfoUpdate, this));
+
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
@@ -141,10 +151,10 @@ Result Service::computeResultImpl(bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  HttpOrHttpsResponse response = getResultFunction_(
+  HttpOrHttpsResponse response = networkFunctions_.getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      "application/sparql-results+json", {{"Query-Id"s, queryId}});
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;
@@ -240,12 +250,23 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   checkCancellation();
 }
 
+void Service::enableOrDisableRtiWrite(bool enable) {
+  auto lock = std::lock_guard{childRuntimeInfoLock_};
+  childRuntimeInfoAllowWrite_ = enable;
+
+  if (enable && !childRuntimeInfoBuffer_.empty()) {
+    updateChildRuntimeInfoNotThreadsafe(childRuntimeInfoBuffer_);
+    childRuntimeInfoBuffer_.clear();
+  }
+};
+
 // ____________________________________________________________________________
 Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
     ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
   LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  enableOrDisableRtiWrite(true);
 
   size_t rowIdx = 0;
   bool varsChecked{false};
@@ -263,7 +284,9 @@ Result::Generator Service::computeResultLazily(
       if (!singleIdTable) {
         Result::IdTableVocabPair pair{std::move(idTable),
                                       std::move(localVocab)};
+        enableOrDisableRtiWrite(false);
         co_yield pair;
+        enableOrDisableRtiWrite(true);
         // Move back to reuse buffer if not moved out.
         idTable = std::move(pair.idTable_);
         idTable.clear();
@@ -300,6 +323,7 @@ Result::Generator Service::computeResultLazily(
   if (singleIdTable) {
     co_yield {std::move(idTable), std::move(localVocab)};
   }
+  enableOrDisableRtiWrite(false);
 }
 
 // ____________________________________________________________________________
@@ -531,11 +555,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   const auto& [service, sibling] = [&]() {
-    if (a) {
-      return std::tie(a, right);
-    } else {
-      AD_CORRECTNESS_CHECK(b);
+    if (b) {
       return std::tie(b, left);
+    } else {
+      AD_CORRECTNESS_CHECK(a);
+      return std::tie(a, right);
     }
   }();
   AD_CORRECTNESS_CHECK(service != nullptr);
@@ -628,7 +652,30 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Service::cloneImpl() const {
   auto service = std::make_unique<Service>(
-      _executionContext, parsedServiceClause_, getResultFunction_);
+      _executionContext, parsedServiceClause_, networkFunctions_);
   service->cacheBreaker_ = cacheBreaker_;
   return service;
+}
+
+// _____________________________________________________________________________
+void Service::updateChildRuntimeInfoNotThreadsafe(const std::string& msg) {
+  childRuntimeInformation_ =
+      std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+  auto& runtimeChildren = runtimeInfo().children_;
+  runtimeChildren.clear();
+  runtimeChildren.push_back(childRuntimeInformation_);
+  signalQueryUpdate();
+}
+
+// _____________________________________________________________________________
+void Service::handleChildRuntimeInfoUpdate(const std::string& msg) {
+  try {
+    auto lock = std::lock_guard{childRuntimeInfoLock_};
+    if (childRuntimeInfoAllowWrite_) {
+      updateChildRuntimeInfoNotThreadsafe(msg);
+    } else {
+      childRuntimeInfoBuffer_ = msg;
+    }
+  } catch (const nlohmann::json::parse_error&) {
+  }
 }

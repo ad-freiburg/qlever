@@ -61,6 +61,9 @@ constexpr std::string_view toString(CacheStatus status) {
   }
 }
 
+// Convert a human-readable string to a `CacheStatus`.
+CacheStatus fromString(std::string_view str);
+
 // Given a `cache` and a `key` determine the corresponding `CacheStatus`.
 // Note: `computed` in this case means "not contained in the cache".
 CacheStatus getCacheStatus(const auto& cache, const auto& key) {

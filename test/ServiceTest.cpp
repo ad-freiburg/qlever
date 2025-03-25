@@ -37,13 +37,15 @@ class ServiceTest : public ::testing::Test {
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
 
-  // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
-  // is used by default by a `Service` operation (see the constructor in
-  // `Service.h`). Each mock does the following:
+  // Factory for generating mocks of the `NetworkFunctions` that are used by
+  // default by a `Service` operation (see the constructor in `Service.h`).
+  // The `getWebSocketClient` function is not tested here and its mock just
+  // returns a WebSocketClient without actually starting it.
+  // Each mock of the `sendHttpOrHttpsRequest` function does the following:
   //
   // 1. It tests that the request method is POST, the content-type header is
   //    `application/sparql-query`, and the accept header is
-  //    `text/tab-separated-values` (our `Service` always does this).
+  //    `application/sparql-results+json` (our `Service` always does this).
   //
   // 2. It tests that the host and port are as expected.
   //
@@ -53,61 +55,72 @@ class ServiceTest : public ::testing::Test {
   //
   // NOTE: In a previous version of this test, we set up an actual test server.
   // The code can be found in the history of this PR.
-  static auto constexpr getResultFunctionFactory =
+  static auto constexpr getNetworkFunctionsFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "application/sparql-results+json",
          std::exception_ptr mockException =
-             nullptr) -> Service::GetResultFunction {
-    return [=](const ad_utility::httpUtils::Url& url,
-               ad_utility::SharedCancellationHandle,
-               const boost::beast::http::verb& method,
-               std::string_view postData, std::string_view contentTypeHeader,
-               std::string_view acceptHeader) {
-      // Check that the request parameters are as expected.
-      //
-      // NOTE: The first three are hard-coded in `Service::computeResult`, but
-      // the host and port of the endpoint are derived from the IRI, so the last
-      // two checks are non-trivial.
-      EXPECT_EQ(method, boost::beast::http::verb::post);
-      EXPECT_EQ(contentTypeHeader, "application/sparql-query");
-      EXPECT_EQ(acceptHeader, "application/sparql-results+json");
-      EXPECT_EQ(url.asString(), expectedUrl);
+             nullptr) -> Service::NetworkFunctions {
+    return {
+        .getResultFunction_ =
+            [=](const ad_utility::httpUtils::Url& url,
+                ad_utility::SharedCancellationHandle,
+                const boost::beast::http::verb& method,
+                std::string_view postData, std::string_view contentTypeHeader,
+                std::string_view acceptHeader,
+                const std::vector<std::pair<std::string, std::string>>&) {
+              // Check that the request parameters are as expected.
+              //
+              // NOTE: The first three are hard-coded in
+              // `Service::computeResult`, but the host and port of the endpoint
+              // are derived from the IRI, so the last two checks are
+              // non-trivial.
+              EXPECT_EQ(method, boost::beast::http::verb::post);
+              EXPECT_EQ(contentTypeHeader, "application/sparql-query");
+              EXPECT_EQ(acceptHeader, "application/sparql-results+json");
+              EXPECT_EQ(url.asString(), expectedUrl);
 
-      // Check that the whitespace-normalized POST data is the expected query.
-      //
-      // NOTE: a SERVICE clause specifies only the body of a SPARQL query, from
-      // which `Service::computeResult` has to construct a full SPARQL query by
-      // adding `SELECT ... WHERE`, so this checks something non-trivial.
-      std::string whitespaceNormalizedPostData =
-          std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
-      EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
+              // Check that the whitespace-normalized POST data is the expected
+              // query.
+              //
+              // NOTE: a SERVICE clause specifies only the body of a SPARQL
+              // query, from which `Service::computeResult` has to construct a
+              // full SPARQL query by adding `SELECT ... WHERE`, so this checks
+              // something non-trivial.
+              std::string whitespaceNormalizedPostData = std::regex_replace(
+                  std::string{postData}, std::regex{"\\s+"}, " ");
+              EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
 
-      if (mockException) {
-        std::rethrow_exception(mockException);
-      }
+              if (mockException) {
+                std::rethrow_exception(mockException);
+              }
 
-      auto body =
-          [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
-        // Randomly slice the string to make tests more robust.
-        std::mt19937 rng{std::random_device{}()};
+              auto body = [](std::string result)
+                  -> cppcoro::generator<std::span<std::byte>> {
+                // Randomly slice the string to make tests more robust.
+                std::mt19937 rng{std::random_device{}()};
 
-        const std::string resultStr = result;
-        std::uniform_int_distribution<size_t> distribution{
-            0, resultStr.length() / 2};
+                const std::string resultStr = result;
+                std::uniform_int_distribution<size_t> distribution{
+                    0, resultStr.length() / 2};
 
-        for (size_t start = 0; start < resultStr.length();) {
-          size_t size = distribution(rng);
-          std::string resultCopy{resultStr.substr(start, size)};
-          co_yield std::as_writable_bytes(std::span{resultCopy});
-          start += size;
-        }
-      };
-      return (HttpOrHttpsResponse){.status_ = status,
-                                   .contentType_ = contentType,
-                                   .body_ = body(predefinedResult)};
-    };
+                for (size_t start = 0; start < resultStr.length();) {
+                  size_t size = distribution(rng);
+                  std::string resultCopy{resultStr.substr(start, size)};
+                  co_yield std::as_writable_bytes(std::span{resultCopy});
+                  start += size;
+                }
+              };
+              return (HttpOrHttpsResponse){.status_ = status,
+                                           .contentType_ = contentType,
+                                           .body_ = body(predefinedResult)};
+            },
+        .getRuntimeInfoClient_ =
+            [](const ad_utility::httpUtils::Url&, const std::string&,
+               std::function<void(const std::string&)>) {
+              return ad_utility::websocket::WebSocketClientVariant();
+            }};
   };
 
   // The following method generates a JSON result from variables and rows for
@@ -207,8 +220,8 @@ TEST_F(ServiceTest, computeResult) {
             bool silent = false) -> Result {
       Service s{testQec,
                 silent ? parsedServiceClauseSilent : parsedServiceClause,
-                getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
-                                         result, status, contentType)};
+                getNetworkFunctionsFactory(expectedUrl, expectedSparqlQuery,
+                                           result, status, contentType)};
       return s.computeResultOnlyForTesting();
     };
 
@@ -328,7 +341,7 @@ TEST_F(ServiceTest, computeResult) {
     // CHECK 1b: Even if the SILENT-keyword is set, throw local errors.
     Service serviceSilent{
         testQec, parsedServiceClauseSilent,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
             std::make_exception_ptr(
@@ -341,7 +354,7 @@ TEST_F(ServiceTest, computeResult) {
 
     Service serviceSilent2{
         testQec, parsedServiceClauseSilent,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery, "{}",
             boost::beast::http::status::ok, "application/sparql-results+json",
             std::make_exception_ptr(
@@ -442,7 +455,7 @@ TEST_F(ServiceTest, computeResult) {
 
     Service serviceOperation5{
         testQec, parsedServiceClause5,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery5,
             genJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
                                              {"bla", "bli", "y"},
@@ -455,7 +468,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check 7: Lazy computation
     Service lazyService{
         testQec, parsedServiceClause,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery,
             genJsonResult({"x", "y"},
                           {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
@@ -467,7 +480,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check 8: LazyJsonParser Error
     Service service8{
         testQec, parsedServiceClause,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery, std::string(1'000'000, '0'),
             boost::beast::http::status::ok, "application/sparql-results+json")};
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -479,7 +492,7 @@ TEST_F(ServiceTest, computeResult) {
 
     Service service8b{
         testQec, parsedServiceClause,
-        getResultFunctionFactory(
+        getNetworkFunctionsFactory(
             expectedUrl, expectedSparqlQuery,
             R"({"head": {"vars": ["a"]}, "results": {"bindings": [{"a": break}]}})",
             boost::beast::http::status::ok, "application/sparql-results+json")};
@@ -514,8 +527,8 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
 
   Service serviceOperation{
       testQec, parsedServiceClause,
-      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
-                               genJsonResult({"a"}, {{"a"}}))};
+      getNetworkFunctionsFactory("http://localhost:80/api", expectedSparqlQuery,
+                                 genJsonResult({"a"}, {{"a"}}))};
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
@@ -532,7 +545,7 @@ TEST_F(ServiceTest, getCacheKey) {
 
   Service service1{
       testQec, parsedServiceClause,
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult(
@@ -541,7 +554,7 @@ TEST_F(ServiceTest, getCacheKey) {
 
   Service service2{
       testQec, parsedServiceClause,
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult(
@@ -670,13 +683,26 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
           "PREFIX doof: <http://doof.org>",
           "{ }",
           true},
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json"));
 
-  auto service2 = std::make_shared<Service>(*service);
+  // auto service2 = std::make_shared<Service>(*service);
+  auto service2 = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getNetworkFunctionsFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
 
   // Adaptation of the Values class, allowing to compute lazy Results.
   class MockValues : public Values {
@@ -722,6 +748,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
     service->siblingInfo_.reset();
+    service->precomputedResultBecauseSiblingOfService().reset();
     service2->precomputedResultBecauseSiblingOfService().reset();
     siblingOperation->precomputedResultBecauseSiblingOfService().reset();
     testQec->clearCacheUnpinnedOnly();
@@ -745,9 +772,10 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
   // Right requested and two Service operations -> compute
   Service::precomputeSiblingResult(service, service2, true, false);
-  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService().has_value());
-  EXPECT_TRUE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(service->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(service2->siblingInfo_.has_value());
+  EXPECT_FALSE(
+      service2->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Right requested and it is a service -> sibling result is computed and
@@ -820,7 +848,7 @@ TEST_F(ServiceTest, clone) {
           "PREFIX doof: <http://doof.org>",
           "{ }",
           true},
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult({"x", "y"}, {{"a", "b"}}),
@@ -830,4 +858,42 @@ TEST_F(ServiceTest, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(service, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, ChildRuntimeInformation) {
+  Service service{testQec,
+                  parsedQuery::Service{{Variable{"?x"}, Variable{"?y"}},
+                                       TripleComponent::Iri::fromIriref(
+                                           "<http://localhorst/api>"),
+                                       "PREFIX doof: <http://doof.org>",
+                                       "{ }",
+                                       true},
+                  {}};
+
+  // 0. Check overridden `getRuntimeInfoChildren()` function.
+  auto& childRTI = service.childRuntimeInformation_;
+  EXPECT_EQ(childRTI.get(), nullptr);
+  EXPECT_TRUE(service.getRuntimeInfoChildren().empty());
+
+  childRTI = std::make_shared<RuntimeInformation>();
+  childRTI->totalTime_ = 3ms;
+
+  auto serviceRTI = service.getRuntimeInfoPointer();
+  serviceRTI->children_.push_back(childRTI);
+
+  EXPECT_EQ(service.getRuntimeInfoChildren().size(), 1);
+  EXPECT_EQ(service.getRuntimeInfoChildren().at(0)->totalTime_,
+            childRTI->totalTime_);
+
+  // 1. Handle update of the `childRuntimeInformation_`.
+  service.childRuntimeInfoAllowWrite_ = true;
+  EXPECT_NO_THROW(service.handleChildRuntimeInfoUpdate("invalid-json"));
+
+  service.handleChildRuntimeInfoUpdate(R"({"description": "child"})");
+  EXPECT_EQ(service.childRuntimeInformation_->descriptor_, "child");
+
+  service.childRuntimeInfoAllowWrite_ = false;
+  service.handleChildRuntimeInfoUpdate(R"({"description": "child2"})");
+  EXPECT_NE(service.childRuntimeInformation_->descriptor_, "child2");
 }

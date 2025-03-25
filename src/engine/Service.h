@@ -11,6 +11,7 @@
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
+#include "util/http/websocket/WebSocketClient.h"
 
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
 // service IRI, gets the result as JSON, parses it, and writes it into a result
@@ -32,10 +33,22 @@ class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
   using GetResultFunction = std::function<HttpOrHttpsResponse(
-      const ad_utility::httpUtils::Url&,
-      ad_utility::SharedCancellationHandle handle,
+      const ad_utility::httpUtils::Url&, ad_utility::SharedCancellationHandle,
       const boost::beast::http::verb&, std::string_view, std::string_view,
-      std::string_view)>;
+      std::string_view,
+      const std::vector<std::pair<std::string, std::string>>&)>;
+
+  // The type of the function used to get the WebSocketClient.
+  using GetRuntimeInfoClient =
+      std::function<ad_utility::websocket::WebSocketClientVariant(
+          const ad_utility::httpUtils::Url&, const std::string& target,
+          std::function<void(const std::string&)>)>;
+
+  // Convenience struct for the network functions defined above.
+  struct NetworkFunctions {
+    GetResultFunction getResultFunction_;
+    GetRuntimeInfoClient getRuntimeInfoClient_;
+  };
 
   // Information on a Sibling operation.
   struct SiblingInfo {
@@ -48,11 +61,21 @@ class Service : public Operation {
   // The parsed SERVICE clause.
   parsedQuery::Service parsedServiceClause_;
 
-  // The function used to obtain the result from the remote endpoint.
-  GetResultFunction getResultFunction_;
+  // The functions used to obtain the result and runtime information from the
+  // remote endpoint.
+  NetworkFunctions networkFunctions_;
 
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
+
+  // RuntimeInformation of the service-query computation on the endpoint.
+  std::shared_ptr<RuntimeInformation> childRuntimeInformation_;
+
+  // Variables allowing for thread-safe access to `childRuntimeInformation_`
+  // required in `handleChildRuntimeInfoUpdate()` callback function.
+  std::mutex childRuntimeInfoLock_;
+  bool childRuntimeInfoAllowWrite_{false};
+  string childRuntimeInfoBuffer_;
 
   // Counter to generate fresh ids for each instance of the class.
   static inline std::atomic_uint32_t counter_ = 0;
@@ -68,8 +91,11 @@ class Service : public Operation {
   // remote endpoint. The default is to use `httpUtils::sendHttpOrHttpsRequest`,
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
-  Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest);
+  Service(
+      QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
+      NetworkFunctions networkFunctions = {
+          .getResultFunction_ = sendHttpOrHttpsRequest,
+          .getRuntimeInfoClient_ = ad_utility::websocket::getWebSocketClient});
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -89,6 +115,14 @@ class Service : public Operation {
 
   // A SERVICE clause has no children.
   vector<QueryExecutionTree*> getChildren() override { return {}; }
+
+  absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
+  getRuntimeInfoChildren() final {
+    if (childRuntimeInformation_) {
+      return {childRuntimeInformation_};
+    }
+    return {};
+  }
 
   // Convert the given binding to TripleComponent.
   TripleComponent bindingToTripleComponent(
@@ -163,8 +197,28 @@ class Service : public Operation {
       const std::vector<std::string> vars,
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
+  // This function is called by the websocket thread when a new message with the
+  // runtime info appears. If possible, directly call
+  // `updateChildRuntimeInfoNotThreadsafe` below. If not (because the
+  // runtimeInfo might be accessed by another operation), store the `message` in
+  // a cache for later usage.
+  void handleChildRuntimeInfoUpdate(const std::string& msg);
+
+  // Parse the `msg` into a runtime information object, register it as a child
+  // of the runtime information of this service, and call `signalUpdate`.
+  void updateChildRuntimeInfoNotThreadsafe(const std::string& msg);
+
+  // If called with `enable==true` , then after the call it is allowed to modify
+  // the runtime Information via the external websocket thread. If called with
+  // `false`, then it is forbidden after the call.
+  // In the case of `enable=true`, possible values from the runtime info cache
+  // that have been received while the writing was disabled are also propagated
+  // directly via `updateChildRuntimeInfoNotThreadsafe`.
+  void enableOrDisableRtiWrite(bool enable);
+
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, ChildRuntimeInformation);
 };

@@ -87,7 +87,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
     std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
-    std::string_view acceptHeader) {
+    std::string_view acceptHeader,
+    const std::vector<std::pair<std::string, std::string>> customHeaders) {
   // Check that the client pointer is valid.
   AD_CORRECTNESS_CHECK(client);
   // Check that we have a stream (created in the constructor).
@@ -102,6 +103,10 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::accept, acceptHeader);
   request.set(http::field::content_type, contentTypeHeader);
   request.set(http::field::content_length, std::to_string(requestBody.size()));
+  for (const auto& [key, value] : customHeaders) {
+    request.set(key, value);
+  }
+
   request.body() = requestBody;
 
   auto wait = [&client, &handle]<typename T>(
@@ -197,12 +202,13 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
-    std::string_view contentTypeHeader, std::string_view acceptHeader) {
+    std::string_view contentTypeHeader, std::string_view acceptHeader,
+    const std::vector<std::pair<std::string, std::string>> customHeaders) {
   auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
     auto client = std::make_unique<Client>(url.host(), url.port());
     return Client::sendRequest(std::move(client), method, url.host(),
                                url.target(), std::move(handle), requestData,
-                               contentTypeHeader, acceptHeader);
+                               contentTypeHeader, acceptHeader, customHeaders);
   };
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();

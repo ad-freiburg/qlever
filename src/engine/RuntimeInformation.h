@@ -32,6 +32,8 @@ class RuntimeInformation {
   static constexpr auto ZERO = Milliseconds::zero();
 
   /// The computation status of an operation.
+  /// Note: changes have to be reflected in `statusToString`/`stringToStatus`
+  /// methods
   enum struct Status {
     notStarted,
     inProgress,
@@ -94,6 +96,9 @@ class RuntimeInformation {
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti);
 
+  // Import from json. Missing keys or invalid values are ignored.
+  friend void from_json(const nlohmann::json& j, RuntimeInformation& rti);
+
   /// Set `columnNames_` from a `VariableToColumnMap`. The former is a vector
   /// (convenient for this class), the latter is a hash map (appropriate for
   /// the rest of the code).
@@ -136,7 +141,9 @@ class RuntimeInformation {
   void addLimitOffsetRow(const LimitOffsetClause& l,
                          bool fullResultIsNotCached);
 
-  static std::string_view toString(Status status);
+  static std::string_view statusToString(Status status);
+
+  static Status stringToStatus(std::string_view str);
 
   // A helper function for printing the details as a string.
   static void formatDetailValue(std::ostream& out, std::string_view key,

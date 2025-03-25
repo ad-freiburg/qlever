@@ -9,6 +9,9 @@
 
 #include <ranges>
 
+#include "util/ConcurrentCache.h"
+#include "util/HashMap.h"
+
 using namespace std::chrono_literals;
 
 // __________________________________________________________________________
@@ -75,7 +78,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "operation_time: " << toMs(getOperationTime())
       << " ms" << '\n';
-  out << indentStr(indent) << "status: " << toString(status_) << '\n';
+  out << indentStr(indent) << "status: " << statusToString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
@@ -163,7 +166,7 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
 }
 
 // __________________________________________________________________________
-std::string_view RuntimeInformation::toString(Status status) {
+std::string_view RuntimeInformation::statusToString(Status status) {
   switch (status) {
     case fullyMaterialized:
       return "fully materialized";
@@ -183,6 +186,27 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "cancelled";
   }
   AD_FAIL();
+}
+
+// __________________________________________________________________________
+RuntimeInformation::Status RuntimeInformation::stringToStatus(
+    std::string_view str) {
+  static const ad_utility::HashMap<std::string, RuntimeInformation::Status>
+      statusMap = {
+          {"not started", RuntimeInformation::notStarted},
+          {"in progress", RuntimeInformation::inProgress},
+          {"fully materialized", RuntimeInformation::fullyMaterialized},
+          {"lazily materialized", RuntimeInformation::lazilyMaterialized},
+          {"optimized out", RuntimeInformation::optimizedOut},
+          {"failed", RuntimeInformation::failed},
+          {"failed because child failed",
+           RuntimeInformation::failedBecauseChildFailed},
+          {"cancelled", RuntimeInformation::cancelled}};
+
+  auto it = statusMap.find(str);
+  AD_CORRECTNESS_CHECK(it != statusMap.end(), "The string '", str,
+                       "' does not match any RuntimeInformation status.");
+  return it->second;
 }
 
 // ________________________________________________________________________________________________________________
@@ -209,7 +233,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
       {"estimated_column_multiplicities", rti.multiplicityEstimates_},
       {"estimated_size", rti.sizeEstimate_},
-      {"status", RuntimeInformation::toString(rti.status_)},
+      {"status", RuntimeInformation::statusToString(rti.status_)},
       {"children", rti.children_}};
 }
 
@@ -218,6 +242,49 @@ void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
       {"time_query_planning", rti.timeQueryPlanning.count()}};
+}
+
+// __________________________________________________________________________
+void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
+  auto tryGet = [&j]<typename T>(T& dst, std::string_view key) {
+    try {
+      j.at(key).get_to(dst);
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
+    }
+  };
+  using namespace std::chrono;
+  auto tryGetTime = [&j](microseconds& dst, std::string_view key) {
+    try {
+      dst =
+          duration_cast<microseconds>(milliseconds(j.at(key).get<uint64_t>()));
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
+    }
+  };
+
+  tryGet(rti.descriptor_, "description");
+  tryGet(rti.numRows_, "result_rows");
+  tryGet(rti.numCols_, "result_cols");
+  tryGet(rti.columnNames_, "column_names");
+  tryGetTime(rti.totalTime_, "total_time");
+  tryGetTime(rti.originalTotalTime_, "original_total_time");
+  tryGetTime(rti.originalOperationTime_, "original_operation_time");
+  if (auto it = j.find("cache_status"); it != j.end()) {
+    rti.cacheStatus_ = ad_utility::fromString(it->get<std::string_view>());
+  }
+  tryGet(rti.details_, "details");
+  tryGet(rti.costEstimate_, "estimated_total_cost");
+  tryGet(rti.multiplicityEstimates_, "estimated_column_multiplicities");
+  tryGet(rti.sizeEstimate_, "estimated_size");
+  if (auto it = j.find("status"); it != j.end()) {
+    rti.status_ = RuntimeInformation::stringToStatus(it->get<std::string>());
+  }
+  if (auto it = j.find("children"); it != j.end()) {
+    for (const auto& child : *it) {
+      rti.children_.push_back(std::make_shared<RuntimeInformation>(child));
+    }
+  }
 }
 
 // __________________________________________________________________________
