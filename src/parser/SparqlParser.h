@@ -13,8 +13,11 @@
 // message is given.
 class SparqlParser {
  public:
-  // `datasets` are the fixed datasets as per the SPARQL protocol. Passing no
-  // datasets means that they are not fixed.
+  // `datasets` are fixed datasets as per the SPARQL protocol. These cannot be
+  // overwritten from inside the query (using `FROM`) or update (using `USING`).
+  // Passing no datasets means that the datasets are set normally from the
+  // query or update.
   static ParsedQuery parseQuery(
-      std::string operation, const std::vector<DatasetClause>& datasets = {});
+      std::string queryOrUpdate,
+      const std::vector<DatasetClause>& datasets = {});
 };

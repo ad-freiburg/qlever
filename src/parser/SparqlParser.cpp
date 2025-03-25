@@ -10,13 +10,13 @@ using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
-    std::string operation, const std::vector<DatasetClause>& datasets) {
+    std::string queryOrUpdate, const std::vector<DatasetClause>& datasets) {
   using S = std::string;
   // The second argument is the `PrefixMap` for QLever's internal IRIs.
   // The third argument are the datasets from outside the query, which override
   // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
-      std::move(operation),
+      std::move(queryOrUpdate),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
           ? std::nullopt

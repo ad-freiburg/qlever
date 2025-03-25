@@ -642,9 +642,10 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
-  // Set the datasets state of the visitor if no override is defined. Returns
-  // the currently active datasets.
-  parsedQuery::DatasetClauses setAndGetDatasetClauses(
+  // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
+  // `datasetsAreFixed_` controls whether the datasets can be modified from
+  // inside the query or update. Then returns the currently active datasets.
+  const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);

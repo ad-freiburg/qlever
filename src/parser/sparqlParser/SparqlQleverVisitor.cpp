@@ -355,7 +355,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
 }
 
 // ____________________________________________________________________________________
-parsedQuery::DatasetClauses SparqlQleverVisitor::setAndGetDatasetClauses(
+const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
     const std::vector<DatasetClause>& clauses) {
   if (!datasetsAreFixed_) {
     activeDatasetClauses_ = parsedQuery::DatasetClauses::fromClauses(clauses);
