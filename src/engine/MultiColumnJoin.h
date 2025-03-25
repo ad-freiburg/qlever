@@ -63,7 +63,9 @@ class MultiColumnJoin : public Operation {
       IdTable* resultMightBeUnsorted);
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

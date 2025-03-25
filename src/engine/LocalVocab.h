@@ -113,10 +113,13 @@ class LocalVocab {
   // to this local vocab. The purpose is to keep all the contained
   // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
   // primary set of this `LocalVocab` remains unchanged.
-  template <std::ranges::range R>
-  void mergeWith(const R& vocabs) {
+  CPP_template(typename R)(requires ql::ranges::range<R>) void mergeWith(
+      const R& vocabs) {
     using ql::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      if (set == primaryWordSet_) {
+        return;
+      }
       bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
     };
@@ -149,6 +152,9 @@ class LocalVocab {
     }
     localBlankNodeManager_->mergeWith(localManagersView);
   }
+
+  // Convenience function for a single `LocalVocab`.
+  void mergeWith(const LocalVocab& other);
 
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.

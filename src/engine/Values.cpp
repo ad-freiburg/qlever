@@ -108,7 +108,7 @@ void Values::computeMultiplicities() {
 }
 
 // ____________________________________________________________________________
-ProtoResult Values::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
@@ -146,4 +146,9 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   LOG(INFO) << "Number of entries in local vocabulary per column: "
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Values::cloneImpl() const {
+  return std::make_unique<Values>(*this);
 }

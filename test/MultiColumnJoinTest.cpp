@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
+#include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -12,6 +13,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
@@ -75,4 +77,31 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(wantedRes[1], vres[1]);
   ASSERT_EQ(wantedRes[2], vres[2]);
   ASSERT_EQ(wantedRes[3], vres[3]);
+}
+
+// _____________________________________________________________________________
+TEST(MultiColumnJoin, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable a = makeIdTableFromVector({{4, 1, 2}});
+  MultiColumnJoin join{qec, idTableToExecutionTree(qec, a),
+                       idTableToExecutionTree(qec, a)};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(join, IsDeepCopy(*clone));
+
+  std::string_view prefix = "MultiColumnJoin on ";
+  EXPECT_THAT(join.getDescriptor(), ::testing::StartsWith(prefix));
+  EXPECT_THAT(clone->getDescriptor(), ::testing::StartsWith(prefix));
+  // Order of join columns is not deterministic.
+  auto getVars = [prefix](std::string_view string) {
+    string.remove_prefix(prefix.length());
+    std::vector<std::string> vars;
+    for (const auto& split : absl::StrSplit(string, ' ', absl::SkipEmpty())) {
+      vars.emplace_back(split);
+    }
+    ql::ranges::sort(vars);
+    return vars;
+  };
+  EXPECT_EQ(getVars(clone->getDescriptor()), getVars(join.getDescriptor()));
 }

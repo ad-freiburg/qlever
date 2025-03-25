@@ -10,7 +10,7 @@ add_library(parser
         ParsedQuery.cpp
         RdfParser.cpp
         Tokenizer.cpp
-        ContextFileParser.cpp
+        WordsAndDocsFileParser.cpp
         TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
@@ -31,6 +31,7 @@ add_library(parser
         Literal.cpp
         LiteralOrIri.cpp
         DatasetClauses.cpp
+        TextSearchQuery.cpp
 )
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
 

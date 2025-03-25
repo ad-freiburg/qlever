@@ -58,8 +58,10 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
-void appendVector(std::vector<T>& destination, U&& source) {
+CPP_template(typename T, typename U)(
+    requires ad_utility::SimilarTo<
+        std::vector<T>, U>) void appendVector(std::vector<T>& destination,
+                                              U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
@@ -129,11 +131,12 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-template <std::ranges::forward_range Range>
-auto removeDuplicates(const Range& input) -> std::vector<
-    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
+CPP_template(typename Range)(requires ql::ranges::forward_range<
+                             Range>) auto removeDuplicates(const Range& input)
+    -> std::vector<typename std::iterator_traits<
+        ql::ranges::iterator_t<Range>>::value_type> {
   using T =
-      typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
+      typename std::iterator_traits<ql::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
   ad_utility::HashSet<T> distinctElements;
   for (const T& element : input) {
@@ -147,10 +150,11 @@ auto removeDuplicates(const Range& input) -> std::vector<
 
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
-template <typename Array, typename Function>
-requires(ad_utility::isArray<std::decay_t<Array>> &&
-         std::invocable<Function, typename Array::value_type>)
-auto transformArray(Array&& input, Function function) {
+CPP_template(typename Array, typename Function)(
+    requires ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
+        Function,
+        typename Array::value_type>) auto transformArray(Array&& input,
+                                                         Function function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
@@ -162,10 +166,10 @@ auto transformArray(Array&& input, Function function) {
 // but an iterator (first argument) and a value (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
-constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
-                                               ForwardIterator last,
-                                               const Tp& val, Compare comp) {
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+    lower_bound_iterator(ForwardIterator first, ForwardIterator last,
+                         const Tp& val, Compare comp) {
   using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);
@@ -188,10 +192,10 @@ constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
-constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
-                                               ForwardIterator last,
-                                               const Tp& val, Compare comp) {
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+    upper_bound_iterator(ForwardIterator first, ForwardIterator last,
+                         const Tp& val, Compare comp) {
   using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
 
   DistanceType len = std::distance(first, last);

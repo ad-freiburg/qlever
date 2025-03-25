@@ -8,6 +8,7 @@
 #include <chrono>
 #include <vector>
 
+#include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -31,7 +32,7 @@ class StallForeverOperation : public Operation {
   using Operation::Operation;
   // Do-nothing operation that runs for 100ms without computing anything, but
   // which can be cancelled.
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto end = std::chrono::steady_clock::now() + 100ms;
     while (std::chrono::steady_clock::now() < end) {
       checkCancellation();
@@ -42,6 +43,11 @@ class StallForeverOperation : public Operation {
   // Provide public view of remainingTime for tests
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
+  }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
   }
 };
 // _____________________________________________________________________________
@@ -73,7 +79,7 @@ class ShallowParentOperation : public Operation {
     return {child_.get()};
   }
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
     return {childResult->idTable().clone(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
@@ -82,6 +88,11 @@ class ShallowParentOperation : public Operation {
   // Provide public view of remainingTime for tests
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
+  }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
   }
 };
 
@@ -116,7 +127,7 @@ class AlwaysFailOperation : public Operation {
   using Operation::Operation;
   AlwaysFailOperation(QueryExecutionContext* qec, Variable variable)
       : Operation{qec}, variable_{std::move(variable)} {}
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     if (!requestLaziness) {
       throw std::runtime_error{"AlwaysFailOperation"};
     }
@@ -126,6 +137,11 @@ class AlwaysFailOperation : public Operation {
               co_return;
             }(),
             resultSortedOn()};
+  }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
   }
 };
 
@@ -150,10 +166,29 @@ class CustomGeneratorOperation : public Operation {
   CustomGeneratorOperation(QueryExecutionContext* context,
                            Result::Generator generator)
       : Operation{context}, generator_{std::move(generator)} {}
-  ProtoResult computeResult(bool requestLaziness) override {
+  Result computeResult(bool requestLaziness) override {
     AD_CONTRACT_CHECK(requestLaziness);
     return {std::move(generator_), resultSortedOn()};
   }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
+  }
 };
+
+MATCHER_P(SameTypeId, ptr, "has the same type id") {
+  return typeid(*arg) == typeid(*ptr);
+}
+
+inline auto IsDeepCopy(const Operation& other) {
+  using namespace ::testing;
+  return AllOf(
+      Address(SameTypeId(&other)),
+      AD_PROPERTY(Operation, getChildren, Pointwise(Ne(), other.getChildren())),
+      AD_PROPERTY(Operation, getCacheKey, Eq(other.getCacheKey())),
+      AD_PROPERTY(Operation, getExternallyVisibleVariableColumns,
+                  Eq(other.getExternallyVisibleVariableColumns())));
+}
 
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

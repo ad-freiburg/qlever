@@ -71,8 +71,8 @@ static constexpr bool isValuePreservingCast(const Source& source) {
 /*
 @brief Return biggest possible value for the given arithmetic type.
 */
-template <ad_utility::Arithmetic Type>
-consteval Type getMaxValue() {
+CPP_template(typename Type)(
+    requires ad_utility::Arithmetic<Type>) consteval Type getMaxValue() {
   return std::numeric_limits<Type>::max();
 }
 
@@ -115,7 +115,7 @@ struct SetOfIdTableColumnElements {
   */
   explicit SetOfIdTableColumnElements(
       const std::span<const ValueId>& idTableColumnRef) {
-    std::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
+    ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
         (numOccurrencesIterator->second)++;
@@ -190,7 +190,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   // Create the overlap.
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
@@ -295,7 +295,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
        &newOverlapMatches, &smallerTableElementToNewElement,
@@ -326,7 +326,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       });
 
   // Overwrite the designated values in the smaller table.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
@@ -408,10 +408,10 @@ static double calculateNextWholeExponent(const T& base,
 @brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
 always a natural number.
 */
-template <ad_utility::Arithmetic T>
-requires std::convertible_to<T, double>
-static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
-                                               T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T> CPP_and
+                             std::convertible_to<T, double>) static std::
+    vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
+                                       T inclusiveUpperBound) {
   std::vector<T> elements{};
 
   /*
@@ -440,9 +440,9 @@ static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
 @brief Generate a sorted,inclusive interval of all natural numbers inside
 `[inclusiveLowerBound, inclusiveUpperBound]`.
 */
-template <ad_utility::Arithmetic T>
-static std::vector<T> generateNaturalNumberSequenceInterval(
-    T inclusiveLowerBound, T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
+    T> generateNaturalNumberSequenceInterval(T inclusiveLowerBound,
+                                             T inclusiveUpperBound) {
   if constexpr (std::floating_point<T>) {
     inclusiveLowerBound = std::ceil(inclusiveLowerBound);
     inclusiveUpperBound = std::floor(inclusiveUpperBound);
@@ -459,23 +459,22 @@ static std::vector<T> generateNaturalNumberSequenceInterval(
 
 // Merge multiple sorted vectors into one sorted vector, where every element is
 // unique.
-template <ad_utility::Arithmetic T>
-static std::vector<T> mergeSortedVectors(
-    const std::vector<std::vector<T>>& intervals) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
+    T> mergeSortedVectors(const std::vector<std::vector<T>>& intervals) {
   std::vector<T> mergedVector{};
 
   // Merge.
-  std::ranges::for_each(intervals, [&mergedVector](std::vector<T> elements) {
+  ql::ranges::for_each(intervals, [&mergedVector](std::vector<T> elements) {
     if (mergedVector.empty() || elements.empty()) {
-      std::ranges::copy(elements, std::back_inserter(mergedVector));
+      ql::ranges::copy(elements, std::back_inserter(mergedVector));
       return;
     }
     const size_t idxOldLastElem = mergedVector.size() - 1;
-    std::ranges::copy(elements, std::back_inserter(mergedVector));
+    ql::ranges::copy(elements, std::back_inserter(mergedVector));
     if (mergedVector.at(idxOldLastElem) > mergedVector.at(idxOldLastElem + 1)) {
-      std::ranges::inplace_merge(
+      ql::ranges::inplace_merge(
           mergedVector,
-          std::ranges::next(mergedVector.begin(), idxOldLastElem + 1));
+          ql::ranges::next(mergedVector.begin(), idxOldLastElem + 1));
     }
   });
 
@@ -770,27 +769,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       };
     };
     auto generateBiggerEqualLambdaDesc =
-        [](const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& option,
-           const auto& minimumValue, bool canBeEqual) {
-          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
-                              "' must be bigger than",
-                              canBeEqual ? ", or equal to," : "", " ",
-                              minimumValue, ".");
-        };
+        []<typename OptionType,
+           typename = std::enable_if_t<ad_utility::isInstantiation<
+               OptionType, ad_utility::ConstConfigOptionProxy>>>(
+            const OptionType& option, const auto& minimumValue,
+            bool canBeEqual) {
+      return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                          "' must be bigger than",
+                          canBeEqual ? ", or equal to," : "", " ", minimumValue,
+                          ".");
+    };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
     auto generateLessEqualLambdaDesc =
-        [](const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& lhs,
-           const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& rhs) {
-          return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
-                              "' must be smaller than, or equal to, "
-                              "'",
-                              rhs.getConfigOption().getIdentifier(), "'.");
-        };
+        []<typename OptionType,
+           typename = std::enable_if_t<ad_utility::isInstantiation<
+               OptionType, ad_utility::ConstConfigOptionProxy>>>(
+            const OptionType& lhs, const OptionType& rhs) {
+      return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
+                          "' must be smaller than, or equal to, "
+                          "'",
+                          rhs.getConfigOption().getIdentifier(), "'.");
+    };
 
     // Adding the validators.
 
@@ -935,7 +936,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             "' must be bigger than, or equal to, 0.")};
     config.addValidator(
         [](const benchmarkSampleSizeRatiosValueType& vec) {
-          return std::ranges::all_of(
+          return ql::ranges::all_of(
               vec,
               [](const benchmarkSampleSizeRatiosValueType::value_type ratio) {
                 return ratio >= 0.f;
@@ -961,7 +962,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             ".")};
     config.addValidator(
         [](const benchmarkSampleSizeRatiosValueType& vec) {
-          return std::ranges::max(vec) <=
+          return ql::ranges::max(vec) <=
                  getMaxValue<benchmarkSampleSizeRatiosValueType::value_type>() -
                      1.f;
         },
@@ -1056,9 +1057,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               },
               descriptor, descriptor, option);
         };
-    std::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows,
-                                      minSmallerTableRows},
-                          addCastableValidator);
+    ql::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows,
+                                     minSmallerTableRows},
+                         addCastableValidator);
   }
 
   /*
@@ -1163,9 +1164,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   chance to be picked.) This adjusts the number of elements in the sample size
   to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
-  template <ad_utility::InvocableWithExactReturnType<
-                bool, float, size_t, size_t, size_t, size_t, float, float>
-                StopFunction,
+  template <QL_CONCEPT_OR_TYPENAME(ad_utility::InvocableWithExactReturnType<
+                                   bool, float, size_t, size_t, size_t, size_t,
+                                   float, float>) StopFunction,
             isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<float> T2,
             isTypeOrGrowthFunction<size_t> T3,
             isTypeOrGrowthFunction<size_t> T4,
@@ -1303,7 +1304,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         ColumnNumWithType<float>{toUnderlying(TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
-    // comparison to the merge/galloping join algrithm.
+    // comparison to the merge/galloping join algorithm.
     calculateSpeedupOfColumn(
         table, {toUnderlying(JoinAlgorithmSpeedup)},
         {toUnderlying(TimeForHashJoin)},
@@ -1330,9 +1331,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       ResultTable* table,
       const QL_CONCEPT_OR_NOTHING(
           ad_utility::SameAsAny<float, size_t>) auto changingParameterValue,
-      ad_utility::InvocableWithExactReturnType<bool, float, size_t, size_t,
-                                               size_t, size_t, float,
-                                               float> auto stopFunction,
+      QL_CONCEPT_OR_NOTHING(ad_utility::InvocableWithExactReturnType<
+                            bool, float, size_t, size_t, size_t, size_t, float,
+                            float>) auto stopFunction,
       const float overlap, const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const float& ratioRows,
@@ -1684,7 +1685,7 @@ class BmOnlyBiggerTableSizeChanges final
               static_cast<double>(getConfigVariables().minBiggerTableRows_) /
               static_cast<double>(smallerTableNumRows)))};
           auto growthFunction = createDefaultGrowthLambda<float>(
-              10.f, std::ranges::max(minRatio, 10.f),
+              10.f, ql::ranges::max(minRatio, 10.f),
               generateNaturalNumberSequenceInterval(minRatio, 9.f));
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Row ratio", alwaysFalse,
@@ -1742,8 +1743,8 @@ class BmOnlySmallerTableSizeChanges final
         for (const float ratioRows : mergeSortedVectors<float>(
                  {generateNaturalNumberSequenceInterval(
                       getConfigVariables().minRatioRows_,
-                      std::ranges::min(getConfigVariables().maxRatioRows_,
-                                       10.f)),
+                      ql::ranges::min(getConfigVariables().maxRatioRows_,
+                                      10.f)),
                   generateExponentInterval(
                       10.f, getConfigVariables().minRatioRows_,
                       getConfigVariables().maxRatioRows_)})) {
@@ -1755,7 +1756,7 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10UL, std::ranges::max(
+              10UL, ql::ranges::max(
                         static_cast<size_t>(
                             static_cast<double>(
                                 getConfigVariables().minBiggerTableRows_) /
@@ -1867,7 +1868,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
     const auto& ratios{getConfigVariables().benchmarkSampleSizeRatios_};
-    const float maxSampleSizeRatio{std::ranges::max(ratios)};
+    const float maxSampleSizeRatio{ql::ranges::max(ratios)};
 
     /*
     We work with the biggest possible smaller and bigger table. That should make
@@ -2097,17 +2098,17 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
               static_cast<double>(biggerTableNumRows) /
               static_cast<double>(getConfigVariables().minSmallerTableRows_))};
           std::vector<size_t> smallerTableRows;
-          std::ranges::transform(
+          ql::ranges::transform(
               mergeSortedVectors<float>(
                   {generateNaturalNumberSequenceInterval(
-                       1.f, std::ranges::min(10.f, biggestRowRatio)),
+                       1.f, ql::ranges::min(10.f, biggestRowRatio)),
                    generateExponentInterval(10.f, 10.f, biggestRowRatio)}),
               std::back_inserter(smallerTableRows),
               [&biggerTableNumRows](const float ratio) {
                 return static_cast<size_t>(
                     static_cast<double>(biggerTableNumRows) / ratio);
               });
-          std::ranges::reverse(smallerTableRows);
+          ql::ranges::reverse(smallerTableRows);
           const size_t lastSmallerTableRow{smallerTableRows.back()};
           auto growthFunction = createDefaultGrowthLambda(
               10UL, lastSmallerTableRow + 1UL, std::move(smallerTableRows));

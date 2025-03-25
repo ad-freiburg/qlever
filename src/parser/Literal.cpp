@@ -137,17 +137,17 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 
 // __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
-  std::size_t contentLength = beginOfSuffix_ - 2;
-  content_.erase(1 + start + length, contentLength - start - length);
-  content_.erase(1, start);
+  std::size_t contentLength =
+      beginOfSuffix_ - 2;  // Ignore the two quotation marks
+  AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
+  auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
+  std::shift_left(contentBegin, contentBegin + start + length, start);
+  content_.erase(length + 1, contentLength - length);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
 }
 
 // __________________________________________
-void Literal::removeDatatype() {
-  content_.erase(beginOfSuffix_);
-  beginOfSuffix_ = content_.size();
-}
+void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
 // __________________________________________
 void Literal::replaceContentWithSameLength(const std::string& newContent) {

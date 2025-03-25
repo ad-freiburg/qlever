@@ -73,8 +73,8 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg.visibleVariables_, variable);
     } else {
       static_assert(
-          std::is_same_v<T, p::TransPath> || std::is_same_v<T, p::PathQuery> ||
-          std::is_same_v<T, p::Describe> || std::is_same_v<T, p::SpatialQuery>);
+          ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
+                                p::SpatialQuery, p::TextSearchQuery>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
@@ -218,7 +218,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
 
   const auto patternTrickDataIfTripleIsPossible =
       [&]() -> std::optional<PatternTrickData> {
-    if ((triple.p_._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple.s_) &&
+    if ((triple.p_.iri_ == HAS_PREDICATE_PREDICATE) && isVariable(triple.s_) &&
         isVariable(triple.o_) && triple.s_ != triple.o_) {
       Variable predicateVariable{triple.o_.getVariable()};
       return PatternTrickData{predicateVariable,

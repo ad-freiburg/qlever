@@ -7,6 +7,7 @@
 #include <optional>
 #include <variant>
 
+#include "backports/concepts.h"
 #include "parser/Iri.h"
 #include "parser/NormalizedString.h"
 
@@ -41,8 +42,9 @@ class Literal {
   }
 
  public:
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
+  CPP_template(typename H,
+               typename L)(requires std::same_as<L, Literal>) friend H
+      AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }
   bool operator==(const Literal&) const = default;
@@ -91,16 +93,14 @@ class Literal {
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Set the substring of the literal by erasing the part between the
-  // end of the prefix and the trailing " from content_.
+  // Erase everything but the substring in the range ['start', 'start'+'length')
+  // from the inner content. Note that the start position does not count the
+  // leading quotes, so the first character after the quote has index 0.
+  // Throws if either 'start' or 'start' + 'length' is out of bounds.
   void setSubstr(std::size_t start, std::size_t length);
 
   // Remove the datatype suffix from the Literal.
-  void removeDatatype();
+  void removeDatatypeOrLanguageTag();
 
-  // Replaces the string content with a new string of the same length.Throws
-  // error if the length of the new string differs from the original. Used in
-  // UCASE/LCASE functions in StringExpressions.cpp.
-  void replaceContentWithSameLength(const std::string& newContent);
 };
 }  // namespace ad_utility::triple_component

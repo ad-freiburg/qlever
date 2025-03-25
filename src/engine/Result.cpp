@@ -72,6 +72,10 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
+    : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+
+// _____________________________________________________________________________
+Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{[](auto idTables, auto sortedBy) -> Generator {
         std::optional<IdTable::row_type> previousId = std::nullopt;
         for (IdTableVocabPair& pair : idTables) {
@@ -284,8 +288,7 @@ void Result::cacheDuringConsumption(
             if (aggregate.has_value()) {
               auto& value = aggregate.value();
               value.idTable_.insertAtEnd(newTablePair.idTable_);
-              value.localVocab_.mergeWith(
-                  std::span{&newTablePair.localVocab_, 1});
+              value.localVocab_.mergeWith(newTablePair.localVocab_);
             } else {
               aggregate.emplace(newTablePair.idTable_.clone(),
                                 newTablePair.localVocab_.clone());

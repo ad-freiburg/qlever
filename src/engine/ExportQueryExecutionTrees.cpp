@@ -7,12 +7,17 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 
 #include <ranges>
 
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -368,35 +373,49 @@ ExportQueryExecutionTrees::idToLiteralForEncodedValue(
 // _____________________________________________________________________________
 bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
     const LiteralOrIri& word) {
+  AD_CORRECTNESS_CHECK(word.isLiteral());
   return !word.hasDatatype() ||
          asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
+}
+
+// _____________________________________________________________________________
+std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
+    std::string iriString) {
+  AD_CORRECTNESS_CHECK(iriString.starts_with('<'));
+  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  iriString[0] = '"';
+  iriString[iriString.size() - 1] = '"';
+  return iriString;
 }
 
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::handleIriOrLiteral(
     LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
-  if (!word.isLiteral()) {
-    AD_THROW("The input is an IRI, but only literals are allowed.");
-    return std::nullopt;
+  if (word.isIri()) {
+    if (onlyReturnLiteralsWithXsdString) {
+      return std::nullopt;
+    }
+    return ad_utility::triple_component::Literal::fromStringRepresentation(
+        replaceAnglesByQuotes(
+            std::move(word.getIri().toStringRepresentation())));
   }
-
+  AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
-      return word.getLiteral();
+      return std::move(word.getLiteral());
     }
     return std::nullopt;
   }
 
   if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
-    word.getLiteral().removeDatatype();
+    word.getLiteral().removeDatatypeOrLanguageTag();
   }
-  return word.getLiteral();
+  return std::move(word.getLiteral());
 }
 
 // _____________________________________________________________________________
-ad_utility::triple_component::LiteralOrIri
-ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
@@ -425,7 +444,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
   }
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
       -> std::optional<std::pair<std::string, const char*>> {
     if constexpr (onlyReturnLiterals) {
@@ -460,19 +478,12 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 }
 
 // _____________________________________________________________________________
-template <bool onlyReturnLiterals>
 std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
                                        const LocalVocab& localVocab,
                                        bool onlyReturnLiteralsWithXsdString) {
   using enum Datatype;
   auto datatype = id.getDatatype();
-
-  if constexpr (onlyReturnLiterals) {
-    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
-      return std::nullopt;
-    }
-  }
 
   switch (datatype) {
     case WordVocabIndex:
@@ -484,8 +495,8 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
     case TextRecordIndex:
-      AD_THROW("TextRecordIndex case is not implemented.");
-      return std::nullopt;
+      return ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.getTextExcerpt(id.getTextRecordIndex()));
     default:
       return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
   }
@@ -511,18 +522,6 @@ template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
-
-// ___________________________________________________________________________
-template std::optional<ad_utility::triple_component::Literal>
-ExportQueryExecutionTrees::idToLiteral<false>(
-    const Index& index, Id id, const LocalVocab& localVocab,
-    bool onlyReturnLiteralsWithXsdString);
-
-// ___________________________________________________________________________
-template std::optional<ad_utility::triple_component::Literal>
-ExportQueryExecutionTrees::idToLiteral<true>(
-    const Index& index, Id id, const LocalVocab& localVocab,
-    bool onlyReturnLiteralsWithXsdString);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
@@ -681,8 +680,11 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
             co_yield optionalStringAndType.value().first;
           }
         }
-        co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
+        if (j + 1 < selectedColumnIndices.size()) {
+          co_yield separator;
+        }
       }
+      co_yield '\n';
       cancellationHandle->throwIfCancelled();
     }
   }
@@ -836,13 +838,10 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_yield absl::StrCat(R"({"head":{"vars":)", jsonVars.dump(),
                         R"(},"results":{"bindings":[)");
 
+  // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
-  if (columns.empty()) {
-    co_yield "]}}";
-    co_return;
-  }
 
   auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
                         const LocalVocab& localVocab) {
@@ -860,6 +859,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     return binding.dump();
   };
 
+  // Iterate over the result and yield the bindings. Note that when `columns`
+  // is empty, we have to output an empty set of bindings per row.
   bool isFirstRow = true;
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
@@ -868,7 +869,11 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       if (!isFirstRow) [[likely]] {
         co_yield ",";
       }
-      co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+      if (columns.empty()) {
+        co_yield "{}";
+      } else {
+        co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+      }
       cancellationHandle->throwIfCancelled();
       isFirstRow = false;
     }
@@ -985,7 +990,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>(compute, mediaType);
+                                  sparqlJson, qleverJson>{}(compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 
@@ -1001,7 +1006,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   nlohmann::json jsonPrefix;
 
-  jsonPrefix["query"] = query._originalString;
+  jsonPrefix["query"] =
+      ad_utility::truncateOperationString(query._originalString);
   jsonPrefix["status"] = "OK";
   jsonPrefix["warnings"] = qet.collectWarnings();
   if (query.hasSelectClause()) {

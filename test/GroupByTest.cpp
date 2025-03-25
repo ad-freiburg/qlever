@@ -3,6 +3,7 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
+#include <engine/SpatialJoinAlgorithms.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
@@ -29,6 +30,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
 using ::testing::Eq;
@@ -36,6 +38,7 @@ using ::testing::Optional;
 
 namespace {
 auto I = IntId;
+auto D = DoubleId;
 
 // Return a matcher that checks, whether a given `std::optional<IdTable` has a
 // value and that value is equal to `makeIdTableFromVector(table)`.
@@ -49,7 +52,6 @@ auto optionalHasTable = [](const VectorTable& table) {
 class GroupByTest : public ::testing::Test {
  public:
   GroupByTest() {
-    FILE_BUFFER_SIZE = 1000;
     // Create the index. The full index creation is run here to allow for
     // loading a docsDb file, which is not otherwise accessible
     std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
@@ -75,10 +77,14 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.addTextFromContextFile("group_by_test.words", false);
+    _index.buildTextIndexFile(
+        std::pair<std::string, std::string>{"group_by_test.words",
+                                            "group_by_test.documents"},
+        false);
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
+    _index.parserBufferSize() = 1_kB;
   }
 
   virtual ~GroupByTest() {
@@ -112,6 +118,26 @@ TEST_F(GroupByTest, getDescriptor) {
   GroupBy groupBy{
       ad_utility::testing::getQec(), {Variable{"?a"}}, {alias}, values};
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByTest, clone) {
+  auto expr =
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
+  auto alias =
+      Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
+            Variable{"?a"}};
+
+  parsedQuery::SparqlValues input;
+  input._variables = {Variable{"?a"}};
+  auto values = ad_utility::makeExecutionTree<Values>(getQec(), input);
+
+  GroupBy groupBy{getQec(), {Variable{"?a"}}, {alias}, values};
+
+  auto clone = groupBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(groupBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), groupBy.getDescriptor());
 }
 
 TEST_F(GroupByTest, doGroupBy) {
@@ -261,9 +287,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(123u, outTable._data[1][9]);
   ASSERT_EQ(0u, outTable._data[2][9]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][10]);
 
   std::memcpy(&buffer, &outTable._data[0][11], sizeof(float));
   ASSERT_FLOAT_EQ(-3, buffer);
@@ -281,9 +307,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(41223u, outTable._data[1][13]);
   ASSERT_EQ(41223u, outTable._data[2][13]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][14]);
 
   std::memcpy(&buffer, &outTable._data[0][15], sizeof(float));
   ASSERT_FLOAT_EQ(2, buffer);
@@ -745,6 +771,50 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   // Compare results, using debugString as the result only contains 2 rows
   ASSERT_EQ(resultWithOptimization->asDebugString(),
             resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
+  /* Setup query:
+  SELECT ?x (AVG(?y) as ?avg) WHERE {
+    # explicitly defined subresult.
+  } GROUP BY ?x
+ */
+  // Setup three unsorted input blocks. The first column will be the grouped
+  // `?x`, and the second column the variable `?y` of which we compute the
+  // average.
+  auto runTest = [this](bool inputIsLazy) {
+    std::vector<IdTable> tables;
+    tables.push_back(makeIdTableFromVector({{3, 6}, {8, 27}, {5, 7}}, I));
+    tables.push_back(makeIdTableFromVector({{8, 27}, {5, 9}}, I));
+    tables.push_back(makeIdTableFromVector({{5, 2}, {3, 4}}, I));
+    // The expected averages are as follows: (3 -> 5.0), (5 -> 6.0), (8
+    // -> 27.0).
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(tables),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+    auto& values =
+        dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation());
+    values.forceFullyMaterialized() = !inputIsLazy;
+
+    SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
+    std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
+
+    // Calculate result with optimization
+    qec->getQueryTreeCache().clearAll();
+    RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+    GroupBy groupBy{qec, variablesOnlyX, aliasesAvgY, std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting();
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_THAT(
+        result.idTable(),
+        matchesIdTableFromVector({{I(3), D(5)}, {I(5), D(6)}, {I(8), D(27)}}));
+  };
+  runTest(true);
+  runTest(false);
+
+  // Disable optimization for following tests
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________

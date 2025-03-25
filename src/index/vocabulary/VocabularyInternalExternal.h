@@ -123,11 +123,11 @@ class VocabularyInternalExternal {
   // Convert an iterator (which can be an iterator to the external or internal
   // vocabulary) into the corresponding index by (logically) subtracting
   // `begin()`.
-  uint64_t iteratorToIndex(std::ranges::iterator_t<VocabularyOnDisk> it) const {
+  uint64_t iteratorToIndex(ql::ranges::iterator_t<VocabularyOnDisk> it) const {
     return it - externalVocab_.begin();
   }
   uint64_t iteratorToIndex(
-      std::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
+      ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
     return internalVocab_.indices().at(it - internalVocab_.begin());
   }
 

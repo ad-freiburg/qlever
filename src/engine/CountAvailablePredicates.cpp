@@ -100,7 +100,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-ProtoResult CountAvailablePredicates::computeResult(
+Result CountAvailablePredicates::computeResult(
     [[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -359,4 +359,11 @@ void CountAvailablePredicates::computePatternTrick(
   runtimeInfo.addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo.addDetail("costRatio", costRatio * 100);
   *dynResult = std::move(result).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CountAvailablePredicates::cloneImpl() const {
+  return std::make_unique<CountAvailablePredicates>(
+      _executionContext, subtree_->clone(), subjectColumnIndex_,
+      predicateVariable_, countVariable_);
 }

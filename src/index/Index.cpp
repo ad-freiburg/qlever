@@ -25,9 +25,10 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
-void Index::addTextFromContextFile(const std::string& contextFile,
-                                   bool addWordsFromLiterals) {
-  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
+void Index::buildTextIndexFile(
+    std::optional<std::pair<std::string, std::string>> wordsAndDocsFile,
+    bool addWordsFromLiterals) {
+  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals);
 }
 
 // ____________________________________________________________________________
@@ -181,13 +182,23 @@ ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
-  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
+ad_utility::MemorySize& Index::parserBufferSize() {
+  return pimpl_->parserBufferSize();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::parserBufferSize() const {
+  return std::as_const(*pimpl_).parserBufferSize();
+}
+
+// ____________________________________________________________________________
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
 }
 
 // ____________________________________________________________________________
@@ -203,6 +214,12 @@ void Index::setSettingsFile(const std::string& filename) {
 // ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
+}
+
+// ____________________________________________________________________________
+void Index::storeTextScoringParamsInConfiguration(
+    TextScoringMetric scoringMetric, float b, float k) {
+  return pimpl_->storeTextScoringParamsInConfiguration(scoringMetric, b, k);
 }
 
 // ____________________________________________________________________________

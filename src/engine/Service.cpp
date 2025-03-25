@@ -6,7 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -31,19 +30,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "SERVICE ";
-  if (parsedServiceClause_.silent_) {
-    os << "SILENT ";
-  }
-  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
-     << parsedServiceClause_.prologue_ << "\n"
-     << parsedServiceClause_.graphPatternAsString_ << "\n";
-  if (siblingInfo_.has_value()) {
-    os << siblingInfo_->cacheKey_ << "\n";
-  }
-  os << "}\n";
-  return std::move(os).str();
+  return absl::StrCat("SERVICE ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
@@ -93,16 +80,32 @@ size_t Service::getCostEstimate() {
   return 10 * getSizeEstimateBeforeLimit();
 }
 
-// ____________________________________________________________________________
-ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
-  // Try to simplify the Service Query using it's sibling Operation.
-  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
-    auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
-    parsedServiceClause_.graphPatternAsString_ =
-        "{\n" + valuesClause.value() + '\n' +
-        parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
+// _____________________________________________________________________________
+std::string Service::pushDownValues(std::string_view pattern,
+                                    std::string_view values) {
+  size_t index = pattern.find('{');
+  AD_CORRECTNESS_CHECK(index != std::string::npos);
+  pattern.remove_prefix(index + 1);
+  // If we have a single subquery in the service clause, wrap it inside curly
+  // braces so it remains valid syntax alongside a VALUES clause.
+  if (ctre::starts_with<"[ \t\r\n]*SELECT">(pattern)) {
+    return absl::StrCat("{\n", values, "\n{", pattern, "\n}");
   }
+  return absl::StrCat("{\n", values, "\n", pattern);
+}
 
+// _____________________________________________________________________________
+std::string Service::getGraphPattern() const {
+  // Try to simplify the Service Query using it's sibling Operation.
+  const auto& graphPattern = parsedServiceClause_.graphPatternAsString_;
+  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    return pushDownValues(graphPattern, valuesClause.value());
+  }
+  return graphPattern;
+}
+
+// _____________________________________________________________________________
+Result Service::computeResult(bool requestLaziness) {
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -120,7 +123,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
@@ -128,9 +131,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
-  std::string serviceQuery = absl::StrCat(
-      parsedServiceClause_.prologue_, "\nSELECT ", variablesForSelectClause,
-      " WHERE ", parsedServiceClause_.graphPatternAsString_);
+  std::string serviceQuery =
+      absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
+                   variablesForSelectClause, " WHERE ", getGraphPattern());
   LOG(INFO) << "Sending SERVICE query to remote endpoint "
             << "(protocol: " << serviceUrl.protocolAsString()
             << ", host: " << serviceUrl.host()
@@ -188,9 +191,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   auto generator =
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{cppcoro::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 template <size_t I>
@@ -405,7 +408,7 @@ TripleComponent Service::bindingToTripleComponent(
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+Result Service::makeNeutralElementResultForSilentFail() const {
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   idTable.emplace_back();
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
@@ -565,7 +568,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   auto partialResultGenerator =
       [](std::vector<Result::IdTableVocabPair> pairs,
          Result::LazyResult prevGenerator,
-         std::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
+         ql::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
     for (auto& pair : pairs) {
       co_yield pair;
     }
@@ -609,7 +612,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   for (auto& pair : resultPairs) {
     siblingPair.idTable_.insertAtEnd(pair.idTable_);
-    siblingPair.localVocab_.mergeWith(std::span{&pair.localVocab_, 1});
+    siblingPair.localVocab_.mergeWith(pair.localVocab_);
   }
 
   service->siblingInfo_.emplace(
@@ -620,4 +623,12 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Service::cloneImpl() const {
+  auto service = std::make_unique<Service>(
+      _executionContext, parsedServiceClause_, getResultFunction_);
+  service->cacheBreaker_ = cacheBreaker_;
+  return service;
 }

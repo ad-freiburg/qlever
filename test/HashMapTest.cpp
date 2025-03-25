@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "../src/util/HashMap.h"
+#include "util/HashMap.h"
 
 // Note: Since the HashMap class is a wrapper for a well tested hash map
 // implementation the following tests only check the API for functionality and
