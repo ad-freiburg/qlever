@@ -159,7 +159,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams serialization program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 

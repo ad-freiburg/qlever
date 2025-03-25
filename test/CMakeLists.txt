@@ -39,7 +39,7 @@ endfunction()
 
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
-    add_executable(QLeverAllUnitTestsMain)
+    add_executable(QLeverAllUnitTestsMain RtreeTest.cpp)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
@@ -320,6 +320,8 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
+
+addLinkAndDiscoverTest(RtreeTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 

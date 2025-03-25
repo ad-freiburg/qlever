@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "absl/time/time.h"
+#include "engine/sparqlExpressions/ContainsExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -201,6 +202,12 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
     if (functionName == "date") {
       return createUnary(&makeConvertToDateExpression);
+    }
+  } else if (checkPrefix(GEO_RTREE_PREFIX)) {
+    if (functionName == "boundingBoxContains") {
+      checkNumArgs(2);
+      return std::make_unique<ContainsExpression>(std::move(argList[0]),
+                                                  std::move(argList[1]));
     }
   }
 

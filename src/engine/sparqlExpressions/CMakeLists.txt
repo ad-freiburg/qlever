@@ -19,7 +19,9 @@ add_library(sparqlExpressions
         ConvertToDtypeConstructor.cpp
         RdfTermExpressions.cpp
         LangExpression.cpp
+        ContainsExpression.cpp
         CountStarExpression.cpp
-        PrefilterExpressionIndex.cpp)
-
+        PrefilterExpressionIndex.cpp
+        ContainsExpression.cpp
+        )
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

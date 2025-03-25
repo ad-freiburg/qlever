@@ -41,6 +41,7 @@
 #include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MmapVector.h"
+#include "util/Rtree.h"
 #include "util/json.h"
 
 using ad_utility::BufferedVector;
@@ -135,6 +136,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  Rtree rtree_ = Rtree(4000000000);
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -275,6 +277,8 @@ class IndexImpl {
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
   }
+
+  const auto& getRtree() const { return rtree_; };
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---

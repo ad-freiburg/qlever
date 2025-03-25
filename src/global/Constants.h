@@ -72,6 +72,8 @@ constexpr inline std::string_view DEFAULT_GRAPH_IRI =
     makeQleverInternalIriConst<"default-graph">();
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
     makeQleverInternalIriConst<"internal-graph">();
+static constexpr std::pair<std::string_view, std::string_view>
+    GEO_RTREE_PREFIX = {"geoRtree:", "http://qlever.cs.uni-freiburg.de/"};
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};

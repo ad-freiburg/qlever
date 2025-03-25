@@ -26,6 +26,7 @@
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
+#include "util/RtreeFileReader.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
@@ -561,10 +562,24 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
+    // TODO<joka921> has to be part of the word reader/writer.
+    std::ofstream convertOfs = std::ofstream(
+        onDiskBase_ + ".vocabulary.boundingbox.tmp", std::ios::binary);
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
     wordCallback.readableName() = "internal vocabulary";
+    auto wordCallbackWithRtree = [&wordCallback, &convertOfs, index = 0ull](
+                                     auto&& word, bool external) mutable {
+      wordCallback(word, external);
+      std::optional<BasicGeometry::BoundingBox> boundingBox =
+          BasicGeometry::ConvertWordToRtreeEntry(word);
+      if (boundingBox) {
+        FileReaderWithoutIndex::SaveEntry(boundingBox.value(), index,
+                                          convertOfs);
+      }
+      ++index;
+    };
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numFiles, sortPred, wordCallbackWithRtree,
         memoryLimitIndexBuilding());
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
@@ -578,6 +593,17 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
               << res.vocabularyMetaData_.numWordsTotal() -
                      sizeInternalVocabulary
               << std::endl;
+
+  LOG(INFO) << "Building the Rtree..." << std::endl;
+  try {
+    Rtree rtree = Rtree(10000000000);
+    uint64_t treeSize = rtree.BuildTree(onDiskBase_, ".vocabulary.boundingbox",
+                                        16, "./rtree_build");
+    LOG(INFO) << "Finished building the Rtree with " << treeSize << " elements."
+              << std::endl;
+  } catch (const std::exception& e) {
+    LOG(INFO) << e.what() << std::endl;
+  }
 
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -941,6 +967,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
       usePatterns_ = false;
     }
   }
+  // Load the Rtree TODO
 }
 
 // _____________________________________________________________________________

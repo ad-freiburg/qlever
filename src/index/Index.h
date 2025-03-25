@@ -4,6 +4,9 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
+#include <util/Rtree.h>
+
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -119,6 +122,7 @@ class Index {
   // Get a reference to the DeltaTriplesManager of this Index.
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
+  const Rtree& getRtree() const;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL

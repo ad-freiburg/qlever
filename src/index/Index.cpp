@@ -55,6 +55,8 @@ auto Index::getTextVocab() const -> const TextVocab& {
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
   return pimpl_->getBlankNodeManager();
 }
+// ___________________________________________________
+auto Index::getRtree() const -> const Rtree& { return pimpl_->getRtree(); }
 
 // ____________________________________________________________________________
 size_t Index::getCardinality(
