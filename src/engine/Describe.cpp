@@ -183,7 +183,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
 
   // The `indexScan` might have added some delta triples with local vocab IDs,
   // so make sure to merge them into the `localVocab`.
-  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  localVocab.mergeWith(result->localVocab());
 
   return resultTable;
 }

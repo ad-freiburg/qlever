@@ -256,6 +256,11 @@ class SparqlQleverVisitor {
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
 
+  // Limit the variables in EXISTS expressions of the filter to the ones that
+  // are already known outside the EXISTS expression, so that the filter isn't
+  // optimized away because not all variables are covered.
+  void selectExistsVariables(SparqlFilter& filter) const;
+
   ParsedQuery::GraphPattern visit(Parser::GroupGraphPatternContext* ctx);
 
   OperationsAndFilters visit(Parser::GroupGraphPatternSubContext* ctx);
