@@ -122,35 +122,37 @@ static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
 
 //______________________________________________________________________________
 static std::vector<BlockMetadata> getRelevantBlocks(
-    const RelevantBlockItRanges& relevantBlockRanges,
-    std::span<const BlockMetadata> blocks) {
-  if (blocks.empty() || relevantBlockRanges.empty()) return {};
+    const BlockSubranges& relevantBlockRanges) {
   std::vector<BlockMetadata> relevantBlocks;
-  ql::ranges::for_each(
-      relevantBlockRanges, [&relevantBlocks](const BlockItRange& range) {
-        relevantBlocks.insert(relevantBlocks.end(), range.begin(), range.end());
-      });
+  relevantBlocks.reserve(ql::concepts::transform_reduce(
+      relevantBlockRanges.begin(), relevantBlockRanges.end(), 0ULL,
+      ql::concepts::plus{},
+      [](const BlockSubrange& range) { return range.size(); }));
+  ql::ranges::copy(relevantBlockRanges | ql::views::join,
+                   ql::concepts::back_inserter(relevantBlocks));
   return relevantBlocks;
 }
 
 namespace detail {
 
 //______________________________________________________________________________
-// Merge `BlockItRange blockRange` with the previous (relevant) `BlockItRange`s.
-static void mergeBlockRangeWithRanges(RelevantBlockItRanges& blockRanges,
-                                      const BlockItRange& blockRange) {
+// Merge `BlockSubrange blockRange` with the previous (relevant)
+// `BlockSubrange`s.
+static void mergeBlockRangeWithRanges(BlockSubranges& blockRanges,
+                                      const BlockSubrange& blockRange) {
   if (blockRange.empty()) return;
   if (blockRanges.empty()) {
     blockRanges.push_back(blockRange);
     return;
   }
-
-  BlockItRange& lastBlockItRange = blockRanges.back();
-  if (lastBlockItRange.end() >= blockRange.begin()) {
+  auto blockRangeBegin = blockRange.begin();
+  BlockSubrange& lastBlockRange = blockRanges.back();
+  AD_CORRECTNESS_CHECK(blockRangeBegin >= lastBlockRange.begin());
+  if (lastBlockRange.end() >= blockRangeBegin) {
     // The blockRange intersects with previous blockRange(s).
-    lastBlockItRange =
-        BlockItRange{lastBlockItRange.begin(),
-                     std::max(lastBlockItRange.end(), blockRange.end())};
+    lastBlockRange =
+        BlockSubrange{lastBlockRange.begin(),
+                      std::max(lastBlockRange.end(), blockRange.end())};
   } else {
     // The new blockRange doesn't intersect with previous blockRange(s).
     blockRanges.push_back(blockRange);
@@ -160,11 +162,11 @@ static void mergeBlockRangeWithRanges(RelevantBlockItRanges& blockRanges,
 namespace mapping {
 //______________________________________________________________________________
 // Map the given `ValueIdIt beginIdIt` and `ValueIdIt endIdIt` to their
-// corresponding `BlockIdIt` values and return them as `BlockItRange`.
-static BlockItRange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
-                                                 const ValueIdIt& beginIdIt,
-                                                 const ValueIdIt& endIdIt,
-                                                 BlockSpan blockRange) {
+// corresponding `BlockIdIt` values and return them as `BlockSubrange`.
+static BlockSubrange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
+                                                  const ValueIdIt& beginIdIt,
+                                                  const ValueIdIt& endIdIt,
+                                                  BlockSpan blockRange) {
   AD_CORRECTNESS_CHECK(beginIdIt <= endIdIt);
   auto blockRangeBegin = blockRange.begin();
   // Each `BlockMetadata` value contains two bounding `ValueId`s, one for
@@ -188,56 +190,54 @@ static BlockItRange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
   // `BlockIdIt`s. This is why we have to divide by two in the following after
   // we calculated the respective `ValueId` index with
   // std::distance(idRangeBegin, idIt).
-  return BlockItRange{
-      BlockIt{blockRangeBegin + std::distance(idRangeBegin, beginIdIt) / 2},
-      std::min(blockRange.end(),
-               BlockIt{blockRangeBegin +
-                       (std::distance(idRangeBegin, endIdIt) + 1) / 2})};
+  auto blockOffsetBegin = std::distance(idRangeBegin, beginIdIt) / 2;
+  auto blockOffsetEnd = (std::distance(idRangeBegin, endIdIt) + 1) / 2;
+  return {blockRangeBegin + blockOffsetBegin,
+          std::min(blockRange.end(), blockRangeBegin + blockOffsetEnd)};
 }
 
 //______________________________________________________________________________
 // Map the complement on the given `ValueIdItPairs`s to their corresponding
-// `BlockItRange`s.
+// `BlockSubrange`s.
 // The actual mapping is implemented by `mapValueIdItPairToBlockRange`.
-RelevantBlockItRanges mapValueIdItRangesToBlockItRangesComplemented(
+BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdItRange& idRange, BlockSpan blockRange) {
+    const ValueIdSubrange& idRange, BlockSpan blockRange) {
   auto idRangeBegin = idRange.begin();
   // Vector containing the `BlockRange` mapped indices.
-  RelevantBlockItRanges blockRanges;
+  BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-
-  ValueIdIt lastIdRangeIt = idRange.begin();
+  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
+                                           std::ref(blockRanges));
+  auto previousEndIt = idRange.begin();
   ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
     const auto& [beginIdIt, endIdIt] = idItPair;
-    mergeBlockRangeWithRanges(
-        blockRanges, mapValueIdItPairToBlockRange(idRangeBegin, lastIdRangeIt,
-                                                  beginIdIt, blockRange));
-    lastIdRangeIt = endIdIt;
+    addRange(mapValueIdItPairToBlockRange(idRangeBegin, previousEndIt,
+                                          beginIdIt, blockRange));
+    previousEndIt = endIdIt;
   });
-  mergeBlockRangeWithRanges(
-      blockRanges, mapValueIdItPairToBlockRange(idRangeBegin, lastIdRangeIt,
-                                                idRange.end(), blockRange));
+  addRange(mapValueIdItPairToBlockRange(idRangeBegin, previousEndIt,
+                                        idRange.end(), blockRange));
   return blockRanges;
 }
 
 //______________________________________________________________________________
-// Map the given `ValueIdItPair`s to their corresponding `BlockItRange`s.
+// Map the given `ValueIdItPair`s to their corresponding `BlockSubrange`s.
 // The actual mapping is implemented by `mapValueIdItPairToBlockRange`.
-RelevantBlockItRanges mapValueIdItRangesToBlockItRanges(
+BlockSubranges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdItRange& idRange, BlockSpan blockRange) {
+    const ValueIdSubrange& idRange, BlockSpan blockRange) {
   if (relevantIdRanges.empty()) return {};
   auto idRangeBegin = idRange.begin();
   // Vector containing the `BlockRange` mapped iterators.
-  RelevantBlockItRanges blockRanges;
+  BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-
+  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
+                                           std::ref(blockRanges));
   ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
     const auto& [beginIdIt, endIdIt] = idItPair;
-    mergeBlockRangeWithRanges(
-        blockRanges, mapValueIdItPairToBlockRange(idRangeBegin, beginIdIt,
-                                                  endIdIt, blockRange));
+    addRange(mapValueIdItPairToBlockRange(idRangeBegin, beginIdIt, endIdIt,
+                                          blockRange));
   });
   return blockRanges;
 }
@@ -249,69 +249,64 @@ namespace logicalOps {
 
 //______________________________________________________________________________
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
-// (||)`) of `RelevantBlockItRanges r1` and `RelevantBlockItRanges r2`.
+// (||)`) of `BlockSubranges r1` and `BlockSubranges r2`.
 // (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`
 // (`logical-and
-// (&&)`) of `RelevantBlockItRanges r1` and `RelevantBlockItRanges r2`.
+// (&&)`) of `BlockSubranges r1` and `BlockSubranges r2`.
 //
 // EXAMPLE UNION
 // Given input `r1` and `r2`
-// `RelevantBlockItRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
-// `RelevantBlockItRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// `BlockSubranges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `BlockSubranges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is `RelevantBlocksRanges result`: `[<2, 10>, <15, 23>]`
 //
 // EXAMPLE INTERSECTION
 // Given input `r1` and `r2`
-// `RelevantBlockItRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
-// `RelevantBlockItRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// `BlockSubranges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `BlockSubranges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is
 // `RelevantBlocksRanges result`: `[<4, 6>, <8, 9>, <15, 16>, <20, 22>]`
 template <bool GetUnion>
-RelevantBlockItRanges mergeRelevantBlockItRanges(
-    const RelevantBlockItRanges& r1, const RelevantBlockItRanges& r2) {
+BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
+                                          const BlockSubranges& r2) {
   if constexpr (GetUnion) {
     if (r1.empty() && r2.empty()) return {};
   } else {
     if (r1.empty() || r2.empty()) return {};
   }
-  RelevantBlockItRanges mergedRanges;
+  BlockSubranges mergedRanges;
   mergedRanges.reserve(r1.size() + r2.size());
+  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
+                                           std::ref(mergedRanges));
   auto idx1 = r1.begin();
   auto idx2 = r2.begin();
   while (idx1 != r1.end() && idx2 != r2.end()) {
     auto& [idx1Begin, idx1End] = *idx1;
     auto& [idx2Begin, idx2End] = *idx2;
     if (idx1End < idx2Begin) {
-      if constexpr (GetUnion) mergeBlockRangeWithRanges(mergedRanges, *idx1);
+      if constexpr (GetUnion) addRange(*idx1);
       idx1++;
     } else if (idx2End < idx1Begin) {
-      if constexpr (GetUnion) mergeBlockRangeWithRanges(mergedRanges, *idx2);
+      if constexpr (GetUnion) addRange(*idx2);
       idx2++;
     } else {
       // Handle overlapping ranges.
       if constexpr (GetUnion) {
         // Add the union of r1 and r2.
-        mergeBlockRangeWithRanges(mergedRanges,
-                                  BlockItRange{std::min(idx1Begin, idx2Begin),
-                                               std::max(idx1End, idx2End)});
+        addRange(BlockSubrange{std::min(idx1Begin, idx2Begin),
+                               std::max(idx1End, idx2End)});
         (idx1++, idx2++);
       } else {
         // Add the intersection of r1 and r2.
-        mergeBlockRangeWithRanges(mergedRanges,
-                                  BlockItRange{std::max(idx1Begin, idx2Begin),
-                                               std::min(idx1End, idx2End)});
-        idx1End < idx2End ? idx1++
-                          : (idx2End < idx1End ? idx2++ : (idx1++, idx2++));
+        addRange(BlockSubrange{std::max(idx1Begin, idx2Begin),
+                               std::min(idx1End, idx2End)});
+        idx1End < idx2End ? idx1++ : idx2++;
       }
     }
   }
   if constexpr (!GetUnion) return mergedRanges;
-
-  const auto optAddRestRanges = [&mergedRanges](const BlockItRange& range) {
-    mergeBlockRangeWithRanges(mergedRanges, range);
-  };
-  ql::ranges::for_each(idx1, r1.end(), optAddRestRanges);
-  ql::ranges::for_each(idx2, r2.end(), optAddRestRanges);
+  ql::ranges::for_each(idx1, r1.end(), addRange);
+  ql::ranges::for_each(idx2, r2.end(), addRange);
   return mergedRanges;
 }
 
@@ -321,8 +316,8 @@ RelevantBlockItRanges mergeRelevantBlockItRanges(
 //______________________________________________________________________________
 // This function retrieves the `BlockRange`s for `BlockMetadata` values that
 // contain bounding `ValueId`s with different underlying datatypes.
-static RelevantBlockItRanges getRangesMixedDatatypeBlocks(
-    const ValueIdItRange& idRange, BlockSpan blockRange) {
+static BlockSubranges getRangesMixedDatatypeBlocks(
+    const ValueIdSubrange& idRange, BlockSpan blockRange) {
   if (idRange.empty()) return {};
   std::vector<ValueIdItPair> mixedDatatypeRanges;
   // Ensure that `idRange` holds access to even number of ValueIds.
@@ -436,15 +431,14 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
   if (!blockRange.empty()) {
     checkRequirementsBlockMetadata(blockRange, evaluationColumn);
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
-    ValueIdItRange idRange{
+    ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
-    result = getRelevantBlocks(
-        detail::logicalOps::mergeRelevantBlockItRanges<true>(
+    result =
+        getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
             evaluateImpl(idRange, blockRange),
             // always add mixed datatype blocks
-            getRangesMixedDatatypeBlocks(idRange, blockRange)),
-        blockRange);
+            getRangesMixedDatatypeBlocks(idRange, blockRange)));
     checkRequirementsBlockMetadata(result, evaluationColumn);
   }
 
@@ -493,9 +487,9 @@ RelationalExpression<Comparison>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-RelevantBlockItRanges
+BlockSubranges
 RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange,
+    const ValueIdSubrange& idRange, BlockSpan blockRange,
     bool getComplementOverAllDatatypes) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
@@ -524,8 +518,8 @@ RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-RelevantBlockItRanges RelationalExpression<Comparison>::evaluateImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange) const {
+BlockSubranges RelationalExpression<Comparison>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
   return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
 };
 
@@ -613,8 +607,9 @@ std::string IsDatatypeExpression<Datatype>::asString(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-static RelevantBlockItRanges evaluateIsIriOrIsLiteralImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange, const bool isNegated) {
+static BlockSubranges evaluateIsIriOrIsLiteralImpl(
+    const ValueIdSubrange& idRange, BlockSpan blockRange,
+    const bool isNegated) {
   using enum IsDatatype;
   static_assert(Datatype == IRI || Datatype == LITERAL);
   using LVE = LocalVocabEntry;
@@ -635,8 +630,9 @@ static RelevantBlockItRanges evaluateIsIriOrIsLiteralImpl(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-static RelevantBlockItRanges evaluateIsBlankOrIsNumericImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange, const bool isNegated) {
+static BlockSubranges evaluateIsBlankOrIsNumericImpl(
+    const ValueIdSubrange& idRange, BlockSpan blockRange,
+    const bool isNegated) {
   using enum IsDatatype;
   static_assert(Datatype == BLANK || Datatype == NUMERIC);
 
@@ -683,8 +679,8 @@ static RelevantBlockItRanges evaluateIsBlankOrIsNumericImpl(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-RelevantBlockItRanges IsDatatypeExpression<Datatype>::evaluateImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange) const {
+BlockSubranges IsDatatypeExpression<Datatype>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
   using enum IsDatatype;
   if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
     return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
@@ -718,8 +714,8 @@ LogicalExpression<Operation>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
-RelevantBlockItRanges LogicalExpression<Operation>::evaluateImpl(
-    const ValueIdItRange& idRange, BlockSpan blockRange) const {
+BlockSubranges LogicalExpression<Operation>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
@@ -778,8 +774,8 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-RelevantBlockItRanges NotExpression::evaluateImpl(const ValueIdItRange& idRange,
-                                                  BlockSpan blockRange) const {
+BlockSubranges NotExpression::evaluateImpl(const ValueIdSubrange& idRange,
+                                           BlockSpan blockRange) const {
   return child_->evaluateImpl(idRange, blockRange);
 };
 
@@ -905,15 +901,12 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
                 throw std::runtime_error(absl::StrCat(
                     "Provided Literal or Iri with value: ",
                     value.asLiteralOrIri().toStringRepresentation(),
-                    ". This is an invalid reference value for "
-                    "filtering date "
-                    "values over expression YEAR. Please provide an "
-                    "integer "
+                    ". This is an invalid reference value for filtering date "
+                    "values over expression YEAR. Please provide an integer "
                     "value as reference year."));
               }
               throw std::runtime_error(
-                  "Reference value IdOrLocalVocabEntry contains "
-                  "unknown type.");
+                  "Reference value IdOrLocalVocabEntry contains unknown type.");
             },
             referenceValue);
       };
@@ -927,12 +920,11 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
         if (valueId.getDatatype() == Int) {
           return valueId.getInt();
         }
-        throw std::runtime_error(
-            absl::StrCat("Reference value for filtering date values over "
-                         "expression YEAR is of invalid datatype: ",
-                         toString(valueId.getDatatype()),
-                         ".\nPlease provide an integer value as reference "
-                         "year."));
+        throw std::runtime_error(absl::StrCat(
+            "Reference value for filtering date values over "
+            "expression YEAR is of invalid datatype: ",
+            toString(valueId.getDatatype()),
+            ".\nPlease provide an integer value as reference year."));
       };
   return makePrefilterExpressionYearImpl(
       comparison, retrieveYearIntOrThrowErr(referenceValue));

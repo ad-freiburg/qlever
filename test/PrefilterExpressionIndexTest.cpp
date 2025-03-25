@@ -4,7 +4,6 @@
 
 #include <gmock/gmock.h>
 
-#include <ranges>
 #include <vector>
 
 #include "./PrefilterExpressionTestHelpers.h"
@@ -45,11 +44,11 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 //______________________________________________________________________________
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
-// Convert `IdxPairRanges` to `RelevantBlockItRanges` with respect to `BlockIt
+// Convert `IdxPairRanges` to `BlockSubranges` with respect to `BlockIt
 // beginBlockSpan` (first possible `std::span<const BlockMetadata>::iterator`).
-static RelevantBlockItRanges convertFromSpanIdxToSpanBlockItRanges(
+static BlockSubranges convertFromSpanIdxToSpanBlockItRanges(
     const BlockIt& beginBlockSpan, const IdxPairRanges idxRanges) {
-  RelevantBlockItRanges blockItRanges;
+  BlockSubranges blockItRanges;
   blockItRanges.reserve(idxRanges.size());
   ql::ranges::for_each(idxRanges, [&](const IdxPair& idxPair) {
     const auto& [beginIdx, endIdx] = idxPair;
@@ -359,10 +358,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         adjustedExpected);
   }
 
-  // Check if `RelevantBlockItRanges r1` and `RelevantBlockItRanges r2` contain
+  // Check if `BlockSubranges r1` and `BlockSubranges r2` contain
   // equivalent sub-ranges.
-  bool assertEqRelevantBlockItRanges(const RelevantBlockItRanges& r1,
-                                     const RelevantBlockItRanges& r2) {
+  bool assertEqRelevantBlockItRanges(const BlockSubranges& r1,
+                                     const BlockSubranges& r2) {
     return ql::ranges::equal(r1, r2, ql::ranges::equal);
   }
 
@@ -380,7 +379,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     // For the defined `BlockMetadata` values above, evaluation column at index
     // 2 is relevant.
     AccessValueIdFromBlockMetadata accessValueIdOp(2);
-    ValueIdItRange inputRange{
+    ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
         ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
     std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
@@ -403,9 +402,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
   // The `IdxPairRanges` will be mapped to their corresponding
-  // `RelevantBlockItRanges`.
+  // `BlockSubranges`.
   // (1) Set `TestUnion = true`: test logical union (`OR(||)`) on
-  // `BlockItRange`s.
+  // `BlockSubrange`s.
   // (2) Set `TestUnion = false`: test logical intersection (`AND(&&)`) on
   // `BlockItRanges`s.
   template <bool TestUnion>
@@ -1067,7 +1066,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<true>` over `BlockItRange` values.
+// Test `mergeRelevantBlockItRanges<true>` over `BlockSubrange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
   // r1 UNION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<true>({}, {}, {});
@@ -1087,12 +1086,14 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<false>` over `BlockItRange` values.
+// Test `mergeRelevantBlockItRanges<false>` over `BlockSubrange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
   // r1 INTERSECTION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<false>({}, {}, {});
   makeTestAndOrOrMergeBlocks<false>({{0, 3}, {3, 5}}, {}, {});
   makeTestAndOrOrMergeBlocks<false>({{3, 9}}, {{3, 9}}, {{3, 9}});
+  makeTestAndOrOrMergeBlocks<false>({{3, 9}, {9, 12}}, {{3, 9}, {9, 12}},
+                                    {{3, 12}});
   makeTestAndOrOrMergeBlocks<false>({{0, 10}}, {{2, 4}}, {{2, 4}});
   makeTestAndOrOrMergeBlocks<false>({{3, 9}, {9, 12}}, {{0, 10}, {10, 14}},
                                     {{3, 12}});
