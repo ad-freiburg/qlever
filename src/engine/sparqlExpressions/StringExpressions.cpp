@@ -22,27 +22,32 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
+// Return `true` if the byte representation of `c` does not start with `10`,
+// meaning that it is not a UTF-8 continuation byte, and therefore the start of
+// a codepoint.
+static constexpr bool isUtf8CodepointStart(char c) {
+  using b = std::byte;
+  return (static_cast<b>(c) & b{0xC0}) != b{0x80};
+}
 // Count UTF-8 characters by skipping continuation bytes (those starting with
 // "10").
 static std::size_t utf8Length(std::string_view s) {
-  return ql::ranges::count_if(
-      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
+  return ql::ranges::count_if(s, &isUtf8CodepointStart);
 }
 
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
 // string length, the byte offset will be set to the size of the string.
 static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
-  std::size_t byteOffset = 0;
   int64_t charCount = 0;
-
-  for (char c : str) {
-    if ((static_cast<unsigned char>(c) & 0xC0) != 0x80 &&
-        charCount++ == utf8Pos) {
-      break;
+  for (auto [byteOffset, c] : ranges::views::enumerate(str)) {
+    if (isUtf8CodepointStart(c)) {
+      if (charCount == utf8Pos) {
+        return byteOffset;
+      }
+      ++charCount;
     }
-    ++byteOffset;
   }
-  return byteOffset;
+  return str.size();
 }
 
 // String functions.
@@ -67,24 +72,23 @@ class StrExpression : public StrExpressionImpl {
 // `STR()` expression, then the `StringValueGetter` will be used (which also
 // returns string values for IRIs, numeric literals, etc.), otherwise the
 // `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-class StringExpressionImpl : public SparqlExpression {
+template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
+          typename Function, typename... AdditionalNonStringValueGetters>
+class StringExpressionImplImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr =
-      NARY<N,
-           FV<Function, StringValueGetter, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<
-      N, FV<Function, LiteralFromIdGetter, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithStr = NARY<
+      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
+                                          AdditionalNonStringValueGetters...>>;
 
   SparqlExpression::Ptr impl_;
 
  public:
   CPP_template(typename... C)(
-      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) + 1 ==
-                  N)) explicit StringExpressionImpl(SparqlExpression::Ptr child,
-                                                    C... children) {
+      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...) CPP_and(
+          sizeof...(C) + 1 ==
+          N)) explicit StringExpressionImplImpl(SparqlExpression::Ptr child,
+                                                C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
@@ -110,49 +114,21 @@ class StringExpressionImpl : public SparqlExpression {
   }
 };
 
-// Same as the `StringExpressionImpl` above, but with the LiteralOrValueGetter.
+// Impl class for expressions that work on plain strings.
 template <size_t N, typename Function,
           typename... AdditionalNonStringValueGetters>
-class LiteralExpressionImpl : public SparqlExpression {
- private:
-  using ExpressionWithStr =
-      NARY<N, FV<Function, LiteralValueGetterWithStrFunction,
-                 AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr =
-      NARY<N, FV<Function, LiteralValueGetterWithoutStrFunction,
-                 AdditionalNonStringValueGetters...>>;
+using StringExpressionImpl =
+    StringExpressionImplImpl<StringValueGetter, LiteralFromIdGetter, N,
+                             Function, AdditionalNonStringValueGetters...>;
 
-  SparqlExpression::Ptr impl_;
-
- public:
-  explicit LiteralExpressionImpl(
-      SparqlExpression::Ptr child,
-      std::same_as<SparqlExpression::Ptr> auto... children)
-      requires(sizeof...(children) + 1 == N) {
-    AD_CORRECTNESS_CHECK(child != nullptr);
-    if (child->isStrExpression()) {
-      auto childrenOfStr = std::move(*child).moveChildrenOut();
-      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
-      impl_ = std::make_unique<ExpressionWithStr>(
-          std::move(childrenOfStr.at(0)), std::move(children)...);
-    } else {
-      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
-                                                     std::move(children)...);
-    }
-  }
-
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    return impl_->evaluate(context);
-  }
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return impl_->getCacheKey(varColMap);
-  }
-
- private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return impl_->children();
-  }
-};
+// Impl class for expressions that work on literals with datatypes and language
+// tags.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+using LiteralExpressionImpl =
+    StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
+                             LiteralValueGetterWithoutStrFunction, N, Function,
+                             AdditionalNonStringValueGetters...>;
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
@@ -296,7 +272,7 @@ class SubstrImpl {
     // with valid arguments for the `setSubstr` method below for both
     // starting position and length since all the other corner cases have been
     // dealt with above.
-    auto clamp = [utf8len](int64_t n) -> std::size_t {
+    auto clamp = [utf8len](int64_t n) {
       return static_cast<size_t>(
           std::clamp(n, int64_t{0}, static_cast<int64_t>(utf8len)));
     };

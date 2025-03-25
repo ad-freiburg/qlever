@@ -189,18 +189,6 @@ struct LiteralValueGetterWithoutStrFunction
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// Value getter for `isBlank`.
-struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
-  using Mixin<IsBlankNodeValueGetter>::operator();
-  Id operator()(ValueId id, const EvaluationContext*) const {
-    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
-  }
-
-  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
-    return Id::makeFromBool(false);
-  }
-};
-
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>
