@@ -37,6 +37,18 @@ class ContextListMetaData {
   off_t _startScorelist;
   off_t _lastByte;
 
+  size_t getByteLengthContextList() const {
+    return static_cast<size_t>(_startWordlist - _startContextlist);
+  }
+
+  size_t getByteLengthWordlist() const {
+    return static_cast<size_t>(_startScorelist - _startWordlist);
+  }
+
+  size_t getByteLengthScorelist() const {
+    return static_cast<size_t>(_lastByte + 1 - _startScorelist);
+  }
+
   bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
 
   static constexpr size_t sizeOnDisk() {

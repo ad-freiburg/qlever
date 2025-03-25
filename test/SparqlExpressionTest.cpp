@@ -608,6 +608,12 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+  checkStr(IdOrLiteralOrIriVec{iriref("<http://example.org/str>"),
+                               iriref("<http://example.org/int>"),
+                               iriref("<http://example.org/bool>")},
+           IdOrLiteralOrIriVec{lit("http://example.org/str"),
+                               lit("http://example.org/int"),
+                               lit("http://example.org/bool")});
 
   auto T = Id::makeFromBool(true);
   auto F = Id::makeFromBool(false);
@@ -771,28 +777,23 @@ TEST(SparqlExpression, substr) {
               I(0), I(12));
   checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
               I(-2), I(12));
-
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), I(2),
               I(12));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), D(1.8),
               D(11.7));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}),
               D(2.449), D(12.449));
-
   // An actual substring from the middle
   checkSubstr(strs({"es", "os", "re"}), strs({"ones", "twos", "threes"}), I(3),
               I(2));
-
   // Subtle corner case if the starting position is negative
   // Only the letters at positions  `p < -3 + 6 = 3` are exported (the first two
   // letters, remember that the positions are 1-based).
   checkSubstr(strs({"on", "tw", "th"}), strs({"ones", "twos", "threes"}), I(-3),
               I(6));
-
   // Correct handling of UTF-8 multibyte characters.
   checkSubstr(strs({"pfel", "pfel", "pfel"}),
               strs({"uApfel", "uÄpfel", "uöpfel"}), I(3), I(18));
-
   // corner cases: 0 or negative length, or invalid numeric parameter
   checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), D(naN),
               I(2));
@@ -803,9 +804,8 @@ TEST(SparqlExpression, substr) {
               D(-3.8));
 
   // Invalid datatypes
-  // First must be string.
+  // First must be LiteralOrIri
   auto Ux = IdOrLiteralOrIri{U};
-  checkSubstr(Ux, I(3), I(4), I(7));
   checkSubstr(Ux, U, I(4), I(7));
   checkSubstr(Ux, Ux, I(4), I(7));
   // Second and third must be numeric;
@@ -815,6 +815,17 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
+  // WithDataType xsd:string
+  checkSubstr(
+      IdOrLiteralOrIriVec{
+          lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      IdOrLiteralOrIriVec{
+          lit("Hello World", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      I(1), I(5));
+
+  // WithLanguageTag
+  checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")},
+              IdOrLiteralOrIriVec{lit("chat", "@en")}, I(1), I(3));
 }
 
 // _____________________________________________________________________________________

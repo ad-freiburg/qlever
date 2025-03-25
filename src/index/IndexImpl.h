@@ -29,6 +29,7 @@
 #include "index/Postings.h"
 #include "index/StxxlSortFunctors.h"
 #include "index/TextMetaData.h"
+#include "index/TextScoring.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -135,6 +136,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  ScoreData scoreData_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -164,6 +166,9 @@ class IndexImpl {
   // in the test retrieval of the texts. This only works reliably if the
   // wordsFile.tsv starts with contextId 1 and is continuous.
   size_t nofNonLiteralsInTextIndex_;
+
+  TextScoringMetric textScoringMetric_;
+  std::pair<float, float> bAndKParamForTextScoring_;
 
   // Global static pointers to the currently active index and comparator.
   // Those are used to compare LocalVocab entries with each other as well as
@@ -252,10 +257,14 @@ class IndexImpl {
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase);
 
-  // Adds a text index to a complete KB index. First reads the given context
-  // file (if file name not empty), then adds words from literals (if true).
-  void addTextFromContextFile(const string& contextFile,
-                              bool addWordsFromLiterals);
+  // Adds a text index to a complete KB index. Reads words from the given
+  // wordsfile and calculates bm25 scores with the docsfile if given.
+  // Additionally adds words from literals of the existing KB. Can't be called
+  // with only words or only docsfile, but with or without both. Also can't be
+  // called with the pair empty and bool false
+  void buildTextIndexFile(
+      std::optional<std::pair<string, string>> wordsAndDocsFile,
+      bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -268,6 +277,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  const auto& getScoreData() const { return scoreData_; }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -373,6 +384,10 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  IdTable readContextListHelper(
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const ContextListMetaData& contextList, bool isWordCl) const;
+
   IdTable readWordCl(const TextBlockMetaData& tbmd,
                      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
@@ -424,6 +439,9 @@ class IndexImpl {
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
+
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 
   const string& getTextName() const { return textMeta_.getName(); }
 
@@ -532,7 +550,8 @@ class IndexImpl {
 
   void processWordCaseDuringInvertedListProcessing(
       const WordsFileLine& line,
-      ad_utility::HashMap<WordIndex, Score>& wordsInContext) const;
+      ad_utility::HashMap<WordIndex, Score>& wordsInContext,
+      ScoreData& scoreData) const;
 
   void logEntityNotFound(const string& word,
                          size_t& entityNotFoundErrorMsgCount) const;

@@ -22,6 +22,34 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
+// Return `true` if the byte representation of `c` does not start with `10`,
+// meaning that it is not a UTF-8 continuation byte, and therefore the start of
+// a codepoint.
+static constexpr bool isUtf8CodepointStart(char c) {
+  using b = std::byte;
+  return (static_cast<b>(c) & b{0xC0}) != b{0x80};
+}
+// Count UTF-8 characters by skipping continuation bytes (those starting with
+// "10").
+static std::size_t utf8Length(std::string_view s) {
+  return ql::ranges::count_if(s, &isUtf8CodepointStart);
+}
+
+// Convert UTF-8 position to byte offset. If utf8Pos exceeds the
+// string length, the byte offset will be set to the size of the string.
+static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
+  int64_t charCount = 0;
+  for (auto [byteOffset, c] : ranges::views::enumerate(str)) {
+    if (isUtf8CodepointStart(c)) {
+      if (charCount == utf8Pos) {
+        return byteOffset;
+      }
+      ++charCount;
+    }
+  }
+  return str.size();
+}
+
 // String functions.
 [[maybe_unused]] auto strImpl =
     [](std::optional<std::string> s) -> IdOrLiteralOrIri {
@@ -44,24 +72,23 @@ class StrExpression : public StrExpressionImpl {
 // `STR()` expression, then the `StringValueGetter` will be used (which also
 // returns string values for IRIs, numeric literals, etc.), otherwise the
 // `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-class StringExpressionImpl : public SparqlExpression {
+template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
+          typename Function, typename... AdditionalNonStringValueGetters>
+class StringExpressionImplImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr =
-      NARY<N,
-           FV<Function, StringValueGetter, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<
-      N, FV<Function, LiteralFromIdGetter, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithStr = NARY<
+      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
+  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
+                                          AdditionalNonStringValueGetters...>>;
 
   SparqlExpression::Ptr impl_;
 
  public:
   CPP_template(typename... C)(
-      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...)
-          CPP_and(sizeof...(C) + 1 ==
-                  N)) explicit StringExpressionImpl(SparqlExpression::Ptr child,
-                                                    C... children) {
+      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...) CPP_and(
+          sizeof...(C) + 1 ==
+          N)) explicit StringExpressionImplImpl(SparqlExpression::Ptr child,
+                                                C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
@@ -86,6 +113,22 @@ class StringExpressionImpl : public SparqlExpression {
     return impl_->children();
   }
 };
+
+// Impl class for expressions that work on plain strings.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+using StringExpressionImpl =
+    StringExpressionImplImpl<StringValueGetter, LiteralFromIdGetter, N,
+                             Function, AdditionalNonStringValueGetters...>;
+
+// Impl class for expressions that work on literals with datatypes and language
+// tags.
+template <size_t N, typename Function,
+          typename... AdditionalNonStringValueGetters>
+using LiteralExpressionImpl =
+    StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
+                             LiteralValueGetterWithoutStrFunction, N, Function,
+                             AdditionalNonStringValueGetters...>;
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
@@ -150,11 +193,7 @@ using IriOrUriExpression =
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
-  // Count UTF-8 characters by skipping continuation bytes (those starting with
-  // "10").
-  auto utf8Len = ql::ranges::count_if(
-      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
-  return Id::makeFromInt(utf8Len);
+  return Id::makeFromInt(utf8Length(s));
 };
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
@@ -206,8 +245,9 @@ class SubstrImpl {
   };
 
  public:
-  IdOrLiteralOrIri operator()(std::optional<std::string> s, NumericValue start,
-                              NumericValue length) const {
+  IdOrLiteralOrIri operator()(
+      std::optional<ad_utility::triple_component::Literal> s,
+      NumericValue start, NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
@@ -226,29 +266,31 @@ class SubstrImpl {
     if (startInt < 0) {
       lengthInt += startInt;
     }
-
-    const auto& str = s.value();
+    const auto& str = asStringViewUnsafe(s.value().getContent());
+    std::size_t utf8len = utf8Length(str);
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
-    // with valid arguments for the `getUTF8Substring` method below for both
+    // with valid arguments for the `setSubstr` method below for both
     // starting position and length since all the other corner cases have been
     // dealt with above.
-    auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
-      if (n < 0) {
-        return 0;
-      }
-      if (static_cast<size_t>(n) > sz) {
-        return sz;
-      }
-      return static_cast<size_t>(n);
+    auto clamp = [utf8len](int64_t n) {
+      return static_cast<size_t>(
+          std::clamp(n, int64_t{0}, static_cast<int64_t>(utf8len)));
     };
 
-    return toLiteral(
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)));
+    startInt = clamp(startInt);
+    lengthInt = clamp(lengthInt);
+    std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
+    std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
+    std::size_t byteLength = endByteOffset - startByteOffset;
+
+    s.value().setSubstr(startByteOffset, byteLength);
+    return LiteralOrIri(std::move(s.value()));
   }
 };
 
 using SubstrExpression =
-    StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
+    LiteralExpressionImpl<3, SubstrImpl, NumericValueGetter,
+                          NumericValueGetter>;
 
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,
