@@ -259,9 +259,7 @@ Result::Generator Service::computeResultLazily(
     childRuntimeInfoAllowWrite_ = b;
 
     if (b && !childRuntimeInfoBuffer_.empty()) {
-      childRuntimeInformation_ = std::make_shared<RuntimeInformation>(
-          nlohmann::json::parse(childRuntimeInfoBuffer_));
-      signalQueryUpdate();
+      updateChildRuntimeInfoNotThreadsafe(childRuntimeInfoBuffer_);
       childRuntimeInfoBuffer_.clear();
     }
   };
@@ -660,13 +658,20 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+void Service::updateChildRuntimeInfoNotThreadsafe(const std::string& msg) {
+  childRuntimeInformation_ = std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg)));
+  auto& runtimeChildren = runtimeInfo().children_;
+  runtimeChildren.clear();
+  runtimeChildren.push_back(childRuntimeInformation_);
+  signalQueryUpdate();
+}
+
+// _____________________________________________________________________________
 void Service::handleChildRuntimeInfoUpdate(const std::string& msg) {
   try {
     auto lock = std::lock_guard{childRuntimeInfoLock_};
     if (childRuntimeInfoAllowWrite_) {
-      childRuntimeInformation_ =
-          std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
-      signalQueryUpdate();
+      updateChildRuntimeInfoNotThreadsafe(msg);
     } else {
       childRuntimeInfoBuffer_ = msg;
     }

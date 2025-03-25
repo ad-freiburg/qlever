@@ -75,7 +75,7 @@ class Service : public Operation {
   // required in `handleChildRuntimeInfoUpdate()` callback function.
   std::mutex childRuntimeInfoLock_;
   bool childRuntimeInfoAllowWrite_{false};
-  std::string childRuntimeInfoBuffer_;
+  string childRuntimeInfoBuffer_;
 
   // Counter to generate fresh ids for each instance of the class.
   static inline std::atomic_uint32_t counter_ = 0;
@@ -198,6 +198,7 @@ class Service : public Operation {
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
   void handleChildRuntimeInfoUpdate(const std::string& msg);
+  void updateChildRuntimeInfoNotThreadsafe(const std::string& msg);
 
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
