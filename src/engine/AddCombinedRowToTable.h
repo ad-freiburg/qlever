@@ -155,7 +155,7 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
     if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
       currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+      mergedVocab_.mergeWith(table.getLocalVocab());
     }
   }
 
