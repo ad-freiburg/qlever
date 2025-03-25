@@ -53,10 +53,9 @@ string Describe::getCacheKeyImpl() const {
   const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
-    std::ranges::transform(defaultGraphs.value(),
-                           std::back_inserter(graphIdVec),
-                           &TripleComponent::toRdfLiteral);
-    std::ranges::sort(graphIdVec);
+    ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
+                          &TripleComponent::toRdfLiteral);
+    ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
   }
@@ -184,7 +183,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
 
   // The `indexScan` might have added some delta triples with local vocab IDs,
   // so make sure to merge them into the `localVocab`.
-  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  localVocab.mergeWith(result->localVocab());
 
   return resultTable;
 }
@@ -218,12 +217,12 @@ IdTable Describe::getIdsToDescribe(const Result& result,
   // Copy the `Id`s from the hash set to an `IdTable`.
   IdTable idsAsTable{1, allocator()};
   idsAsTable.resize(idsToDescribe.size());
-  std::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
+  ql::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
   return idsAsTable;
 }
 
 // _____________________________________________________________________________
-ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab;
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //
@@ -244,4 +243,10 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
                            std::move(blankNodes));
 
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Describe::cloneImpl() const {
+  return std::make_unique<Describe>(_executionContext, subtree_->clone(),
+                                    describe_);
 }

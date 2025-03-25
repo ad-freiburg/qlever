@@ -17,6 +17,7 @@
 #include <memory>
 #include <memory_resource>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -51,8 +52,8 @@ class LocaleManager {
   using U8String = std::basic_string<uint8_t>;
   using U8StringView = std::basic_string_view<uint8_t>;
 
-  template <ad_utility::SimilarToAny<U8String, U8StringView> T>
-  class SortKeyImpl {
+  CPP_template(typename T)(requires ad_utility::SimilarToAny<
+                           T, U8String, U8StringView>) class SortKeyImpl {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
@@ -177,9 +178,12 @@ class LocaleManager {
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  void getSortKey(
-      std::string_view s, const Level level,
-      std::invocable<const uint8_t*, size_t> auto resultFunction) const {
+  // clang-format off
+  CPP_template(typename F)(
+    requires ranges::invocable<F, const uint8_t*, size_t>)
+      // clang-format on
+      void getSortKey(std::string_view s, const Level level,
+                      F resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer`.
@@ -313,7 +317,7 @@ class LocaleManager {
    * different steps in icu. */
   std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
   const icu::Normalizer2* _normalizer =
       nullptr;  // actually locale-independent but useful to be placed here

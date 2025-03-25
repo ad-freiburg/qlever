@@ -34,13 +34,17 @@ class NeutralElementOperation : public Operation {
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
+  std::unique_ptr<Operation> cloneImpl() const override {
+    return std::make_unique<NeutralElementOperation>(_executionContext);
+  }
+
  protected:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
     return {};
   };
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);

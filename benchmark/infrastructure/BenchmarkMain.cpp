@@ -90,7 +90,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
 Print the configuration documentation of all registered benchmarks.
 */
 static __attribute__((noreturn)) void printConfigurationOptionsAndExit() {
-  std::ranges::for_each(
+  ql::ranges::for_each(
       BenchmarkRegister::getAllRegisteredBenchmarks(),
       [](const BenchmarkInterface* bench) {
         std::cerr << createCategoryTitle(
@@ -211,13 +211,13 @@ int main(int argc, char** argv) {
   // Actually processing the arguments.
   if (vm.count("print")) {
     // Print the results and metadata.
-    std::ranges::for_each(benchmarkClassAndResults,
-                          [](const auto& pair) {
-                            std::cout << benchmarkResultsToString(pair.first,
-                                                                  pair.second)
-                                      << "\n\n";
-                          },
-                          {});
+    ql::ranges::for_each(benchmarkClassAndResults,
+                         [](const auto& pair) {
+                           std::cout << benchmarkResultsToString(pair.first,
+                                                                 pair.second)
+                                     << "\n\n";
+                         },
+                         {});
   }
 
   if (vm.count("write")) {

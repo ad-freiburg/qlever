@@ -1,14 +1,12 @@
-// Copyright 2023, University of Freiburg,
+// Copyright 2023 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-//
-// Authors: Björn Buchhold <buchhold@gmail.com>
+// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
 #include <chrono>
-#include <ctre.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -22,6 +20,7 @@ using namespace ad_utility::memory_literals;
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
 constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
@@ -256,3 +255,8 @@ constexpr inline std::string_view EMPH_OFF = "\033[22m";
 // Allowed range for geographical coordinates from WTK Text
 constexpr inline double COORDINATE_LAT_MAX = 90.0;
 constexpr inline double COORDINATE_LNG_MAX = 180.0;
+
+// When operation results are returned as `application/qlever-results+json` the
+// Operation string is echoed. This operation string is truncated to ensure
+// performance.
+constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;

@@ -21,8 +21,9 @@ Column number together with the type of value, that can be found inside the
 column. Note, that **all** entries in the column must have the same type,
 because of `ResultTable::getEntry`.
 */
-template <ad_utility::SameAsAnyTypeIn<ResultTable::EntryType> Type>
-struct ColumnNumWithType {
+CPP_template(typename Type)(
+    requires ad_utility::SameAsAnyTypeIn<
+        Type, ResultTable::EntryType>) struct ColumnNumWithType {
   using ColumnType = Type;
   const size_t columnNum_;
 };
@@ -30,15 +31,16 @@ struct ColumnNumWithType {
 template <typename ColumnReturnType, typename... ColumnInputTypes>
 requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
     ResultTable* const table,
-    ad_utility::InvocableWithSimilarReturnType<
-        ColumnReturnType, const ColumnInputTypes&...> auto&& generator,
+    QL_CONCEPT_OR_NOTHING(
+        ad_utility::InvocableWithSimilarReturnType<
+            ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
     const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
     const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
   // Using a column more than once is the sign of an error.
   std::array<size_t, sizeof...(ColumnInputTypes)> allColumnNums{
       {inputColumns.columnNum_...}};
-  std::ranges::sort(allColumnNums);
-  AD_CONTRACT_CHECK(std::ranges::adjacent_find(allColumnNums) ==
+  ql::ranges::sort(allColumnNums);
+  AD_CONTRACT_CHECK(ql::ranges::adjacent_find(allColumnNums) ==
                     allColumnNums.end());
 
   // Fill the result column.

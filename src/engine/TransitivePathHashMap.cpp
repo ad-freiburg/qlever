@@ -11,15 +11,6 @@
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
-TransitivePathHashMap::TransitivePathHashMap(
-    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist)
-    : TransitivePathImpl<HashMapWrapper>(
-          qec, std::move(child), std::move(leftSide), std::move(rightSide),
-          minDist, maxDist) {}
-
-// _____________________________________________________________________________
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
@@ -43,4 +34,13 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     insertIntoMap(edges, startCol[i], targetCol[i]);
   }
   return HashMapWrapper{std::move(edges), allocator()};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TransitivePathHashMap::cloneImpl() const {
+  auto copy = std::make_unique<TransitivePathHashMap>(*this);
+  copy->subtree_ = subtree_->clone();
+  copy->lhs_ = lhs_.clone();
+  copy->rhs_ = rhs_.clone();
+  return copy;
 }

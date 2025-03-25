@@ -149,7 +149,10 @@ textLimitClause
 
 valuesClause : ( VALUES dataBlock )?;
 
-update: prologue (update1 (';' update)? )? ;
+// We have replaced the original recursive definition with an equivalent
+// non-recursive definition for performance reasons.
+// Original definition: `update: prologue (update1 (';' update)? )? ;`
+update: prologue (update1 (';' prologue update1)* (';' prologue)? )? ;
 
 update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
 
@@ -181,7 +184,7 @@ insertClause: INSERT quadPattern ;
 
 usingClause: USING (iri | NAMED iri) ;
 
-graphOrDefault: DEFAULT | GRAPH iri ;
+graphOrDefault: DEFAULT | GRAPH? iri ;
 
 graphRef: GRAPH iri ;
 
@@ -195,7 +198,10 @@ quads: triplesTemplate? ( quadsNotTriples '.'? triplesTemplate? )* ;
 
 quadsNotTriples: GRAPH varOrIri '{' triplesTemplate? '}' ;
 
-triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
+// We have replaced the original recursive definition with an equivalent
+// non-recursive definition for performance reasons.
+// Original definition: `triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;`
+triplesTemplate: triplesSameSubject ( '.' triplesSameSubject )* '.'? ;
 
 
 // Corresponds to GraphPattern.

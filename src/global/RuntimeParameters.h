@@ -20,6 +20,7 @@ inline auto& RuntimeParameters() {
   // clearly misunderstand something about static initialization.
   static ad_utility::Parameters params = []() {
     using namespace std::chrono_literals;
+    using namespace ad_utility::memory_literals;
     auto ensureStrictPositivity = [](auto&& parameter) {
       parameter.setParameterConstraint(
           [](std::chrono::seconds value, std::string_view parameterName) {
@@ -53,7 +54,18 @@ inline auto& RuntimeParameters() {
         Bool<"throw-on-unbound-variables">{false},
         // Control up until which size lazy results should be cached. Caching
         // does cause significant overhead for this case.
-        MemorySizeParameter<"lazy-result-max-cache-size">{5_MB}};
+        MemorySizeParameter<"cache-max-size-lazy-result">{5_MB},
+        Bool<"websocket-updates-enabled">{true},
+        // When the result of an index scan is smaller than a single block, then
+        // its size estimate will be the size of the block divided by this
+        // value.
+        SizeT<"small-index-scan-size-estimate-divisor">{5},
+        // Determines whether the cost estimate for a cached subtree should be
+        // set to zero in query planning.
+        Bool<"zero-cost-estimate-for-cached-subtree">{false},
+        // Maximum size for the body of requests that the server will process.
+        MemorySizeParameter<"request-body-limit">{100_MB},
+    };
   }();
   return params;
 }

@@ -85,6 +85,9 @@ class SparqlExpression {
   // is correct for most of the expressions.
   virtual bool containsLangExpression() const;
 
+  // Helper to identify if this is represents a `YEAR` expression.
+  virtual bool isYearExpression() const;
+
   // ___________________________________________________________________________
   using LangFilterData = SparqlExpressionPimpl::LangFilterData;
   virtual std::optional<LangFilterData> getLanguageFilterExpression() const;
@@ -122,6 +125,18 @@ class SparqlExpression {
   // Returns true iff this expression is a STR(...) expression.  Default
   // implementation returns `false`.
   virtual bool isStrExpression() const;
+
+  // Returns true iff this expression is an EXISTS(...) expression.  Default
+  // implementation returns `false`.
+  virtual bool isExistsExpression() const;
+
+  // Return non-null pointers to all `EXISTS` expressions in expression tree.
+  // The result is passed in as a reference to simplify the recursive
+  // implementation.
+  virtual void getExistsExpressions(
+      std::vector<const SparqlExpression*>& result) const final;
+  virtual void getExistsExpressions(
+      std::vector<SparqlExpression*>& result) final;
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;

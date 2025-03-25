@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/Describe.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
@@ -177,4 +178,19 @@ TEST(Describe, simpleMembers) {
   ASSERT_EQ(children.size(), 1);
   EXPECT_THAT(children.at(0)->getRootOperation()->getDescriptor(),
               Eq("NeutralElement"));
+}
+
+// _____________________________________________________________________________
+TEST(Describe, clone) {
+  auto qec = getQec();
+  parsedQuery::Describe parsedDescribe;
+  parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
+  Describe describe{qec,
+                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    parsedDescribe};
+
+  auto clone = describe.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(describe, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), describe.getDescriptor());
 }

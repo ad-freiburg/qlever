@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
+#include "engine/Operation.h"
+#include "parser/ParsedQuery.h"
 
 class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
@@ -48,12 +48,13 @@ class Values : public Operation {
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
 

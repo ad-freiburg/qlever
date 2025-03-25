@@ -51,7 +51,7 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
@@ -73,4 +73,10 @@ ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Sort::cloneImpl() const {
+  return std::make_unique<Sort>(_executionContext, subtree_->clone(),
+                                sortColumnIndices_);
 }

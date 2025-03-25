@@ -336,6 +336,7 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
    * <true, matchContent> on success and <false, emptyStringView> on failure
    */
   struct Matcher {
+    // TODO<C++17, joka921>: Template-value feature not available in C++17
     template <auto& regex>
     static std::pair<bool, std::string_view> process(
         std::string_view data) noexcept {

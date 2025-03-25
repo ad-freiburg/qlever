@@ -22,16 +22,16 @@ using OptValue = std::optional<std::string>;
 // usage within the `Filter()`. In addition, `Filter()` requires access to the
 // optional underlying variable, this access is solved over the stand alone
 // function `getVariableFromLangExpression()`.
-template <typename NaryOperation>
-requires(isOperation<NaryOperation>)
-class LangExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(
+    requires isOperation<NaryOperation>) class LangExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
   bool containsLangExpression() const override { return true; }
 
   std::optional<Variable> variable() const {
-    std::optional<SparqlExpression*> optChild = this->getNthChild(0);
+    std::optional<SparqlExpression*> optChild = this->getChildAtIndex(0);
     if (auto stringPtr =
             dynamic_cast<const VariableExpression*>(optChild.value())) {
       return stringPtr->value();

@@ -17,7 +17,11 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {}
+    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+  AD_CORRECTNESS_CHECK(subtree_);
+  subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
+      std::move(subtree_), keepIndices_);
+}
 
 // _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
@@ -59,7 +63,7 @@ Result::Generator Distinct::lazyDistinct(Result::LazyResult input,
 }
 
 // _____________________________________________________________________________
-ProtoResult Distinct::computeResult(bool requestLaziness) {
+Result Distinct::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
@@ -77,9 +81,9 @@ ProtoResult Distinct::computeResult(bool requestLaziness) {
       CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
                       std::move(subRes->idTables()), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn()}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn()};
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{cppcoro::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
@@ -97,7 +101,7 @@ IdTable Distinct::distinct(
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
-  // Variant of `std::ranges::unique` that allows to skip the begin rows of
+  // Variant of `ql::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
   auto begin =
       ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
@@ -181,4 +185,10 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
 
   LOG(DEBUG) << "Distinct done.\n";
   return std::move(output).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Distinct::cloneImpl() const {
+  return std::make_unique<Distinct>(_executionContext, subtree_->clone(),
+                                    keepIndices_);
 }

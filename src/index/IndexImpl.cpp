@@ -71,10 +71,11 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
   auto makeRdfParserImpl =
-      [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
+      [this, &files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    return std::make_unique<RdfMultifileParser<TokenizerT>>(files);
+    return std::make_unique<RdfMultifileParser<TokenizerT>>(
+        files, this->parserBufferSize());
   };
 
   // `callFixedSize` litfts runtime integers to compile time integers. We use it
@@ -548,6 +549,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
+  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
+              << std::endl;
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -683,10 +686,11 @@ auto IndexImpl::convertPartialToGlobalIds(
       for (Buffer::row_reference triple : *triples) {
         transformTriple(triple, *idMap);
       }
-      auto [beginInternal, endInternal] = std::ranges::partition(
-          *triples, [&isQLeverInternalTriple](const auto& row) {
-            return !isQLeverInternalTriple(row);
-          });
+      auto beginInternal =
+          std::partition(triples->begin(), triples->end(),
+                         [&isQLeverInternalTriple](const auto& row) {
+                           return !isQLeverInternalTriple(row);
+                         });
       IdTableStatic<NumColumnsIndexBuilding> internalTriples(
           triples->getAllocator());
       // TODO<joka921> We could leave the partitioned complete block as is,
@@ -694,7 +698,7 @@ auto IndexImpl::convertPartialToGlobalIds(
       // push only a part of a block. We then would safe the copy of the
       // internal triples here, but I am not sure whether this is worth it.
       internalTriples.insertAtEnd(*triples, beginInternal - triples->begin(),
-                                  endInternal - triples->begin());
+                                  triples->end() - triples->begin());
       triples->resize(beginInternal - triples->begin());
 
       Buffers buffers{std::move(*triples), std::move(internalTriples)};
@@ -890,9 +894,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   // `Permutation`class, but we first have to deal with The delta triples for
   // the additional permutations.
   auto setMetadata = [this](const Permutation& p) {
-    deltaTriplesManager().modify([&p](DeltaTriples& deltaTriples) {
+    deltaTriplesManager().modify<void>([&p](DeltaTriples& deltaTriples) {
       deltaTriples.setOriginalMetadata(p.permutation(),
-                                       p.metaData().blockData());
+                                       p.metaData().blockDataShared());
     });
   };
 
@@ -1129,6 +1133,10 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
+  loadDataMember("text-scoring-metric", textScoringMetric_,
+                 TextScoringMetric::EXPLICIT);
+  loadDataMember("b-and-k-parameter-for-text-scoring",
+                 bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
@@ -1620,12 +1628,12 @@ constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
 }  // namespace
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                    BlocksOfTriples sortedTriples,
-                                    bool doWriteConfiguration,
-                                    NextSorter&&... nextSorter)
+CPP_template_def(typename... NextSorter)(requires(
+    sizeof...(NextSorter) <=
+    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                            BlocksOfTriples sortedTriples,
+                                            bool doWriteConfiguration,
+                                            NextSorter&&... nextSorter)
 
 {
   size_t numTriplesNormal = 0;
@@ -1652,21 +1660,20 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(
+    requires(sizeof...(NextSorter) <=
+             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                                 BlocksOfTriples sortedTriples,
+                                                 NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-    size_t numColumns, BlocksOfTriples sortedTriples,
-    NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+        size_t numColumns, BlocksOfTriples sortedTriples,
+        NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   size_t numSubjectsTotal = 0;
   auto numSubjectCounter = makeNumDistinctIdsCounter<0>(numSubjectsNormal);
@@ -1714,11 +1721,11 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(
+    requires(sizeof...(NextSorter) <=
+             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                                 BlocksOfTriples sortedTriples,
+                                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;

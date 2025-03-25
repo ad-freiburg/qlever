@@ -5,10 +5,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../WordsAndDocsFileLineCreator.h"
 #include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForWord.h"
@@ -26,45 +28,45 @@ std::string kg =
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 std::string wordsFileContent =
-    h::createWordsFileLine("astronomer", false, 1, 1) +
-    h::createWordsFileLine("<Astronomer>", true, 1, 0) +
-    h::createWordsFileLine("scientist", false, 1, 1) +
-    h::createWordsFileLine("field", false, 1, 1) +
-    h::createWordsFileLine("astronomy", false, 1, 1) +
-    h::createWordsFileLine("astronomer", false, 2, 0) +
-    h::createWordsFileLine("<Astronomer>", true, 2, 0) +
-    h::createWordsFileLine(":s:firstsentence", false, 2, 0) +
-    h::createWordsFileLine("scientist", false, 2, 0) +
-    h::createWordsFileLine("field", false, 2, 0) +
-    h::createWordsFileLine("astronomy", false, 2, 0) +
-    h::createWordsFileLine("astronomy", false, 3, 1) +
-    h::createWordsFileLine("concentrates", false, 3, 1) +
-    h::createWordsFileLine("studies", false, 3, 1) +
-    h::createWordsFileLine("specific", false, 3, 1) +
-    h::createWordsFileLine("question", false, 3, 1) +
-    h::createWordsFileLine("outside", false, 3, 1) +
-    h::createWordsFileLine("scope", false, 3, 1) +
-    h::createWordsFileLine("earth", false, 3, 1) +
-    h::createWordsFileLine("astronomy", false, 4, 1) +
-    h::createWordsFileLine("concentrates", false, 4, 1) +
-    h::createWordsFileLine("studies", false, 4, 1) +
-    h::createWordsFileLine("field", false, 4, 1) +
-    h::createWordsFileLine("outside", false, 4, 1) +
-    h::createWordsFileLine("scope", false, 4, 1) +
-    h::createWordsFileLine("earth", false, 4, 1) +
-    h::createWordsFileLine("tester", false, 5, 1) +
-    h::createWordsFileLine("rockets", false, 5, 1) +
-    h::createWordsFileLine("astronomer", false, 5, 1) +
-    h::createWordsFileLine("<Astronomer>", true, 5, 0) +
-    h::createWordsFileLine("although", false, 5, 1) +
-    h::createWordsFileLine("astronomer", false, 6, 0) +
-    h::createWordsFileLine("<Astronomer>", true, 6, 0) +
-    h::createWordsFileLine("although", false, 6, 0) +
-    h::createWordsFileLine("<Astronomer>", true, 6, 0) +
-    h::createWordsFileLine("space", false, 6, 1) +
-    h::createWordsFileLine("<Astronomer>", true, 7, 0) +
-    h::createWordsFileLine("space", false, 7, 0) +
-    h::createWordsFileLine("earth", false, 7, 1);
+    createWordsFileLineAsString("astronomer", false, 1, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
+    createWordsFileLineAsString("scientist", false, 1, 1) +
+    createWordsFileLineAsString("field", false, 1, 1) +
+    createWordsFileLineAsString("astronomy", false, 1, 1) +
+    createWordsFileLineAsString("astronomer", false, 2, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
+    createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
+    createWordsFileLineAsString("scientist", false, 2, 0) +
+    createWordsFileLineAsString("field", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 3, 1) +
+    createWordsFileLineAsString("concentrates", false, 3, 1) +
+    createWordsFileLineAsString("studies", false, 3, 1) +
+    createWordsFileLineAsString("specific", false, 3, 1) +
+    createWordsFileLineAsString("question", false, 3, 1) +
+    createWordsFileLineAsString("outside", false, 3, 1) +
+    createWordsFileLineAsString("scope", false, 3, 1) +
+    createWordsFileLineAsString("earth", false, 3, 1) +
+    createWordsFileLineAsString("astronomy", false, 4, 1) +
+    createWordsFileLineAsString("concentrates", false, 4, 1) +
+    createWordsFileLineAsString("studies", false, 4, 1) +
+    createWordsFileLineAsString("field", false, 4, 1) +
+    createWordsFileLineAsString("outside", false, 4, 1) +
+    createWordsFileLineAsString("scope", false, 4, 1) +
+    createWordsFileLineAsString("earth", false, 4, 1) +
+    createWordsFileLineAsString("tester", false, 5, 1) +
+    createWordsFileLineAsString("rockets", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 5, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
+    createWordsFileLineAsString("although", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("although", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("space", false, 6, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
+    createWordsFileLineAsString("space", false, 7, 0) +
+    createWordsFileLineAsString("earth", false, 7, 1);
 
 std::string firstDocText =
     "An astronomer is a scientist in the field of "
@@ -77,8 +79,8 @@ std::string secondDocText =
     "too although they might not be in space but on "
     "earth.";
 
-std::string docsFileContent = h::createDocsFileLine(4, firstDocText) +
-                              h::createDocsFileLine(7, secondDocText);
+std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
+                              createDocsFileLineAsString(7, secondDocText);
 
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};
@@ -162,15 +164,77 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 6));
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 7));
 
-  // Tests if the correct scores are retrieved from the non literal texts
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 0, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 1, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 2, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 3, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 4, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 5, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 6, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 7, true));
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // Explicit scores
+  qec =
+      getQec(kg, true, true, true, 16_B, true, true,
+             contentsOfWordsFileAndDocsFile, 1_kB, TextScoringMetric::EXPLICIT);
+
+  TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultCount = score1.computeResultOnlyForTesting();
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 0, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 1, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 2, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 3, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 4, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 5, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 6, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 7, true));
+
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // TFIDF
+  qec = getQec(kg, true, true, true, 16_B, true, true,
+               contentsOfWordsFileAndDocsFile, 1_kB, TextScoringMetric::TFIDF);
+  TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
+  float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
+  float tfidfWord1Doc7 = h::calculateTFIDFFromParameters(1, 2, 6);
+  float tfidfWord2Doc4 = h::calculateTFIDFFromParameters(1, 1, 6);
+  ASSERT_EQ(tfidfWord1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 0, true, false));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 1, true, false));
+  ASSERT_EQ(tfidfWord1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 2, true, false));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 3, true, false));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 4, true, false));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 5, true, false));
+  ASSERT_EQ(tfidfWord1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 6, true, false));
+  ASSERT_EQ(tfidfWord1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 7, true, false));
+
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // BM25
+  qec = getQec(kg, true, true, true, 16_B, true, true,
+               contentsOfWordsFileAndDocsFile, 1_kB, TextScoringMetric::BM25);
+  TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultBM25 = score3.computeResultOnlyForTesting();
+  float bm25Word1Doc4 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 15, 0.75, 1.75);
+  float bm25Word1Doc7 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 10, 0.75, 1.75);
+  float bm25Word2Doc4 =
+      h::calculateBM25FromParameters(1, 1, 6, 7, 15, 0.75, 1.75);
+  ASSERT_EQ(bm25Word1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 0, true, false));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 1, true, false));
+  ASSERT_EQ(bm25Word1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 2, true, false));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 3, true, false));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 4, true, false));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 5, true, false));
+  ASSERT_EQ(bm25Word1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 6, true, false));
+  ASSERT_EQ(bm25Word1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 7, true, false));
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
@@ -254,5 +318,17 @@ TEST(TextIndexScanForWord, KnownEmpty) {
 
   TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
   ASSERT_TRUE(!s5.knownEmptyResult());
+}
+
+// _____________________________________________________________________________
+TEST(TextIndexScanForWord, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForWord scan{qec, Variable{"?text1"}, "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(scan, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), scan.getDescriptor());
 }
 }  // namespace

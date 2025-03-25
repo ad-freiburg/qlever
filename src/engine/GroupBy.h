@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/Join.h"
 #include "engine/Operation.h"
@@ -99,7 +100,7 @@ class GroupBy : public Operation {
   sparqlExpression::EvaluationContext createEvaluationContext(
       const LocalVocab& localVocab, const IdTable& idTable) const;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -112,10 +113,11 @@ class GroupBy : public Operation {
   // function returns the starting index of the last block of this `idTable`.
   // The argument `currentGroupBlock` is used to store the values of the group
   // by columns for the current group.
-  template <int COLS>
-  size_t searchBlockBoundaries(
-      const std::invocable<size_t, size_t> auto& onBlockChange,
-      const IdTableView<COLS>& idTable, GroupBlock& currentGroupBlock) const;
+  CPP_template(int COLS,
+               typename T)(requires ranges::invocable<T, size_t, size_t>) size_t
+      searchBlockBoundaries(const T& onBlockChange,
+                            const IdTableView<COLS>& idTable,
+                            GroupBlock& currentGroupBlock) const;
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>
@@ -573,6 +575,9 @@ class GroupBy : public Operation {
   // Return true if the `variable` is part of the result of the subtree of this
   // GROUP BY. This is used by some of the optimizations above.
   bool isVariableBoundInSubtree(const Variable& variable) const;
+
+ private:
+  std::unique_ptr<Operation> cloneImpl() const override;
 
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.

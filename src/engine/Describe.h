@@ -47,8 +47,9 @@ class Describe : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Add all triples where the subject is one of the `blankNodes` (an `IdTable`

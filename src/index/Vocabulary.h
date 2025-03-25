@@ -105,14 +105,14 @@ class Vocabulary {
   static constexpr bool isCompressed_ =
       std::is_same_v<StringType, CompressedString>;
 
-  // If a word uses one of these language tags it will be internalized.
-  vector<std::string> internalizedLangs_{"en"};
-
-  // If a word starts with one of those prefixes, it will be externalized When
-  // a word matched both `externalizedPrefixes_` and `internalizedLangs_`, it
-  // will be externalized. Qlever-internal prefixes are currently not
-  // externalized.
-  vector<std::string> externalizedPrefixes_;
+  // If a literal uses one of these language tags or starts with one of these
+  // prefixes, it will be externalized. By default, everything is externalized.
+  // Both of these settings can be overridden using the `settings.json` file.
+  //
+  // NOTE: Qlever-internal prefixes are currently always internalized, no matter
+  // how `internalizedLangs_` and `externalizedPrefixes_` are set.
+  vector<std::string> internalizedLangs_;
+  vector<std::string> externalizedPrefixes_{""};
 
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,

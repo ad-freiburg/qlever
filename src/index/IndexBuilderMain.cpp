@@ -1,8 +1,8 @@
-// Copyright 2014, University of Freiburg,
+// Copyright 2014 - 2025 University of Freiburg
 // Chair of Algorithms and Data Structures.
-// Author:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -155,6 +155,7 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
+  string scoringMetric = "explicit";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -164,7 +165,10 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  float bScoringParam = 0.75;
+  float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> stxxlMemory;
+  std::optional<ad_utility::MemorySize> parserBufferSize;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -213,6 +217,17 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
+  add("bm25-b", po::value(&bScoringParam),
+      "Sets the b param in the BM25 scoring metric for the fulltext index."
+      " This has to be between (including) 0 and 1.");
+  add("bm25-k", po::value(&kScoringParam),
+      "Sets the k param in the BM25 scoring metric for the fulltext index."
+      "This has to be greater than or equal to 0.");
+  add("set-scoring-metric,S", po::value(&scoringMetric),
+      "Sets the scoring metric used. Options are \"explicit\" for explicit "
+      "scores that are read from the wordsfile, "
+      "\"tf-idf\" for tf idf "
+      "and \"bm25\" for bm25. The default is count.");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),
@@ -228,6 +243,9 @@ int main(int argc, char** argv) {
   add("stxxl-memory,m", po::value(&stxxlMemory),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
+  add("parser-buffer-size,b", po::value(&parserBufferSize),
+      "The size of the buffer used for parsing the input files. This must be "
+      "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
       "Do not delete temporary files from index creation for debugging.");
 
@@ -241,6 +259,14 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (kScoringParam < 0) {
+      throw std::invalid_argument("The value of bm25-k must be >= 0");
+    }
+    if (bScoringParam < 0 || bScoringParam > 1) {
+      throw std::invalid_argument(
+          "The value of bm25-b must be between and "
+          "including 0 and 1");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
@@ -248,6 +274,9 @@ int main(int argc, char** argv) {
   }
   if (stxxlMemory.has_value()) {
     index.memoryLimitIndexBuilding() = stxxlMemory.value();
+  }
+  if (parserBufferSize.has_value()) {
+    index.parserBufferSize() = parserBufferSize.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
@@ -322,9 +351,25 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
+    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
 
-    if (!wordsfile.empty() || addWordsFromLiterals) {
-      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
+    if (!(wordsAndDocsFileSpecified ||
+          (wordsfile.empty() && docsfile.empty()))) {
+      throw std::runtime_error(absl::StrCat(
+          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
+          ". Both or none of docsfile and wordsfile have to be given to build "
+          "text index. If none are given the option to add words from literals "
+          "has to be true. For details see --help."));
+    }
+    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
+      index.storeTextScoringParamsInConfiguration(
+          getTextScoringMetricFromString(scoringMetric), bScoringParam,
+          kScoringParam);
+      index.buildTextIndexFile(
+          wordsAndDocsFileSpecified
+              ? std::optional{std::pair{wordsfile, docsfile}}
+              : std::nullopt,
+          addWordsFromLiterals);
     }
 
     if (!docsfile.empty()) {

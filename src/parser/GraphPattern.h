@@ -21,8 +21,8 @@ struct GraphPatternOperation;
 // of the operations that must be completed before applying the text limit
 // operation.
 struct TextLimitMetaObject {
-  vector<Variable> entityVars_;
-  vector<Variable> scoreVars_;
+  std::vector<Variable> entityVars_;
+  std::vector<Variable> scoreVars_;
   uint64_t idsOfMustBeFinishedOperations_;
 };
 
@@ -42,8 +42,9 @@ class GraphPattern {
   // pattern.
 
   // Modify query to take care of language filter. `variable` is the variable,
-  // `languageInQuotes` is the language.
-  void addLanguageFilter(const Variable& variable,
+  // `languageInQuotes` is the language. Return `true` if it could successfully
+  // be applied, false otherwise.
+  bool addLanguageFilter(const Variable& variable,
                          const std::string& languageInQuotes);
 
   bool _optional;

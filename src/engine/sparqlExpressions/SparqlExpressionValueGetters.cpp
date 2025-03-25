@@ -91,16 +91,82 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(
     Id id, const EvaluationContext* context) const {
-  auto optionalLiteralOrIriAndType =
-      ExportQueryExecutionTrees::idToLiteralOrIri(context->_qec.getIndex(), id,
-                                                  context->_localVocab);
-  if (optionalLiteralOrIriAndType.has_value()) {
-    return std::move(optionalLiteralOrIriAndType.value());
-  } else {
-    return std::nullopt;
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
+                                              const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, false);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, true);
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> ReplacementStringGetter::operator()(
+    Id id, const EvaluationContext* context) const {
+  std::optional<std::string> originalString =
+      StringValueGetter::operator()(id, context);
+  if (!originalString.has_value()) {
+    return originalString;
   }
+  return convertToReplacementString(originalString.value());
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> ReplacementStringGetter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return convertToReplacementString(asStringViewUnsafe(s.getContent()));
+}
+
+// ____________________________________________________________________________
+std::string ReplacementStringGetter::convertToReplacementString(
+    std::string_view view) {
+  std::string result;
+  // Rough estimate of the size of the result string.
+  result.reserve(view.size());
+  for (size_t i = 0; i < view.size(); i++) {
+    char c = view.at(i);
+    switch (c) {
+      case '$':
+        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
+        result.push_back('\\');
+        break;
+      case '\\':
+        // "\$" is unescaped to "$"
+        if (i + 1 < view.size() && view.at(i + 1) == '$') {
+          result.push_back('$');
+          i++;
+        } else {
+          // Escape existing backslashes.
+          result.push_back(c);
+          result.push_back(c);
+        }
+        break;
+      default:
+        result.push_back(c);
+        break;
+    }
+  }
+  return result;
 }
 
 // ____________________________________________________________________________
@@ -250,11 +316,11 @@ OptIri IriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-template <typename T, typename ValueGetter>
-requires std::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
-         std::same_as<std::optional<std::string>, T>
-T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
-           ValueGetter& valueGetter) {
+CPP_template(typename T, typename ValueGetter)(
+    requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+             concepts::same_as<std::optional<std::string>, T>)) T
+    getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+             ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
