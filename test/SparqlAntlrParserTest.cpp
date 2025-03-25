@@ -1991,23 +1991,23 @@ TEST(SparqlParser, Exists) {
   auto expectGroupGraphPattern =
       ExpectCompleteParse<&Parser::groupGraphPattern>{};
   expectGroupGraphPattern("{ ?a ?b ?c . FILTER EXISTS {?a <bar> ?foo} }",
-                          containsExistsFilter(selectABarFooMatcher(
+                          m::ContainsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ ?a ?b ?c . FILTER NOT EXISTS {?a <bar> ?foo} }",
-                          containsExistsFilter(selectABarFooMatcher(
+                          m::ContainsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ FILTER EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
-                          containsExistsFilter(selectABarFooMatcher(
+                          m::ContainsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
   expectGroupGraphPattern("{ FILTER NOT EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
-                          containsExistsFilter(selectABarFooMatcher(
+                          m::ContainsExistsFilter(selectABarFooMatcher(
                               std::nullopt, std::nullopt, {{"?a"}})));
 
   auto doesNotBindExists = [&]() {
-    auto innerMatcher = containsExistsFilter(selectABarFooMatcher(
+    auto innerMatcher = m::ContainsExistsFilter(selectABarFooMatcher(
         std::nullopt, std::nullopt, std::vector<std::string>{}));
     using parsedQuery::GroupGraphPattern;
-    return AD_FIELD(GraphPattern, _graphPatterns,
+    return AD_FIELD(parsedQuery::GraphPattern, _graphPatterns,
                     ::testing::ElementsAre(
                         ::testing::VariantWith<GroupGraphPattern>(
                             AD_FIELD(GroupGraphPattern, _child, innerMatcher)),

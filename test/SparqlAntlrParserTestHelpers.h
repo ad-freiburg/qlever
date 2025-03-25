@@ -1179,7 +1179,7 @@ inline auto ExistsFilter =
            std::nullopt) -> Matcher<const SparqlFilter&> {
   return AD_FIELD(SparqlFilter, expression_,
                   AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getPimpl,
-                              Exists(SelectQuery(AsteriskSelect(), m,
+                              Exists(SelectQuery(VariablesSelect({}), m,
                                                  defaultGraphs, namedGraphs))));
 };
 
