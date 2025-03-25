@@ -448,8 +448,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       throw std::runtime_error(absl::StrCat(
           msg, ad_utility::truncateOperationString(operationString)));
     }
-    if (ql::ranges::all_of(operations,
-                           std::mem_fn(&ParsedQuery::hasUpdateClause))) {
+    if (ql::ranges::all_of(operations, &ParsedQuery::hasUpdateClause)) {
       co_return co_await processUpdate(
           std::move(operations), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value());

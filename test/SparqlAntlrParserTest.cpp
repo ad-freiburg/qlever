@@ -2427,6 +2427,15 @@ TEST(SparqlParser, Update) {
           AllOf(fooInsertMatcher,
                 m::pq::OriginalString(
                     "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
+  expectUpdate_("", testing::IsEmpty());
+  expectUpdate_(" ", testing::IsEmpty());
+  expectUpdate_("PREFIX ex: <http://example.org>", testing::IsEmpty());
+  expectUpdate_("INSERT DATA { <a> <b> <c> }; PREFIX ex: <http://example.org>",
+                testing::ElementsAre(insertMatcher));
+  expectUpdate_("### Some comment \n \n #someMoreComments", testing::IsEmpty());
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> };### Some comment \n \n #someMoreComments",
+      testing::ElementsAre(insertMatcher));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
