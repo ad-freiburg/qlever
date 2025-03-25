@@ -1634,6 +1634,8 @@ TEST(QueryPlanner, SpatialJoinService) {
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   auto Basel = SpatialJoinAlgorithm::BASELINE;
   auto BBox = SpatialJoinAlgorithm::BOUNDING_BOX;
+  auto SJ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto NoType = SpatialJoinJoinType::NONE;
   PayloadVariables emptyPayload{};
 
   // Simple base cases
@@ -1647,7 +1649,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2, NoType,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1658,7 +1660,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2, NoType,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1670,7 +1672,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, Basel,
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, Basel, NoType,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1683,7 +1685,120 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
-                     BBox, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                     BBox, NoType,scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:within-dist ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::WITHIN_DIST, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:intersects ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::INTERSECTS, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:covers ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::COVERS, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:contains ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::CONTAINS, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:touches ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::TOUCHES, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:crosses ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::CROSSES, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:overlaps ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::OVERLAPS, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:equals ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                     SJ, SpatialJoinJoinType::EQUALS, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1696,7 +1811,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:numNearestNeighbors 2 ;"
       "spatialSearch:bindDistance ?dist ."
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, 2, V{"?y"}, V{"?b"}, V{"?dist"}, emptyPayload, S2,
+      h::SpatialJoin(100, 2, V{"?y"}, V{"?b"}, V{"?dist"}, emptyPayload, S2, NoType,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1708,7 +1823,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+      h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2, NoType,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 }
 
@@ -1720,6 +1835,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   using PV = PayloadVariables;
+  auto NoType = SpatialJoinJoinType::NONE;
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1734,7 +1850,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-                     PV{std::vector<V>{V{"?a"}}}, S2, scan("?x", "<p>", "?y"),
+                     PV{std::vector<V>{V{"?a"}}}, S2, NoType, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1750,7 +1866,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, scan("?x", "<p>", "?y"),
+          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, NoType, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
   // Right variable and duplicates are possible (silently deduplicated during
@@ -1769,7 +1885,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}}, S2,
+          PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}}, S2, NoType,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
@@ -1787,7 +1903,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload <all> ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
-          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2, NoType,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
   h::expect(
@@ -1803,7 +1919,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload spatialSearch:all ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
-          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2, NoType,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
@@ -1822,7 +1938,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload ?a ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
-          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2, NoType,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
@@ -1831,6 +1947,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
+  auto NoType = SpatialJoinJoinType::NONE;
 
   // If only maxDistance is used but not numNearestNeighbors, the right variable
   // must not come from inside the SERVICE
@@ -1848,7 +1965,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
                      // Payload variables have the default all instead of empty
                      // in this case
-                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+                     PayloadVariables::all(), S2,NoType, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   // If the user explicitly states that they want all payload variables (which
@@ -1865,8 +1982,8 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       "spatialSearch:maxDistance 1 ; "
       "spatialSearch:payload spatialSearch:all ."
       " } }",
-      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, 
+                     PayloadVariables::all(), S2, NoType,scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   // Nearest neighbors search requires the right child to be defined inside the
@@ -1919,6 +2036,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   using PV = PayloadVariables;
+  auto NoType = SpatialJoinJoinType::NONE;
 
   h::expect(
       "SELECT * WHERE {"
@@ -1932,14 +2050,14 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // children one way or the other depending on cost estimates. Both
       // versions are semantically correct.
       ::testing::AnyOf(
-          h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(), S2,
+          h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(), S2, NoType,
                          h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt,
-                                        PV::all(), S2, scan("?x", "<p>", "?y"),
+                                        PV::all(), S2, NoType,scan("?x", "<p>", "?y"),
                                         scan("?ac", "<p2>", "?c")),
                          scan("?ab", "<p1>", "?b")),
-          h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(), S2,
+          h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(), S2, NoType,
                          h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                                        PV::all(), S2, scan("?x", "<p>", "?y"),
+                                        PV::all(), S2, NoType,scan("?x", "<p>", "?y"),
                                         scan("?ab", "<p1>", "?b")),
                          scan("?ac", "<p2>", "?c"))));
   h::expect(
@@ -1970,14 +2088,14 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // versions are semantically correct.
       ::testing::AnyOf(
           h::SpatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
-                         PV{std::vector<V>{V{"?ac"}}}, S2,
+                         PV{std::vector<V>{V{"?ac"}}}, S2, NoType,
                          h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
-                                        S2, scan("?x", "<p>", "?y"),
+                                        S2, NoType,scan("?x", "<p>", "?y"),
                                         scan("?ab", "<p1>", "?b")),
                          scan("?ac", "<p2>", "?c")),
-          h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2,
+          h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2, NoType,
                          h::SpatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
-                                        PV{std::vector<V>{V{"?ac"}}}, S2,
+                                        PV{std::vector<V>{V{"?ac"}}}, S2,NoType,
                                         scan("?x", "<p>", "?y"),
                                         scan("?ac", "<p2>", "?c")),
                          scan("?ab", "<p1>", "?b"))));
@@ -2249,6 +2367,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
+  auto NoType = SpatialJoinJoinType::NONE;
 
   // For maxDistance the special predicate remains supported
   h::expect(
@@ -2258,7 +2377,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+                     PayloadVariables::all(), S2,  NoType,scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "SELECT * WHERE {"
@@ -2266,8 +2385,8 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?y <max-distance-in-meters:5000> ?b ."
       "?x <p> ?y ."
       " }",
-      h::SpatialJoin(5000, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+      h::SpatialJoin(5000, -1, V{"?y"}, V{"?b"}, std::nullopt, 
+                     PayloadVariables::all(), S2, NoType,scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   // Test that invalid triples throw an error
@@ -2319,8 +2438,8 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?y <nearest-neighbors:2:500> ?b }",
       h::QetWithWarnings(
           {"special predicate <nearest-neighbors:...> is deprecated"},
-          h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+          h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt, 
+                         PayloadVariables::all(), S2, NoType,scan("?x", "<p>", "?y"),
                          scan("?a", "<p>", "?b"))));
   h::expect(
       "SELECT ?x ?y WHERE {"
@@ -2330,7 +2449,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       h::QetWithWarnings(
           {"special predicate <nearest-neighbors:...> is deprecated"},
           h::SpatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+                         PayloadVariables::all(), S2, NoType, scan("?x", "<p>", "?y"),
                          scan("?a", "<p>", "?b"))));
 
   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"

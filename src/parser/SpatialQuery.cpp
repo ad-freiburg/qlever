@@ -170,9 +170,12 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   }
 
   // Default join type
-  SpatialJoinJoinType joinType = SpatialJoinJoinType::INTERSECTS;
-  if (joinType_.has_value()) {
-    joinType = joinType_.value();
+  SpatialJoinJoinType joinType = SpatialJoinJoinType::NONE;
+  if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    joinType = SpatialJoinJoinType::INTERSECTS;
+    if (joinType_.has_value()) {
+      joinType = joinType_.value();
+    }
   }
 
   // Payload variables

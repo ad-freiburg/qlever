@@ -262,7 +262,7 @@ class SpatialJoinVarColParamTest
 
   std::shared_ptr<SpatialJoin> makeSpatialJoin(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
-      bool addDist = true, PayloadVariables pv = PayloadVariables::all()) {
+      bool addDist = true, PayloadVariables pv = PayloadVariables::all(), SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM, SpatialJoinJoinType joinType = SpatialJoinJoinType::WITHIN_DIST) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -276,7 +276,7 @@ class SpatialJoinVarColParamTest
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv},
+                                     Variable{"?point2"}, dist, pv, alg, joinType},
             std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -296,11 +296,11 @@ class SpatialJoinVarColParamTest
   // failed, instead of failing for both getResultWidth() and
   // computeVariableToColumnMap() if only one of them is wrong
   void testGetResultWidthOrVariableToColumnMap(
-      VarColTestSuiteParam parameters) {
+      VarColTestSuiteParam parameters, SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildTestQEC();
-    auto spJoin2 = makeSpatialJoin(qec, parameters);
+    auto spJoin2 = makeSpatialJoin(qec, parameters, true, PayloadVariables::all(), alg);
     auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
@@ -320,6 +320,74 @@ class SpatialJoinVarColParamTest
           addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
       expectedColumns.push_back({"?distOfTheTwoObjectsAddedInternally", "0"});
+
+      auto varColMap = spatialJoin->computeVariableToColumnMap();
+      auto resultTable = spatialJoin->computeResult(false);
+
+      // if the size of varColMap and expectedColumns is the same and each
+      // element of expectedColumns is contained in varColMap, then they are the
+      // same (assuming that each element is unique)
+      ASSERT_EQ(varColMap.size(), expectedColumns.size());
+
+      for (size_t i = 0; i < expectedColumns.size(); i++) {
+        ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
+
+        // test, that the column contains the correct values
+        ColumnIndex ind =
+            varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
+        const IdTable* r = &resultTable.idTable();
+        ASSERT_LT(0, r->numRows());
+        ASSERT_LT(ind, r->numColumns());
+        ValueId tableEntry = r->at(0, ind);
+
+        if (tableEntry.getDatatype() == Datatype::VocabIndex) {
+          std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
+          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
+                      string::npos);
+        } else if (tableEntry.getDatatype() == Datatype::Int) {
+          std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
+          ASSERT_EQ(value, expectedColumns.at(i).second);
+        } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
+          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
+                                   qec->getIndex(), tableEntry, {})
+                                   .value();
+          value = absl::StrCat("\"", value, "\"^^<", type, ">");
+          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
+                      string::npos);
+        }
+      }
+    }
+  }
+
+  void testGetResultWidthOrVariableToColumnMapSpatialJoinIntersects(
+      VarColTestSuiteParam parameters) {
+    auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
+          testVarToColMap] = parameters;
+    auto qec = buildTestQEC();
+    auto spJoin2 = makeSpatialJoin(qec, parameters, false, PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinJoinType::INTERSECTS);
+    auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
+
+    size_t expectedResultWidth =
+        (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
+
+    auto numTriples = qec->getIndex().numTriples().normal;
+    ASSERT_EQ(numTriples, 15);
+
+    if (!testVarToColMap) {
+      ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
+    } else {
+      std::vector<std::pair<std::string, std::string>> expectedColumns{};
+
+      expectedColumns =
+          addExpectedColumns(expectedColumns, leftSideBigChild, "1");
+      expectedColumns =
+          addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
       auto varColMap = spatialJoin->computeVariableToColumnMap();
       auto resultTable = spatialJoin->computeResult(false);
@@ -515,6 +583,14 @@ class SpatialJoinVarColParamTest
 
 TEST_P(SpatialJoinVarColParamTest, variableToColumnMap) {
   testGetResultWidthOrVariableToColumnMap(GetParam());
+}
+
+TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoin) {
+  testGetResultWidthOrVariableToColumnMap(GetParam(), SpatialJoinAlgorithm::LIBSPATIALJOIN);
+}
+
+TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinIntersects) {
+  testGetResultWidthOrVariableToColumnMapSpatialJoinIntersects(GetParam());
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {

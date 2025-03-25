@@ -16,6 +16,7 @@
 
 // Selection of a SpatialJoin join type
 enum class SpatialJoinJoinType {
+  NONE,
   INTERSECTS,
   CONTAINS,
   COVERS,
@@ -171,6 +172,9 @@ class SpatialJoin : public Operation {
 
   // retrieve the currently selected algorithm
   SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
+
+  // retrieve the currently selected SJ jointype
+  SpatialJoinJoinType getJoinType() const { return config_.joinType_; }
 
   // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {
