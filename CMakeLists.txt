@@ -12,20 +12,6 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
 endif ()
 
-# Boost::ASIO currently seems to have a bug when multiple coroutine streams are
-# concurrently in flight because there were multiple calls to `co_spawn`.
-# `ASIO` recycles the memory for awaitable frames, but there seems to only be
-# one global unsynchronized memory pool for this recycling, which leads to all
-# kinds of race conditions. The following constant disables the memory
-# recycling and gets rid of all of those errors and crashes.
-# TODO<joka921> Further analyze and then report this bug to the ASIO
-# developers.
-add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
-
-# Fixes an error with boost versions < 1.84,
-# more information: https://github.com/boostorg/beast/issues/2661
-add_definitions("-DBOOST_ASIO_DISABLE_CONCEPTS")
-
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -165,6 +151,25 @@ endif ()
 ######################################
 find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
+
+# Boost::ASIO currently seems to have a bug when multiple coroutine streams are
+# concurrently in flight because there were multiple calls to `co_spawn`.
+# `ASIO` recycles the memory for awaitable frames, but there seems to only be
+# one global unsynchronized memory pool for this recycling, which leads to all
+# kinds of race conditions. The following constant disables the memory
+# recycling and gets rid of all of those errors and crashes.
+# TODO<joka921> Further analyze and then report this bug to the ASIO
+# developers.
+add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+
+# Fixes an error with boost versions < 1.84,
+# more information: https://github.com/boostorg/beast/issues/2661
+# Note: currently the build is broken with BOOST ASIO 1.83 + Clang-16 and there
+# seems to be nothing we can do about it.
+if (Boost_VERSION VERSION_LESS "1.83")
+    add_definitions("-DBOOST_ASIO_DISABLE_CONCEPTS")
+endif()
+
 
 ######################################
 # SSL

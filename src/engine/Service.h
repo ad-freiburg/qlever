@@ -197,8 +197,24 @@ class Service : public Operation {
       const std::vector<std::string> vars,
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
+  // This function is called by the websocket thread when a new message with the
+  // runtime info appears. If possible, directly call
+  // `updateChildRuntimeInfoNotThreadsafe` below. If not (because the
+  // runtimeInfo might be accessed by another operation), store the `message` in
+  // a cache for later usage.
   void handleChildRuntimeInfoUpdate(const std::string& msg);
+
+  // Parse the `msg` into a runtime information object, register it as a child
+  // of the runtime information of this service, and call `signalUpdate`.
   void updateChildRuntimeInfoNotThreadsafe(const std::string& msg);
+
+  // If called with `enable==true` , then after the call it is allowed to modify
+  // the runtime Information via the external websocket thread. If called with
+  // `false`, then it is forbidden after the call.
+  // In the case of `enable=true`, possible values from the runtime info cache
+  // that have been received while the writing was disabled are also propagated
+  // directly via `updateChildRuntimeInfoNotThreadsafe`.
+  void enableOrDisableRtiWrite(bool enable);
 
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);

@@ -250,23 +250,23 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   checkCancellation();
 }
 
+void Service::enableOrDisableRtiWrite(bool enable) {
+  auto lock = std::lock_guard{childRuntimeInfoLock_};
+  childRuntimeInfoAllowWrite_ = enable;
+
+  if (enable && !childRuntimeInfoBuffer_.empty()) {
+    updateChildRuntimeInfoNotThreadsafe(childRuntimeInfoBuffer_);
+    childRuntimeInfoBuffer_.clear();
+  }
+};
+
 // ____________________________________________________________________________
 Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
     ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
-  auto childRtiAllowWrite = [&](bool b) {
-    auto lock = std::lock_guard{childRuntimeInfoLock_};
-    childRuntimeInfoAllowWrite_ = b;
-
-    if (b && !childRuntimeInfoBuffer_.empty()) {
-      updateChildRuntimeInfoNotThreadsafe(childRuntimeInfoBuffer_);
-      childRuntimeInfoBuffer_.clear();
-    }
-  };
-
   LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-  childRtiAllowWrite(true);
+  enableOrDisableRtiWrite(true);
 
   size_t rowIdx = 0;
   bool varsChecked{false};
@@ -284,9 +284,9 @@ Result::Generator Service::computeResultLazily(
       if (!singleIdTable) {
         Result::IdTableVocabPair pair{std::move(idTable),
                                       std::move(localVocab)};
-        childRtiAllowWrite(false);
+        enableOrDisableRtiWrite(false);
         co_yield pair;
-        childRtiAllowWrite(true);
+        enableOrDisableRtiWrite(true);
         // Move back to reuse buffer if not moved out.
         idTable = std::move(pair.idTable_);
         idTable.clear();
@@ -323,7 +323,7 @@ Result::Generator Service::computeResultLazily(
   if (singleIdTable) {
     co_yield {std::move(idTable), std::move(localVocab)};
   }
-  childRtiAllowWrite(false);
+  enableOrDisableRtiWrite(false);
 }
 
 // ____________________________________________________________________________
@@ -659,7 +659,8 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
 
 // _____________________________________________________________________________
 void Service::updateChildRuntimeInfoNotThreadsafe(const std::string& msg) {
-  childRuntimeInformation_ = std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg)));
+  childRuntimeInformation_ =
+      std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
   auto& runtimeChildren = runtimeInfo().children_;
   runtimeChildren.clear();
   runtimeChildren.push_back(childRuntimeInformation_);
