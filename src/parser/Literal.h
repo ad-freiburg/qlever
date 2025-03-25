@@ -101,5 +101,6 @@ class Literal {
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
+
 };
 }  // namespace ad_utility::triple_component
