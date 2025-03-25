@@ -278,3 +278,64 @@ TEST(LiteralOrIri, Hashing) {
   ad_utility::HashSet<LiteralOrIri> set{lit, iri};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(lit, iri));
 }
+
+// _______________________________________________________________________
+TEST(LiteralTest, SetSubstr) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().setSubstr(0, 5);
+  EXPECT_THAT("Hello", asStringViewUnsafe(literal.getContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
+              asStringViewUnsafe(literal.getDatatype()));
+
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().setSubstr(6, 5);
+  EXPECT_THAT("World", asStringViewUnsafe(literal.getContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
+              asStringViewUnsafe(literal.getDatatype()));
+
+  // Substring works at the byte level (not the UTF-8 character level).
+  literal = LiteralOrIri::literalWithoutQuotes("Äpfel");
+  literal.getLiteral().setSubstr(0, 2);
+  EXPECT_THAT("Ä", asStringViewUnsafe(literal.getContent()));
+
+  // Test with invalid values.
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  EXPECT_THROW(literal.getLiteral().setSubstr(12, 1), ad_utility::Exception);
+  EXPECT_THROW(literal.getLiteral().setSubstr(6, 7), ad_utility::Exception);
+}
+
+TEST(LiteralOrIriTest, GetIri) {
+  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
+  EXPECT_THAT("https://example.org/books/book1",
+              asStringViewUnsafe(iri.getIriContent()));
+
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  EXPECT_THROW(literal.getIri(), ad_utility::Exception);
+}
+
+// _______________________________________________________________________
+TEST(LiteralTest, removeDatatypeOrLanguageTag) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+}
