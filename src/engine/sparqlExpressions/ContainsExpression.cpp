@@ -51,7 +51,7 @@ ContainsExpression::ContainsExpression(SparqlExpression::Ptr child,
           "bounding box) must not contain a language tag or a datatype");
     }
     */
-    boundingBoxString = removeQuotes(originalBoundingBoxString);
+    boundingBoxString = originalBoundingBoxString;
   } else {
     throw std::runtime_error(
         "The second argument to the Contains function must be a "

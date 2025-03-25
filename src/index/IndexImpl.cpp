@@ -594,7 +594,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                      sizeInternalVocabulary
               << std::endl;
 
-  res.idTriples = std::move(*idTriples.wlock());
   LOG(INFO) << "Building the Rtree..." << std::endl;
   try {
     Rtree rtree = Rtree(10000000000);
@@ -968,7 +967,6 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
       usePatterns_ = false;
     }
   }
-
   // Load the Rtree TODO
 }
 
