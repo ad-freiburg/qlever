@@ -125,11 +125,10 @@ static std::vector<BlockMetadata> getRelevantBlocks(
     const BlockSubranges& relevantBlockRanges) {
   std::vector<BlockMetadata> relevantBlocks;
   relevantBlocks.reserve(ql::concepts::transform_reduce(
-      relevantBlockRanges.begin(), relevantBlockRanges.end(), 0ULL,
-      ql::concepts::plus{},
+      relevantBlockRanges.begin(), relevantBlockRanges.end(), 0ULL, std::plus{},
       [](const BlockSubrange& range) { return range.size(); }));
   ql::ranges::copy(relevantBlockRanges | ql::views::join,
-                   ql::concepts::back_inserter(relevantBlocks));
+                   std::back_inserter(relevantBlocks));
   return relevantBlocks;
 }
 
@@ -207,8 +206,8 @@ BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
   // Vector containing the `BlockRange` mapped indices.
   BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
-                                           std::ref(blockRanges));
+  auto addRange =
+      std::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
   auto previousEndIt = idRange.begin();
   ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
     const auto& [beginIdIt, endIdIt] = idItPair;
@@ -232,8 +231,8 @@ BlockSubranges mapValueIdItRangesToBlockItRanges(
   // Vector containing the `BlockRange` mapped iterators.
   BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
-  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
-                                           std::ref(blockRanges));
+  auto addRange =
+      std::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
   ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
     const auto& [beginIdIt, endIdIt] = idItPair;
     addRange(mapValueIdItPairToBlockRange(idRangeBegin, beginIdIt, endIdIt,
@@ -276,8 +275,8 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
   }
   BlockSubranges mergedRanges;
   mergedRanges.reserve(r1.size() + r2.size());
-  auto addRange = ql::concepts::bind_front(mergeBlockRangeWithRanges,
-                                           std::ref(mergedRanges));
+  auto addRange =
+      std::bind_front(mergeBlockRangeWithRanges, std::ref(mergedRanges));
   auto idx1 = r1.begin();
   auto idx2 = r2.begin();
   while (idx1 != r1.end() && idx2 != r2.end()) {
