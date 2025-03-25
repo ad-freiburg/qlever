@@ -4,7 +4,7 @@ IN-CONTEXT:
 
 The query planner creates a node for each triple and a scan for each node.
 This is not necessary for each in-context relation because several triples are worded in one operation.
-The only pyhsical scan for a relation is the scan of the wordlists.
+The only physical scan for a relation is the scan of the wordlists.
 Thus, only triples of the form in-context <WORDS> need a SCAN.
 Where WORDS can be literals, prefixes and also concrete entities.
 TODO: This will change when there is support for text without words.

@@ -2,12 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <sstream>
 #include <string>
 
-#include "./IndexTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
@@ -21,23 +21,27 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/Sort.h"
-#include "engine/TextOperationWithFilter.h"
-#include "engine/TextOperationWithoutFilter.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
-std::vector<std::string> getTestCollectionOfWords(size_t size) {
-  std::vector<std::string> testCollectionOfWords(size);
-  for (size_t i = 0; i < testCollectionOfWords.size(); ++i) {
-    testCollectionOfWords[i] = std::to_string(i * 7635475567ULL);
+
+using TestWords = std::vector<LocalVocabEntry>;
+
+TestWords getTestCollectionOfWords(size_t size) {
+  using namespace ad_utility::triple_component;
+  TestWords testCollectionOfWords;
+  for (size_t i = 0; i < size; ++i) {
+    testCollectionOfWords.push_back(
+        LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)));
   }
   return testCollectionOfWords;
 }
@@ -46,7 +50,7 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
   // Test collection of words.
-  std::vector<std::string> testWords = getTestCollectionOfWords(1000);
+  TestWords testWords = getTestCollectionOfWords(1000);
 
   // Create empty local vocabulary.
   LocalVocab localVocab;
@@ -55,53 +59,51 @@ TEST(LocalVocab, constructionAndAccess) {
   // Add the words from our test vocabulary and check that they get the expected
   // local vocab indexes.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
-              LocalVocabIndex::make(i));
+    ASSERT_EQ(*localVocab.getIndexAndAddIfNotContained(testWords[i]),
+              testWords[i]);
   }
+  size_t localVocabSize = localVocab.size();
   ASSERT_EQ(localVocab.size(), testWords.size());
 
   // Check that we get the same indexes if we do this again, but that no new
   // words will be added.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
-              LocalVocabIndex::make(i));
+    ASSERT_EQ(*localVocab.getIndexAndAddIfNotContained(testWords[i]),
+              testWords[i]);
+    ASSERT_EQ(localVocab.size(), localVocabSize);
   }
-  ASSERT_EQ(localVocab.size(), testWords.size());
 
   // Check again that we get the right indexes, but with `getIndexOrNullopt`.
   for (size_t i = 0; i < testWords.size(); ++i) {
     std::optional<LocalVocabIndex> localVocabIndex =
         localVocab.getIndexOrNullopt(testWords[i]);
     ASSERT_TRUE(localVocabIndex.has_value());
-    ASSERT_EQ(localVocabIndex.value(), LocalVocabIndex::make(i));
+    ASSERT_EQ(*localVocabIndex.value(), testWords[i]);
   }
 
   // Check that `getIndexOrNullopt` returns `std::nullopt` for words that are
   // not contained in the local vocab. This makes use of the fact that the words
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_FALSE(localVocab.getIndexOrNullopt(testWords[i] + "A"));
+    std::string content{asStringViewUnsafe(testWords[i].getContent())};
+    auto illegalWord =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+            content + "A");
+    ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
-
-  // Check that the lookup by ID gives the correct words.
-  for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(i)), testWords[i]);
-  }
-  ASSERT_EQ(localVocab.size(), testWords.size());
-
-  // Check that out-of-bound lookups are detected (this would have a caught the
-  // one-off bug in #820, LocalVocab.cpp line 55).
-  ASSERT_THROW(localVocab.getWord(LocalVocabIndex::make(testWords.size())),
-               std::runtime_error);
-  ASSERT_THROW(localVocab.getWord(LocalVocabIndex::make(-1)),
-               std::runtime_error);
 
   // Check that a move gives the expected result.
+  localVocabSize = localVocab.size();
   auto localVocabMoved = std::move(localVocab);
-  ASSERT_EQ(localVocab.size(), 0);
+  // TODO<joka921> Should we reset the pointer?
+  // ASSERT_EQ(localVocab.size(), 0);
   ASSERT_EQ(localVocabMoved.size(), testWords.size());
+  // Check that we get the same indexes if we do this again, but that no new
+  // words will be added.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_EQ(localVocabMoved.getWord(LocalVocabIndex::make(i)), testWords[i]);
+    ASSERT_EQ(*localVocabMoved.getIndexAndAddIfNotContained(testWords[i]),
+              testWords[i]);
+    ASSERT_EQ(localVocabMoved.size(), localVocabSize);
   }
 }
 
@@ -110,29 +112,88 @@ TEST(LocalVocab, clone) {
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
-  for (auto& word : getTestCollectionOfWords(localVocabSize)) {
-    localVocabOriginal.getIndexAndAddIfNotContained(word);
+  std::vector<LocalVocabIndex> indices;
+  auto inputWords = getTestCollectionOfWords(localVocabSize);
+  for (const auto& word : inputWords) {
+    indices.push_back(localVocabOriginal.getIndexAndAddIfNotContained(word));
   }
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
 
-  // Clone it and test that the clone contains the same words, but under
-  // different addresses (that is, the word strings were deeply copied).
+  // Clone it and test that the clone contains the same words.
   LocalVocab localVocabClone = localVocabOriginal.clone();
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
   ASSERT_EQ(localVocabClone.size(), localVocabSize);
-  for (size_t i = 0; i < localVocabSize; ++i) {
-    LocalVocabIndex idx = LocalVocabIndex::make(i);
-    const std::string& wordFromOriginal = localVocabOriginal.getWord(idx);
-    const std::string& wordFromClone = localVocabClone.getWord(idx);
-    ASSERT_EQ(wordFromOriginal, wordFromClone);
-    ASSERT_NE(&wordFromOriginal, &wordFromClone);
+  ASSERT_THAT(localVocabClone.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAreArray(
+                  localVocabOriginal.getAllWordsForTesting()));
+
+  // Test that the indices are still valid after the original vocabulary was
+  // destroyed.
+  localVocabOriginal = LocalVocab{};
+
+  for (size_t i = 0; i < inputWords.size(); ++i) {
+    EXPECT_EQ(*indices[i], inputWords[i]);
   }
 
-  // Check that `nextFreeIndex_` of the clone is OK by adding another word to
-  // the clone.
-  localVocabClone.getIndexAndAddIfNotContained("blubb");
-  ASSERT_EQ(localVocabClone.getIndexAndAddIfNotContained("blubb"),
-            LocalVocabIndex::make(localVocabSize));
+  // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
+  // in the clone.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab v;
+  auto id = v.getBlankNodeIndex(&bnm);
+  LocalVocab vClone = v.clone();
+  EXPECT_TRUE(vClone.isBlankNodeIndexContained(id));
+}
+// _____________________________________________________________________________
+TEST(LocalVocab, merge) {
+  // Create a small local vocabulary.
+  std::vector<LocalVocabIndex> indices;
+  LocalVocab vocA;
+  LocalVocab vocB;
+  constexpr auto lit = [](std::string_view s) {
+    return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
+  };
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneA")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoA")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneB")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoB")));
+
+  // Clone it and test that the clone contains the same words.
+  auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
+  LocalVocab localVocabMerged = LocalVocab::merge(vocabs);
+  ASSERT_EQ(localVocabMerged.size(), 4u);
+  ASSERT_THAT(localVocabMerged.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(lit("oneA"), lit("twoA"),
+                                              lit("oneB"), lit("twoB")));
+  vocA = LocalVocab{};
+  vocB = LocalVocab{};
+  EXPECT_EQ(*indices[0], lit("oneA"));
+  EXPECT_EQ(*indices[1], lit("twoA"));
+  EXPECT_EQ(*indices[2], lit("oneB"));
+  EXPECT_EQ(*indices[3], lit("twoB"));
+
+  // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab localVocabMerged2;
+  BlankNodeIndex id;
+  {
+    LocalVocab vocC, vocD;
+    id = vocC.getBlankNodeIndex(&bnm);
+    auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
+    localVocabMerged2 = LocalVocab::merge(vocabs2);
+  }
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+
+  LocalVocab vocE, vocF;
+  auto id2 = vocE.getBlankNodeIndex(&bnm);
+  auto vocabs3 =
+      std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
+  vocE.mergeWith(vocabs3 | ql::views::transform(
+                               [](const LocalVocab* l) -> const LocalVocab& {
+                                 return *l;
+                               }));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id2));
 }
 
 // _____________________________________________________________________________
@@ -146,23 +207,32 @@ TEST(LocalVocab, propagation) {
   //
   // NOTE: This cannot be `const Operation&` because `Operation::getResult()` is
   // not `const`.
-  auto checkLocalVocab = [&](Operation& operation,
-                             std::vector<std::string> expectedWords) -> void {
-    std::shared_ptr<const ResultTable> resultTable = operation.getResult();
+  auto checkLocalVocab =
+      [&](Operation& operation,
+          const std::vector<std::string>& expectedWordsAsStrings) -> void {
+    TestWords expectedWords;
+    auto toLitOrIri = [](const auto& word) {
+      using namespace ad_utility::triple_component;
+      if (word.starts_with('<')) {
+        return LiteralOrIri::iriref(word);
+      } else {
+        return LiteralOrIri::literalWithoutQuotes(word);
+      }
+    };
+    ql::ranges::transform(expectedWordsAsStrings,
+                          std::back_inserter(expectedWords), toLitOrIri);
+    std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
-    std::vector<std::string> localVocabWords;
-    for (size_t i = 0; i < resultTable->localVocab().size(); ++i) {
-      localVocabWords.emplace_back(
-          resultTable->localVocab().getWord(LocalVocabIndex::make(i)));
-    }
-    ASSERT_EQ(localVocabWords, expectedWords)
-        << "Operation: " << operation.getDescriptor() << std::endl;
-  };
-
-  // Lambda that checks that `computeResult` throws an exception.
-  auto checkThrow = [&](Operation& operation) -> void {
-    ASSERT_THROW(operation.getResult(), ad_utility::AbortException)
+    TestWords localVocabWords =
+        resultTable->localVocab().getAllWordsForTesting();
+    // We currently allow the local vocab to have multiple IDs for the same
+    // word, so we have to deduplicate first.
+    ql::ranges::sort(localVocabWords);
+    localVocabWords.erase(std::ranges::unique(localVocabWords).begin(),
+                          localVocabWords.end());
+    ASSERT_THAT(localVocabWords,
+                ::testing::UnorderedElementsAreArray(expectedWords))
         << "Operation: " << operation.getDescriptor() << std::endl;
   };
 
@@ -185,53 +255,68 @@ TEST(LocalVocab, propagation) {
   // literal "x", we would have to write TripleComponent{"\"x\""}. For the
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
-  Values values1(testQec, {{Variable{"?x"}, Variable{"?y"}},
-                           {{TripleComponent{"x"}, TripleComponent{"y1"}},
-                            {TripleComponent{"x"}, TripleComponent{"y2"}}}});
+  auto iri = ad_utility::testing::iri;
+  Values values1(
+      testQec,
+      {{Variable{"?x"}, Variable{"?y"}},
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
+        {TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN2>")}}}});
   Values values1copy = values1;
-  checkLocalVocab(values1copy, std::vector<std::string>{"x", "y1", "y2"});
+  std::vector<std::string> localVocab1{"<xN1>", "<yN1>", "<yN2>"};
+  checkLocalVocab(values1copy, localVocab1);
 
   // VALUES operation that uses an existing literal (from the test index).
-  Values values2(testQec, {{Variable{"?x"}, Variable{"?y"}},
-                           {{TripleComponent{"<x>"}, TripleComponent{"<y>"}}}});
+  Values values2(
+      testQec, {{Variable{"?x"}, Variable{"?y"}},
+                {{TripleComponent{iri("<x>")}, TripleComponent{iri("<y>")}}}});
   Values values2copy = values2;
   checkLocalVocab(values2copy, std::vector<std::string>{});
+
+  // Contains local vocab words that are (at least partially) disjoint from the
+  // words in `values1`.
+  Values values3(
+      testQec,
+      {{Variable{"?x"}, Variable{"?y"}},
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{iri("<yN1>")}},
+        {TripleComponent{iri("<xN2>")}, TripleComponent{iri("<yN3>")}}}});
+  std::vector<std::string> localVocab13{"<xN1>", "<yN1>", "<yN2>", "<xN2>",
+                                        "<yN3>"};
 
   // JOIN operation with exactly one non-empty local vocab and with two
   // non-empty local vocabs (the last two arguments are the two join columns).
   Join join1(testQec, qet(values1), qet(values2), 0, 0);
-  checkLocalVocab(join1, std::vector<std::string>{"x", "y1", "y2"});
-  Join join2(testQec, qet(values1), qet(values1), 0, 0);
-  checkThrow(join2);
+  checkLocalVocab(join1, localVocab1);
+  Join join2(testQec, qet(values1), qet(values3), 0, 0);
+  checkLocalVocab(join2, localVocab13);
 
   // OPTIONAL JOIN operation with exactly one non-empty local vocab.
   OptionalJoin optJoin1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(optJoin1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(optJoin1, localVocab1);
 
   // OPTIONAL JOIN operation with two non-empty local vocab.
-  OptionalJoin optJoin2(testQec, qet(values1), qet(values1));
-  checkThrow(optJoin2);
+  OptionalJoin optJoin2(testQec, qet(values1), qet(values3));
+  checkLocalVocab(optJoin2, localVocab13);
 
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs.
   MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
-  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1));
-  checkThrow(multiJoin2);
+  checkLocalVocab(multiJoin1, localVocab1);
+  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values3));
+  checkLocalVocab(multiJoin2, localVocab13);
 
   // ORDER BY operation (the third argument are the indices of the columns to be
   // sorted, and the sort order; not important for this test).
   OrderBy orderBy(testQec, qet(values1), {{0, true}, {1, true}});
-  checkLocalVocab(orderBy, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(orderBy, localVocab1);
 
   // SORT operation (the third operation is the sort column).
   Sort sort(testQec, qet(values1), {0});
-  checkLocalVocab(sort, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(sort, localVocab1);
 
   // DISTINCT operation (the third argument are the indices of the input columns
   // that are considered for the output; not important for this test).
   Distinct distinct1(testQec, qet(values1), {0, 1});
-  checkLocalVocab(distinct1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(distinct1, localVocab1);
 
   // GROUP BY operation.
   auto groupConcatExpression =
@@ -250,27 +335,28 @@ TEST(LocalVocab, propagation) {
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
       qet(values1));
-  checkLocalVocab(groupBy, std::vector<std::string>{"x", "y1", "y2", "y1|y2"});
+  checkLocalVocab(
+      groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>", "yN1|yN2"});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
   // as it did before GroupBy::computeResult copied it's local vocabulary).
   Distinct distinct2(testQec, qet(values1), {0});
-  checkLocalVocab(distinct2, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(distinct2, localVocab1);
 
   // UNION operation with exactly one non-empty local vocab and with two
   // non-empy local vocabs.
   Union union1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(union1, std::vector<std::string>{"x", "y1", "y2"});
-  Union union2(testQec, qet(values1), qet(values1));
-  checkThrow(union2);
+  checkLocalVocab(union1, localVocab1);
+  Union union2(testQec, qet(values1), qet(values3));
+  checkLocalVocab(union2, localVocab13);
 
   // MINUS operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs.
   Minus minus1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(minus1, std::vector<std::string>{"x", "y1", "y2"});
-  Minus minus2(testQec, qet(values1), qet(values1));
-  checkThrow(minus2);
+  checkLocalVocab(minus1, localVocab1);
+  Minus minus2(testQec, qet(values1), qet(values3));
+  checkLocalVocab(minus2, localVocab13);
 
   // FILTER operation (the third argument is an expression; which one doesn't
   // matter for this test).
@@ -278,7 +364,7 @@ TEST(LocalVocab, propagation) {
       testQec, qet(values1),
       {std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
        "Expression ?x"});
-  checkLocalVocab(filter, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(filter, localVocab1);
 
   // BIND operation (the third argument is a `parsedQuery::Bind` object).
   Bind bind(
@@ -286,7 +372,7 @@ TEST(LocalVocab, propagation) {
       {{std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
         "Expression ?x"},
        Variable{"?z"}});
-  checkLocalVocab(bind, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(bind, localVocab1);
 
   // TRANSITIVE PATH operation.
   //
@@ -295,27 +381,74 @@ TEST(LocalVocab, propagation) {
   // local-vocabulary. Still, it doesn't harm to test this.
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
   TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
-  TransitivePath transitivePath(testQec, qet(values1), left, right, 1, 1);
-  checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
+  auto transitivePath = TransitivePathBase::makeTransitivePath(
+      testQec, qet(values1), std::move(left), std::move(right), 1, 1);
+  checkLocalVocab(*transitivePath, localVocab1);
 
   // PATTERN TRICK operations.
-  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, "?z");
-  checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
+  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
+  checkLocalVocab(hasPredicateScan, localVocab1);
+  Values valuesPatternTrick(
+      testQec,
+      {{Variable{"?x"}, Variable{"?y"}},
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}},
+        {TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}}}});
   CountAvailablePredicates countAvailablePredictes(
-      testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});
-  checkLocalVocab(countAvailablePredictes,
-                  std::vector<std::string>{"x", "y1", "y2"});
-
+      testQec, qet(valuesPatternTrick), 0, Variable{"?y"}, Variable{"?count"});
+  checkLocalVocab(countAvailablePredictes, {"<xN1>"});
   // TEXT operations.
   //
-  // NOTE: `TextOperationWithoutFilter` takes no arguments, so the local
-  // vocabulary of the operation remains empty (but it doesn't harm to check
-  // that that is indeed the case).
-  TextOperationWithFilter text1(
-      testQec, "someWord", {Variable{"?x"}, Variable{"?y"}, Variable{"?text"}},
-      Variable{"?text"}, qet(values1), 0);
-  checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(testQec, {"someWord"}, {Variable{"?text"}},
-                                   Variable{"?text"});
-  checkLocalVocab(text2, {});
+  // TODO<joka921> Maybe add tests for the new TextIndexScanFor... classes,
+  // they never introduce any local vocab.
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, getBlankNodeIndex) {
+  ad_utility::BlankNodeManager bnm(0);
+  LocalVocab v;
+  BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
+  BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
+  EXPECT_NE(a, b);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
+  using ad_utility::triple_component::LiteralOrIri;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone = original.clone();
+  LocalVocab mergeCandidate;
+  mergeCandidate.mergeWith(std::span{&clone, 1});
+
+  EXPECT_EQ(mergeCandidate.size(), 1);
+  EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(
+                  LiteralOrIri::literalWithoutQuotes("test")));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
+  using ad_utility::triple_component::LiteralOrIri;
+  using ::testing::UnorderedElementsAre;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone1 = original.clone();
+  LocalVocab clone2 = original.clone();
+  clone2.mergeWith(std::span{&original, 1});
+  original.mergeWith(std::span{&clone1, 1});
+
+  // Implementation detail, merging does add to the "other word set" but does
+  // not deduplicate with the primary word set.
+  EXPECT_EQ(original.size(), 2);
+  EXPECT_THAT(original.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
+                                   LiteralOrIri::literalWithoutQuotes("test")));
+
+  EXPECT_EQ(clone2.size(), 1);
+  EXPECT_THAT(clone2.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 }

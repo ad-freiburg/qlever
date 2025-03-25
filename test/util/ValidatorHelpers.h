@@ -18,10 +18,9 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-template <typename Type>
-requires ad_utility::isTypeContainedIn<Type,
-                                       ad_utility::ConfigOption::AvailableTypes>
-Type createDummyValueForValidator(size_t variant);
+CPP_template(typename Type)(requires ad_utility::SameAsAnyTypeIn<
+                            Type, ad_utility::ConfigOption::AvailableTypes>)
+    Type createDummyValueForValidator(size_t variant);
 
 /*
 @brief For easily creating `Validator` functions, that compare given values to
@@ -46,14 +45,14 @@ creation of multiple different validator functions. For more information,
 what the exact difference is, see the code in `createDummyValueForValidator`.
 */
 template <typename... ParameterTypes>
-requires((ad_utility::isTypeContainedIn<
+requires((ad_utility::SameAsAnyTypeIn<
              ParameterTypes, ad_utility::ConfigOption::AvailableTypes>) &&
          ...)
 auto generateDummyNonExceptionValidatorFunction(size_t variant) {
   return [... dummyValuesToCompareTo =
               createDummyValueForValidator<ParameterTypes>(variant)](
              const ParameterTypes&... args) {
-    // Special handeling for `args` of type bool is needed. For the reasoning:
+    // Special handling for `args` of type bool is needed. For the reasoning:
     // See the doc string.
     auto compare = []<typename T>(const T& arg,
                                   const T& dummyValueToCompareTo) {

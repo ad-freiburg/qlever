@@ -8,11 +8,24 @@
 #include <cstdint>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
+
+namespace detail::concepts {
+template <typename T>
+CPP_requires(HasAsStaticView,
+             requires(T& table)(table.template asStaticView<0>()));
+
+template <typename T>
+CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
+}  // namespace detail::concepts
+
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
 // the join columns are the first columns. On each call to `addRow`, we only
@@ -22,8 +35,10 @@ namespace ad_utility {
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
-  std::optional<std::array<IdTableView<0>, 2>> inputs_;
+  std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
+  LocalVocab mergedVocab_{};
+  std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
@@ -36,9 +51,9 @@ class AddCombinedRowToIdTable {
   // Store the indices that have not yet been written.
   std::vector<TargetIndexAndRowIndices> indexBuffer_;
 
-  // Store the information, which row index from the first input is written to a
+  // Store the information, which row index from the left input is written to a
   // given index in the output. This is used for OPTIONAL joins where there are
-  // rows that have no counterpart in the second input.
+  // rows that have no counterpart in the right input.
   struct TargetIndexAndRowIndex {
     size_t targetIndex_;
     size_t rowIndex_;
@@ -57,30 +72,52 @@ class AddCombinedRowToIdTable {
   // materialized and written to the result in one go.
   size_t bufferSize_ = 100'000;
 
+  // This callback is called with the result as an argument each time `flush()`
+  // is called. It can be used to consume parts of the result early, before the
+  // complete operation has finished.
+  using BlockwiseCallback = std::function<void(IdTable&, LocalVocab&)>;
+  [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
+
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+  CancellationHandle cancellationHandle_;
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTableView<0> input1,
-                                   IdTableView<0> input2, IdTable output,
-                                   size_t bufferSize = 100'000)
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
+      IdTable output, CancellationHandle cancellationHandle,
+      size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputs_{std::array{std::move(input1), std::move(input2)}},
+        inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
-        bufferSize_{bufferSize} {
+        bufferSize_{bufferSize},
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
     checkNumColumns();
+    indexBuffer_.reserve(bufferSize);
   }
   // Similar to the previous constructor, but the inputs are not given.
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
-  explicit AddCombinedRowToIdTable(size_t numJoinColumns, IdTable output,
-                                   size_t bufferSize = 100'000)
+  explicit AddCombinedRowToIdTable(
+      size_t numJoinColumns, IdTable output,
+      CancellationHandle cancellationHandle, size_t bufferSize = 100'000,
+      BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputs_{std::nullopt},
+        inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
-        bufferSize_{bufferSize} {}
+        bufferSize_{bufferSize},
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
+    indexBuffer_.reserve(bufferSize);
+  }
 
   // Return the number of UNDEF values per column.
   const std::vector<size_t>& numUndefinedPerColumn() {
@@ -91,12 +128,52 @@ class AddCombinedRowToIdTable {
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
-    AD_EXPENSIVE_CHECK(inputs_.has_value());
+    AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
     ++nextIndex_;
     if (nextIndex_ > bufferSize_) {
       flush();
+    }
+  }
+
+  // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
+  // `IdTableView<0>`. Identity for `IdTableView<0>`.
+  template <typename T>
+  static IdTableView<0> toView(const T& table) {
+    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
+      return table.template asStaticView<0>();
+    } else {
+      return table;
+    }
+  }
+
+  // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
+  // passed pointer reference to that vocab.
+  template <typename T>
+  void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
+    AD_CORRECTNESS_CHECK(currentVocab == nullptr);
+    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
+      currentVocab = &table.getLocalVocab();
+      mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+    }
+  }
+
+  // Flush remaining pending entries before changing the input.
+  void flushBeforeInputChange() {
+    // Clear to avoid unnecessary merge.
+    currentVocabs_ = {nullptr, nullptr};
+    if (nextIndex_ != 0) {
+      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
+      flush();
+    } else if (resultTable_.empty()) {
+      // Clear local vocab when no rows were written.
+      //
+      // TODO<joka921, robinTF> This is a conservative approach. We could
+      // optimize this case (clear the local vocab more often, but still
+      // correctly) by considering the situation after all the relevant inputs
+      // have been processed.
+      mergedVocab_ = LocalVocab{};
     }
   }
 
@@ -107,26 +184,31 @@ class AddCombinedRowToIdTable {
   // `IdTable` or `IdTableView<0>`, or any other type that has a
   // `asStaticView<0>` method that returns an `IdTableView<0>`.
   void setInput(const auto& inputLeft, const auto& inputRight) {
-    auto toView = []<typename T>(const T& table) {
-      if constexpr (requires { table.template asStaticView<0>(); }) {
-        return table.template asStaticView<0>();
-      } else {
-        return table;
-      }
-    };
-    if (nextIndex_ != 0) {
-      AD_CORRECTNESS_CHECK(inputs_.has_value());
-      flush();
-    }
-    inputs_ = std::array{toView(inputLeft), toView(inputRight)};
+    flushBeforeInputChange();
+    mergeVocab(inputLeft, currentVocabs_.at(0));
+    mergeVocab(inputRight, currentVocabs_.at(1));
+    inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
     checkNumColumns();
+  }
+
+  // Only set the left input. After this it is only allowed to call
+  // `addOptionalRow` and not `addRow` until `setInput` has been called again.
+  void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
+    flushBeforeInputChange();
+    mergeVocab(inputLeft, currentVocabs_.at(0));
+    // The right input will be empty, but with the correct number of columns.
+    inputLeftAndRight_ = std::array{
+        toView(inputLeft),
+        IdTableView<0>{resultTable_.numColumns() -
+                           toView(inputLeft).numColumns() + numJoinColumns_,
+                       ad_utility::makeUnlimitedAllocator<Id>()}};
   }
 
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
   // UNDEF
   void addOptionalRow(size_t rowIndexA) {
-    AD_EXPENSIVE_CHECK(inputs_.has_value());
+    AD_EXPENSIVE_CHECK(inputLeftAndRight_.has_value());
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
     ++nextIndex_;
@@ -142,6 +224,8 @@ class AddCombinedRowToIdTable {
     return std::move(resultTable_);
   }
 
+  LocalVocab& localVocab() { return mergedVocab_; }
+
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
   AddCombinedRowToIdTable(const AddCombinedRowToIdTable&) = delete;
@@ -155,6 +239,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
@@ -168,24 +253,26 @@ class AddCombinedRowToIdTable {
     if (nextIndex_ == 0) {
       return;
     }
-    AD_CORRECTNESS_CHECK(inputs_.has_value());
+    AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
-    // Sometimes columns are combined where one value is UNDEF and the other one
-    // is not. This function very efficiently returns the not-UNDEF value in
-    // this case.
-    // TODO<joka921> If we keep track of the information that one of the
-    // involved columns contains no UNDEF values at all, we can omit this step
-    // and simply copy the values from this column without looking at the other
-    // input.
-    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-      static_assert(ValueId::makeUndefined().getBits() == 0u);
-      return ValueId::fromBits(a.getBits() | b.getBits());
+    // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
+    // If exactly one of them is UNDEF, return the other one, else return any of
+    // them (they are equal anyway).
+    auto getJoinValue = [](const ValueId a, const ValueId b) {
+      // NOTE: For localVocabIndices we might have different pointers that
+      // compare equal because they point to the same word. Therefore we cannot
+      // use a simple bitwise operation to handle the "one of them is UNDEF"
+      // case as we previously did.
+      if (a.isUndefined()) {
+        return b;
+      }
+      return a;
     };
 
     // A lambda that writes the join column with the given `colIdx` to the
     // `nextResultColIdx`-th column of the result.
-    auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
+    auto writeJoinColumn = [&result, &getJoinValue, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
       const auto& colLeft = inputLeft().getColumn(colIdx);
       const auto& colRight = inputRight().getColumn(colIdx);
@@ -195,13 +282,13 @@ class AddCombinedRowToIdTable {
 
       // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = mergeWithUndefined(colLeft[sourceIndices[0]],
-                                           colRight[sourceIndices[1]]);
+        auto resultId =
+            getJoinValue(colLeft[sourceIndices[0]], colRight[sourceIndices[1]]);
         numUndef += static_cast<size_t>(resultId.isUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }
 
-      // Write the optional rows. For the second input those are always
+      // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
         Id id = colLeft[sourceIndex];
@@ -232,7 +319,7 @@ class AddCombinedRowToIdTable {
         resultCol[oldSize + targetIndex] = resultId;
       }
 
-      // Write the optional rows. For the second input those are always
+      // Write the optional rows. For the right input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
         Id id = [&col, sourceIndex = sourceIndex]() {
@@ -256,25 +343,40 @@ class AddCombinedRowToIdTable {
       ++nextResultColIdx;
     }
 
-    // Then the remaining columns from the first input.
+    // Then the remaining columns from the left input.
     for (size_t col = numJoinColumns_; col < inputLeft().numColumns(); ++col) {
-      writeNonJoinColumn.operator()<true>(col, nextResultColIdx);
+      writeNonJoinColumn.template operator()<true>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
-    // Then the remaining columns from the second input.
+    // Then the remaining columns from the right input.
     for (size_t col = numJoinColumns_; col < inputRight().numColumns(); col++) {
-      writeNonJoinColumn.operator()<false>(col, nextResultColIdx);
+      writeNonJoinColumn.template operator()<false>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
+    std::invoke(blockwiseCallback_, result, mergedVocab_);
+    // The current `IdTable`s might still be active, so we have to merge the
+    // local vocabs again if all other sets were moved-out.
+    if (resultTable_.empty()) {
+      // Make sure to reset `mergedVocab_` so it is in a valid state again.
+      mergedVocab_ = LocalVocab{};
+      // Only merge non-null vocabs.
+      auto range = currentVocabs_ | ql::views::filter(toBool) |
+                   ql::views::transform(dereference);
+      mergedVocab_.mergeWith(ql::ranges::ref_view{range});
+    }
   }
-  const IdTableView<0>& inputLeft() const { return inputs_.value()[0]; }
+  const IdTableView<0>& inputLeft() const {
+    return inputLeftAndRight_.value()[0];
+  }
 
-  const IdTableView<0>& inputRight() const { return inputs_.value()[1]; }
+  const IdTableView<0>& inputRight() const {
+    return inputLeftAndRight_.value()[1];
+  }
 
   void checkNumColumns() const {
     AD_CONTRACT_CHECK(inputLeft().numColumns() >= numJoinColumns_);

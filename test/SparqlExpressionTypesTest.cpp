@@ -10,28 +10,34 @@
 
 using namespace sparqlExpression;
 
-TEST(SparqlExpressionTypes, expressionResultCopyIfNotVector) {
+TEST(SparqlExpressionTypes, expressionResult) {
   ExpressionResult a = Id::makeFromDouble(42.3);
   ExpressionResult b = Id::makeFromDouble(1.0);
-  ASSERT_NO_THROW(b = copyExpressionResultIfNotVector(a));
+  ASSERT_NO_THROW(b = copyExpressionResult(a));
   ASSERT_EQ(a, b);
 
   a = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
-  ASSERT_ANY_THROW(b = copyExpressionResultIfNotVector(a));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      b = copyExpressionResultIfNotVector(a),
-      ::testing::StartsWith(
-          "Tried to copy an expression result that is a vector."));
+  a.emplace<Id>(Id::makeFromDouble(42.0));
+  ASSERT_NO_THROW(b = copyExpressionResult(a));
+  ASSERT_EQ(a, b);
+
+  auto c = VectorWithMemoryLimit<Id>(ad_utility::testing::makeAllocator());
+  c.emplace_back(Id::makeFromDouble(42.0));
+  ASSERT_EQ(c.size(), 1);
+  copyExpressionResult(static_cast<ExpressionResult>(std::move(c)));
+  ASSERT_TRUE(c.empty());
 }
 
 TEST(SparqlExpressionTypes, printIdOrString) {
+  using namespace ad_utility::triple_component;
   std::stringstream str;
-  IdOrString idOrString{Id::makeUndefined()};
+
+  IdOrLiteralOrIri idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
-  ASSERT_EQ(str.str(), "Undefined:Undefined");
-  idOrString = "bimm";
+  ASSERT_EQ(str.str(), "U:0");
+  idOrString = LiteralOrIri::literalWithoutQuotes("bimm");
   // Clear the stringstream.
   str.str({});
   PrintTo(idOrString, &str);
-  ASSERT_EQ(str.str(), "bimm");
+  ASSERT_EQ(str.str(), "\"bimm\"");
 }

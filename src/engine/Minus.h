@@ -6,8 +6,8 @@
 #include <array>
 #include <vector>
 
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class Minus : public Operation {
  private:
@@ -25,10 +25,10 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag){};
+  explicit Minus(OnlyForTestingTag) {}
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
@@ -36,11 +36,6 @@ class Minus : public Operation {
   size_t getResultWidth() const override;
 
   vector<ColumnIndex> resultSortedOn() const override;
-
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -68,6 +63,8 @@ class Minus : public Operation {
                     IdTable* result) const;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   /**
    * @brief Compares the two rows under the assumption that the first
    * entries of the rows are equal.
@@ -77,7 +74,7 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

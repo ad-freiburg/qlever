@@ -5,10 +5,21 @@
 #include "Bind.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+
+// _____________________________________________________________________________
+Bind::Bind(QueryExecutionContext* qec,
+           std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
+    : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
+  _subtree = ExistsJoin::addExistsJoinsToSubtree(
+      _bind._expression, std::move(_subtree), getExecutionContext(),
+      cancellationHandle_);
+}
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
@@ -25,6 +36,9 @@ uint64_t Bind::getSizeEstimateBeforeLimit() {
 size_t Bind::getCostEstimate() {
   return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
 }
+
+// We delegate the limit to the child operation, so we always support it.
+bool Bind::supportsLimit() const { return true; }
 
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
@@ -53,15 +67,11 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::asStringImpl(size_t indent) const {
+string Bind::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "BIND ";
   os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->asString(indent);
+  os << "\n" << _subtree->getCacheKey();
   return std::move(os).str();
 }
 
@@ -80,110 +90,127 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-void Bind::setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
-
-// _____________________________________________________________________________
 std::vector<QueryExecutionTree*> Bind::getChildren() {
   return {_subtree.get()};
 }
 
 // _____________________________________________________________________________
-ResultTable Bind::computeResult() {
-  LOG(DEBUG) << "Get input to BIND operation..." << endl;
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
-  LOG(DEBUG) << "Got input to Bind operation." << endl;
-  IdTable idTable{getExecutionContext()->getAllocator()};
-
-  idTable.setNumColumns(getResultWidth());
-
-  // Make a deep copy of the local vocab from `subRes` and then add to it (in
-  // case BIND adds a new word or words).
-  //
-  // TODO: In most BIND operations, nothing is added to the local vocabulary, so
-  // it would be more efficient to first share the pointer here (like with
-  // `shareLocalVocabFrom`) and only copy it when a new word is about to be
-  // added. Same for GROUP BY.
-  auto localVocab = subRes->getCopyOfLocalVocab();
-
-  size_t inwidth = subRes->idTable().numColumns();
-  size_t outwidth = getResultWidth();
-
-  CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
-                  this, &idTable, &localVocab, *subRes,
-                  _bind._expression.getPimpl());
-
-  LOG(DEBUG) << "BIND result computation done." << endl;
-  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+IdTable Bind::cloneSubView(const IdTable& idTable,
+                           const std::pair<size_t, size_t>& subrange) {
+  IdTable result(idTable.numColumns(), idTable.getAllocator());
+  result.resize(subrange.second - subrange.first);
+  ql::ranges::copy(idTable.begin() + subrange.first,
+                   idTable.begin() + subrange.second, result.begin());
+  return result;
 }
 
 // _____________________________________________________________________________
-template <size_t IN_WIDTH, size_t OUT_WIDTH>
-void Bind::computeExpressionBind(
-    IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-    const ResultTable& inputResultTable,
-    sparqlExpression::SparqlExpression* expression) const {
+Result Bind::computeResult(bool requestLaziness) {
+  _subtree->setLimit(getLimit());
+  LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
+  std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
+  LOG(DEBUG) << "Got input to Bind operation." << std::endl;
+
+  auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
+    return computeExpressionBind(localVocab, std::move(idTable),
+                                 _bind._expression.getPimpl());
+  };
+
+  if (subRes->isFullyMaterialized()) {
+    if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
+      return {
+          [](auto applyBind,
+             std::shared_ptr<const Result> result) -> Result::Generator {
+            size_t size = result->idTable().size();
+            for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
+              LocalVocab outVocab = result->getCopyOfLocalVocab();
+              IdTable idTable = applyBind(
+                  cloneSubView(result->idTable(),
+                               {offset, std::min(size, offset + CHUNK_SIZE)}),
+                  &outVocab);
+              co_yield {std::move(idTable), std::move(outVocab)};
+            }
+          }(std::move(applyBind), std::move(subRes)),
+          resultSortedOn()};
+    }
+    // Make a deep copy of the local vocab from `subRes` and then add to it (in
+    // case BIND adds a new word or words).
+    //
+    // Make a copy of the local vocab from`subRes`and then add to it (in case
+    // BIND adds new words). Note: The copy of the local vocab is shallow
+    // via`shared_ptr`s, so the following is also efficient if the BIND adds no
+    // new words.
+    LocalVocab localVocab = subRes->getCopyOfLocalVocab();
+    IdTable result = applyBind(subRes->idTable().clone(), &localVocab);
+    LOG(DEBUG) << "BIND result computation done." << std::endl;
+    return {std::move(result), resultSortedOn(), std::move(localVocab)};
+  }
+  auto generator =
+      [](auto applyBind,
+         std::shared_ptr<const Result> result) -> Result::Generator {
+    for (auto& [idTable, localVocab] : result->idTables()) {
+      IdTable resultTable = applyBind(std::move(idTable), &localVocab);
+      co_yield {std::move(resultTable), std::move(localVocab)};
+    }
+  }(std::move(applyBind), std::move(subRes));
+  return {std::move(generator), resultSortedOn()};
+}
+
+// _____________________________________________________________________________
+IdTable Bind::computeExpressionBind(
+    LocalVocab* localVocab, IdTable idTable,
+    const sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
+      deadline_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable.idTable().asStaticView<IN_WIDTH>();
-  auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();
+  idTable.addEmptyColumn();
+  auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  // first initialize the first columns (they remain identical)
-  const auto inSize = input.size();
-  output.reserve(inSize);
-  const auto inCols = input.numColumns();
-  // copy the input to the first numColumns;
-  for (size_t i = 0; i < inSize; ++i) {
-    output.emplace_back();
-    for (size_t j = 0; j < inCols; ++j) {
-      output(i, j) = input(i, j);
-    }
-  }
-
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
     if constexpr (isVariable) {
-      auto column =
+      auto columnIndex =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = output(i, column);
-      }
+      auto inputColumn = idTable.getColumn(columnIndex);
+      AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
+      ad_utility::chunkedCopy(inputColumn, outputColumn.begin(), CHUNK_SIZE,
+                              [this]() { checkCancellation(); });
     } else if constexpr (isStrongId) {
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = singleResult;
-      }
+      ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
+                              [this]() { checkCancellation(); });
     } else {
-      bool isConstant = sparqlExpression::isConstantResult<T>;
+      constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), inSize, &evaluationContext);
+          AD_FWD(singleResult), outputColumn.size(), &evaluationContext);
 
-      if (isConstant) {
+      if constexpr (isConstant) {
         auto it = resultGenerator.begin();
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *outputLocalVocab);
-          for (size_t i = 0; i < inSize; ++i) {
-            output(i, inCols) = constantId;
-          }
+                  std::move(*it), *localVocab);
+          checkCancellation();
+          ad_utility::chunkedFill(outputColumn, constantId, CHUNK_SIZE,
+                                  [this]() { checkCancellation(); });
         }
       } else {
         size_t i = 0;
         // We deliberately move the values from the generator.
         for (auto& resultValue : resultGenerator) {
-          output(i, inCols) =
+          outputColumn[i] =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue), *outputLocalVocab);
+                  std::move(resultValue), *localVocab);
           i++;
+          checkCancellation();
         }
       }
     }
@@ -191,5 +218,10 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  *outputIdTable = std::move(output).toDynamic();
+  return idTable;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Bind::cloneImpl() const {
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
 }

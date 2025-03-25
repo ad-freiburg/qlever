@@ -5,11 +5,12 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -54,10 +55,10 @@ void testSort(IdTable input, const IdTable& expected,
     // Apply the current permutation of the `sortColumns` to `expected` and
     // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
-      std::ranges::copy(input.getColumn(sortColumns[i]),
-                        permutedInput.getColumn(i).begin());
-      std::ranges::copy(expected.getColumn(sortColumns[i]),
-                        permutedExpected.getColumn(i).begin());
+      ql::ranges::copy(input.getColumn(sortColumns[i]),
+                       permutedInput.getColumn(i).begin());
+      ql::ranges::copy(expected.getColumn(sortColumns[i]),
+                       permutedExpected.getColumn(i).begin());
     }
 
     for (size_t i = 0; i < 5; ++i) {
@@ -140,7 +141,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(1u, varColMap.size());
@@ -148,7 +149,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
 
-    EXPECT_THAT(s.getSubtree()->getRootOperation()->asString(),
+    EXPECT_THAT(s.getSubtree()->getRootOperation()->getCacheKey(),
                 ::testing::StartsWith("Values for testing with"));
   }
 
@@ -162,7 +163,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ("Sort (internal order) on ?1 ?0", s.getDescriptor());
 
     EXPECT_THAT(
-        s.asString(),
+        s.getCacheKey(),
         ::testing::StartsWith("SORT(internal) on columns:asc(1) asc(0) \n"));
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());
@@ -194,5 +195,15 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::AbortException);
+      ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(Sort, clone) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }

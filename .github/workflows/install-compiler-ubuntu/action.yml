@@ -1,0 +1,37 @@
+name: "Install various versions of gcc and clang"
+description: "dummy description"
+inputs:
+  compiler:
+    description: "Must be `gcc` or `clang`"
+    required: true
+  compiler-version:
+    description: "the version of the compiler (must be major version)"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Add PPA for GCC
+      if :  inputs.compiler == 'gcc'
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update
+      shell: bash
+
+    - name: Install gcc
+      if :  inputs.compiler == 'gcc'
+      run : sudo apt install -y gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}
+      shell: bash
+
+    - name: Install clang
+      if :  inputs.compiler == 'clang'
+      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
+      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
+      # immediately after.
+      run:  |
+        wget https://apt.llvm.org/llvm.sh
+        sudo chmod +x llvm.sh
+        sed   's/apt-key del/echo/' llvm.sh -iy
+        sudo ./llvm.sh ${{inputs.compiler-version}}
+        sudo apt install -y clang-${{inputs.compiler-version}}
+      shell: bash
+
+# TODO<joka921> Add assertion for unsupported compilers and versions.

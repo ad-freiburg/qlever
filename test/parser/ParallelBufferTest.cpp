@@ -17,6 +17,7 @@ TEST(ParallelBuffer, ParallelFileBuffer) {
 
   size_t blocksize = 4;
   ParallelFileBuffer buf(blocksize);
+  EXPECT_EQ(buf.getBlocksize(), blocksize);
   buf.open(filename);
   std::vector<ParallelFileBuffer::BufferType> expected{
       {'a', 'b', 'c', 'd'}, {'e', 'f', 'g', 'h'}, {'i', 'j'}};

@@ -50,10 +50,10 @@ ResultEntry::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
-  j = nlohmann::json{{"descriptor", resultEntry.descriptor_},
-                     {"measuredTime", resultEntry.measuredTime_},
-                     {"metadata", resultEntry.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultEntry& resultEntry) {
+  j = nlohmann::ordered_json{{"descriptor", resultEntry.descriptor_},
+                             {"measured-time", resultEntry.measuredTime_},
+                             {"metadata", resultEntry.metadata()}};
 }
 
 // ____________________________________________________________________________
@@ -104,11 +104,11 @@ ResultGroup::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultGroup& resultGroup) {
-  j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
-                     {"resultEntries", resultGroup.resultEntries_},
-                     {"resultTables", resultGroup.resultTables_},
-                     {"metadata", resultGroup.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultGroup& resultGroup) {
+  j = nlohmann::ordered_json{{"descriptor", resultGroup.descriptor_},
+                             {"result-entries", resultGroup.resultEntries_},
+                             {"result-tables", resultGroup.resultTables_},
+                             {"metadata", resultGroup.metadata()}};
 }
 
 // ____________________________________________________________________________
@@ -129,7 +129,7 @@ void ResultTable::init(const std::string& descriptor,
   descriptorForLog_ = std::move(descriptorForLog);
   columnNames_ = columnNames;
   entries_.resize(rowNames.size());
-  std::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
+  ql::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
 
   // Setting the row names.
   for (size_t row = 0; row < rowNames.size(); row++) {
@@ -163,11 +163,11 @@ void ResultTable::setEntry(const size_t& row, const size_t& column,
 
 // ____________________________________________________________________________
 ResultTable::operator std::string() const {
-  // Used for the formating of floats in the table. They will always be
-  // formated as having 4 values after the decimal point.
+  // Used for the formatting of floats in the table. They will always be
+  // formatted as having 4 values after the decimal point.
   static constexpr absl::string_view floatFormatSpecifier = "%.4f";
 
-  // What should be printed between columns. Used for nicer formating.
+  // What should be printed between columns. Used for nicer formatting.
   const std::string columnSeperator = " | ";
 
   // Convert an `EntryType` of `ResultTable` to a screen friendly
@@ -175,7 +175,7 @@ ResultTable::operator std::string() const {
   auto entryToStringVisitor = []<typename T>(const T& entry) {
     /*
     `EntryType` has multiple distinct possible types, that all need different
-    handeling. Fortunaly, we can decide the handeling at compile time and
+    handling. Fortunately, we can decide the handling at compile time and
     throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
     */
     if constexpr (std::is_same_v<T, std::monostate>) {
@@ -276,21 +276,21 @@ ResultTable::operator std::string() const {
                         ad_utility::addIndentation(stream.str(), "    "));
   }
 
-  // For formating: What is the maximum string width of a column, if you
+  // For formatting: What is the maximum string width of a column, if you
   // compare all it's entries?
   std::vector<size_t> columnMaxStringWidth(numColumns(), 0);
   for (size_t column = 0; column < numColumns(); column++) {
-    // How long is the string representation of a colum entry in a wanted row?
+    // How long is the string representation of a column entry in a wanted row?
     auto stringWidthOfRow = std::views::transform(
         entries_, [&column, &entryToString](const std::vector<EntryType>& row) {
           return entryToString(row.at(column)).length();
         });
 
     // Which of the entries is the longest?
-    columnMaxStringWidth.at(column) = std::ranges::max(stringWidthOfRow);
+    columnMaxStringWidth.at(column) = ql::ranges::max(stringWidthOfRow);
 
     // Is the name of the column bigger?
-    columnMaxStringWidth.at(column) = std::ranges::max(
+    columnMaxStringWidth.at(column) = ql::ranges::max(
         columnMaxStringWidth.at(column), columnNames_.at(column).length());
   }
 
@@ -317,8 +317,14 @@ ResultTable::operator std::string() const {
 
 // ____________________________________________________________________________
 void ResultTable::addRow() {
-  // Create an emptry row of the same size as every other row.
+  // Create an empty row of the same size as every other row.
   entries_.emplace_back(numColumns());
+}
+
+// ____________________________________________________________________________
+void ResultTable::deleteRow(const size_t rowIdx) {
+  AD_CONTRACT_CHECK(rowIdx < numRows());
+  entries_.erase(std::begin(entries_) + rowIdx);
 }
 
 // ____________________________________________________________________________
@@ -334,11 +340,11 @@ size_t ResultTable::numColumns() const {
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const ResultTable& resultTable) {
-  j = nlohmann::json{{"descriptor", resultTable.descriptor_},
-                     {"columnNames", resultTable.columnNames_},
-                     {"entries", resultTable.entries_},
-                     {"metadata", resultTable.metadata()}};
+void to_json(nlohmann::ordered_json& j, const ResultTable& resultTable) {
+  j = nlohmann::ordered_json{{"descriptor", resultTable.descriptor_},
+                             {"column-names", resultTable.columnNames_},
+                             {"entries", resultTable.entries_},
+                             {"metadata", resultTable.metadata()}};
 }
 
 // The code for the string insertion operator of a class, that can be casted to
@@ -363,5 +369,35 @@ std::ostream& operator<<(std::ostream& os, const ResultTable& resultTable) {
 std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
   return streamInserterOperatorImplementation(os, resultGroup);
 }
+
+// ____________________________________________________________________________
+template <typename T>
+void ResultGroup::deleteEntryImpl(T& entry) {
+  // The vector, that holds our entries.
+  auto& vec = [this]() -> auto& {
+    if constexpr (std::same_as<T, ResultEntry>) {
+      return resultEntries_;
+    } else {
+      static_assert(std::same_as<T, ResultTable>);
+      return resultTables_;
+    }
+  }();
+
+  // Delete `entry`.
+  auto entryIterator{ql::ranges::find(
+      vec, &entry, [](const ad_utility::CopyableUniquePtr<T>& pointer) {
+        return pointer.get();
+      })};
+  AD_CONTRACT_CHECK(entryIterator != std::end(vec));
+  vec.erase(entryIterator);
+}
+
+// ____________________________________________________________________________
+void ResultGroup::deleteMeasurement(ResultEntry& entry) {
+  deleteEntryImpl(entry);
+}
+
+// ____________________________________________________________________________
+void ResultGroup::deleteTable(ResultTable& table) { deleteEntryImpl(table); }
 
 }  // namespace ad_benchmark

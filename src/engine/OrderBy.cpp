@@ -8,11 +8,11 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Comparators.h"
+#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
-
-using std::string;
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -25,18 +25,15 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
   AD_CONTRACT_CHECK(!sortIndices_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       sortIndices_,
       [this](ColumnIndex index) { return index < getResultWidth(); },
       ad_utility::first));
 }
 
 // _____________________________________________________________________________
-string OrderBy::asStringImpl(size_t indent) const {
+std::string OrderBy::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   os << "ORDER BY on columns:";
 
   // TODO<joka921> This produces exactly the same format as SORT operations
@@ -45,12 +42,12 @@ string OrderBy::asStringImpl(size_t indent) const {
   for (auto ind : sortIndices_) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << subtree_->getCacheKey();
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-string OrderBy::getDescriptor() const {
+std::string OrderBy::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto [sortIndex, isDescending] : sortIndices_) {
@@ -66,23 +63,16 @@ string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable OrderBy::computeResult() {
+Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
+  using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->size(), subRes->width()) >
-      remainingTime() * sortEstimateCancellationFactor) {
-    // The estimated time for this sort is much larger than the actually
-    // remaining time, cancel this operation
-    throw ad_utility::CancellationException(
-        "OrderBy operation was canceled, because time estimate exceeded "
-        "remaining time by a factor of " +
-        std::to_string(sortEstimateCancellationFactor));
-  }
+  const auto& subTable = subRes->idTable();
+  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+      subTable.numRows(), subTable.numColumns(), deadline_,
+      "Sort for COUNT(DISTINCT *)");
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();
@@ -132,6 +122,26 @@ ResultTable OrderBy::computeResult() {
   ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
     Engine::sort<I>(&idTable, comparison);
   });
+  // We can't check during sort, so reset status here
+  cancellationHandle_->resetWatchDogState();
+  checkCancellation();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+}
+
+// ___________________________________________________________________
+OrderBy::SortedVariables OrderBy::getSortedVariables() const {
+  SortedVariables result;
+  for (const auto& [colIdx, isDescending] : sortIndices_) {
+    using enum AscOrDesc;
+    result.emplace_back(subtree_->getVariableAndInfoByColumnIndex(colIdx).first,
+                        isDescending ? Desc : Asc);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> OrderBy::cloneImpl() const {
+  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
+                                   sortIndices_);
 }

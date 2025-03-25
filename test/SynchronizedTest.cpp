@@ -125,6 +125,20 @@ TEST(Synchronized, ToBaseReference) {
   // TODO<joka921>: Test, that the locking was indeed successful.
 }
 
+TEST(Synchronized, Copyable) {
+  Synchronized<int> s1{3};
+  Synchronized<int> s2{s1};
+  Synchronized<int> s3{0};
+  s3 = s1;
+  EXPECT_EQ(*s2.wlock(), 3);
+  EXPECT_EQ(*s3.wlock(), 3);
+
+  *s1.wlock() = 42;
+  EXPECT_EQ(*s1.wlock(), 42);
+  EXPECT_EQ(*s2.wlock(), 3);
+  EXPECT_EQ(*s3.wlock(), 3);
+}
+
 template <typename T, typename = void>
 struct AllowsNonConstExclusiveAccess : public std::false_type {};
 
@@ -249,8 +263,9 @@ TEST(Synchronized, SFINAE) {
 
   // Outcommenting this does not compile and cannot be brought to compile
   // without making usage of the Synchronized classes "withWriteLock" method
-  // unecessarily hard. static_assert(!AllowsNonConstExclusiveAccessLambda<const
-  // Synchronized<Vec, std::shared_mutex>>::value);
+  // unnecessarily hard.
+  // static_assert(!AllowsNonConstExclusiveAccessLambda<const Synchronized<Vec,
+  // std::shared_mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(AllowsConstSharedAccessLambda<
@@ -269,8 +284,9 @@ TEST(Synchronized, SFINAE) {
 
   // Outcommenting this does not compile and cannot be brought to compile
   // without making usage of the Synchronized classes "withWriteLock" method
-  // unecessarily hard. static_assert(!AllowsNonConstExclusiveAccessLambda<const
-  // Synchronized<Vec, std::mutex>>::value);
+  // unnecessarily hard.
+  // static_assert(!AllowsNonConstExclusiveAccessLambda<const Synchronized<Vec,
+  // std::mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::mutex>>::value);
   static_assert(!AllowsConstSharedAccessLambda<

@@ -4,12 +4,42 @@
 
 #include "engine/Operation.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 
+namespace {
+// Keep track of some statistics about the local vocabs of the results.
+struct LocalVocabTracking {
+  size_t maxSize_ = 0;
+  size_t sizeSum_ = 0;
+  size_t totalVocabs_ = 0;
+  size_t nonEmptyVocabs_ = 0;
+
+  float avgSize() const {
+    return nonEmptyVocabs_ == 0 ? 0
+                                : static_cast<float>(sizeSum_) /
+                                      static_cast<float>(nonEmptyVocabs_);
+  }
+};
+
+// Merge the stats of a single local vocab into the overall stats.
+void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
+  stats.maxSize_ = std::max(stats.maxSize_, vocab.size());
+  stats.sizeSum_ += vocab.size();
+  ++stats.totalVocabs_;
+  if (!vocab.empty()) {
+    ++stats.nonEmptyVocabs_;
+  }
+}
+}  // namespace
+
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -22,6 +52,7 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
@@ -34,9 +65,9 @@ void Operation::forAllDescendants(F f) const {
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
-  vector<string> res = getWarnings();
+  vector<string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -47,6 +78,15 @@ vector<string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarningOrThrow(std::string warning) const {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }
 
 // ________________________________________________________________________
@@ -69,44 +109,190 @@ void Operation::recursivelySetTimeConstraint(
   });
 }
 
+// _____________________________________________________________________________
+void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
+                                   uint64_t numCols,
+                                   std::chrono::microseconds duration) const {
+  bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
+  auto& rti =
+      isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
+  rti.totalTime_ += duration;
+  rti.originalTotalTime_ = rti.totalTime_;
+  rti.originalOperationTime_ = rti.getOperationTime();
+  // Don't update the number of rows/cols twice if the rti for the limit and the
+  // rti for the actual operation are the same.
+  if (!applyToLimit || externalLimitApplied_) {
+    rti.numRows_ += numRows;
+    rti.numCols_ = numCols;
+  }
+  if (isRtiWrappedInLimit) {
+    runtimeInfo().totalTime_ += duration;
+    runtimeInfo().originalTotalTime_ = runtimeInfo().totalTime_;
+    runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
+  }
+}
+
+// _____________________________________________________________________________
+Result Operation::runComputation(const ad_utility::Timer& timer,
+                                 ComputationMode computationMode) {
+  AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
+  checkCancellation();
+  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+  signalQueryUpdate();
+  Result result =
+      computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
+  AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
+                    result.isFullyMaterialized());
+
+  checkCancellation();
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    // Compute the datatypes that occur in each column of the result.
+    // Also assert, that if a column contains UNDEF values, then the
+    // `mightContainUndef` flag for that columns is set.
+    // TODO<joka921> It is cheaper to move this calculation into the
+    // individual results, but that requires changes in each individual
+    // operation, therefore we currently only perform this expensive
+    // change in the DEBUG builds.
+    result.checkDefinedness(getExternallyVisibleVariableColumns());
+  }
+  // Make sure that the results that are written to the cache have the
+  // correct runtimeInfo. The children of the runtime info are already set
+  // correctly because the result was computed, so we can pass `nullopt` as
+  // the last argument.
+  if (result.isFullyMaterialized()) {
+    size_t vocabSize = result.localVocab().size();
+    if (vocabSize > 1) {
+      runtimeInfo().addDetail("local-vocab-size", vocabSize);
+    }
+    updateRuntimeInformationOnSuccess(result.idTable().size(),
+                                      ad_utility::CacheStatus::computed,
+                                      timer.msecs(), std::nullopt);
+  } else {
+    runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+    result.runOnNewChunkComputed(
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
+            const Result::IdTableVocabPair& pair,
+            std::chrono::microseconds duration) mutable {
+          const IdTable& idTable = pair.idTable_;
+          updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
+                             duration);
+          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
+                     << " x " << idTable.numColumns() << std::endl;
+          mergeStats(vocabStats, pair.localVocab_);
+          if (vocabStats.sizeSum_ > 0) {
+            runtimeInfo().addDetail(
+                "non-empty-local-vocabs",
+                absl::StrCat(vocabStats.nonEmptyVocabs_, " / ",
+                             vocabStats.totalVocabs_,
+                             ", Ø = ", vocabStats.avgSize(),
+                             ", max = ", vocabStats.maxSize_));
+          }
+          timeSizeUpdate += duration;
+          if (timeSizeUpdate > 50ms) {
+            timeSizeUpdate = 0us;
+            signalQueryUpdate();
+          }
+        },
+        [this](bool failed) {
+          if (failed) {
+            runtimeInfo().status_ = RuntimeInformation::failed;
+          }
+          signalQueryUpdate();
+        });
+  }
+  // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+  // already perform it. An example for an operation that directly computes
+  // the Limit is a full index scan with three variables. Note that the
+  // `QueryPlanner` does currently only set the limit for operations that
+  // support it natively, except for operations in subqueries. This means
+  // that a lot of the time the limit is only artificially applied during
+  // export, allowing the cache to reuse the same operation for different
+  // limits and offsets.
+  if (!supportsLimit()) {
+    runtimeInfo().addLimitOffsetRow(_limit, true);
+    AD_CONTRACT_CHECK(!externalLimitApplied_);
+    externalLimitApplied_ = !_limit.isUnconstrained();
+    result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
+                                           const IdTable& idTable) {
+      updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                         limitTime);
+    });
+  } else {
+    result.assertThatLimitWasRespected(_limit);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+CacheValue Operation::runComputationAndPrepareForCache(
+    const ad_utility::Timer& timer, ComputationMode computationMode,
+    const QueryCacheKey& cacheKey, bool pinned, bool isRoot) {
+  auto& cache = _executionContext->getQueryTreeCache();
+  auto result = runComputation(timer, computationMode);
+  auto maxSize =
+      isRoot ? cache.getMaxSizeSingleEntry()
+             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+                        cache.getMaxSizeSingleEntry());
+  if (canResultBeCached() && !result.isFullyMaterialized() &&
+      !unlikelyToFitInCache(maxSize)) {
+    AD_CONTRACT_CHECK(!pinned);
+    result.cacheDuringConsumption(
+        [maxSize](
+            const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
+            const Result::IdTableVocabPair& newIdTable) {
+          auto currentSize =
+              currentIdTablePair.has_value()
+                  ? CacheValue::getSize(currentIdTablePair.value().idTable_)
+                  : 0_B;
+          return maxSize >=
+                 currentSize + CacheValue::getSize(newIdTable.idTable_);
+        },
+        [runtimeInfo = getRuntimeInfoPointer(), &cache,
+         cacheKey](Result aggregatedResult) {
+          auto copy = *runtimeInfo;
+          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
+          cache.tryInsertIfNotPresent(
+              false, cacheKey,
+              std::make_shared<CacheValue>(std::move(aggregatedResult),
+                                           std::move(copy)));
+        });
+  }
+  if (result.isFullyMaterialized()) {
+    auto resultNumRows = result.idTable().size();
+    auto resultNumCols = result.idTable().numColumns();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
+  }
+
+  return CacheValue{std::move(result), runtimeInfo()};
+}
+
 // ________________________________________________________________________
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
-                                                   bool onlyReadFromCache) {
+std::shared_ptr<const Result> Operation::getResult(
+    bool isRoot, ComputationMode computationMode) {
+  // Use the precomputed Result if it exists.
+  if (precomputedResultBecauseSiblingOfService_.has_value()) {
+    auto result = std::move(precomputedResultBecauseSiblingOfService_).value();
+    precomputedResultBecauseSiblingOfService_.reset();
+    return result;
+  }
+
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
-    // Reset runtime info, tests may re-use Operation objects.
+    // Reset runtime info, tests may reuse Operation objects.
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const string cacheKey = asString();
+  const QueryCacheKey cacheKey = {
+      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
-
-  // When we pin the final result but no subtrees, we need to remember the sizes
-  // of all involved index scans that have only one free variable. Note that
-  // these index scans are executed already during query planning because they
-  // have to be executed anyway, for any query plan. If we don't remember these
-  // sizes here, future queries that take the result from the cache would redo
-  // these index scans. Note that we do not need to remember the multiplicity
-  // (and distinctness) because the multiplicity for an index scan with a single
-  // free variable is always 1.
-  if (pinFinalResultButNotSubtrees) {
-    auto lock =
-        getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
-    forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
-          child->getResultWidth() == 1) {
-        (*lock)[child->getRootOperation()->asString()] =
-            child->getSizeEstimate();
-      }
-    });
-  }
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
@@ -121,61 +307,43 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer] {
-      checkCancellation([this]() { return "Before " + getDescriptor(); });
-      runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-      signalQueryUpdate();
-      ResultTable result = computeResult();
-
-      // Compute the datatypes that occur in each column of the result.
-      // Also assert, that if a column contains UNDEF values, then the
-      // `mightContainUndef` flag for that columns is set.
-      // TODO<joka921> It is cheaper to move this calculation into the
-      // individual results, but that requires changes in each individual
-      // operation, therefore we currently only perform this expensive
-      // change in the DEBUG builds.
-      AD_EXPENSIVE_CHECK(
-          result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      checkCancellation([this]() { return "In " + getDescriptor(); });
-      // Make sure that the results that are written to the cache have the
-      // correct runtimeInfo. The children of the runtime info are already set
-      // correctly because the result was computed, so we can pass `nullopt` as
-      // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
-      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-      // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables.
-      if (!supportsLimit()) {
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        // Note: both of the following calls have no effect and negligible
-        // runtime if neither a LIMIT nor an OFFSET were specified.
-        result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else {
-        AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                          _limit.actualSize(result.idTable().numRows()));
-      }
-      return CacheValue{std::move(result), runtimeInfo()};
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
+                       isRoot]() {
+      return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
+                                              pinResult, isRoot);
     };
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                        onlyReadFromCache)
-                              : cache.computeOnce(cacheKey, computeLambda,
-                                                  onlyReadFromCache);
+    auto suitedForCache = [](const CacheValue& cacheValue) {
+      return cacheValue.resultTable().isFullyMaterialized();
+    };
+
+    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
+
+    auto result = [&]() {
+      auto compute = [&](auto&&... args) {
+        if (!canResultBeCached()) {
+          return cache.computeButDontStore(AD_FWD(args)...);
+        }
+        return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
+                         : cache.computeOnce(AD_FWD(args)...);
+      };
+      return compute(cacheKey, cacheSetup, onlyReadFromCache, suitedForCache);
+    }();
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->size();
-    auto resultNumCols = result._resultPointer->resultTable()->width();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
-    return result._resultPointer->resultTable();
+    if (result._resultPointer->resultTable().isFullyMaterialized()) {
+      updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
+
+    return result._resultPointer->resultTablePtr();
+  } catch (ad_utility::CancellationException& e) {
+    e.setOperation(getDescriptor());
+    runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
+    throw;
   } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     runtimeInfo().status_ =
@@ -187,24 +355,24 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     // caught by the `processQuery` method, where the error message will be
     // printed *and* included in an error response sent to the client.
     LOG(ERROR) << "Waited for a result from another thread which then failed"
-               << endl;
-    LOG(DEBUG) << asString();
+               << std::endl;
+    LOG(DEBUG) << getCacheKey();
     throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << asString() << endl;
+    LOG(ERROR) << "Aborted Operation" << std::endl;
+    LOG(DEBUG) << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation" << endl;
-    LOG(DEBUG) << asString() << endl;
+    LOG(ERROR) << "Aborted Operation" << std::endl;
+    LOG(DEBUG) << getCacheKey() << std::endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
-        "Unexpected expection that is not a subclass of std::exception");
+        "Unexpected exception that is not a subclass of std::exception");
   }
 }
 
@@ -218,10 +386,10 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
+    size_t numRows, ad_utility::CacheStatus cacheStatus, Milliseconds duration,
+    std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.size();
+  _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
@@ -256,11 +424,12 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
+  const auto& result = resultAndCacheStatus._resultPointer->resultTable();
+  AD_CONTRACT_CHECK(result.isFullyMaterialized());
   updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->resultTable(),
-      resultAndCacheStatus._cacheStatus, duration,
+      result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
@@ -275,9 +444,9 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
-                         std::views::transform(&RuntimeInformation::totalTime_);
+                         ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0ms);
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
   signalQueryUpdate();
 }
@@ -329,6 +498,14 @@ void Operation::createRuntimeInfoFromEstimates(
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
+  // We are interested only in the first two elements of the limit tuple.
+  const auto& [limit, offset, _1, _2] = getLimit();
+  if (limit.has_value()) {
+    _runtimeInfo->addDetail("limit", limit.value());
+  }
+  if (offset > 0) {
+    _runtimeInfo->addDetail("offset", offset);
+  }
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);
@@ -337,8 +514,8 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
-  auto cachedResult =
-      _executionContext->getQueryTreeCache().getIfContained(asString());
+  auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
+      {getCacheKey(), locatedTriplesSnapshot().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -400,7 +577,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  auto it = std::ranges::find(
+  auto it = ql::ranges::find(
       varToColMap, sortedIndices.front(),
       [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
@@ -420,17 +597,59 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
   return _resultSortedColumns.value();
 }
 
-// ___________________________________________________________________________
-void Operation::setTextLimit(size_t limit) {
-  std::ranges::for_each(getChildren(), [limit](auto* child) {
-    child->getRootOperation()->setTextLimit(limit);
-  });
-}
-
 // _____________________________________________________________________________
 
 void Operation::signalQueryUpdate() const {
-  if (_executionContext) {
+  if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
+}
+
+// _____________________________________________________________________________
+std::string Operation::getCacheKey() const {
+  auto result = getCacheKeyImpl();
+  if (_limit._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  }
+  if (_limit._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+uint64_t Operation::getSizeEstimate() {
+  if (_limit._limit.has_value()) {
+    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  } else {
+    return getSizeEstimateBeforeLimit();
+  }
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::clone() const {
+  auto result = cloneImpl();
+  auto compareTypes = [this, &result]() {
+    const auto& reference = *result;
+    return typeid(*this) == typeid(reference);
+  };
+  AD_CORRECTNESS_CHECK(compareTypes());
+  AD_CORRECTNESS_CHECK(result->_executionContext == _executionContext);
+  auto areChildrenDifferent = [this, &result]() {
+    auto ownChildren = getChildren();
+    auto otherChildren = result->getChildren();
+    if (ownChildren.size() != otherChildren.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < ownChildren.size(); i++) {
+      if (ownChildren.at(i) == otherChildren.at(i)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  AD_CORRECTNESS_CHECK(areChildrenDifferent());
+  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  return result;
 }

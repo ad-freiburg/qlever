@@ -1,23 +1,37 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2011 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2014]
+//          Johannes Kalmbach <bast@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
-#include <sys/timeb.h>
-#include <time.h>
+#include <absl/strings/str_format.h>
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 
-#include <chrono>
-#include <iomanip>
 #include <iostream>
 #include <locale>
 #include <sstream>
 #include <string>
 
-#include "./StringUtils.h"
+#include "util/ConstexprMap.h"
+#include "util/TypeTraits.h"
 
 #ifndef LOGLEVEL
-#define LOGLEVEL 3
+#define LOGLEVEL INFO
+#endif
+
+// Abseil also defines its own LOG macro, so we need to undefine it here.
+//
+// NOTE: In case you run into trouble with this conflict, in particular, if you
+// use the `LOG(INFO)` macro and you get compilation errors that mention
+// `abseil`, use the (otherwise identical) `AD_LOG_INFO` macro below.
+//
+// TODO<joka921>: Eventually replace the `LOG` macro by `AD_LOG` everywhere.
+
+#ifdef LOG
+#undef LOG
 #endif
 
 #define LOG(x)      \
@@ -26,23 +40,37 @@
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
 
-#define AD_POS_IN_CODE                                                     \
-  '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
-      << "] "  // NOLINT
+#define AD_LOG(x)   \
+  if (x > LOGLEVEL) \
+    ;               \
+  else              \
+    ad_utility::Log::getLog<x>()  // NOLINT
 
-static constexpr size_t TRACE = 6;
-static constexpr size_t TIMING = 5;
-static constexpr size_t DEBUG = 4;
-static constexpr size_t INFO = 3;
-static constexpr size_t WARN = 2;
-static constexpr size_t ERROR = 1;
-static constexpr size_t FATAL = 0;
+enum class LogLevel {
+  FATAL = 0,
+  ERROR = 1,
+  WARN = 2,
+  INFO = 3,
+  DEBUG = 4,
+  TIMING = 5,
+  TRACE = 6
+};
+
+// Macros for the different log levels. Always use these instead of the old
+// `LOG(...)` macro to avoid conflicts with `abseil`.
+#define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
+#define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
+#define AD_LOG_WARN AD_LOG(LogLevel::WARN)
+#define AD_LOG_INFO AD_LOG(LogLevel::INFO)
+#define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
+#define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
+#define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
+
+using enum LogLevel;
 
 namespace ad_utility {
-/* A singleton (According to Scott Meyer's pattern that holds
- * a pointer to a single std::ostream. This enables us to globally
- * redirect the LOG(LEVEL) Makros to another location.
- */
+// A singleton that holds a pointer to a single `std::ostream`. This enables us
+// to globally redirect the `AD_LOG_...` macros to another output stream.
 struct LogstreamChoice {
   std::ostream& getStream() { return *_stream; }
   void setStream(std::ostream* stream) { _stream = stream; }
@@ -60,19 +88,15 @@ struct LogstreamChoice {
 
   // default to cout since it was the default before
   std::ostream* _stream = &std::cout;
+};
 
-};  // struct LogstreamChoice
-
-/** @brief Redirect every LOG(LEVEL) macro that is called afterwards
- *         to the stream that the argument points to.
- *         Typically called in the main function of an executable.
- */
-inline void setGlobalLoggingStream(std::ostream* streamPtr) {
-  LogstreamChoice::get().setStream(streamPtr);
+// After this call, every use of `AD_LOG_...` will use the specified stream.
+// Used in various tests to redirect or suppress logging output.
+inline void setGlobalLoggingStream(std::ostream* stream) {
+  LogstreamChoice::get().setStream(stream);
 }
 
-using std::string;
-//! Helper class to get thousandth separators in a locale
+// Helper class to get thousandth separators in a locale
 class CommaNumPunct : public std::numpunct<char> {
  protected:
   virtual char do_thousands_sep() const { return ','; }
@@ -82,70 +106,36 @@ class CommaNumPunct : public std::numpunct<char> {
 
 const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 
-//! String representation of a double with precision and thousandth separators
-inline string to_string(double in, size_t precision) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << std::setprecision(precision) << std::fixed << in;
-  return std::move(buffer).str();
-}
-
-//! String representation of a long with thousandth separators
-inline string to_string(long in) {
-  std::ostringstream buffer;
-  buffer.imbue(commaLocale);
-  buffer << in;
-  return std::move(buffer).str();
-}
-
-//! Log
+// The class that actually does the logging.
 class Log {
  public:
-  template <unsigned char LEVEL>
+  template <LogLevel LEVEL>
   static std::ostream& getLog() {
     // use the singleton logging stream as target.
     return LogstreamChoice::get().getStream()
-           << ad_utility::Log::getTimeStamp() << "\t- "
-           << ad_utility::Log::getLevel<LEVEL>();
+           << getTimeStamp() << " - " << getLevel<LEVEL>();
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
-  static string getTimeStamp() {
-    using namespace std::chrono;
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
-    std::stringstream ss;
-
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.'
-       << std::setw(3) << std::setfill('0') << ms.count();
-    return std::move(ss).str();
+  static std::string getTimeStamp() {
+    return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
+                            absl::LocalTimeZone());
   }
 
-  template <unsigned char LEVEL>
-  static string getLevel() {
-    if (LEVEL == TRACE) {
-      return "TRACE: ";
-    }
-    if (LEVEL == TIMING) {
-      return "TIMING: ";
-    }
-    if (LEVEL == DEBUG) {
-      return "DEBUG: ";
-    }
-    if (LEVEL == INFO) {
-      return "INFO:  ";
-    }
-    if (LEVEL == WARN) {
-      return "WARN:  ";
-    }
-    if (LEVEL == ERROR) {
-      return "ERROR: ";
-    }
-    if (LEVEL == FATAL) {
-      return "FATAL: ";
-    }
+  template <LogLevel LEVEL>
+  static consteval std::string_view getLevel() {
+    using std::pair;
+    constexpr ad_utility::ConstexprMap map{std::array{
+        pair(TRACE, "TRACE: "),
+        pair(TIMING, "TIMING: "),
+        pair(DEBUG, "DEBUG: "),
+        pair(INFO, "INFO: "),
+        pair(WARN, "WARN: "),
+        pair(ERROR, "ERROR: "),
+        pair(FATAL, "FATAL: "),
+    }};
+    return map.at(LEVEL);
   }
 };
 }  // namespace ad_utility

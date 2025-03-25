@@ -7,9 +7,9 @@
 
 #include <boost/geometry.hpp>
 #include <boost/serialization/split_free.hpp>
+#include <ctre-unicode.hpp>
 
 #include "./Rtree.h"
-#include "ctre/ctre.h"
 
 class BasicGeometry {
  public:
@@ -69,7 +69,7 @@ class BasicGeometry {
   }
 
   static bool BoundingBoxesAreEqual(BasicGeometry::BoundingBox b1,
-                             BasicGeometry::BoundingBox b2) {
+                                    BasicGeometry::BoundingBox b2) {
     if (BasicGeometry::GetMinX(b1) != BasicGeometry::GetMinX(b2)) return false;
     if (BasicGeometry::GetMinY(b1) != BasicGeometry::GetMinY(b2)) return false;
     if (BasicGeometry::GetMaxX(b1) != BasicGeometry::GetMaxX(b2)) return false;
@@ -89,7 +89,7 @@ class BasicGeometry {
   // Convert a single wkt literal to a datapoint in the format suitable for the
   // Rtree
   static std::optional<BoundingBox> ConvertWordToRtreeEntry(
-      const std::string& wkt) {
+      std::string_view wkt) {
     /**
      * Convert a single wkt literal to a boundingbox.
      * Get the bounding box of either a multipolygon, polygon or a linestring
@@ -135,8 +135,7 @@ struct RTreeValue {
   [[nodiscard]] double MinY() const { return box.min_corner().get<1>(); }
   [[nodiscard]] double MaxY() const { return box.max_corner().get<1>(); }
 
-  bool operator==(const RTreeValue& other) const
-  {
+  bool operator==(const RTreeValue& other) const {
     if (id != other.id) return false;
     if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
     return true;
@@ -150,15 +149,14 @@ struct RTreeValue {
 };
 
 // ___________________________________________________________________________
-// Data type for a value of the Rtree (id and boundingbox), with the addtional
+// Data type for a value of the Rtree (id and boundingbox), with the additional
 // information of its position in the x- and y-sorting. This is only used to
 // create the Rtree in a more efficient way
 struct RTreeValueWithOrderIndex : RTreeValue {
   uint64_t orderX = 0;
   uint64_t orderY = 0;
 
-  bool operator==(const RTreeValueWithOrderIndex& other) const
-  {
+  bool operator==(const RTreeValueWithOrderIndex& other) const {
     if (id != other.id) return false;
     if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
     if (orderX != other.orderX) return false;

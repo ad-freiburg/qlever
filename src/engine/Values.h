@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
+#include "engine/Operation.h"
+#include "parser/ParsedQuery.h"
 
 class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
@@ -23,7 +23,7 @@ class Values : public Operation {
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  virtual string asStringImpl(size_t indent) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;
@@ -31,8 +31,6 @@ class Values : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
-
-  virtual void setTextLimit(size_t limit) override { (void)limit; }
 
   virtual bool knownEmptyResult() override {
     return parsedValues_._variables.empty() || parsedValues_._values.empty();
@@ -50,11 +48,13 @@ class Values : public Operation {
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
 

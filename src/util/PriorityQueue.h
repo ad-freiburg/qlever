@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <memory>
 #include <queue>
 #include <set>
@@ -25,6 +24,7 @@
 #include "./Exception.h"
 #include "./HashMap.h"
 #include "./Log.h"
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 using std::make_shared;
@@ -153,7 +153,7 @@ class TreeBasedPQ {
   /**
    * Update the key of a value in the HeapBasedPQ
    * @param newKey
-   * @param handle inout parameter, will be changed to be a valid handle after
+   * @param handle in/out parameter, will be changed to be a valid handle after
    * the operation has finished.
    * @throws NotInPQException if the handle does not point into the PQ (because
    * of pop or erase operations)
@@ -241,7 +241,7 @@ class HeapBasedPQ {
     const Value& value() const { return mData->mValue; }
     Value& value() { return mData->mValue; }
 
-    // was the value asociated with this handle already deleted because of an
+    // was the value associated with this handle already deleted because of an
     // erase operation
     bool isValid() const { return (mData->mScore).index() == 1; };
 
@@ -370,7 +370,7 @@ class HeapBasedPQ {
    * associated with the handle
    *
    * @param newKey
-   * @param handle Inout parameter: Updated s.t. it stays valid.
+   * @param handle in/out parameter: Updated s.t. it stays valid.
    * @throws NotInPQException if the handle does not point into the PQ (because
    * of pop or erase operations)
    */

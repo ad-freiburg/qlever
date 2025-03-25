@@ -4,7 +4,7 @@
 
 #include "SetOfIntervals.h"
 
-#include <algorithm>
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 // ___________________________________________________________________________

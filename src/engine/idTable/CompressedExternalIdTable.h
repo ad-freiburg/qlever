@@ -5,12 +5,12 @@
 #ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 #define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 
-#include <algorithm>
+#include <absl/strings/str_cat.h>
+
 #include <future>
-#include <queue>
 #include <ranges>
 
-#include "absl/strings/str_cat.h"
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -19,9 +19,16 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
-#include "util/http/beast.h"
 
 namespace ad_utility {
+
+namespace compressedExternalIdTable::detail {
+template <typename B, typename R>
+CPP_requires(HasPushBackRequires, requires(B& b, const R& r)(b.push_back(r)));
+
+template <typename B, typename R>
+CPP_concept HasPushBack = CPP_requires_ref(HasPushBackRequires, B, R);
+}  // namespace compressedExternalIdTable::detail
 
 using namespace ad_utility::memory_literals;
 
@@ -117,12 +124,12 @@ class CompressedExternalIdTableWriter {
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       compressColumFutures.push_back(
           std::async(std::launch::async, [this, i, blockSize, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `std::views::chunk`
+            // TODO<C++23> Use `ql::views::chunkd`
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
               size_t upper = std::min(lower + blockSize, column.size());
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
@@ -152,7 +159,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<cppcoro::generator<const IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
     }
     return result;
@@ -165,7 +172,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForRows<N>(i));
     }
     return result;
@@ -174,8 +181,9 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   auto getGeneratorForAllRows() {
     // Note: As soon as we drop the support for GCC11 this can be
-    // `return getAllRowGenerators<N>() | std::views::join;
-    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
+    // `return getAllRowGenerators<N>() | ql::views::join;
+    return ql::views::join(
+        ad_utility::OwningViewNoConst{getAllRowGenerators<N>()});
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -190,7 +198,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
-    std::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
+    ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
   }
 
@@ -198,7 +206,7 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return std::views::join(
+    return ql::views::join(
         ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -256,7 +264,7 @@ class CompressedExternalIdTableWriter {
         blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
     block.resize(blockSize);
     std::vector<std::future<void>> readColumnFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       readColumnFutures.push_back(
           std::async(std::launch::async, [&block, this, i, blockIdx]() {
             decltype(auto) col = block.getColumn(i);
@@ -316,6 +324,10 @@ class CompressedExternalIdTableBase {
   CompressedExternalIdTableWriter writer_;
   std::future<void> compressAndWriteFuture_;
 
+  // Store whether this table has previously already been iterated over (in
+  // which case this member becomes `false`).
+  std::atomic<bool> isFirstIteration_ = true;
+
   [[no_unique_address]] BlockTransformation blockTransformation_{};
 
  public:
@@ -334,8 +346,9 @@ class CompressedExternalIdTableBase {
   }
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
-  void push(const auto& row) requires requires { currentBlock_.push_back(row); }
-  {
+  CPP_template(typename R)(
+      requires compressedExternalIdTable::detail::HasPushBack<
+          decltype(currentBlock_), R>) void push(const R& row) {
     ++numElementsPushed_;
     currentBlock_.push_back(row);
     if (currentBlock_.size() >= blocksize_) {
@@ -363,6 +376,8 @@ class CompressedExternalIdTableBase {
       compressAndWriteFuture_.get();
     }
     writer_.clear();
+    numBlocksPushed_ = 0;
+    isFirstIteration_ = true;
   }
 
  protected:
@@ -400,6 +415,9 @@ class CompressedExternalIdTableBase {
   // until the pushing is actually finished, and return `true`. Using this
   // function allows for an efficient usage of this class for very small inputs.
   bool transformAndPushLastBlock() {
+    if (!isFirstIteration_) {
+      return numBlocksPushed_ != 0;
+    }
     // If we have pushed at least one (complete) block, then the last future
     // from pushing a block is still in flight. If we have never pushed a block,
     // then also the future cannot be valid.
@@ -447,11 +465,11 @@ class CompressedExternalIdTable
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTable(
+  CPP_member explicit CPP_ctor(CompressedExternalIdTable)(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
-      requires(NumStaticCols > 0)
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)(
+      requires(NumStaticCols > 0))
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
                                   std::move(allocator), blocksizeCompression) {}
 
@@ -461,7 +479,7 @@ class CompressedExternalIdTable
   // exactly once.
   auto getRows() {
     if (!this->transformAndPushLastBlock()) {
-      // For the case of only a single block we have to mimick the exact same
+      // For the case of only a single block we have to mimic the exact same
       // return type as that of `writer_.getGeneratorForAllRows()`, that's why
       // there are the seemingly redundant multiple calls to
       // join(OwningView(vector(...))).
@@ -470,10 +488,10 @@ class CompressedExternalIdTable
         co_yield block;
       }(this->currentBlock_);
       auto rowView =
-          std::views::join(ad_utility::OwningView{std::move(generator)});
+          ql::views::join(ad_utility::OwningView{std::move(generator)});
       std::vector<decltype(rowView)> vec;
       vec.push_back(std::move(rowView));
-      return std::views::join(ad_utility::OwningView(std::move(vec)));
+      return ql::views::join(ad_utility::OwningViewNoConst(std::move(vec)));
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -482,6 +500,27 @@ class CompressedExternalIdTable
     }
     return this->writer_.template getGeneratorForAllRows<NumStaticCols>();
   }
+};
+
+// A virtual base class for the `CompressedExternalIdTableSorter` (see below)
+// that type-erases the used comparator as well as the statically known number
+// of columns. The interface only deals in blocks, so that the costs of the
+// virtual calls and the checking of the correct number of columns disappear.
+class CompressedExternalIdTableSorterTypeErased {
+ public:
+  // Push a complete block at once.
+  virtual void pushBlock(const IdTableStatic<0>& block) = 0;
+  // Get the sorted output after all blocks have been pushed. If `blocksize ==
+  // nullopt`, the size of the returned blocks will be chosen automatically.
+  virtual cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize = std::nullopt) = 0;
+
+  // Clear the complete sorter s.t. it can be reused. This deletes the contents
+  // of the underlying file. Note:  We need a name that is distinct from `clear`
+  // because of name collisions in the multiple inheritance of the
+  // implementation.
+  virtual void clearUnderlying() = 0;
+  virtual ~CompressedExternalIdTableSorterTypeErased() = default;
 };
 
 // This class allows the external (on-disk) sorting of an `IdTable` that is too
@@ -505,11 +544,11 @@ struct BlockSorter {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 };
-// Deduction guide for the implicit aggregate initializtion (its  "constructor")
+// Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
 // it.
 template <typename Comparator>
@@ -518,7 +557,8 @@ BlockSorter(Comparator) -> BlockSorter<Comparator>;
 template <typename Comparator, size_t NumStaticCols>
 class CompressedExternalIdTableSorter
     : public CompressedExternalIdTableBase<NumStaticCols,
-                                           BlockSorter<Comparator>> {
+                                           BlockSorter<Comparator>>,
+      public CompressedExternalIdTableSorterTypeErased {
  private:
   using Base =
       CompressedExternalIdTableBase<NumStaticCols, BlockSorter<Comparator>>;
@@ -532,9 +572,12 @@ class CompressedExternalIdTableSorter
   //  output phase.
   int numBufferedOutputBlocks_ = 4;
 
+  // See the `moveResultOnMerge()` getter function for documentation.
+  bool moveResultOnMerge_ = true;
+
  public:
   // Constructor.
-  explicit CompressedExternalIdTableSorter(
+  CompressedExternalIdTableSorter(
       std::string filename, size_t numCols, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
@@ -549,50 +592,121 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTableSorter(
+  CPP_member CPP_ctor(CompressedExternalIdTableSorter)(
       std::string filename, ad_utility::MemorySize memory,
       ad_utility::AllocatorWithLimit<Id> allocator,
       MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comp = {}) requires(NumStaticCols > 0)
+      Comparator comp = {})(requires(NumStaticCols > 0))
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
 
+  // Explicitly inherit the `push` function, such that we can use it unqualified
+  // within this class.
+  using Base::push;
+
+  // If set to `false` then the sorted result can be extracted multiple times.
+  // If set to `true` then the result is moved out and unusable after the first
+  // merge. In that case an exception will be thrown at the start of the second
+  // merge.
+  // Note: This mechanism gives a performance advantage for very small inputs
+  // that can be completely sorted in RAM. In that case we can avoid a copy of
+  // the sorted result.
+  bool& moveResultOnMerge() {
+    AD_CONTRACT_CHECK(this->isFirstIteration_);
+    return moveResultOnMerge_;
+  }
+
   // Transition from the input phase, where `push()` can be called, to the
-  // output phase and return a generator that yields the sorted elements. This
-  // function must be called exactly once.
-  cppcoro::generator<
-      const typename IdTableStatic<NumStaticCols>::const_row_reference>
-  sortedView() {
-    size_t numYielded = 0;
+  // output phase and return a generator that yields the sorted elements one by
+  // one. Either this function or the following function must be called exactly
+  // once.
+  auto sortedView() {
+    return ql::views::join(ad_utility::OwningView{getSortedBlocks()});
+  }
+
+  // Similar to `sortedView` (see above), but the elements are yielded in
+  // blocks. The size of the blocks is `blocksize` if specified, otherwise it
+  // will be automatically determined from the given memory limit.
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> getSortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
+    // If we move the result out, there must only be a single merge phase.
+    AD_CONTRACT_CHECK(this->isFirstIteration_ || !this->moveResultOnMerge_);
     mergeIsActive_.store(true);
-    for (const auto& block : ad_utility::streams::runStreamAsync(
-             sortedBlocks(), std::max(1, numBufferedOutputBlocks_ - 2))) {
-      for (typename IdTableStatic<NumStaticCols>::const_row_reference row :
-           block) {
-        ++numYielded;
-        co_yield row;
-      }
+    // Explanation for the second argument: One block is buffered by this
+    // generator, one block is buffered inside the `sortedBlocks` generator, so
+    // `numBufferedOutputBlocks_ - 2` blocks may be buffered by the async
+    // stream.
+    for (auto& block : ad_utility::streams::runStreamAsync(
+             sortedBlocks<N>(blocksize),
+             std::max(1, numBufferedOutputBlocks_ - 2))) {
+      co_yield block;
     }
-    AD_CORRECTNESS_CHECK(numYielded == this->numElementsPushed_);
+    this->isFirstIteration_ = false;
     mergeIsActive_.store(false);
   }
 
+  // The implementation of the type-erased interface. Push a complete block at
+  // once.
+  void pushBlock(const IdTableStatic<0>& block) override {
+    AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
+    ql::ranges::for_each(block,
+                         [ptr = this](const auto& row) { ptr->push(row); });
+  }
+
+  // The implementation of the type-erased interface. Get the sorted blocks as
+  // dynamic IdTables.
+  cppcoro::generator<IdTableStatic<0>> getSortedOutput(
+      std::optional<size_t> blocksize) override {
+    return getSortedBlocks<0>(blocksize);
+  }
+
  private:
+  void clearUnderlying() override { this->clear(); }
   // Transition from the input phase, where `push()` may be called, to the
   // output phase and return a generator that yields the sorted elements. This
   // function may be called exactly once.
-  cppcoro::generator<IdTableStatic<NumStaticCols>> sortedBlocks() {
+  template <size_t N = NumStaticCols>
+  requires(N == NumStaticCols || N == 0)
+  cppcoro::generator<IdTableStatic<N>> sortedBlocks(
+      std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
-      // There was only one block, return it.
-      co_yield this->currentBlock_;
+      // There was only one block, return it. If a blocksize was explicitly
+      // requested for the output, and the single block is larger than this
+      // blocksize, we manually have to split it into chunks.
+      auto& block = this->currentBlock_;
+      if (block.empty()) {
+        co_return;
+      }
+      const auto blocksizeOutput = blocksize.value_or(block.numRows());
+      if (block.numRows() <= blocksizeOutput) {
+        if (this->moveResultOnMerge_) {
+          co_yield std::move(this->currentBlock_).template toStatic<N>();
+        } else {
+          auto blockAsStatic = IdTableStatic<N>(
+              this->currentBlock_.clone().template toStatic<N>());
+          co_yield blockAsStatic;
+        }
+      } else {
+        // TODO<C++23> Use `ql::views::chunkd`.
+        for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
+          size_t upper = std::min(i + blocksizeOutput, block.numRows());
+          auto curBlock = IdTableStatic<NumStaticCols>(
+              this->numColumns_, this->writer_.allocator());
+          curBlock.reserve(upper - i);
+          curBlock.insertAtEnd(block, i, upper);
+          co_yield std::move(curBlock).template toStatic<N>();
+        }
+      }
       co_return;
     }
     auto rowGenerators =
         this->writer_.template getAllRowGenerators<NumStaticCols>();
 
     const size_t blockSizeOutput =
-        computeBlockSizeForMergePhase(rowGenerators.size());
+        blocksize.value_or(computeBlockSizeForMergePhase(rowGenerators.size()));
 
     using P = std::pair<decltype(rowGenerators[0].begin()),
                         decltype(rowGenerators[0].end())>;
@@ -609,24 +723,24 @@ class CompressedExternalIdTableSorter
     for (auto& gen : rowGenerators) {
       pq.emplace_back(gen.begin(), gen.end());
     }
-    std::ranges::make_heap(pq, comp);
+    ql::ranges::make_heap(pq, comp);
     IdTableStatic<NumStaticCols> result(this->writer_.numColumns(),
                                         this->writer_.allocator());
     result.reserve(blockSizeOutput);
     size_t numPopped = 0;
     while (!pq.empty()) {
-      std::ranges::pop_heap(pq, comp);
+      ql::ranges::pop_heap(pq, comp);
       auto& min = pq.back();
       result.push_back(*min.first);
       ++(min.first);
       if (min.first == min.second) {
         pq.pop_back();
       } else {
-        std::ranges::push_heap(pq, comp);
+        ql::ranges::push_heap(pq, comp);
       }
       if (result.size() >= blockSizeOutput) {
         numPopped += result.numRows();
-        co_yield result;
+        co_yield std::move(result).template toStatic<N>();
         // The `result` will be moved away, so we have to reset it again.
         result = IdTableStatic<NumStaticCols>(this->writer_.numColumns(),
                                               this->writer_.allocator());
@@ -634,7 +748,9 @@ class CompressedExternalIdTableSorter
       }
     }
     numPopped += result.numRows();
-    co_yield result;
+    if (!result.empty()) {
+      co_yield std::move(result).template toStatic<N>();
+    }
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 
@@ -643,7 +759,7 @@ class CompressedExternalIdTableSorter
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 

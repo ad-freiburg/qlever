@@ -11,6 +11,7 @@
 #include "../test/util/GTestHelpers.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -21,16 +22,16 @@ namespace ad_utility {
 @tparam OptionType Exists to define, if the test should be done with
 `ConfigOption`, or `const ConfigOption`.
 */
-template <template <typename> typename ProxyType, typename OptionType>
-requires std::same_as<OptionType, ConfigOption> ||
-         std::same_as<OptionType, const ConfigOption>
-void basicConstructorTest() {
+CPP_template(template <typename> typename ProxyType, typename OptionType)(
+    requires SameAsAny<OptionType, ConfigOption,
+                       const ConfigOption>) void basicConstructorTest() {
   // Test construction for a given type.
   auto doTest = []<typename T>() {
     // Does the normal constructor work?
     T varForConfigOption;
     OptionType opt("testOption", "", &varForConfigOption);
     ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
+    static_assert(std::same_as<T, typename ProxyType<T>::value_type>);
 
     // Is there an exception, if we give a config option of the wrong type?
     doForTypeInConfigOptionValueType([&opt]<typename WrongT>() {

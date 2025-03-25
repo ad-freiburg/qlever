@@ -355,18 +355,6 @@ TEST(ConfigOptionTest, SetValueWithJson) {
   doForTypeInConfigOptionValueType(doTestCase);
 }
 
-// Test, if there is a dummy value for any type, that a `ConfigOption` can hold.
-TEST(ConfigOptionTest, DummyValueExistence) {
-  doForTypeInConfigOptionValueType([]<typename T>() {
-    T notUsed;
-    ConfigOption option("option", "", &notUsed);
-
-    ASSERT_FALSE(option.getDummyValueAsJson().is_null());
-    ASSERT_NE("None", option.getDummyValueAsString());
-    ASSERT_NE("", option.getDummyValueAsString());
-  });
-}
-
 TEST(ConfigOptionTest, HoldsType) {
   // Test for `configOption` with the given type.
   auto doTest = []<typename CorrectType>() {

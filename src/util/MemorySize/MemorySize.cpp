@@ -5,40 +5,40 @@
 
 #include "util/MemorySize/MemorySize.h"
 
+#include <absl/strings/charconv.h>
 #include <absl/strings/str_cat.h>
 
-#include <cinttypes>
-#include <ranges>
+#include <cctype>
+#include <charconv>
+#include <cmath>
+#include <ctre-unicode.hpp>
 #include <string_view>
 
-#include "util/Cache.h"
+#include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
-#include "util/Exception.h"
-#include "util/HashMap.h"
-#include "util/MemorySize/MemorySizeParser.h"
-#include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
-#include "util/MemorySize/generated/MemorySizeLanguageParser.h"
 
 namespace ad_utility {
 // _____________________________________________________________________________
 std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
-  auto toString = [](const auto number, std::string_view unitName) {
-    return absl::StrCat(number, " ", unitName);
+  auto toString = []<typename T>(const T number, std::string_view unitName) {
+    if constexpr (std::integral<T>) {
+      return absl::StrCat(number, " ", unitName);
+    } else {
+      static_assert(std::floating_point<T>);
+      return number * 10 == std::floor(number * 10)
+                 ? absl::StrCat(number, " ", unitName)
+                 : absl::StrCat(std::round(number * 10) / 10, " ", unitName);
+    }
   };
 
-  /*
-  Choosing the memory unit type is done by choosing the unit type, in which
-  range `memoryInBytes_` is contained.
-  A memory unit type normally has the range `[hisSize,
-  sizeOfTheNextBiggerUnit)`.
-  Only exceptions are:
-  - `TB`, which has no upper bound, because it's our biggest unit.
-  - `kB`, which has the lower bound `100'000` instead of `1'000`. Typically, for
-  such small sizes you still want the exact value because they mean something
-  ,e.g. a block size or a page size etc..
-  */
+  // Lower bounds on the size for the various memory units. Used to determine
+  // the memory unit type below.
+  //
+  // NOTE: the lower bound for `kB` is `100'000` instead of `1'000` because we
+  // want exact values below `100'000` bytes (for example, block or page sizes
+  // are often larger than 1'000 bytes but below 100'000 bytes).
   constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
       {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
        std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},
@@ -63,7 +63,40 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  return MemorySizeParser::parseMemorySize(str);
+  constexpr ctll::fixed_string regex =
+      "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
+  if (auto matcher = ctre::match<regex>(str)) {
+    auto amountString = matcher.get<"amount">().to_view();
+    // Versions after CTRE v3.8.1 should support to_number()
+    // with double values if the compilers support it.
+    double amount;
+    absl::from_chars(amountString.begin(), amountString.end(), amount);
+    auto unitString = matcher.get<"unit">().to_view();
+    switch (std::tolower(unitString.at(0))) {
+      case 'b':
+        if (ad_utility::contains(amountString, '.')) {
+          throw std::runtime_error(absl::StrCat(
+              "'", str,
+              "' could not be parsed as a memory size. When using bytes as "
+              "units only unsigned integers are allowed."));
+        }
+        return MemorySize::bytes(static_cast<size_t>(amount));
+      case 'k':
+        return MemorySize::kilobytes(amount);
+      case 'm':
+        return MemorySize::megabytes(amount);
+      case 'g':
+        return MemorySize::gigabytes(amount);
+      case 't':
+        return MemorySize::terabytes(amount);
+      default:
+        // Whatever this is, it is false.
+        AD_FAIL();
+    }
+  }
+  throw std::runtime_error(absl::StrCat(
+      "'", str,
+      R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
 }
 
 // _____________________________________________________________________________

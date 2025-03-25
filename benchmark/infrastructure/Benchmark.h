@@ -14,13 +14,16 @@
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "backports/concepts.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -65,7 +68,8 @@ class BenchmarkResults {
   @param constructorArgs Arguments to pass to the constructor of the object,
   that the new `CopyableUniquePtr` will own.
   */
-  template <typename EntryType>
+  template <QL_CONCEPT_OR_TYPENAME(
+      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup>) EntryType>
   static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(
@@ -87,8 +91,7 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  template <typename Function>
-  requires std::invocable<Function>
+  template <std::invocable Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
@@ -96,7 +99,7 @@ class BenchmarkResults {
   }
 
   /*
-   * @brief Returns a vector of all the singe measurements.
+   * @brief Returns a vector of all the single measurements.
    */
   std::vector<ResultEntry> getSingleMeasurements() const;
 
@@ -131,7 +134,8 @@ class BenchmarkResults {
 
   // Json serialization. The implementation can be found in
   // `BenchmarkToJson`.
-  friend void to_json(nlohmann::json& j, const BenchmarkResults& results);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const BenchmarkResults& results);
 };
 
 /*
@@ -147,10 +151,6 @@ class BenchmarkInterface {
   */
   ad_utility::ConfigManager manager_;
 
- public:
-  // A human-readable name that will be printed as part of the output.
-  virtual std::string name() const = 0;
-
   /*
   For the general metadata of a class. Mostly information, that is the same
   for every benchmark, so that every entry of the `BenchmarkResults` doesn't
@@ -158,17 +158,21 @@ class BenchmarkInterface {
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
   version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
-  clunky. Instead, you make one `BenchmarkInterface` instance for every
-  version and simply return which version you are using as metadata through
-  `getMetadata`.
+  clunky. Instead, you make one `BenchmarkInterface` instance for every version
+  and simply return which version you are using as metadata through .
   */
-  virtual BenchmarkMetadata getMetadata() const {
-    // Default behaviour.
-    return BenchmarkMetadata{};
-  }
+  BenchmarkMetadata generalClassMetadata_;
+
+ public:
+  // A human-readable name that will be printed as part of the output.
+  virtual std::string name() const = 0;
+
+  // Getter for the general metadata of the class.
+  BenchmarkMetadata& getGeneralMetadata();
+  const BenchmarkMetadata& getGeneralMetadata() const;
 
   /*
-  Run all your benchmarks. The `BenchmarkResults` class is a management
+  @brief Run all your benchmarks. The `BenchmarkResults` class is a management
   class for measuering the execution time of functions and organizing the
   results.
   */
@@ -178,8 +182,19 @@ class BenchmarkInterface {
   virtual ~BenchmarkInterface() = default;
 
   // Needed for manipulation by the infrastructure.
-  ad_utility::ConfigManager& getConfigManager() { return manager_; }
-  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
+  ad_utility::ConfigManager& getConfigManager();
+  const ad_utility::ConfigManager& getConfigManager() const;
+
+  /*
+  @brief Only used for manipulation via the infrastructure. Is called directly
+  before `runAllBenchmarks`.
+
+  Add/update the default metadata of the benchmark class. Currently
+  adds/updates:
+  - A time stamp containing the time and date of this call. Can be used to
+  identify the time and date, `runAllBenchmarks` was run.
+  */
+  void updateDefaultGeneralMetadata();
 };
 
 /*
@@ -191,7 +206,7 @@ class BenchmarkRegister {
   using BenchmarkPointer = std::unique_ptr<BenchmarkInterface>;
 
   /*
-  Static vector of all registered benchmark classe instances.
+  Static vector of all registered benchmark class instances.
    */
   inline static std::vector<BenchmarkPointer> registeredBenchmarks{};
 
@@ -202,7 +217,7 @@ class BenchmarkRegister {
    *  implemented the `BenchmarkInterface`. Shouldn't take up much space
    *  and I couldn't find a better way of doing it.
    *
-   * @param benchmarkClasseInstance The memory managment of the passed
+   * @param benchmarkClasseInstance The memory management of the passed
    *  instances will be taken over by `BenchmarkRegister`.
    */
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
@@ -214,13 +229,13 @@ class BenchmarkRegister {
   static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
-   * @brief Measures all the registered benchmarks and returns the resulting
-   *  `BenchmarkResuls` objects.
-   *
-   * @return Every benchmark class get's measured with their own
-   *  `BenchmarkResults`. They should be in the same order as the
-   *  registrations.
-   */
+  @brief For each registered benchmark:
+  - Update the default class metadata.
+  - Run the measurements.
+
+  @return Every benchmark class gets measured with their own
+  `BenchmarkResults`. They should be in the same order as the registrations.
+  */
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*
@@ -233,7 +248,7 @@ class BenchmarkRegister {
 Macros for easier registering of benchmark classes.
 `declareRegisterVariable` and `declareRegisterVariableHidden` are needed for
 the implementation. Only `registerBenchmark` needs to be 'called', when one
-want's to register a benchmark class.
+wants to register a benchmark class.
 */
 #define AD_DECLARE_REGISTER_VARIABLE_HIDDEN(line, benchmarkClass, ...) \
   static BenchmarkRegister gRegisterVariable##benchmarkClass##line{    \

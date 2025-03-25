@@ -10,16 +10,15 @@ namespace detail {
 
 // The implementation of `makeOnDestructionDontThrowDuringStackUnwinding` (see
 // below).
-template <typename F>
-requires(std::is_invocable_v<F>)
-class OnDestructionDontThrowDuringStackUnwinding {
+CPP_template(typename F)(requires std::is_invocable_v<
+                         F>) class OnDestructionDontThrowDuringStackUnwinding {
   static_assert(
       !std::is_nothrow_invocable_v<F>,
       "When using a non-throwing callback, use the simpler `absl::Cleanup`");
 
  private:
   F f_;
-  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+  ThrowInDestructorIfSafe throwInDestructorIfSafe_;
   bool isCanceled_ = false;
 
  public:
@@ -37,19 +36,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
     if (isCanceled_) {
       return;
     }
-    // If the number of uncaught exceptions is the same as when then constructor
-    // was called, then it is safe to throw a possible exception For details see
-    // https://en.cppreference.com/w/cpp/error/uncaught_exception, especially
-    // the links at the bottom of the page.
-    if (numExceptionsDuringConstruction_ == std::uncaught_exceptions()) {
-      std::invoke(std::move(f_));
-    } else {
-      // We must not throw, so we simply ignore possible exceptions.
-      ad_utility::ignoreExceptionIfThrows(
-          std::move(f_),
-          "Note: the exception would have been thrown during stack unwinding "
-          "in a way that would immediately terminate the program.");
-    }
+    throwInDestructorIfSafe_(std::move(f_));
   }
   friend class OnDestructionCreator;
 
@@ -84,9 +71,9 @@ class OnDestructionCreator {
 // return object in a container because all of its constructors are either
 // private or deleted. This is disabled deliberately as it might lead to program
 // termination (for `std::vector`) or to uncalled destructors.
-template <std::invocable F>
-[[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<F>
-makeOnDestructionDontThrowDuringStackUnwinding(F f) {
+CPP_template(typename F)(requires std::invocable<F>)
+    [[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<
+        F> makeOnDestructionDontThrowDuringStackUnwinding(F f) {
   static_assert(
       !std::is_nothrow_invocable_v<F>,
       "When using a non-throwing callback, use the simpler `absl::Cleanup`");

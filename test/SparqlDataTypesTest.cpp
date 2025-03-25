@@ -5,7 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "parser/data/VarOrTerm.h"
+#include "index/Index.h"
+#include "parser/data/ConstructQueryExportContext.h"
+#include "parser/data/Types.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -14,18 +16,19 @@ using enum PositionInTriple;
 namespace {
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
-  ResultTable _resultTable{
+  Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row) const {
-    return {row, _resultTable, _hashMap, _index};
+    return {row, _resultTable.idTable(), _resultTable.localVocab(), _hashMap,
+            _index};
   }
 
   void setIdTable(IdTable&& table) {
     _resultTable =
-        ResultTable{std::move(table), {}, _resultTable.getSharedLocalVocab()};
+        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
   }
 };
 
@@ -76,8 +79,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 
   EXPECT_THAT(blankNode.evaluate(context, SUBJECT), expectedLabel);
   EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
-  EXPECT_THAT(VarOrTerm{GraphTerm{blankNode}}.evaluate(context, SUBJECT),
-              expectedLabel);
+  EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
@@ -132,8 +134,7 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
 
   EXPECT_THAT(iri.evaluate(context, SUBJECT), expectedString);
   EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
-  EXPECT_THAT(VarOrTerm{GraphTerm{iri}}.evaluate(context, SUBJECT),
-              expectedString);
+  EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
@@ -179,15 +180,13 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
 
   EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
   EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
-  EXPECT_EQ(VarOrTerm{GraphTerm{literal}}.evaluate(context, SUBJECT),
-            std::nullopt);
+  EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
 
   auto expectedString = Optional("some literal"s);
 
   EXPECT_THAT(literal.evaluate(context, OBJECT), expectedString);
   EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
-  EXPECT_THAT(VarOrTerm{GraphTerm{literal}}.evaluate(context, OBJECT),
-              expectedString);
+  EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
@@ -199,11 +198,16 @@ TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
 }
 
 TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
-  EXPECT_THROW(Variable{"no_leading_var_or_dollar"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{""}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"? var with space"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"?"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"$"}, ad_utility::Exception);
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP()
+        << "validity of variable names is only checked with expensive checks";
+  }
+  EXPECT_THROW(Variable("no_leading_var_or_dollar", true),
+               ad_utility::Exception);
+  EXPECT_THROW(Variable("", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("? var with space", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("?", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("$", true), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
@@ -264,12 +268,12 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
-  EXPECT_THAT(VarOrTerm{variableKnown}.evaluate(context, SUBJECT),
+  EXPECT_THAT(GraphTerm{variableKnown}.evaluate(context, SUBJECT),
               Optional("69"s));
 
   Variable variableUnknown{"?unknownVar"};
 
   EXPECT_EQ(variableUnknown.evaluate(context, SUBJECT), std::nullopt);
-  EXPECT_EQ(VarOrTerm{variableUnknown}.evaluate(context, SUBJECT),
+  EXPECT_EQ(GraphTerm{variableUnknown}.evaluate(context, SUBJECT),
             std::nullopt);
 }

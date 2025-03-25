@@ -1,10 +1,11 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 #include <cstdio>
 #include <fstream>
 #include <ranges>
@@ -12,13 +13,12 @@
 #include <stdexcept>
 #include <tuple>
 
+#include "../engine/ValuesForTesting.h"
 #include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "./IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
@@ -33,6 +33,22 @@
 struct IdTableAndJoinColumn {
   IdTable idTable;
   size_t joinColumn;
+};
+
+// Implementation of a class that inherits from `IdTable` but is copyable
+// (convenient for testing).
+template <size_t N = 0>
+using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
+template <size_t N = 0>
+class CopyableIdTable : public TableImpl<N> {
+ public:
+  using Base = TableImpl<N>;
+  using Base::Base;
+  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
+  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
+    static_cast<Base&>(*this) = rhs.clone();
+    return *this;
+  }
 };
 
 // For easier reading. We repeat that type combination so often, that this
@@ -65,9 +81,44 @@ IdTable makeIdTableFromVector(const VectorTable& content,
   return result;
 }
 
+// Similar to `makeIdTableFromVector` (see above), but returns a GMock
+// `matcher`, that matches for equality with the created `IdTable`. In
+// particular, the matcher also deals with `IdTable` not being copyable, which
+// requires a workaround for GMock/GTest.
+struct MatchesIdTableFromVector {
+  template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+  auto operator()(const VectorTable& content, Transformation t = {}) const {
+    return ::testing::Eq(
+        CopyShield<IdTable>(makeIdTableFromVector(content, std::move(t))));
+  }
+};
+static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
+
+// Construct an `IdTable` from the given arguments, but returns a GMock
+// `matcher`, that matches for equality with the `IdTable`. In particular, the
+// matcher also deals with `IdTable` not being copyable, which requires a
+// workaround for GMock/GTest.
+struct MatchesIdTable {
+  template <typename... Ts>
+  requires(std::constructible_from<IdTable, Ts && ...>)
+  auto operator()(Ts&&... ts) const {
+    return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
+  }
+
+  // Overload for lvalue-references (`IdTable`s are not copyable)
+  template <typename T,
+            typename = std::enable_if_t<ad_utility::SimilarTo<T, IdTable>>>
+  auto operator()(T& table) const {
+    // Note: We could use `Eq(cref(table))` , but the explicit deep copy
+    // gets rid of all possibly lifetime and mutability issues.
+    return operator()(table.clone());
+  }
+};
+static constexpr MatchesIdTable matchesIdTable;
+
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample
- * solution and, if the option was choosen, if the IdTable is sorted by
+ * solution and, if the option was chosen, if the IdTable is sorted by
  * the join column.
  *
  * @param table The IdTable that should be tested.
@@ -87,7 +138,7 @@ void compareIdTableWithExpectedContent(
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during
- * normal programm usage.
+ * normal program usage.
  */
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table);
 
@@ -188,7 +239,7 @@ IdTable createRandomlyFilledIdTable(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
-@brief Return a IdTable, that is completly randomly filled.
+@brief Return a IdTable, that is completely randomly filled.
 
 @param numberRows, numberColumns The size of the IdTable, that is to be
 returned.
@@ -199,3 +250,13 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
+
+/// Turn a given `IdTable` into a `QueryExecutionTree` by cloning the table
+/// and filling it with dummy variables.
+std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
+    QueryExecutionContext*, const IdTable&);
+
+// Fully consume a given generator and store it in an `IdTable` and store the
+// local vocabs in a vector.
+std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
+    Result::LazyResult generator, size_t numColumns);

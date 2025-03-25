@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "engine/LocalVocab.h"
 #include "util/Algorithm.h"
 
 namespace ad_utility {
@@ -108,13 +109,17 @@ template <typename Table>
 struct IdTableAndFirstCol {
  private:
   Table table_;
+  LocalVocab localVocab_;
 
  public:
   // Typedef needed for generic interfaces.
   using iterator = std::decay_t<decltype(table_.getColumn(0).begin())>;
+  using const_iterator =
+      std::decay_t<decltype(std::as_const(table_).getColumn(0).begin())>;
 
   // Construct by taking ownership of the table.
-  explicit IdTableAndFirstCol(Table t) : table_{std::move(t)} {}
+  IdTableAndFirstCol(Table t, LocalVocab localVocab)
+      : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
 
   // Get access to the first column.
   decltype(auto) col() { return table_.getColumn(0); }
@@ -126,9 +131,11 @@ struct IdTableAndFirstCol {
   auto begin() const { return col().begin(); }
   auto end() const { return col().end(); }
 
-  bool empty() { return col().empty(); }
+  bool empty() const { return col().empty(); }
 
   const Id& operator[](size_t idx) const { return col()[idx]; }
+  const Id& front() const { return col().front(); }
+  const Id& back() const { return col().back(); }
 
   size_t size() const { return col().size(); }
 
@@ -139,5 +146,7 @@ struct IdTableAndFirstCol {
   IdTableView<I> asStaticView() const {
     return table_.template asStaticView<I>();
   }
+
+  const LocalVocab& getLocalVocab() const { return localVocab_; }
 };
 }  // namespace ad_utility

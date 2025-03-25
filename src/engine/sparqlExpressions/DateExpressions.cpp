@@ -6,9 +6,15 @@
 
 namespace sparqlExpression {
 namespace detail {
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
+
 // Date functions.
 // The input is `std::nullopt` if the argument to the expression is not a date.
-inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
+
+//______________________________________________________________________________
+inline auto extractYear = [](std::optional<DateYearOrDuration> d) {
   if (!d.has_value()) {
     return Id::makeUndefined();
   } else {
@@ -16,7 +22,8 @@ inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
   }
 };
 
-inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
+//______________________________________________________________________________
+inline auto extractMonth = [](std::optional<DateYearOrDuration> d) {
   // TODO<C++23> Use the monadic operations for std::optional
   if (!d.has_value()) {
     return Id::makeUndefined();
@@ -28,7 +35,8 @@ inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
   return Id::makeFromInt(optionalMonth.value());
 };
 
-inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
+//______________________________________________________________________________
+inline auto extractDay = [](std::optional<DateYearOrDuration> d) {
   // TODO<C++23> Use the monadic operations for `std::optional`.
   if (!d.has_value()) {
     return Id::makeUndefined();
@@ -40,18 +48,47 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
   return Id::makeFromInt(optionalDay.value());
 };
 
-template <auto dateMember, auto makeId>
-inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d->isDate()) {
+//______________________________________________________________________________
+inline auto extractStrTimezone =
+    [](std::optional<DateYearOrDuration> d) -> IdOrLiteralOrIri {
+  // TODO<C++23> Use the monadic operations for std::optional
+  if (!d.has_value()) {
     return Id::makeUndefined();
   }
-  Date date = d.value().getDate();
-  if (!date.hasTime()) {
-    return Id::makeUndefined();
-  }
-  return std::invoke(makeId, std::invoke(dateMember, date));
+  auto timezoneStr = d.value().getStrTimezone();
+  return LiteralOrIri{Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(timezoneStr))};
 };
 
+//______________________________________________________________________________
+inline auto extractTimezoneDurationFormat =
+    [](std::optional<DateYearOrDuration> d) {
+      // TODO<C++23> Use the monadic operations for std::optional
+      if (!d.has_value()) {
+        return Id::makeUndefined();
+      }
+      const auto& optDayTimeDuration =
+          DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
+      return optDayTimeDuration.has_value()
+                 ? Id::makeFromDate(optDayTimeDuration.value())
+                 : Id::makeUndefined();
+    };
+
+//______________________________________________________________________________
+template <auto dateMember, auto makeId>
+inline const auto extractTimeComponentImpl =
+    [](std::optional<DateYearOrDuration> d) {
+      if (!d.has_value() || !d->isDate()) {
+        return Id::makeUndefined();
+      }
+      Date date = d.value().getDate();
+      if (!date.hasTime()) {
+        return Id::makeUndefined();
+      }
+      return std::invoke(makeId, std::invoke(dateMember, date));
+    };
+
+//______________________________________________________________________________
 constexpr auto extractHours =
     extractTimeComponentImpl<&Date::getHour, &Id::makeFromInt>;
 constexpr auto extractMinutes =
@@ -59,10 +96,14 @@ constexpr auto extractMinutes =
 constexpr auto extractSeconds =
     extractTimeComponentImpl<&Date::getSecond, &Id::makeFromDouble>;
 
-NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
+//______________________________________________________________________________
 NARY_EXPRESSION(MonthExpression, 1,
                 FV<decltype(extractMonth), DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
+NARY_EXPRESSION(TimezoneStrExpression, 1,
+                FV<decltype(extractStrTimezone), DateValueGetter>);
+NARY_EXPRESSION(TimezoneDurationExpression, 1,
+                FV<decltype(extractTimezoneDurationFormat), DateValueGetter>);
 NARY_EXPRESSION(HoursExpression, 1,
                 FV<decltype(extractHours), DateValueGetter>);
 NARY_EXPRESSION(MinutesExpression, 1,
@@ -70,14 +111,38 @@ NARY_EXPRESSION(MinutesExpression, 1,
 NARY_EXPRESSION(SecondsExpression, 1,
                 FV<decltype(extractSeconds), DateValueGetter>);
 
+//______________________________________________________________________________
+// `YearExpression` requires `YearExpressionImpl` to be easily identifiable if
+// provided as a `SparqlExpression*` object.
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class YearExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+  bool isYearExpression() const override { return true; }
+};
+
+using YearExpression = YearExpressionImpl<
+    Operation<1, FV<decltype(extractYear), DateValueGetter>>>;
+
 }  // namespace detail
 using namespace detail;
+
+//______________________________________________________________________________
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child) {
   return std::make_unique<YearExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child) {
   return std::make_unique<DayExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<TimezoneStrExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<TimezoneDurationExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {

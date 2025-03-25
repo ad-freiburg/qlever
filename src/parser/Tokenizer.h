@@ -4,7 +4,7 @@
 //
 #pragma once
 
-#include <gtest/gtest.h>
+#include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
 #include <regex>
@@ -56,6 +56,7 @@ struct TurtleToken {
         StringLiteralLongQuote(grp(StringLiteralLongQuoteString)),
 
         Iriref(grp(IrirefString)),
+        IrirefRelaxed(grp(IrirefStringRelaxed)),
         PnameNS(grp(PnameNSString)),
         PnameLN(grp(PnameLNString)),
         PnLocal(grp(PnLocalString)),
@@ -126,6 +127,9 @@ struct TurtleToken {
   const string IrirefString =
       "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + ")*>";
   const RE2 Iriref;
+  const string IrirefStringRelaxed =
+      "<([^\\x00-\\x19<>\"\\\\]|"s + UcharString + ")*>";
+  const RE2 IrirefRelaxed;
 
   const string PercentString = "%" + cls(HexString) + "{2}";
   // const RE2 Percent;
@@ -211,7 +215,7 @@ struct SkipWhitespaceAndCommentsMixin {
   void skipWhitespaceAndComments() {
     // Call `skipWhitespace` and `skipComments` in a loop until no more input
     // was consumed. This is necessary because we might have multiple lines of
-    // comments that are spearated by whitespace.
+    // comments that are separated by whitespace.
     while (true) {
       bool a = skipWhitespace();
       bool b = skipComments();

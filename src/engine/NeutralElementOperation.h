@@ -14,9 +14,9 @@ class NeutralElementOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
-  // The individual implementation of `asString` (see above) that has to be
+  // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] string asStringImpl(size_t) const override {
+  [[nodiscard]] string getCacheKeyImpl() const override {
     return "Neutral Element";
   };
 
@@ -25,7 +25,6 @@ class NeutralElementOperation : public Operation {
     return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
-  void setTextLimit(size_t) override{};
   size_t getCostEstimate() override { return 0; }
 
  private:
@@ -35,13 +34,17 @@ class NeutralElementOperation : public Operation {
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
+  std::unique_ptr<Operation> cloneImpl() const override {
+    return std::make_unique<NeutralElementOperation>(_executionContext);
+  }
+
  protected:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
     return {};
   };
 
  private:
-  ResultTable computeResult() override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);

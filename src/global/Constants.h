@@ -1,134 +1,166 @@
-// Copyright 2023, University of Freiburg,
+// Copyright 2023 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-//
-// Authors: Björn Buchhold <buchhold@gmail.com>
+// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
-#include <limits>
+#include <chrono>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
-#include "../util/Parameters.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/StringUtils.h"
 
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;
 
-static const ad_utility::MemorySize DEFAULT_STXXL_MEMORY = 5_GB;
-static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
+    5_GB;
+constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
+constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
-static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
-static const size_t MIN_WORD_PREFIX_SIZE = 4;
-static const char PREFIX_CHAR = '*';
-static const size_t MAX_NOF_NODES = 64;
-static const size_t MAX_NOF_FILTERS = 64;
+constexpr inline uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
+constexpr inline size_t MIN_WORD_PREFIX_SIZE = 4;
+constexpr inline char PREFIX_CHAR = '*';
 
-static const size_t BUFFER_SIZE_RELATION_SIZE = 1'000'000'000;
-static const size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
-static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
-static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
+constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
 
-static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
-static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
+constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
-static const size_t GALLOP_THRESHOLD = 1000;
+constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
-static const char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
-static const char INTERNAL_PREDICATE_PREFIX_IRI[] =
-    "<QLever-internal-function/>";
-static const char CONTAINS_ENTITY_PREDICATE[] =
-    "<QLever-internal-function/contains-entity>";
-static const char CONTAINS_WORD_PREDICATE[] =
-    "<QLever-internal-function/contains-word>";
-static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
-static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
-    "<QLever-internal-function/text>";
-static const char HAS_PREDICATE_PREDICATE[] =
-    "<QLever-internal-function/has-predicate>";
-static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
-    "geof:", "<http://www.opengis.net/def/function/geosparql/"};
-static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
-    "math:", "<http://www.w3.org/2005/xpath-functions/math#"};
+constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
+constexpr inline char QLEVER_INTERNAL_PREFIX_URL[] =
+    "http://qlever.cs.uni-freiburg.de/builtin-functions/";
+
+// Make a QLever-internal IRI from `QL_INTERNAL_PREFIX_URL` by appending the
+// concatenation of the given `suffixes` and enclosing the result in angle
+// brackets (const and non-const version).
+template <
+    ad_utility::detail::constexpr_str_cat_impl::ConstexprString... suffixes>
+constexpr std::string_view makeQleverInternalIriConst() {
+  return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
+                                     suffixes..., ">">();
+}
+inline std::string makeQleverInternalIri(const auto&... suffixes) {
+  return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
+                      suffixes..., ">");
+}
+
+constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
+    makeQleverInternalIriConst<"">();
+constexpr inline std::string_view
+    QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET =
+        ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL>();
+constexpr inline std::string_view CONTAINS_ENTITY_PREDICATE =
+    makeQleverInternalIriConst<"contains-entity">();
+constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
+    makeQleverInternalIriConst<"contains-word">();
+
+constexpr inline std::string_view QLEVER_INTERNAL_TEXT_MATCH_PREDICATE =
+    makeQleverInternalIriConst<"text">();
+constexpr inline std::string_view HAS_PREDICATE_PREDICATE =
+    makeQleverInternalIriConst<"has-predicate">();
+constexpr inline std::string_view HAS_PATTERN_PREDICATE =
+    makeQleverInternalIriConst<"has-pattern">();
+constexpr inline std::string_view DEFAULT_GRAPH_IRI =
+    makeQleverInternalIriConst<"default-graph">();
+constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
+    makeQleverInternalIriConst<"internal-graph">();
 static constexpr std::pair<std::string_view, std::string_view>
     GEO_RTREE_PREFIX = {"geoRtree:", "<http://qlever.cs.uni-freiburg.de/"};
 
-static const std::string INTERNAL_VARIABLE_PREFIX =
+constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
+    "geof:", "http://www.opengis.net/def/function/geosparql/"};
+constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
+    "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
+    "xsd", "http://www.w3.org/2001/XMLSchema#"};
+constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
+    QLEVER_INTERNAL_PREFIX_NAME, QLEVER_INTERNAL_PREFIX_URL};
+
+constexpr inline std::string_view QLEVER_INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
-static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
-static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
+constexpr inline std::string_view QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX =
+    "?_QLever_internal_variable_bn_";
+
+constexpr inline std::string_view
+    QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX =
+        "?_QLever_internal_variable_qp_";
+
+constexpr inline std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
+constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
 
-// For anonymous nodes in Turtle.
-static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
-
-static const std::string INTERNAL_ENTITIES_URI_PREFIX =
-    "<QLever-internal-function/";
-
-static const std::string LANGUAGE_PREDICATE =
-    INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
+constexpr inline std::string_view LANGUAGE_PREDICATE =
+    makeQleverInternalIriConst<"langtag">();
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
-static const char XSD_DATETIME_TYPE[] =
+constexpr inline char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
+constexpr inline char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
-static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
-static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
-static const char XSD_GYEARMONTH_TYPE[] =
+constexpr inline char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
+constexpr inline char XSD_GYEAR_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#gYear";
+constexpr inline char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
+constexpr inline char XSD_DAYTIME_DURATION_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 
 constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
-static const char XSD_INTEGER_TYPE[] =
+constexpr inline char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";
-static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
-static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
+constexpr inline char XSD_FLOAT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#float";
+constexpr inline char XSD_DOUBLE_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#double";
 constexpr inline char XSD_DECIMAL_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#decimal";
 
-static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
+constexpr inline char XSD_NON_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#nonPositiveInteger";
-static const char XSD_NEGATIVE_INTEGER_TYPE[] =
+constexpr inline char XSD_NEGATIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#negativeInteger";
-static const char XSD_LONG_TYPE[] = "http://www.w3.org/2001/XMLSchema#long";
-static const char XSD_SHORT_TYPE[] = "http://www.w3.org/2001/XMLSchema#short";
-static const char XSD_BYTE_TYPE[] = "http://www.w3.org/2001/XMLSchema#byte";
-static const char XSD_NON_NEGATIVE_INTEGER_TYPE[] =
+constexpr inline char XSD_LONG_TYPE[] = "http://www.w3.org/2001/XMLSchema#long";
+constexpr inline char XSD_SHORT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#short";
+constexpr inline char XSD_BYTE_TYPE[] = "http://www.w3.org/2001/XMLSchema#byte";
+constexpr inline char XSD_NON_NEGATIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#nonNegativeInteger";
-static const char XSD_UNSIGNED_LONG_TYPE[] =
+constexpr inline char XSD_UNSIGNED_LONG_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedLong";
-static const char XSD_UNSIGNED_INT_TYPE[] =
+constexpr inline char XSD_UNSIGNED_INT_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedInt";
-static const char XSD_UNSIGNED_SHORT_TYPE[] =
+constexpr inline char XSD_UNSIGNED_SHORT_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedShort";
-static const char XSD_UNSIGNED_BYTE_TYPE[] =
-    "http://www.w3.org/2001/XMLSchema#unsignedByte";
-static const char XSD_POSITIVE_INTEGER_TYPE[] =
+constexpr inline char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
-static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
-static const int DEFAULT_NOF_VALUE_INTEGER_DIGITS = 50;
-static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
-static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
-static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
+constexpr inline char RDF_PREFIX[] =
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+constexpr inline char RDF_LANGTAG_STRING[] =
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
-static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
-static const std::string MMAP_FILE_SUFFIX = ".meta";
-static const std::string CONFIGURATION_FILE = ".meta-data.json";
-static const std::string PREFIX_FILE = ".prefixes";
+constexpr inline char GEO_WKT_LITERAL[] =
+    "http://www.opengis.net/ont/geosparql#wktLiteral";
 
-static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
+constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
+constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
+constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
+
+constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "
     "your settings.json and rebuild your index. You can optionally specify the "
     "\"locale\" key, otherwise \"en.US\" will be used as default";
-static const std::string WARNING_ASCII_ONLY_PREFIXES =
+constexpr inline std::string_view WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
     "parsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
@@ -137,14 +169,12 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
 // "but not all";
 
-static const std::string WARNING_PARALLEL_PARSING =
+constexpr inline std::string_view WARNING_PARALLEL_PARSING =
     "You specified \"parallel-parsing = true\", which enables faster parsing "
-    "for TTL files that don't include multiline literals with unescaped "
-    "newline characters and that have newline characters after the end of "
-    "triples.";
-static const std::string LOCALE_DEFAULT_LANG = "en";
-static const std::string LOCALE_DEFAULT_COUNTRY = "US";
-static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
+    "for TTL files with a well-behaved use of newlines";
+constexpr inline std::string_view LOCALE_DEFAULT_LANG = "en";
+constexpr inline std::string_view LOCALE_DEFAULT_COUNTRY = "US";
+constexpr inline bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
 
 // Constants for the range of valid compression prefixes
 // all ASCII- printable characters are left out.
@@ -153,24 +183,20 @@ static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
 // All prefix codes have a most significant bit of 1. This means the prefix
 // codes are never valid UTF-8 and thus it is always able to determine, whether
 // this vocabulary was compressed or not.
-static constexpr uint8_t MIN_COMPRESSION_PREFIX = 129;
-static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
+constexpr inline uint8_t MIN_COMPRESSION_PREFIX = 129;
+constexpr inline uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // if this is the first character of a compressed string, this means that no
 // compression has been applied to  a word
-static const uint8_t NO_PREFIX_CHAR =
+constexpr inline uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
-static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
+constexpr inline size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
-static constexpr size_t MAKE_ROOM_SLACK_FACTOR = 2;
-
-// The version of the binary format of the pattern files. Has to be increased,
-// when this format is changed.
-static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
+constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
 
 // The maximal number of columns an `IdTable` (an intermediate result of
 // query evaluation) may have to be able to use the more efficient `static`
@@ -180,34 +206,26 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // more columns, but also increases compile times because more templates
 // have to be instantiated. It might also be necessary to increase some internal
 // compiler limits for the evaluation of constexpr functions and templates.
-static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
+constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
-inline auto& RuntimeParameters() {
-  using ad_utility::detail::parameterShortNames::Double;
-  using ad_utility::detail::parameterShortNames::SizeT;
-  // NOTE: It is important that the value of the static variable is created by
-  // an immediately invoked lambda, otherwise we get really strange segfaults on
-  // Clang 16 and 17.
-  // TODO<joka921> Figure out whether this is a bug in Clang or whether we
-  // clearly misunderstand something about static initialization.
-  static ad_utility::Parameters params = []() {
-    return ad_utility::Parameters{
-        // If the time estimate for a sort operation is larger by more than this
-        // factor than the remaining time, then the sort is canceled with a
-        // timeout exception.
-        Double<"sort-estimate-cancellation-factor">{3.0},
-        SizeT<"cache-max-num-entries">{1000},
-        SizeT<"cache-max-size-gb">{30},
-        SizeT<"cache-max-size-gb-single-entry">{5},
-        SizeT<"lazy-index-scan-queue-size">{20},
-        SizeT<"lazy-index-scan-num-threads">{10},
-        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000}};
-  }();
-  return params;
-}
+// Interval in which an enabled watchdog would check if
+// `CancellationHandle::throwIfCancelled` is called regularly.
+constexpr inline std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{
+    50};
+
+// In all permutations, the graph ID of the triple is stored as the fourth
+// entry. During the index building it is important that this is the first
+// column after the "actual" triple.
+constexpr inline size_t ADDITIONAL_COLUMN_GRAPH_ID = 3;
+
+// In the PSO and PSO permutations the patterns of the subject and object are
+// stored at the following indices. Note that the col0 (the P) is not part of
+// the result, so the column order for PSO is S O PatternS PatternO.
+constexpr inline size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 4;
+constexpr inline size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 5;
 
 #ifdef _PARALLEL_SORT
-static constexpr bool USE_PARALLEL_SORT = true;
+constexpr inline bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>
 namespace ad_utility {
 template <typename... Args>
@@ -219,7 +237,7 @@ using parallel_tag = __gnu_parallel::parallel_tag;
 }  // namespace ad_utility
 
 #else
-static constexpr bool USE_PARALLEL_SORT = false;
+constexpr inline bool USE_PARALLEL_SORT = false;
 namespace ad_utility {
 template <typename... Args>
 auto parallel_sort([[maybe_unused]] Args&&... args) {
@@ -230,4 +248,17 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-static constexpr size_t NUM_SORT_THREADS = 4;
+constexpr inline size_t NUM_SORT_THREADS = 4;
+/// ANSI escape sequence for bold text in the console
+constexpr inline std::string_view EMPH_ON = "\033[1m";
+/// ANSI escape sequence to print "normal" text again in the console.
+constexpr inline std::string_view EMPH_OFF = "\033[22m";
+
+// Allowed range for geographical coordinates from WTK Text
+constexpr inline double COORDINATE_LAT_MAX = 90.0;
+constexpr inline double COORDINATE_LNG_MAX = 180.0;
+
+// When operation results are returned as `application/qlever-results+json` the
+// Operation string is echoed. This operation string is truncated to ensure
+// performance.
+constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;

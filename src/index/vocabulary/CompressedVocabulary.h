@@ -2,130 +2,337 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_COMPRESSEDVOCABULARY_H
-#define QLEVER_COMPRESSEDVOCABULARY_H
+#pragma once
 
-#include "./VocabularyTypes.h"
+#include "backports/algorithm.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/PrefixHeuristic.h"
+#include "index/vocabulary/CompressionWrappers.h"
+#include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/VocabularyTypes.h"
+#include "util/FsstCompressor.h"
+#include "util/OverloadCallOperator.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/TaskQueue.h"
 
-/// TODO<joka921> Currently the settings of the compressor are not directly
-/// serialized but have to be manually stored and initialized.
+namespace detail {
 
-/// TODO<joka921> Make "Compressor" and "Vocabulary" a concept.
+template <typename Vocabulary, typename Iterator>
+CPP_requires(IterableVocabulary_,
+             requires(const Vocabulary& vocabulary,
+                      const Iterator& it)(it - vocabulary.begin()));
 
-/// A vocabulary in which compression is performed per word via the `Compressor`
-template <typename UnderlyingVocabulary, typename Compressor>
-class CompressedVocabulary {
+template <typename Vocabulary, typename Iterator>
+CPP_concept IterableVocabulary =
+    CPP_requires_ref(IterableVocabulary_, Vocabulary, Iterator);
+
+}  // namespace detail
+
+// A vocabulary in which compression is performed using a customizable
+// compression algorithm, with one dictionary per `NumWordsPerBlock` many words
+// (default 1 million).
+CPP_template(typename UnderlyingVocabulary,
+             typename CompressionWrapper =
+                 ad_utility::vocabulary::FsstSquaredCompressionWrapper,
+             size_t NumWordsPerBlock = 1UL << 20)(
+    requires ad_utility::vocabulary::CompressionWrapper<
+        CompressionWrapper>) class CompressedVocabulary {
  private:
-  UnderlyingVocabulary _underlyingVocabulary;
-  Compressor _compressor;
+  UnderlyingVocabulary underlyingVocabulary_;
+  CompressionWrapper compressionWrapper_;
+  // We need to store two files, one for the words and one for the codebooks.
+  static constexpr std::string_view wordsSuffix = ".words";
+  static constexpr std::string_view decodersSuffix = ".codebooks";
 
  public:
-  CompressedVocabulary(Compressor compressor = Compressor())
-      : _compressor{std::move(compressor)} {}
+  // The vocabulary is initialized using the `open()` method, the default
+  // constructor leads to an empty vocabulary.
+  CompressedVocabulary() = default;
 
-  auto operator[](uint64_t id) const {
-    return _compressor.decompress(_underlyingVocabulary[id]);
+  // Get the uncompressed word at the given index.
+  std::string operator[](uint64_t idx) const {
+    return compressionWrapper_.decompress(
+        toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
-  [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
-  [[nodiscard]] uint64_t getHighestId() const {
-    return _underlyingVocabulary.getHighestId();
+  [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
+
+  // From a `comparator` that can compare two strings, make a new comparator,
+  // that can compare a string and an `iterator` by decompressing the word that
+  // the iterator points to. The returned comparator is symmetric, meaning that
+  // the iterator can either be the left or the right argument.
+  template <typename StringType, typename Comparator>
+  auto makeSymmetricComparator(Comparator comparator = Comparator{}) const {
+    auto pred1 = [comparator, self = this](const StringType& el,
+                                           const auto& it) {
+      return comparator(el, self->decompressFromIterator(it));
+    };
+    auto pred2 = [comparator, self = this](const auto& it,
+                                           const StringType& el) {
+      return comparator(self->decompressFromIterator(it), el);
+    };
+    return ad_utility::OverloadCallOperator{pred1, pred2};
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
+  /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [this, &comparator](const auto& a, const auto& b) {
-      return comparator(_compressor.decompress(a), b);
-    };
-    auto underlyingResult =
-        _underlyingVocabulary.lower_bound(word, actualComparator);
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = _compressor.decompress(underlyingResult._word.value());
-    }
-    return result;
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
+
+    auto wordAndIndex =
+        underlyingVocabulary_.lower_bound_iterator(word, actualComparator);
+    return convertWordAndIndexFromUnderlyingVocab(wordAndIndex);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [this, &comparator](const auto& a, const auto& b) {
-      return comparator(a, _compressor.decompress(b));
-    };
-    auto underlyingResult =
-        _underlyingVocabulary.upper_bound(word, actualComparator);
-    // TODO:: make this a private helper function.
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = _compressor.decompress(underlyingResult._word.value());
-    }
-    return result;
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
+    auto wordAndIndex =
+        underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
+    return convertWordAndIndexFromUnderlyingVocab(wordAndIndex);
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
-  /// created by using a `DiskWriterFromUncompressedWords`. Note that the
-  /// settings of the `compressor` are not stored in the file, but currently
-  /// have to be manually stored a set via the constructor.
+  /// created by using a `DiskWriterFromUncompressedWords`.
   void open(const std::string& filename) {
-    _underlyingVocabulary.open(filename);
+    underlyingVocabulary_.open(absl::StrCat(filename, wordsSuffix));
+    ad_utility::serialization::FileReadSerializer decoderReader(
+        absl::StrCat(filename, decodersSuffix));
+    std::vector<typename CompressionWrapper::Decoder> decoders;
+    decoderReader >> decoders;
+    compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
+    AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdx(size()) <=
+                                           compressionWrapper_.numDecoders()));
   }
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
   class DiskWriterFromUncompressedWords {
    private:
-    const Compressor& _compressor;
-    typename UnderlyingVocabulary::WordWriter _underlyingWriter;
+    std::vector<std::string> wordBuffer_;
+    std::vector<bool> isExternalBuffer_;
+    std::vector<typename CompressionWrapper::Decoder> decoders_;
+    typename UnderlyingVocabulary::WordWriter underlyingWriter_;
+    std::string filenameDecoders_;
+    std::string readableName_ = "";
+    bool isFinished_ = false;
+    ad_utility::MemorySize uncompressedSize_ = bytes(0);
+    ad_utility::MemorySize compressedSize_ = bytes(0);
+    size_t numBlocks_ = 0u;
+    size_t numBlocksLargerWhenCompressed_ = 0u;
+    ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
+        writeQueue_{5};
+    ad_utility::JThread writeThread_{[this] {
+      while (auto opt = writeQueue_.pop()) {
+        opt.value()();
+      }
+    }};
+    std::atomic<size_t> queueIndex_ = 0;
+    ad_utility::TaskQueue<false> compressQueue_{10, 10};
 
    public:
-    /// Constructor
-    explicit DiskWriterFromUncompressedWords(const Compressor& compressor,
-                                             const std::string& filename)
-        : _compressor{compressor}, _underlyingWriter{filename} {}
+    /// Constructor.
+    explicit DiskWriterFromUncompressedWords(
+        const std::string& filenameWords, const std::string& filenameDecoders)
+        : underlyingWriter_{filenameWords},
+          filenameDecoders_{filenameDecoders} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
-    void push(std::string_view uncompressedWord) {
-      auto compressedWord = _compressor.compress(uncompressedWord);
-      _underlyingWriter.push(compressedWord.data(), compressedWord.size());
+    void operator()(std::string_view uncompressedWord,
+                    bool isExternal = false) {
+      AD_CORRECTNESS_CHECK(!isFinished_);
+      wordBuffer_.emplace_back(uncompressedWord);
+      isExternalBuffer_.push_back(isExternal);
+      if (wordBuffer_.size() == NumWordsPerBlock) {
+        finishBlock();
+      }
     }
 
-    /// After calls to `finish()` no more wrods can be pushed.
-    /// `finish()` is implicitly also called by the destructor.
-    void finish() { _underlyingWriter.finish(); }
-  };
+    /// Dump all the words that still might be contained in intermediate buffers
+    /// to the underlying file and close the file. After calls to `finish()` no
+    /// more words can be pushed. `finish()` is implicitly also called by the
+    /// destructor.
+    void finish() {
+      if (std::exchange(isFinished_, true)) {
+        return;
+      }
+      finishBlock();
+      compressQueue_.finish();
+      writeQueue_.finish();
+      AD_CORRECTNESS_CHECK(writeThread_.joinable());
+      writeThread_.join();
+      underlyingWriter_.finish();
+      ad_utility::serialization::FileWriteSerializer decoderWriter(
+          filenameDecoders_);
+      decoderWriter << decoders_;
+      auto compressionRatio =
+          (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
+          std::max(uncompressedSize_.getBytes(), size_t(1));
+      std::string nameString =
+          readableName_.empty() ? std::string{"vocabulary"} : readableName_;
+      LOG(INFO) << "Finished writing compressed " << nameString
+                << ", size = " << compressedSize_
+                << " [uncompressed = " << uncompressedSize_
+                << ", ratio = " << compressionRatio << "%]" << std::endl;
+      if (numBlocksLargerWhenCompressed_ > 0) {
+        LOG(WARN) << "Number of blocks made larger by the compression instead "
+                     "of smaller: "
+                  << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
+                  << std::endl;
+      }
+    }
 
-  DiskWriterFromUncompressedWords makeDiskWriter(const std::string& filename) {
-    return DiskWriterFromUncompressedWords{_compressor, filename};
+    // Access the human-readable description for the vocabulary to be written
+    // that will be used in log message.
+    std::string& readableName() { return readableName_; }
+
+    // Call `finish`, does nothing if `finish` has been manually called.
+    ~DiskWriterFromUncompressedWords() noexcept {
+      ad_utility::terminateIfThrows(
+          [this]() { this->finish(); },
+          "The destructor of a DiskWriter of a `CompressedVocabulary`");
+    }
+    DiskWriterFromUncompressedWords(const DiskWriterFromUncompressedWords&) =
+        delete;
+    DiskWriterFromUncompressedWords& operator=(
+        const DiskWriterFromUncompressedWords&) = delete;
+
+   private:
+    // Compress a complete block and write it to the underlying vocabulary.
+    void finishBlock() {
+      if (wordBuffer_.empty()) {
+        return;
+      }
+
+      static constexpr auto getSize = [](const auto& words) {
+        return std::accumulate(
+            words.begin(), words.end(), bytes(0),
+            [](auto x, std::string_view v) { return x + bytes(v.size()); });
+      };
+      auto uncompressedSize = getSize(wordBuffer_);
+      uncompressedSize_ += uncompressedSize;
+
+      auto compressAndWrite = [uncompressedSize, words = std::move(wordBuffer_),
+                               this, idx = queueIndex_++,
+                               isExternalBuffer =
+                                   std::move(isExternalBuffer_)]() mutable {
+        auto bulkResult = CompressionWrapper::compressAll(words);
+        writeQueue_.push(std::pair{
+            idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
+                  isExternalBuffer = std::move(isExternalBuffer)]() {
+              auto& [buffer, views, decoder] = bulkResult;
+              auto compressedSize = getSize(views);
+              compressedSize_ += compressedSize;
+              ++numBlocks_;
+              numBlocksLargerWhenCompressed_ +=
+                  static_cast<size_t>(compressedSize > uncompressedSize);
+              size_t i = 0;
+              for (auto& word : views) {
+                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
+                                                  decltype(word), bool>) {
+                  underlyingWriter_(word, isExternalBuffer.at(i));
+                  ++i;
+                } else {
+                  underlyingWriter_(word);
+                }
+              }
+              decoders_.emplace_back(decoder);
+            }});
+      };
+      compressQueue_.push(std::move(compressAndWrite));
+      wordBuffer_.clear();
+      isExternalBuffer_.clear();
+    }
+  };
+  using WordWriter = DiskWriterFromUncompressedWords;
+
+  // Return a `DiskWriter` that can be used to create the vocabulary.
+  DiskWriterFromUncompressedWords makeDiskWriter(
+      const std::string& filename) const {
+    return DiskWriterFromUncompressedWords{
+        absl::StrCat(filename, wordsSuffix),
+        absl::StrCat(filename, decodersSuffix)};
+  }
+  /// Initialize the vocabulary from the given `words`.
+  // TODO<joka921> This can be a generic Mixin...
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    writer.finish();
+    open(filename);
   }
 
+  // Access to the underlying vocabulary.
   UnderlyingVocabulary& getUnderlyingVocabulary() {
-    return _underlyingVocabulary;
+    return underlyingVocabulary_;
   }
   const UnderlyingVocabulary& getUnderlyingVocabulary() const {
-    return _underlyingVocabulary;
+    return underlyingVocabulary_;
   }
-  Compressor& getCompressor() { return _compressor; }
-  const Compressor& getCompressor() const { return _compressor; }
 
-  void close() { _underlyingVocabulary.close(); }
+  void close() { underlyingVocabulary_.close(); }
 
-  void build(std::vector<std::string> words) {
-    for (auto& word : words) {
-      word = _compressor.compress(word);
+ private:
+  // Get the correct decoder for the given `idx`.
+  size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
+
+  // Decompress the word that `it` points to. `it` is an iterator into the
+  // underlying vocabulary.
+  template <typename It>
+  auto decompressFromIterator(It it) const {
+    auto idx = [&]() {
+      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary, It>) {
+        return it - underlyingVocabulary_.begin();
+      } else {
+        return underlyingVocabulary_.iteratorToIndex(it);
+      }
+    }();
+    return compressionWrapper_.decompress(toStringView(*it),
+                                          getDecoderIdx(idx));
+  };
+
+  // ____________________________________________________
+  static constexpr ad_utility::MemorySize bytes(size_t numBytes) {
+    return ad_utility::MemorySize::bytes(numBytes);
+  };
+
+  // _________________________________________________________________
+  template <typename T>
+  static std::string_view toStringView(const T& el) {
+    if constexpr (ranges::convertible_to<T, std::string_view>) {
+      return el;
+    } else if constexpr (ad_utility::isInstantiation<T, std::optional>) {
+      return toStringView(el.value());
+    } else {
+      // WordAndIndex
+      return el.word_.value();
     }
-    _underlyingVocabulary.build(words);
+  }
+
+  // Convert a `WordAndIndex` from the underlying vocabulary by decompressing
+  // the word.
+  WordAndIndex convertWordAndIndexFromUnderlyingVocab(
+      const WordAndIndex& wordAndIndex) const {
+    if (wordAndIndex.isEnd()) {
+      return wordAndIndex;
+    }
+    auto decompressedWord = compressionWrapper_.decompress(
+        wordAndIndex.word(), getDecoderIdx(wordAndIndex.index()));
+    return {std::move(decompressedWord), wordAndIndex.index()};
   }
 };
-
-#endif  // QLEVER_COMPRESSEDVOCABULARY_H

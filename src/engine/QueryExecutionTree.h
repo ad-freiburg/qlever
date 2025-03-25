@@ -1,78 +1,42 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "../parser/data/ConstructQueryExportContext.h"
-#include "../parser/data/Types.h"
-#include "../parser/data/VarOrTerm.h"
-#include "../util/Conversions.h"
-#include "../util/Generator.h"
-#include "../util/HashSet.h"
-#include "../util/stream_generator.h"
-#include "./Operation.h"
-#include "./QueryExecutionContext.h"
-
-using std::shared_ptr;
-using std::string;
+#include "engine/Operation.h"
+#include "engine/QueryExecutionContext.h"
+#include "parser/ParsedQuery.h"
+#include "parser/data/Types.h"
+#include "util/stream_generator.h"
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* const qec);
-  template <typename Op>
-  QueryExecutionTree(QueryExecutionContext* const qec,
-                     std::shared_ptr<Op> operation)
+  explicit QueryExecutionTree(QueryExecutionContext* qec);
+  QueryExecutionTree(QueryExecutionContext* qec,
+                     std::shared_ptr<Operation> operation)
       : QueryExecutionTree(qec) {
-    setOperation(std::move(operation));
+    rootOperation_ = std::move(operation);
+    resultWidth_ = rootOperation_->getResultWidth();
+    cacheKey_ = rootOperation_->getCacheKey();
+    readFromCache();
   }
 
-  enum OperationType {
-    UNDEFINED,
-    SCAN,
-    JOIN,
-    SORT,
-    ORDER_BY,
-    FILTER,
-    DISTINCT,
-    TEXT_WITHOUT_FILTER,
-    TEXT_WITH_FILTER,
-    OPTIONAL_JOIN,
-    COUNT_AVAILABLE_PREDICATES,
-    GROUP_BY,
-    HAS_PREDICATE_SCAN,
-    UNION,
-    MULTICOLUMN_JOIN,
-    TRANSITIVE_PATH,
-    VALUES,
-    SERVICE,
-    BIND,
-    MINUS,
-    NEUTRAL_ELEMENT,
-    DUMMY,
-    CARTESIAN_PRODUCT_JOIN
-  };
+  std::string getCacheKey() const;
 
-  void setOperation(OperationType type, std::shared_ptr<Operation> op);
-
-  template <typename Op>
-  void setOperation(std::shared_ptr<Op>);
-
-  string asString(size_t indent = 0);
-
-  const QueryExecutionContext* getQec() const { return _qec; }
+  const QueryExecutionContext* getQec() const { return qec_; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CONTRACT_CHECK(_rootOperation);
-    return _rootOperation->getExternallyVisibleVariableColumns();
+    AD_CONTRACT_CHECK(rootOperation_);
+    return rootOperation_->getExternallyVisibleVariableColumns();
   }
 
   // For a given `ColumnIndex` return the corresponding `pair<Variable,
@@ -83,34 +47,36 @@ class QueryExecutionTree {
   const VariableToColumnMap::value_type& getVariableAndInfoByColumnIndex(
       ColumnIndex colIdx) const;
 
-  std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
+  std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
 
-  const OperationType& getType() const { return _type; }
+  bool isEmpty() const { return !rootOperation_; }
 
-  // Is the root operation of this tree an `IndexScan` operation.
-  // This is the only query for a concrete type that is frequently used.
-  bool isIndexScan() const;
-
-  bool isEmpty() const {
-    return _type == OperationType::UNDEFINED || !_rootOperation;
-  }
-
+  // Get the column index that the given `variable` will have in the result of
+  // this query. Throw if the variable is not part of the `VariableToColumnMap`.
   size_t getVariableColumn(const Variable& variable) const;
 
-  size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
+  // Similar to `getVariableColumn` above, but return `nullopt` if the variable
+  // is not part of the `VariableToColumnMap`.
+  std::optional<size_t> getVariableColumnOrNullopt(
+      const Variable& variable) const;
 
-  shared_ptr<const ResultTable> getResult() const {
-    return _rootOperation->getResult(isRoot());
+  size_t getResultWidth() const { return resultWidth_.value(); }
+
+  std::shared_ptr<const Result> getResult(bool requestLaziness = false) const {
+    return rootOperation_->getResult(
+        isRoot(), requestLaziness ? ComputationMode::LAZY_IF_SUPPORTED
+                                  : ComputationMode::FULLY_MATERIALIZED);
   }
 
   // A variable, its column index in the Id space result, and the `ResultType`
   // of this column.
   struct VariableAndColumnIndex {
-    std::string _variable;
-    size_t _columnIndex;
+    std::string variable_;
+    size_t columnIndex_;
   };
 
-  using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
+  using ColumnIndicesAndTypes =
+      std::vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
@@ -119,14 +85,7 @@ class QueryExecutionTree {
       bool includeQuestionMark = true) const;
 
   const std::vector<ColumnIndex>& resultSortedOn() const {
-    return _rootOperation->getResultSortedOn();
-  }
-
-  void setTextLimit(size_t limit) {
-    _rootOperation->setTextLimit(limit);
-    // Invalidate caches asString representation.
-    _asString = "";  // triggers recomputation.
-    _sizeEstimate = std::numeric_limits<size_t>::max();
+    return rootOperation_->getResultSortedOn();
   }
 
   size_t getCostEstimate();
@@ -134,12 +93,20 @@ class QueryExecutionTree {
   size_t getSizeEstimate();
 
   float getMultiplicity(size_t col) const {
-    return _rootOperation->getMultiplicity(col);
+    return rootOperation_->getMultiplicity(col);
   }
 
+  // The implementation of this method calls
+  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
+  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
+  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
+
   size_t getDistinctEstimate(size_t col) const {
-    return static_cast<size_t>(_rootOperation->getSizeEstimate() /
-                               _rootOperation->getMultiplicity(col));
+    return static_cast<size_t>(rootOperation_->getSizeEstimate() /
+                               rootOperation_->getMultiplicity(col));
   }
 
   bool isVariableCovered(Variable variable) const;
@@ -153,15 +120,15 @@ class QueryExecutionTree {
   void readFromCache();
 
   // recursively get all warnings from descendant operations
-  vector<string> collectWarnings() const {
-    return _rootOperation->collectWarnings();
+  std::vector<std::string> collectWarnings() const {
+    return rootOperation_->collectWarnings();
   }
 
   template <typename F>
   void forAllDescendants(F f) {
     static_assert(
         std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
-    for (auto ptr : _rootOperation->getChildren()) {
+    for (auto ptr : rootOperation_->getChildren()) {
       if (ptr) {
         f(ptr);
         ptr->forAllDescendants(f);
@@ -174,7 +141,7 @@ class QueryExecutionTree {
     static_assert(
         std::is_same_v<void,
                        std::invoke_result_t<F, const QueryExecutionTree*>>);
-    for (auto ptr : _rootOperation->getChildren()) {
+    for (auto ptr : rootOperation_->getChildren()) {
       if (ptr) {
         f(ptr);
         ptr->forAllDescendants(f);
@@ -182,25 +149,33 @@ class QueryExecutionTree {
     }
   }
 
-  bool& isRoot() noexcept { return _isRoot; }
-  [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
+  bool& isRoot() noexcept { return isRoot_; }
+  [[nodiscard]] const bool& isRoot() const noexcept { return isRoot_; }
+
+  // Create a `QueryExecutionTree` that produces exactly the same result as
+  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
+  // sorted accordingly, or sorted by another permutation of the same columns,
+  // it is simply returned.
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::vector<ColumnIndex>& sortColumns);
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const vector<ColumnIndex>& sortColumns);
+      const std::vector<ColumnIndex>& sortColumns);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
   // a vector of two-dimensional arrays. This format often appears in
   // `QueryPlanner.cpp`.
   static std::pair<std::shared_ptr<QueryExecutionTree>,
-                   shared_ptr<QueryExecutionTree>>
+                   std::shared_ptr<QueryExecutionTree>>
   createSortedTrees(std::shared_ptr<QueryExecutionTree> qetA,
                     std::shared_ptr<QueryExecutionTree> qetB,
-                    const vector<std::array<ColumnIndex, 2>>& sortColumns);
+                    const std::vector<std::array<ColumnIndex, 2>>& sortColumns);
 
   // The return type of the `getSortedTreesAndJoinColumns` function below. It is
   // deliberately stored as a tuple vs. a struct with named members, so that we
@@ -232,18 +207,35 @@ class QueryExecutionTree {
     return getRootOperation()->getPrimarySortKeyVariable();
   }
 
+  // _____________________________________________________________
+  friend void PrintTo(const QueryExecutionTree& tree, std::ostream* os) {
+    auto& s = *os;
+    s << tree.getRootOperation()->getDescriptor();
+  }
+
+  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+
+  // Set the value of the `LIMIT` clause that will be applied to the result of
+  // this operation.
+  void setLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->setLimit(limitOffsetClause);
+    // Setting the limit invalidates the `cacheKey` as well as the
+    // `sizeEstimate`.
+    cacheKey_ = getRootOperation()->getCacheKey();
+    sizeEstimate_ = getRootOperation()->getSizeEstimate();
+  }
+
  private:
-  QueryExecutionContext* _qec;  // No ownership
-  std::shared_ptr<Operation>
-      _rootOperation;  // Owned child. Will be deleted at deconstruction.
-  OperationType _type;
-  string _asString;
-  size_t _indent = 0;  // the indent with which the _asString repr was formatted
-  size_t _sizeEstimate;
-  bool _isRoot = false;  // used to distinguish the root from child
+  QueryExecutionContext* qec_;  // No ownership
+  std::shared_ptr<Operation> rootOperation_ =
+      nullptr;  // Owned child. Will be deleted at deconstruction.
+  std::optional<size_t> sizeEstimate_ = std::nullopt;
+  std::optional<std::string> cacheKey_ = std::nullopt;
+  std::optional<size_t> resultWidth_ = std::nullopt;
+  bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 
-  std::shared_ptr<const ResultTable> _cachedResult = nullptr;
+  std::shared_ptr<const Result> cachedResult_ = nullptr;
 
  public:
   // Helper class to avoid bug in g++ that leads to memory corruption when
@@ -251,14 +243,20 @@ class QueryExecutionTree {
   // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
   // information
   struct StringTriple {
-    std::string _subject;
-    std::string _predicate;
-    std::string _object;
+    std::string subject_;
+    std::string predicate_;
+    std::string object_;
     StringTriple(std::string subject, std::string predicate, std::string object)
-        : _subject{std::move(subject)},
-          _predicate{std::move(predicate)},
-          _object{std::move(object)} {}
+        : subject_{std::move(subject)},
+          predicate_{std::move(predicate)},
+          object_{std::move(object)} {}
   };
+
+  std::shared_ptr<QueryExecutionTree> clone() const {
+    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
+                                qec_, rootOperation_->clone())
+                          : std::make_shared<QueryExecutionTree>(qec_);
+  }
 };
 
 namespace ad_utility {

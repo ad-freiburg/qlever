@@ -5,13 +5,18 @@
 
 #pragma once
 
+#include <atomic>
 #include <concepts>
 #include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"
+#include "util/HashSet.h"
+#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -21,11 +26,11 @@ types, in the same order and transformed to `const type&`, and returns a
 bool.
 */
 template <typename Func, typename... ParameterTypes>
-concept ValidatorFunction =
+CPP_concept ValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, bool, const ParameterTypes&...>;
 
 // Simple struct, that holds an error message. For use as the return type of
-// invocable object, that fullfill `ExceptionValidator`.
+// invocable object, that fulfill `ExceptionValidator`.
 struct ErrorMessage {
  private:
   std::string message_;
@@ -44,7 +49,7 @@ parameter types, in the same order and transformed to `const type&`, and returns
 an instance of `std::optional<ErrorMessage>`.
 */
 template <typename Func, typename... ParameterTypes>
-concept ExceptionValidatorFunction =
+CPP_concept ExceptionValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, std::optional<ErrorMessage>,
                                           const ParameterTypes&...>;
 
@@ -55,10 +60,13 @@ That is, instead of returning `bool`, it now returns
 
 @param errorMessage Content for `ErrorMessage`.
 */
-template <typename... ValidatorParameterTypes>
-inline auto transformValidatorIntoExceptionValidator(
-    ValidatorFunction<ValidatorParameterTypes...> auto validatorFunction,
-    std::string errorMessage) {
+CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes)(
+    requires ValidatorFunction<
+        ValidatorFunc,
+        ValidatorParameterTypes...>) inline auto transformValidatorIntoExceptionValidator(ValidatorFunc
+                                                                                              validatorFunction,
+                                                                                          std::string
+                                                                                              errorMessage) {
   // The whole 'transformation' is simply a wrapper.
   return [validatorFunction = std::move(validatorFunction),
           errorMessage = ErrorMessage{std::move(errorMessage)}](
@@ -95,8 +103,15 @@ class ConfigOptionValidatorManager {
   */
   std::function<void(void)> wrappedValidatorFunction_;
 
-  // A descripton of the invariant, this validator imposes.
+  // A description of the invariant, this validator imposes.
   std::string descriptor_;
+
+  // Pointer to the `configOption`, that will be checked.
+  ad_utility::HashSet<const ConfigOption*> configOptionsToBeChecked_;
+
+  // Describes the order of initialization.
+  static inline std::atomic_size_t numberOfInstances_{0};
+  size_t initializationId_{numberOfInstances_++};
 
  public:
   /*
@@ -115,22 +130,24 @@ class ConfigOptionValidatorManager {
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
-  template <typename TranslationFunction, typename ExceptionValidatorFunc,
-            isInstantiation<
-                ConstConfigOptionProxy>... ExceptionValidatorParameterTypes>
-  requires(std::invocable<TranslationFunction,
-                          const ExceptionValidatorParameterTypes> &&
-           ...) &&
-          ExceptionValidatorFunction<
-              ExceptionValidatorFunc,
-              std::invoke_result_t<TranslationFunction,
-                                   ExceptionValidatorParameterTypes>...> &&
-          (sizeof...(ExceptionValidatorParameterTypes) > 0)
-  ConfigOptionValidatorManager(
-      ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
-      TranslationFunction translationFunction,
-      const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
-      : descriptor_{std::move(descriptor)} {
+  CPP_template(typename TranslationFunction, typename ExceptionValidatorFunc,
+               typename... ExceptionValidatorParameterTypes)(
+      requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
+                                     ConstConfigOptionProxy>)
+          CPP_and(...&& std::invocable<TranslationFunction,
+                                       const ExceptionValidatorParameterTypes>)
+              CPP_and ExceptionValidatorFunction<
+                  ExceptionValidatorFunc,
+                  std::invoke_result_t<
+                      TranslationFunction,
+                      const ExceptionValidatorParameterTypes>...>)
+      ConfigOptionValidatorManager(
+          ExceptionValidatorFunc exceptionValidatorFunction,
+          std::string descriptor, TranslationFunction translationFunction,
+          const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
+      : descriptor_{std::move(descriptor)},
+        configOptionsToBeChecked_{
+            &configOptionsToBeChecked.getConfigOption()...} {
     wrappedValidatorFunction_ = [translationFunction =
                                      std::move(translationFunction),
                                  exceptionValidatorFunction =
@@ -179,20 +196,26 @@ class ConfigOptionValidatorManager {
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
-  template <typename TranslationFunction, typename ValidatorFunc,
-            isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
-  requires(std::invocable<TranslationFunction, const ValidatorParameterTypes> &&
-           ...) &&
-          ValidatorFunction<ValidatorFunc,
-                            std::invoke_result_t<TranslationFunction,
-                                                 ValidatorParameterTypes>...> &&
-          (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
-      ValidatorFunc validatorFunction, std::string errorMessage,
-      std::string descriptor, TranslationFunction translationFunction,
-      const ValidatorParameterTypes... configOptionsToBeChecked)
+  CPP_template(typename TranslationFunction, typename ValidatorFunc,
+               typename... ValidatorParameterTypes)(
+      requires(...&& isInstantiation<ValidatorParameterTypes,
+                                     ConstConfigOptionProxy>)
+          CPP_and(... && (std::invocable<TranslationFunction,
+                                         const ValidatorParameterTypes>))
+              CPP_and(ValidatorFunction<
+                      ValidatorFunc,
+                      std::invoke_result_t<TranslationFunction,
+                                           const ValidatorParameterTypes>...>)
+                  CPP_and(sizeof...(ValidatorParameterTypes) > 0))
+      ConfigOptionValidatorManager(
+          ValidatorFunc validatorFunction, std::string errorMessage,
+          std::string descriptor, TranslationFunction translationFunction,
+          const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
-            transformValidatorIntoExceptionValidator<std::invoke_result_t<
-                TranslationFunction, ValidatorParameterTypes>...>(
+            transformValidatorIntoExceptionValidator<
+                ValidatorFunc,
+                std::invoke_result_t<TranslationFunction,
+                                     const ValidatorParameterTypes>...>(
                 std::move(validatorFunction), std::move(errorMessage)),
             std::move(descriptor), std::move(translationFunction),
             configOptionsToBeChecked...) {}
@@ -209,6 +232,14 @@ class ConfigOptionValidatorManager {
   saved validator function, imposes upon the configuration options.
   */
   std::string_view getDescription() const;
+
+  // Return, how many instances of this class were initialized before this
+  // instance.
+  size_t getInitializationId() const;
+
+  // The `configOption`s, that this validator will check.
+  const ad_utility::HashSet<const ConfigOption*>& configOptionToBeChecked()
+      const;
 };
 
 }  // namespace ad_utility

@@ -26,10 +26,11 @@ class GroupConcatExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto impl = [context,
-                 this](SingleExpressionResult auto&& el) -> ExpressionResult {
+    auto impl = [this, context](auto&& el)
+        -> CPP_ret(ExpressionResult)(
+            requires SingleExpressionResult<decltype(el)>) {
       std::string result;
-      auto groupConcatImpl = [&result, this, context](auto generator) {
+      auto groupConcatImpl = [this, &result, context](auto generator) {
         // TODO<joka921> Make this a configurable constant.
         result.reserve(20000);
         for (auto& inp : generator) {
@@ -40,30 +41,36 @@ class GroupConcatExpression : public SparqlExpression {
             }
             result.append(s.value());
           }
+          context->cancellationHandle_->throwIfCancelled();
         }
       };
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
       if (distinct_) {
+        context->cancellationHandle_->throwIfCancelled();
         groupConcatImpl(detail::getUniqueElements(context, context->size(),
                                                   std::move(generator)));
       } else {
         groupConcatImpl(std::move(generator));
       }
       result.shrink_to_fit();
-      return IdOrString(std::move(result));
+      return IdOrLiteralOrIri(ad_utility::triple_component::LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(result))});
     };
 
     auto childRes = child_->evaluate(context);
     return std::visit(impl, std::move(childRes));
   }
 
-  // A `GroupConcatExpression` is an aggregate, so it never leaves any
-  // unaggregated variables.
-  vector<Variable> getUnaggregatedVariables() override { return {}; }
+  // Required when using the hash map optimization.
+  [[nodiscard]] const std::string& getSeparator() const { return separator_; }
 
   // A `GroupConcatExpression` is an aggregate.
-  bool containsAggregate() const override { return true; }
+  AggregateStatus isAggregate() const override {
+    return distinct_ ? AggregateStatus::DistinctAggregate
+                     : AggregateStatus::NonDistinctAggregate;
+  }
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {

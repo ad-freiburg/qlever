@@ -25,7 +25,7 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
-namespace ad_utility {
+namespace ad_utility::ConfigManagerImpl {
 // ____________________________________________________________________________
 std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
   auto toStringVisitor = []<typename T>(const T&) -> std::string {
@@ -70,7 +70,7 @@ bool ConfigOption::wasSet() const {
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   /*
-  Manually checks, if the json represents one of the possibilites of
+  Manually checks, if the json represents one of the possibilities of
   `AvailableTypes`.
   */
   auto isValueTypeSubType = []<typename T>(const nlohmann::json& j,
@@ -98,7 +98,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       */
       return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
                                  const std::vector<InnerType>&) {
-        return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+        return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
           return isValueTypeSubType.template operator()<InnerType>(
               entry, AD_FWD(isValueTypeSubType));
         });
@@ -174,16 +174,16 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       using VectorEntryType = T::value_type;
 
       std::ostringstream stream;
-      stream << "{";
+      stream << "[";
       ad_utility::lazyStrJoin(
           &stream,
-          std::views::transform(
+          ql::views::transform(
               content,
               [&variantSubTypeToString](const VectorEntryType& entry) {
                 return variantSubTypeToString(entry, variantSubTypeToString);
               }),
           ", ");
-      stream << "}";
+      stream << "]";
       return stream.str();
     }
   };
@@ -237,71 +237,22 @@ nlohmann::json ConfigOption::getDefaultValueAsJson() const {
       data_);
 }
 
-// The dummy values.
-template <typename DummyType>
-static std::decay_t<DummyType> getDummyValue() {
-  if constexpr (std::is_same_v<std::decay_t<DummyType>, bool>) {
-    return false;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::string>) {
-    return "Example string";
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, int>) {
-    return -42;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, size_t>) {
-    return 42uL;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, float>) {
-    return 4.2f;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<bool>>) {
-    return std::vector{true, false};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<std::string>>) {
-    return std::vector<std::string>{"Example", "string", "list"};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<int>>) {
-    return std::vector{40, -41, 42};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
-                                      std::vector<size_t>>) {
-    return std::vector{40uL, 41uL, 42uL};
-  } else {
-    // Must be a vector of floats.
-    static_assert(std::is_same_v<std::decay_t<DummyType>, std::vector<float>>);
-    return {40.0f, 41.1f, 42.2f};
-  }
-}
-
-// ____________________________________________________________________________
-nlohmann::json ConfigOption::getDummyValueAsJson() const {
-  return std::visit(
-      []<typename T>(const Data<T>&) {
-        return nlohmann::json(getDummyValue<T>());
-      },
-      data_);
-}
-
-// ____________________________________________________________________________
-std::string ConfigOption::getDummyValueAsString() const {
-  return std::visit(
-      /*
-      We could directly return a string, but by converting a value, we don't
-      have to keep an eye on how the class represents it's values as strings.
-      */
-      []<typename T>(const Data<T>&) {
-        return contentOfAvailableTypesToString(getDummyValue<T>());
-      },
-      data_);
-}
-
 // ____________________________________________________________________________
 ConfigOption::operator std::string() const {
+  /*
+  In short:
+  - The value will always be given, even if it was never set.
+  - The default value will only be shown, if it exists and is different from the
+  current value.
+  - The description will only be shown, if it exists.
+  */
   return absl::StrCat(
-      "Configuration option '", identifier_, "'\n",
-      ad_utility::addIndentation(
-          absl::StrCat(
-              "Value type: ", getActualValueTypeAsString(), "\nDefault value: ",
-              getDefaultValueAsString(), "\nCurrently held value: ",
-              wasSet() ? getValueAsString() : "value was never initialized",
-              "\nDescription: ", description_),
-          "    "));
+      "Value: ", wasSet() ? getValueAsString() : "[must be specified]",
+      wasSetAtRuntime() && getDefaultValueAsString() != getValueAsString()
+          ? absl::StrCat("\nDefault: ", getDefaultValueAsString())
+          : "",
+      !description_.empty() ? absl::StrCat("\nDescription: ", description_)
+                            : "");
 }
 
 // ____________________________________________________________________________
@@ -310,4 +261,4 @@ std::string ConfigOption::getActualValueTypeAsString() const {
       []<typename T>(const Data<T>&) { return availableTypesToString<T>(); },
       data_);
 }
-}  // namespace ad_utility
+}  // namespace ad_utility::ConfigManagerImpl

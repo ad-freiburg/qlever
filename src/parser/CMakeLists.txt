@@ -8,19 +8,30 @@ add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
         ParsedQuery.cpp
-        TurtleParser.cpp
+        RdfParser.cpp
         Tokenizer.cpp
-        ContextFileParser.cpp
+        WordsAndDocsFileParser.cpp
         TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
+        GeoPoint.cpp
         GraphPatternOperation.cpp
+        MagicServiceQuery.cpp
+        PathQuery.cpp
+        SpatialQuery.cpp
+        PayloadVariables.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp
         GraphPatternOperation.cpp
         # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
-        GraphPattern.cpp data/VariableToColumnMapPrinters.cpp)
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 util engine)
+        GraphPattern.cpp data/Variable.cpp
+        Iri.cpp
+        Literal.cpp
+        LiteralOrIri.cpp
+        DatasetClauses.cpp
+        TextSearchQuery.cpp
+)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
 

@@ -1,12 +1,9 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-//
-// Created by johannes on 15.09.21.
 // Several templated helper functions that are used for the Expression module
 
-#ifndef QLEVER_SPARQLEXPRESSIONGENERATORS_H
-#define QLEVER_SPARQLEXPRESSIONGENERATORS_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -15,9 +12,9 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
-                                                   const EvaluationContext* context,
-                                                   size_t beginIndex, size_t endIndex) {
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context,
+    size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
   const auto& varToColMap = context->_variableToColumnMap;
@@ -28,45 +25,49 @@ inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
 
   std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
-  AD_CONTRACT_CHECK(beginIndex <= endIndex && endIndex <= completeColumn.size());
-  return {completeColumn.begin() + beginIndex, completeColumn.begin() + endIndex};
+  AD_CONTRACT_CHECK(beginIndex <= endIndex &&
+                    endIndex <= completeColumn.size());
+  return {completeColumn.begin() + beginIndex,
+          completeColumn.begin() + endIndex};
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
-                                                   const EvaluationContext* context) {
-  return getIdsFromVariable(variable, context, context->_beginIndex, context->_endIndex);
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context) {
+  return getIdsFromVariable(variable, context, context->_beginIndex,
+                            context->_endIndex);
 }
 
 /// Generators that yield `numItems` items for the various
 /// `SingleExpressionResult`s after applying a `Transformation` to them.
 /// Typically, this transformation is one of the value getters from
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
-template <SingleExpressionResult T, typename Transformation = std::identity>
-requires isConstantResult<T> && std::invocable<Transformation, T>
-cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> resultGenerator(
-    T constant, size_t numItems, Transformation transformation = {}) {
+CPP_template(typename T, typename Transformation = std::identity)(
+    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
+        ranges::invocable<Transformation, T>)
+    cppcoro::generator<const std::decay_t<std::invoke_result_t<
+        Transformation, T>>> resultGenerator(T constant, size_t numItems,
+                                             Transformation transformation =
+                                                 {}) {
   auto transformed = transformation(constant);
   for (size_t i = 0; i < numItems; ++i) {
     co_yield transformed;
   }
 }
 
-template <typename T, typename Transformation = std::identity>
-requires std::ranges::input_range<T>
-auto resultGenerator(T vector, size_t numItems, Transformation transformation = {})
-    -> cppcoro::generator<std::decay_t<
-        std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
+CPP_template(typename T, typename Transformation = std::identity)(
+    requires ql::ranges::input_range<
+        T>) auto resultGenerator(T&& vector, size_t numItems,
+                                 Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  for (auto& element : vector) {
-    auto cpy = transformation(std::move(element));
-    co_yield cpy;
-  }
+  return ad_utility::allView(AD_FWD(vector)) |
+         ql::views::transform(std::move(transformation));
 }
 
 template <typename Transformation = std::identity>
-inline cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+inline cppcoro::generator<
+    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
 resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
                 Transformation transformation = {}) {
   size_t i = 0;
@@ -89,41 +90,48 @@ resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
 
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
-template <SingleExpressionResult Input, typename Transformation = std::identity>
-auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* context,
-                   Transformation transformation = {}) {
+CPP_template(typename Input, typename Transformation = std::identity)(
+    requires SingleExpressionResult<
+        Input>) auto makeGenerator(Input&& input, size_t numItems,
+                                   const EvaluationContext* context,
+                                   Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
-    std::span<const ValueId> inputWithVariableResolved{
-        getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(inputWithVariableResolved, numItems, transformation);
+    return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems,
+                           transformation);
   } else {
-    return resultGenerator(std::forward<Input>(input), numItems, transformation);
+    return resultGenerator(AD_FWD(input), numItems, transformation);
   }
 }
 
 /// Generate `numItems` many values from the `input` and apply the
 /// `valueGetter` to each of the values.
-inline auto valueGetterGenerator = []<typename ValueGetter, SingleExpressionResult Input>(
-                                       size_t numElements, EvaluationContext* context,
-                                       Input&& input, ValueGetter&& valueGetter) {
-  auto transformation = [ context, valueGetter ]<typename I>(I && i)
-      requires std::invocable<ValueGetter, I&&, EvaluationContext*> {
+inline auto valueGetterGenerator =
+    CPP_template_lambda()(typename ValueGetter, typename Input)(
+        size_t numElements, EvaluationContext* context, Input&& input,
+        ValueGetter&& valueGetter)(requires SingleExpressionResult<Input>) {
+  auto transformation =
+      CPP_template_lambda(context, valueGetter)(typename I)(I && i)(
+          requires ranges::invocable<ValueGetter, I&&, EvaluationContext*>) {
+    context->cancellationHandle_->throwIfCancelled();
     return valueGetter(AD_FWD(i), context);
   };
-  return makeGenerator(std::forward<Input>(input), numElements, context, transformation);
+
+  return makeGenerator(AD_FWD(input), numElements, context, transformation);
 };
 
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
 inline auto applyFunction = []<typename Function, typename... Generators>(
-                                Function&& function, size_t numItems, Generators... generators)
-    -> cppcoro::generator<std::invoke_result_t<Function, typename Generators::value_type...>> {
+                                Function&& function, size_t numItems,
+                                Generators... generators)
+    -> cppcoro::generator<std::invoke_result_t<
+        Function, ql::ranges::range_value_t<Generators>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 
   auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(std::move(*iterators)...);
+    return function(AD_MOVE(*iterators)...);
   };
 
   for (size_t i = 0; i < numItems; ++i) {
@@ -136,9 +144,11 @@ inline auto applyFunction = []<typename Function, typename... Generators>(
 
 /// Return a generator that returns the `numElements` many results of the
 /// `Operation` applied to the `operands`
-template <typename Operation, SingleExpressionResult... Operands>
-auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
-                    Operands&&... operands) {
+CPP_template(typename Operation, typename... Operands)(requires(
+    SingleExpressionResult<
+        Operands>&&...)) auto applyOperation(size_t numElements, Operation&&,
+                                             EvaluationContext* context,
+                                             Operands&&... operands) {
   using ValueGetters = typename std::decay_t<Operation>::ValueGetters;
   using Function = typename std::decay_t<Operation>::Function;
   static_assert(std::tuple_size_v<ValueGetters> == sizeof...(Operands));
@@ -149,7 +159,8 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
 
   // Function that takes all the generators as a parameter pack and computes the
   // generator for the operation result;
-  auto getResultFromGenerators = std::bind_front(applyFunction, Function{}, numElements);
+  auto getResultFromGenerators =
+      std::bind_front(applyFunction, Function{}, numElements);
 
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual
@@ -158,12 +169,31 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
     // Both `operands` and `valueGetters` are parameter packs of equal size,
     // so there will be one call to `getValue` for each pair of
     // (`operands`, `valueGetter`)
-    return getResultFromGenerators(getValue(std::forward<Operands>(operands), valueGetters)...);
+    return getResultFromGenerators(
+        getValue(std::forward<Operands>(operands), valueGetters)...);
   };
 
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
-}  // namespace sparqlExpression::detail
+// Return a lambda that takes a `LiteralOrIri` and converts it to an `Id` by
+// adding it to the `localVocab`.
+inline auto makeStringResultGetter(LocalVocab* localVocab) {
+  return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+  };
+}
 
-#endif  // QLEVER_SPARQLEXPRESSIONGENERATORS_H
+// Return the `Id` if the passed `value` contains one, alternatively add the
+// literal or iri in the `value` to the `localVocab` and return the newly
+// created `Id` instead.
+inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value,
+                               LocalVocab* localVocab) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
+                                       makeStringResultGetter(localVocab)},
+      value);
+}
+
+}  // namespace sparqlExpression::detail

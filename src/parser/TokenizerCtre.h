@@ -4,17 +4,15 @@
 
 #pragma once
 
-#include <ctre/ctre.h>
-#include <gtest/gtest.h>
+#include <gtest/gtest_prod.h>
 
 #include <cstdlib>
+#include <ctre-unicode.hpp>
 #include <string>
 
 #include "parser/Tokenizer.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CtreHelpers.h"
-#include "util/Log.h"
-#include "util/StringUtils.h"
 
 using ctll::fixed_string;
 using namespace ctre::literals;
@@ -332,12 +330,13 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   }
 
   /*
-   * The helper struct used for the intenal apply function
+   * The helper struct used for the internal apply function
    * Its static function process<regex>(string_view)
    * tries to match a prefix of the string_view with the regex and returns
-   * <true, matchContent> on sucess and <false, emptyStringView> on failure
+   * <true, matchContent> on success and <false, emptyStringView> on failure
    */
   struct Matcher {
+    // TODO<C++17, joka921>: Template-value feature not available in C++17
     template <auto& regex>
     static std::pair<bool, std::string_view> process(
         std::string_view data) noexcept {

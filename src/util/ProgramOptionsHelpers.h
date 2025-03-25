@@ -5,12 +5,12 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
-#include <util/Concepts.h>
-#include <util/Parameters.h>
-
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "util/Concepts.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -26,8 +26,9 @@ class NonNegative {
   size_t _value;
 };
 
-template <typename Stream, ad_utility::SimilarTo<NonNegative> NN>
-Stream& operator<<(Stream& stream, NN&& nonNegative) {
+CPP_template(typename Stream, typename NN)(
+    requires ad_utility::SimilarTo<NN, NonNegative>) Stream&
+operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 
@@ -61,6 +62,21 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = std::optional<T>(boost::any_cast<T>(v));
 }
 
+// This function is required  to use `MemorySize` in `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     MemorySize*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = MemorySize::parse(s);
+}
+
 /// Create `boost::program_options::value`s (command-line options) from
 /// `ad_utility::Parameters`
 template <typename Parameters>
@@ -82,6 +98,8 @@ class ParameterToProgramOptionFactory {
    * @return A `boost::program_options::value` with the parameter's current
    * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
+   *
+   * TODO<C++17,joka921>: template-values are not supported in C++17
    */
   template <ad_utility::ParameterName name>
   auto getProgramOption() {

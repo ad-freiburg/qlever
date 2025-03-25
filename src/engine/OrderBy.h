@@ -33,7 +33,7 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
@@ -43,7 +43,11 @@ class OrderBy : public Operation {
   // computes.
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
-  void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
+  // Expose the variables on which this OrderBy is performed. Currently mostly
+  // used for testing.
+  enum class AscOrDesc { Asc, Desc };
+  using SortedVariables = std::vector<std::pair<Variable, AscOrDesc>>;
+  SortedVariables getSortedVariables() const;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -74,7 +78,9 @@ class OrderBy : public Operation {
   }
 
  private:
-  ResultTable computeResult() override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

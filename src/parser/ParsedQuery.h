@@ -1,6 +1,8 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <initializer_list>
@@ -11,20 +13,22 @@
 
 #include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
 #include "parser/TripleComponent.h"
+#include "parser/UpdateClause.h"
 #include "parser/data/GroupKey.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 #include "parser/data/Types.h"
-#include "parser/data/VarOrTerm.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generator.h"
@@ -50,36 +54,7 @@ class SparqlPrefix {
   bool operator==(const SparqlPrefix&) const = default;
 };
 
-inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
-inline bool isVariable(const TripleComponent& elem) {
-  return elem.isVariable();
-}
-
-inline bool isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
-}
-
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
-
-// Data container for parsed triples from the where clause
-class SparqlTriple {
- public:
-  SparqlTriple(TripleComponent s, PropertyPath p, TripleComponent o)
-      : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
-
-  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
-      : _s(std::move(s)), _p(PropertyPath::fromIri(p_iri)), _o(std::move(o)) {}
-
-  bool operator==(const SparqlTriple& other) const {
-    return _s == other._s && _p == other._p && _o == other._o;
-  }
-  TripleComponent _s;
-  PropertyPath _p;
-  TripleComponent _o;
-
-  [[nodiscard]] string asString() const;
-};
 
 // Forward declaration
 namespace parsedQuery {
@@ -95,11 +70,18 @@ class ParsedQuery {
 
   using ConstructClause = parsedQuery::ConstructClause;
 
+  using UpdateClause = parsedQuery::UpdateClause;
+
+  using DatasetClauses = parsedQuery::DatasetClauses;
+
+  // ASK queries have no further context in the header, so we use an empty
+  // struct
+  struct AskClause : public parsedQuery::ClauseBase {};
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
-  size_t _numGraphPatterns = 1;
   // The number of additional internal variables that were added by the
   // implementation of ORDER BY as BIND+ORDER BY.
   int64_t numInternalVariables_ = 0;
@@ -108,10 +90,20 @@ class ParsedQuery {
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
+  std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
-  // explicit default initialisation because the constructor
-  // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+  // Contains warnings about queries that are valid according to the SPARQL
+  // standard, but are probably semantically wrong.
+  std::vector<std::string> warnings_;
+
+  using HeaderClause =
+      std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
+  // Use explicit default initialization for `SelectClause` because its
+  // constructor is private.
+  HeaderClause _clause{SelectClause{}};
+
+  // The IRIs from the FROM and FROM NAMED clauses.
+  DatasetClauses datasetClauses_;
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -119,6 +111,14 @@ class ParsedQuery {
 
   [[nodiscard]] bool hasConstructClause() const {
     return std::holds_alternative<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] bool hasUpdateClause() const {
+    return std::holds_alternative<UpdateClause>(_clause);
+  }
+
+  bool hasAskClause() const {
+    return std::holds_alternative<AskClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {
@@ -129,6 +129,10 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  [[nodiscard]] decltype(auto) updateClause() const {
+    return std::get<UpdateClause>(_clause);
+  }
+
   [[nodiscard]] decltype(auto) selectClause() {
     return std::get<SelectClause>(_clause);
   }
@@ -137,11 +141,30 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  [[nodiscard]] decltype(auto) updateClause() {
+    return std::get<UpdateClause>(_clause);
+  }
+
   // Add a variable, that was found in the query body.
   void registerVariableVisibleInQueryBody(const Variable& variable);
 
   // Add variables, that were found in the query body.
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
+
+  // Return all the warnings that have been added via `addWarning()` or
+  // `addWarningOrThrow`.
+  const std::vector<std::string>& warnings() const { return warnings_; }
+
+  // Add a warning to the query. The warning becomes part of the return value of
+  // the `warnings()` function above.
+  void addWarning(std::string warning) {
+    warnings_.push_back(std::move(warning));
+  }
+
+  // If unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a
+  // warning.
+  void addWarningOrThrow(std::string warning);
 
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
@@ -149,16 +172,6 @@ class ParsedQuery {
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
     return _rootGraphPattern._graphPatterns;
-  }
-
-  // TODO<joka921> This is currently necessary because of the missing scoping of
-  // subqueries
-  [[nodiscard]] int64_t getNumInternalVariables() const {
-    return numInternalVariables_;
-  }
-
-  void setNumInternalVariables(int64_t numInternalVariables) {
-    numInternalVariables_ = numInternalVariables;
   }
 
  private:
@@ -181,12 +194,13 @@ class ParsedQuery {
   Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
 
   // If the `variable` is neither visible in the query body nor contained in the
-  // `additionalVisibleVariables`, throw an `InvalidQueryException` that uses
-  // the `locationDescription` inside the message.
+  // `additionalVisibleVariables`, add a warning or throw an exception (see
+  // `addWarningOrThrow`) that uses the `locationDescription` inside the
+  // message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Similar to `checkVariableIsVisible` above, but performs the check for each
   // of the variables that are used inside the `expression`.
@@ -194,7 +208,7 @@ class ParsedQuery {
       const sparqlExpression::SparqlExpressionPimpl& expression,
       const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Add the `groupKeys` (either variables or expressions) to the query and
   // check whether all the variables are visible inside the query body.
@@ -213,11 +227,17 @@ class ParsedQuery {
   void addOrderByClause(OrderClause orderClause, bool isGroupBy,
                         std::string_view noteForImplicitGroupBy);
 
+ public:
   // Return the next internal variable. Used e.g. by `addInternalBind` and
   // `addInternalAlias`
   Variable getNewInternalVariable();
 
- public:
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
+
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
   // an `InvalidQueryException` if the modifiers are invalid. This might happen
   // if one of the modifiers uses a variable that is either not visible in the
@@ -225,20 +245,7 @@ class ParsedQuery {
   // grouped or aggregated in the presence of a GROUP BY clause.
   void addSolutionModifiers(SolutionModifiers modifiers);
 
-  /**
-   * @brief Adds all elements from p's rootGraphPattern to this parsed query's
-   * root graph pattern. This changes the graph patterns ids.
-   */
-  void merge(const ParsedQuery& p);
-
-  [[nodiscard]] string asString() const;
-
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
-  // If this is a SELECT query, yield all the selected variables. If this is a
-  // CONSTRUCT query, yield all the variables that are used in the CONSTRUCT
-  // clause. Note that the result may contain duplicates in the CONSTRUCT case.
-  [[nodiscard]] cppcoro::generator<const Variable>
-  getConstructedOrSelectedVariables() const;
 };

@@ -26,6 +26,8 @@
 #include "util/json.h"
 
 namespace ad_utility {
+
+namespace ConfigManagerImpl {
 /*
 Describes a configuration option. A configuration option can only hold/parse/set
 values of a specific type, decided when creating the object.
@@ -40,7 +42,7 @@ class ConfigOption {
 
  private:
   /*
-  Holds the type dependant data of the class, because the class is not a
+  Holds the type dependent data of the class, because the class is not a
   templated class, but sometimes behaves like one.
   */
   template <typename T>
@@ -89,9 +91,9 @@ class ConfigOption {
   bool wasSet() const;
 
   // Returns, if this configuration option holds values of the given type.
-  template <typename Type>
-  requires ad_utility::isTypeContainedIn<Type, ConfigOption::AvailableTypes>
-  constexpr bool holdsType() const {
+  CPP_template(typename Type)(
+      requires ad_utility::SameAsAnyTypeIn<
+          Type, AvailableTypes>) constexpr bool holdsType() const {
     return std::holds_alternative<Data<Type>>(data_);
   }
 
@@ -100,9 +102,8 @@ class ConfigOption {
   exception, should the given value have a different type, than what the
   configuration option was set to.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
-  void setValue(const T& value) {
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) void setValue(const T& value) {
     // Only set the variable, that our internal pointer points to, if the given
     // value is of the right type.
     if (auto* data = std::get_if<Data<T>>(&data_); data != nullptr) {
@@ -127,9 +128,9 @@ class ConfigOption {
   there is no default value, or `T` is the wrong type, then it will throw an
   exception.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
-  std::decay_t<T> getDefaultValue() const {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
+      getDefaultValue() const {
     if (hasDefaultValue() && std::holds_alternative<Data<T>>(data_)) {
       return std::get<Data<T>>(data_).defaultValue_.value();
     } else if (!hasDefaultValue()) {
@@ -157,8 +158,9 @@ class ConfigOption {
   @brief Return the content of the variable, that the internal pointer points
   to. If `T` is the wrong type, then it will throw an exception.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
+      getValue() const {
     if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else if (!wasSet()) {
@@ -182,18 +184,6 @@ class ConfigOption {
   points to.
   */
   nlohmann::json getValueAsJson() const;
-
-  /*
-  @brief Return json representation of a dummy value, that is of the same type,
-  as the type, this configuration option was set to.
-  */
-  nlohmann::json getDummyValueAsJson() const;
-
-  /*
-  @brief Return string representation of a dummy value, that is of the same
-  type, as the type, this configuration option was set to.
-  */
-  std::string getDummyValueAsString() const;
 
   // For printing.
   explicit operator std::string() const;
@@ -225,10 +215,11 @@ class ConfigOption {
   @param defaultValue The optional default value. An empty `std::optional` is
   for no default value and a non empty for a default value.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  ConfigOption(std::string_view identifier, std::string_view description,
-               T* variablePointer, std::optional<T> defaultValue = std::nullopt)
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+      ConfigOption(std::string_view identifier, std::string_view description,
+                   T* variablePointer,
+                   std::optional<T> defaultValue = std::nullopt)
       : data_{Data<T>{std::move(defaultValue), variablePointer}},
         identifier_{identifier},
         description_{description} {
@@ -251,8 +242,8 @@ class ConfigOption {
  private:
   // Needed for testing.
   FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
-
-  // This is a test helper function.
+  FRIEND_TEST(ConfigManagerTest, AddExceptionValidator);
+  FRIEND_TEST(ConfigManagerTest, PrintConfigurationDocComparison);
   template <typename... Ts>
   friend std::string generateValidatorName(std::optional<size_t> id);
 
@@ -265,9 +256,9 @@ class ConfigOption {
   /*
   @brief Return the string representation/name of the type.
   */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
-  static std::string availableTypesToString() {
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) static std::string
+      availableTypesToString() {
     return availableTypesToString(T{});
   }
 
@@ -279,4 +270,10 @@ class ConfigOption {
       const std::optional<AvailableTypes>& v);
 };
 
+// Shorthand for checking, if `T` is part of the available options.
+template <typename T>
+CPP_concept SupportedConfigOptionType =
+    ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
+}  // namespace ConfigManagerImpl
+using ConfigManagerImpl::ConfigOption;
 }  // namespace ad_utility

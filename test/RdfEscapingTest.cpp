@@ -5,8 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "parser/RdfEscaping.h"
-
 using namespace RdfEscaping;
 
 // ___________________________________________________________________________
@@ -43,8 +43,48 @@ TEST(RdfEscapingTest, normalizedContentFromLiteralOrIri) {
   ASSERT_EQ(f("\"bumm\"^^<http://www.mycustomiris.com/sometype>"), "bumm");
 }
 
+TEST(RdfEscapingTest, invalidEscapeThrows) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      normalizeRDFLiteral("\"invalid\\Escape\""),
+      ::testing::HasSubstr("Unsupported escape sequence"));
+}
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, escapeForXml) {
   ASSERT_EQ(escapeForXml("abc\n\t;"), "abc\n\t;");
   ASSERT_EQ(escapeForXml("a&b\"'c<d>"), "a&amp;b&quot;&apos;c&lt;d&gt;");
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, normalizeLiteralWithQuotesToNormalizedString) {
+  ASSERT_EQ(
+      "Hello \" \\World",
+      asStringViewUnsafe(normalizeLiteralWithQuotes(R"("Hello \" \\World")")));
+  ASSERT_THROW(normalizeLiteralWithQuotes("no quotes"), ad_utility::Exception);
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, normalizeLiteralWithoutQuotesToNormalizedString) {
+  ASSERT_EQ(
+      "Hello \" \\World",
+      asStringViewUnsafe(normalizeLiteralWithoutQuotes(R"(Hello \" \\World)")));
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, normalizeIriWithBracketsToNormalizedString) {
+  ASSERT_EQ("https://example.org/books/book1",
+            asStringViewUnsafe(
+                normalizeIriWithBrackets("<https://example.org/books/book1>")));
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, normalizeIriWithoutBracketsToNormalizedString) {
+  ASSERT_EQ("https://example.org/books/book1",
+            asStringViewUnsafe(normalizeIriWithoutBrackets(
+                "https://example.org/books/book1")));
+}
+
+// ___________________________________________________________________________
+TEST(RdfEscapingTest, normalizeLanguageTagToNormalizedString) {
+  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("@se")));
+  ASSERT_EQ("se", asStringViewUnsafe(normalizeLanguageTag("se")));
 }

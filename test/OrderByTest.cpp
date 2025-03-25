@@ -5,12 +5,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/OrderBy.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -61,9 +62,9 @@ void testOrderBy(IdTable input, const IdTable& expected,
     // Apply the current permutation of the `sortColumns` to `expected` and
     // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
-      std::ranges::copy(input.getColumn(i),
-                        permutedInput.getColumn(sortColumns[i].first).begin());
-      std::ranges::copy(
+      ql::ranges::copy(input.getColumn(i),
+                       permutedInput.getColumn(sortColumns[i].first).begin());
+      ql::ranges::copy(
           expected.getColumn(i),
           permutedExpected.getColumn(sortColumns[i].first).begin());
       // Also put the information which columns are descending into the correct
@@ -192,7 +193,7 @@ TEST(OrderBy, mixedDatatypes) {
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {false});
 
-  std::ranges::reverse(expected);
+  ql::ranges::reverse(expected);
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
 }
@@ -208,7 +209,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("OrderBy on ASC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(0) \n"));
 
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
@@ -225,7 +226,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ("OrderBy on ASC(?1) DESC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(1) desc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());
@@ -255,5 +256,19 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::AbortException);
+      ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable permutedInput{2, qec->getAllocator()};
+
+  OrderBy orderBy =
+      makeOrderBy(permutedInput.clone(), OrderBy::SortIndices{{0, true}});
+
+  auto clone = orderBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(orderBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
 }

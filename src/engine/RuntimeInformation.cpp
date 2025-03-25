@@ -36,6 +36,10 @@ std::string indentStr(size_t indent, bool stripped = false) {
   }
   return ind;
 }
+
+auto toMs(std::chrono::microseconds us) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(us).count();
+}
 }  // namespace
 
 // __________________________________________________________________________
@@ -43,13 +47,12 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
   using enum nlohmann::json::value_t;
-  // We want to print doubles with fixed precision and stream ints as their
-  // native type so they get thousands separators. For everything else we
-  // let nlohmann::json handle it.
+  // We want to print doubles and ints as their native type so they get
+  // thousands separators. For everything else we let nlohmann::json handle it.
   if (value.type() == number_float) {
-    out << ad_utility::to_string(value.get<double>(), 2);
+    out << value.get<double>();
   } else if (value.type() == number_unsigned) {
-    out << value.template get<uint64_t>();
+    out << value.get<uint64_t>();
   } else if (value.type() == number_integer) {
     out << value.get<int64_t>();
   } else {
@@ -68,9 +71,9 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << totalTime_.count() << " ms"
+  out << indentStr(indent) << "total_time: " << toMs(totalTime_) << " ms"
       << '\n';
-  out << indentStr(indent) << "operation_time: " << getOperationTime().count()
+  out << indentStr(indent) << "operation_time: " << toMs(getOperationTime())
       << " ms" << '\n';
   out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
@@ -78,11 +81,10 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     out << indentStr(indent)
         // TODO<g++12, Clang 17> use `<< originalTotalTime_` directly
-        << "original_total_time: " << originalTotalTime_.count() << " ms"
-        << '\n';
+        << "original_total_time: " << toMs(originalTotalTime_) << " ms" << '\n';
     out << indentStr(indent)
-        << "original_operation_time: " << originalOperationTime_.count()
-        << " ms" << '\n';
+        << "original_operation_time: " << toMs(originalOperationTime_) << " ms"
+        << '\n';
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
@@ -99,26 +101,43 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 
 // __________________________________________________________________________
 void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
+  // Empty hash map -> empty vector.
   if (columnMap.empty()) {
     columnNames_.clear();
     return;
   }
 
-  ColumnIndex maxColumnIndex = std::ranges::max(
-      columnMap | std::views::values |
-      std::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
+  ColumnIndex maxColumnIndex = ql::ranges::max(
+      columnMap | ql::views::values |
+      ql::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   columnNames_.resize(maxColumnIndex + 1);
-  // Now copy the (variable, index) pairs to the vector.
+
+  // Now copy the `variable, index` pairs from the map to the vector. If the
+  // column might contain UNDEF values, append ` (U)` to the variable name.
+  //
   for (const auto& [variable, columnIndexAndType] : columnMap) {
-    ColumnIndex columnIndex = columnIndexAndType.columnIndex_;
-    columnNames_.at(columnIndex) = variable.name();
+    const auto& [columnIndex, undefStatus] = columnIndexAndType;
+    std::string_view undefStatusSuffix =
+        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined
+            ? ""
+            : " (U)";
+    columnNames_.at(columnIndex) =
+        absl::StrCat(variable.name(), undefStatusSuffix);
+  }
+  // Replace the empty column names (columns that are present in the result, but
+  // are not visible using a variable) by the placeholder "_" to make the
+  // runtime information more readable.
+  for (auto& name : columnNames_) {
+    if (name.empty()) {
+      name = "_";
+    }
   }
 }
 
 // __________________________________________________________________________
-std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
+std::chrono::microseconds RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
@@ -126,11 +145,11 @@ std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
     // computing that child is *not* included in this operation's
     // `totalTime_`. That's why we skip such children in the following loop.
     auto timesOfChildren =
-        children_ | std::views::transform(&RuntimeInformation::totalTime_);
+        children_ | ql::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    return std::max(0ms, totalTime_ - std::reduce(timesOfChildren.begin(),
-                                                  timesOfChildren.end(), 0ms));
+    return std::max(0us, totalTime_ - std::reduce(timesOfChildren.begin(),
+                                                  timesOfChildren.end(), 0us));
   }
 }
 
@@ -160,6 +179,8 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "failed";
     case failedBecauseChildFailed:
       return "failed because child failed";
+    case cancelled:
+      return "cancelled";
   }
   AD_FAIL();
 }
@@ -178,10 +199,10 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.totalTime_.count()},
-      {"operation_time", rti.getOperationTime().count()},
-      {"original_total_time", rti.originalTotalTime_.count()},
-      {"original_operation_time", rti.originalOperationTime_.count()},
+      {"total_time", toMs(rti.totalTime_)},
+      {"operation_time", toMs(rti.getOperationTime())},
+      {"original_total_time", toMs(rti.originalTotalTime_)},
+      {"original_operation_time", toMs(rti.originalOperationTime_)},
       {"cache_status", ad_utility::toString(rti.cacheStatus_)},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
@@ -201,7 +222,6 @@ void to_json(nlohmann::ordered_json& j,
 
 // __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
-                                           Milliseconds timeForLimit,
                                            bool fullResultIsNotCached) {
   bool hasLimit = l._limit.has_value();
   bool hasOffset = l._offset != 0;
@@ -215,9 +235,11 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   numRows_ = l.actualSize(actualOperation->numRows_);
   details_.clear();
   cacheStatus_ = ad_utility::CacheStatus::computed;
-  totalTime_ += timeForLimit;
   actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
                              fullResultIsNotCached);
+  actualOperation->eraseDetail("limit");
+  actualOperation->eraseDetail("offset");
+  addDetail("executed-implicitly-during-query-export", !fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);
 
   // Update the descriptor.

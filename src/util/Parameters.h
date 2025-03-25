@@ -15,6 +15,7 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ParseableDuration.h"
 #include "util/TupleForEach.h"
 #include "util/TypeTraits.h"
 
@@ -35,12 +36,12 @@ struct ParameterBase {
 
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
-concept ParameterFromStringType =
+CPP_concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
-concept ParameterToStringType =
+CPP_concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
@@ -53,22 +54,27 @@ concept ParameterToStringType =
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
-struct Parameter : public ParameterBase {
+CPP_template(typename Type, typename FromString, typename ToString,
+             ParameterName Name)(
+    requires std::semiregular<Type> CPP_and
+        ParameterFromStringType<FromString, Type>
+            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
+    : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
-  Type _value{};
+  Type value_{};
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
+  std::optional<OnUpdateAction> onUpdateAction_ = std::nullopt;
+  using ParameterConstraint = std::function<void(Type, std::string_view)>;
+  std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
-  explicit Parameter(Type initialValue) : _value{std::move(initialValue)} {};
+  explicit Parameter(Type initialValue) : value_{std::move(initialValue)} {};
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -84,30 +90,41 @@ struct Parameter : public ParameterBase {
 
   /// Set the value.
   void set(Type newValue) {
-    _value = std::move(newValue);
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), newValue, name);
+    }
+    value_ = std::move(newValue);
     triggerOnUpdateAction();
   }
 
-  const Type& get() const { return _value; }
+  const Type& get() const { return value_; }
 
   /// Specify the onUpdateAction and directly trigger it.
   /// Note that this useful when the initial value of the parameter
   /// is known before the `onUpdateAction`.
   void setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    _onUpdateAction = std::move(onUpdateAction);
+    onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
+  }
+
+  /// Set an constraint that will be executed every time the value changes
+  /// and once initially when setting it. It is intended to throw an exception
+  /// if the value is invalid.
+  void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
+    std::invoke(parameterConstraint, value_, name);
+    parameterConstraint_ = std::move(parameterConstraint);
   }
 
   // ___________________________________________________________________
   [[nodiscard]] std::string toString() const override {
-    return ToString{}(_value);
+    return ToString{}(value_);
   }
 
  private:
   // Manually trigger the `_onUpdateAction` if it exists
   void triggerOnUpdateAction() {
-    if (_onUpdateAction.has_value()) {
-      _onUpdateAction.value()(_value);
+    if (onUpdateAction_.has_value()) {
+      onUpdateAction_.value()(value_);
     }
   }
 };
@@ -118,14 +135,14 @@ namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
+template <typename Type, typename FromString, typename ToString,
+          ParameterName Name>
 struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
     : std::true_type {};
 }  // namespace detail::parameterConceptImpl
 
 template <typename T>
-concept IsParameter =
+CPP_concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
 
 namespace detail::parameterShortNames {
@@ -141,9 +158,36 @@ struct dbl {
 struct szt {
   size_t operator()(const auto& s) const { return std::stoull(s); }
 };
+struct bl {
+  bool operator()(const auto& s) const {
+    if (s == "true") return true;
+    if (s == "false") return false;
+    AD_THROW(
+        R"(The string value for bool parameter must be either "true" or "false".)");
+  }
+};
 
 struct toString {
   std::string operator()(const auto& s) const { return std::to_string(s); }
+};
+struct boolToString {
+  std::string operator()(const bool& v) const { return v ? "true" : "false"; }
+};
+
+template <typename DurationType>
+struct durationToString {
+  std::string operator()(
+      const ad_utility::ParseableDuration<DurationType>& duration) const {
+    return duration.toString();
+  }
+};
+
+template <typename DurationType>
+struct durationFromString {
+  ad_utility::ParseableDuration<DurationType> operator()(
+      const std::string& duration) const {
+    return ad_utility::ParseableDuration<DurationType>::fromString(duration);
+  }
 };
 
 // To/from string for `MemorySize`.
@@ -171,8 +215,16 @@ template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
 template <ParameterName Name>
+using Bool = Parameter<bool, bl, boolToString, Name>;
+
+template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
+
+template <typename DurationType, ParameterName Name>
+using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
+                                    durationFromString<DurationType>,
+                                    durationToString<DurationType>, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
@@ -183,8 +235,12 @@ using MemorySizeParameter =
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <IsParameter... ParameterTypes>
+template <QL_CONCEPT_OR_TYPENAME(IsParameter)... ParameterTypes>
 class Parameters {
+  // In C++17 mode we cannot use SFINAE, but we also currently don't need it,
+  // add a static_assert for safety should this ever change.
+  static_assert((... && IsParameter<ParameterTypes>));
+
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
   Tuple _parameters;
@@ -244,9 +300,9 @@ class Parameters {
 
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
-  template <ParameterName name, typename OnUpdateAction>
+  template <ParameterName Name, typename OnUpdateAction>
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    constexpr auto index = _nameToIndex.at(name);
+    constexpr auto index = _nameToIndex.at(Name);
     std::get<index>(_parameters)
         .wlock()
         ->setOnUpdateAction(std::move(onUpdateAction));

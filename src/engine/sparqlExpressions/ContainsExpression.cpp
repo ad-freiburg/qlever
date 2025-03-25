@@ -43,12 +43,14 @@ ContainsExpression::ContainsExpression(SparqlExpression::Ptr child,
   if (auto boundingBoxPtr =
           dynamic_cast<const StringLiteralExpression*>(boundingBox.get())) {
     originalBoundingBoxString =
-        boundingBoxPtr->value().normalizedLiteralContent().get();
+        asStringViewUnsafe(boundingBoxPtr->value().getContent());
+    /*
     if (!boundingBoxPtr->value().datatypeOrLangtag().empty()) {
       throw std::runtime_error(
           "The second argument to the Contain function (which contains the "
           "bounding box) must not contain a language tag or a datatype");
     }
+    */
     boundingBoxString = removeQuotes(originalBoundingBoxString);
   } else {
     throw std::runtime_error(

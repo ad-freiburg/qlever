@@ -7,6 +7,7 @@
 #include <concepts>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -18,7 +19,7 @@ namespace ad_utility {
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.
-// TODO<joka921> why can't this be consteval when the result is boudn to a
+// TODO<joka921> why can't this be consteval when the result is bound to a
 // `constexpr` variable?
 constexpr auto pow(auto base, int exponent) {
   if (exponent < 0) {
@@ -49,25 +50,41 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
+template <typename Func, typename CaseConstant, typename... ArgTypes>
+CPP_requires(
+    is_invocable_with_case_,
+    requires(Func&& f, ArgTypes&&... args)(
+        AD_FWD(f).template operator()<CaseConstant::value>(AD_FWD(args)...)));
+
+// Concept that checks if a function can be called with the given arguments
+template <typename Func, auto Case, typename... ArgTypes>
+CPP_concept InvocableWithCase =
+    CPP_requires_ref(is_invocable_with_case_, Func,
+                     std::integral_constant<decltype(Case), Case>, ArgTypes...);
+
 // A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
 // Cases...` that is equal to `value` and then calls
 // `function.operator()<MatchingCase>(args...)`.
-template <auto FirstCase, std::same_as<decltype(FirstCase)> auto... Cases>
-auto ConstexprSwitch =
-    [](auto&& function,
-       const std::equality_comparable_with<decltype(FirstCase)> auto& value,
-       auto&&... args) -> decltype(auto) requires(requires {
-  AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
-} && (... &&
-      requires {
-        AD_FWD(function).template operator()<Cases>(AD_FWD(args)...);
-      })) {
-  if (value == FirstCase) {
-    return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
-  } else if constexpr (sizeof...(Cases) > 0) {
-    return ConstexprSwitch<Cases...>(AD_FWD(function), value, AD_FWD(args)...);
-  } else {
-    AD_FAIL();
+template <auto FirstCase, auto... Cases>
+struct ConstexprSwitch {
+  CPP_template(typename FuncType, typename ValueType, typename... Args)(
+      requires((sizeof...(Cases) == 0) ||
+               ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>)
+          CPP_and std::equality_comparable_with<decltype(FirstCase),
+                                                decltype(FirstCase)>
+              CPP_and InvocableWithCase<FuncType, FirstCase, Args...>
+                  CPP_and(InvocableWithCase<FuncType, Cases,
+                                            Args...>&&...)) constexpr auto
+  operator()(FuncType&& function, const ValueType& value, Args&&... args) const
+      -> decltype(auto) {
+    if (value == FirstCase) {
+      return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
+    } else if constexpr (sizeof...(Cases) > 0) {
+      return ConstexprSwitch<Cases...>{}(AD_FWD(function), value,
+                                         AD_FWD(args)...);
+    } else {
+      AD_FAIL();
+    }
   }
 };
 
@@ -159,18 +176,17 @@ template <auto Array>
 auto toIntegerSequence() {
   return detail::toIntegerSequenceHelper<Array>(
       std::make_index_sequence<Array.size()>{});
-  // return typename detail::ToIntegerSequenceImpl<Array>::type{};
 }
 
 // Map a single integer `value` that is in the range `[0, ..., (maxValue + 1) ^
 // NumIntegers - 1 to an array of `NumIntegers` many integers that are each in
 // the range
 // `[0, ..., (maxValue)]`
-template <std::integral Int, size_t NumIntegers>
-constexpr std::array<Int, NumIntegers> integerToArray(Int value,
-                                                      Int numValues) {
+CPP_template(typename Int,
+             size_t NumIntegers)(requires std::integral<Int>) constexpr std::
+    array<Int, NumIntegers> integerToArray(Int value, Int numValues) {
   std::array<Int, NumIntegers> res;
-  for (auto& el : res | std::views::reverse) {
+  for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
     value /= numValues;
   }
@@ -181,8 +197,9 @@ constexpr std::array<Int, NumIntegers> integerToArray(Int value,
 // the type of `Upper`) that contains each
 // value from `[0, ..., Upper - 1] ^ Num` exactly once. `^` denotes the
 // cartesian power.
-template <std::integral auto Upper, size_t Num>
-constexpr auto cartesianPowerAsArray() {
+CPP_template(auto Upper, size_t Num)(
+    requires std::integral<
+        decltype(Upper)>) constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
   std::array<std::array<Int, Num>, numValues> arr;
@@ -196,8 +213,9 @@ constexpr auto cartesianPowerAsArray() {
 // value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
-template <std::integral auto Upper, size_t Num>
-auto cartesianPowerAsIntegerArray() {
+CPP_template(auto Upper,
+             size_t Num)(requires std::integral<
+                         decltype(Upper)>) auto cartesianPowerAsIntegerArray() {
   return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
 }
 
@@ -222,7 +240,7 @@ struct forEachTypeInTemplateTypeImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
-  void operator()(const auto& lambda) const {
+  constexpr void operator()(const auto& lambda) const {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };

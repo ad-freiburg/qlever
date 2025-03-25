@@ -12,7 +12,7 @@
 // really sure that the suppressed warnings are false positives and that there
 // is no feasible way to avoid them.
 
-// Macros to disable and reenable certain warnings on GCC13. Currently some
+// Macros to disable and re-enable certain warnings on GCC13. Currently some
 // (valid) uses of `std::sort` trigger a false positive `-Warray-bounds`
 // warning. It is important that there is a corresponding `ENABLE_...` macro
 // issued for every `DISABLE_...` macro.

@@ -4,9 +4,11 @@
 
 #include "Minus.h"
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Service.h"
+#include "util/Exception.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
@@ -20,13 +22,10 @@ Minus::Minus(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Minus::asStringImpl(size_t indent) const {
+string Minus::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MINUS\n" << _left->asString(indent) << "\n";
-  os << _right->asString(indent) << " ";
+  os << "MINUS\n" << _left->getCacheKey() << "\n";
+  os << _right->getCacheKey() << " ";
   return std::move(os).str();
 }
 
@@ -34,8 +33,14 @@ string Minus::asStringImpl(size_t indent) const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-ResultTable Minus::computeResult() {
+Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
+
+  // If the right of the RootOperations is a Service, precompute the result of
+  // its sibling.
+  Service::precomputeSiblingResult(_left->getRootOperation(),
+                                   _right->getRootOperation(), true,
+                                   requestLaziness);
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
@@ -45,8 +50,9 @@ ResultTable Minus::computeResult() {
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
-  LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
-             << " and " << rightResult->size() << endl;
+  LOG(DEBUG) << "Computing minus of results of size "
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   int leftWidth = leftResult->idTable().numColumns();
   int rightWidth = rightResult->idTable().numColumns();
@@ -58,8 +64,7 @@ ResultTable Minus::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
-                                                         *rightResult)};
+          Result::getMergedLocalVocab(*leftResult, *rightResult)};
 }
 
 // _____________________________________________________________________________
@@ -101,7 +106,7 @@ void Minus::computeMinus(
     const IdTable& dynA, const IdTable& dynB,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* dynResult) const {
-  // Substract dynB from dynA. The result should be all result mappings mu
+  // Subtract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value
   // for a variable defined in both differs) or the domain of mu and mu' are
   // disjoint (mu' defines no solution for any variables for which mu defines a
@@ -214,4 +219,12 @@ Minus::RowComparison Minus::isRowEqSkipFirst(
     }
   }
   return RowComparison::EQUAL;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneImpl() const {
+  auto copy = std::make_unique<Minus>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

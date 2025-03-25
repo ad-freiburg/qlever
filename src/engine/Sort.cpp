@@ -7,10 +7,10 @@
 
 #include <sstream>
 
-#include "CallFixedSize.h"
-#include "QueryExecutionTree.h"
-
-using std::string;
+#include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -24,23 +24,19 @@ Sort::Sort(QueryExecutionContext* qec,
       sortColumnIndices_{std::move(sortColumnIndices)} {}
 
 // _____________________________________________________________________________
-string Sort::asStringImpl(size_t indent) const {
+std::string Sort::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {
     os << "asc(" << sortCol << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << subtree_->getCacheKey();
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-string Sort::getDescriptor() const {
+std::string Sort::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto sortColumn : sortColumnIndices_) {
@@ -55,23 +51,15 @@ string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable Sort::computeResult() {
+Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
+  using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->size(), subRes->width()) >
-      remainingTime() * sortEstimateCancellationFactor) {
-    // The estimated time for this sort is much larger than the actually
-    // remaining time, cancel this operation
-    throw ad_utility::CancellationException(
-        "Sort operation was canceled, because time estimate exceeded "
-        "remaining time by a factor of " +
-        std::to_string(sortEstimateCancellationFactor));
-  }
+  const auto& subTable = subRes->idTable();
+  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+      subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
 
   LOG(DEBUG) << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
@@ -79,6 +67,16 @@ ResultTable Sort::computeResult() {
   runtimeInfo().addDetail("time-cloning", t.msecs());
   Engine::sort(idTable, sortColumnIndices_);
 
+  // Don't report missed timeout check because sort is not cancellable
+  cancellationHandle_->resetWatchDogState();
+  checkCancellation();
+
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Sort::cloneImpl() const {
+  return std::make_unique<Sort>(_executionContext, subtree_->clone(),
+                                sortColumnIndices_);
 }

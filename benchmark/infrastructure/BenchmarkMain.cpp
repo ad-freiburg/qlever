@@ -7,6 +7,7 @@
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -21,6 +22,7 @@
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
+#include "util/Exception.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -28,18 +30,76 @@
 using namespace ad_benchmark;
 
 /*
- * @brief Write the json object to the specified file.
- *
- * @param fileName The name of the file, where the json informationen
- *  should be written in.
- * @param appendToFile Should the json informationen be appended to the end
- *  of the file, or should the previous content be overwritten?
- */
-static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
-                            bool appendToFile = false) {
-  ad_utility::makeOfstream(
-      fileName, appendToFile ? (std::ios::out | std::ios::app) : std::ios::out)
-      << j;
+@brief Transform the given benchmark classes and corresponding results to
+json, and write them to the specified json file.
+
+@param benchmarkClassAndResults The benchmark classes together with their
+results of running `runAllBenchmarks`.
+@param jsonFileName The name of the json file, where the json informationen
+should be written in.
+@param appendToJsonInFile Should the json informationen be appended to the end
+of the json structure in the file, or should the previous content be
+overwritten? Note: If the json structure in the file isn't an array, an error
+will be thrown, except if the file is empty. In that case, `appendToFile` will
+be treated as `false`.
+*/
+static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
+    const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
+        benchmarkClassAndResults,
+    const std::filesystem::path& jsonFileName,
+    bool appendToJsonInFile = false) {
+  AD_CORRECTNESS_CHECK(jsonFileName.extension() == ".json");
+  // Convert to json.
+  nlohmann::ordered_json benchmarkClassAndBenchmarkResultsAsJson(
+      zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults));
+  AD_CORRECTNESS_CHECK(benchmarkClassAndBenchmarkResultsAsJson.is_array());
+
+  /*
+  Add the old json array entries to the new json array entries, if a non empty
+  file exists. Otherwise, we create/fill the file.
+  */
+  if (appendToJsonInFile && std::filesystem::exists(jsonFileName) &&
+      !std::filesystem::is_empty(jsonFileName)) {
+    /*
+    By parsing the file as json and working with `nlohmann::ordered_json`,
+    instead of the json string representation, we first make sure, that the file
+    only contains valid json, and secondly guarantee, that we generate a valid
+    new json. Also not, that this is not a performance critical place, so we
+    don't have to risk errors for a better performance.
+    */
+    const nlohmann::ordered_json fileAsJson(
+        fileToJson<nlohmann::ordered_json>(jsonFileName.string()));
+    if (!fileAsJson.is_array()) {
+      throw std::runtime_error(
+          absl::StrCat("The contents of the file ", jsonFileName.string(),
+                       " do not describe an array json value. Therefore no "
+                       "values can be appended."));
+    }
+
+    // Add the old entries to the new entries.
+    benchmarkClassAndBenchmarkResultsAsJson.insert(
+        benchmarkClassAndBenchmarkResultsAsJson.begin(), fileAsJson.begin(),
+        fileAsJson.end());
+  }
+
+  ad_utility::makeOfstream(jsonFileName)
+      << benchmarkClassAndBenchmarkResultsAsJson << std::endl;
+}
+
+/*
+Print the configuration documentation of all registered benchmarks.
+*/
+static __attribute__((noreturn)) void printConfigurationOptionsAndExit() {
+  ql::ranges::for_each(
+      BenchmarkRegister::getAllRegisteredBenchmarks(),
+      [](const BenchmarkInterface* bench) {
+        std::cerr << createCategoryTitle(
+                         absl::StrCat("Benchmark class '", bench->name(), "'"))
+                  << "\n"
+                  << bench->getConfigManager().printConfigurationDoc(true)
+                  << "\n\n";
+      });
+  exit(0);
 }
 
 /*
@@ -47,7 +107,7 @@ static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
  * and prints their measured time in a fitting format.
  */
 int main(int argc, char** argv) {
-  // The filename, should the write option be choosen.
+  // The filename, should the write option be chosen.
   std::string writeFileName = "";
   // The short hand, for the benchmark configuration.
   std::string shortHandConfigurationString = "";
@@ -63,11 +123,13 @@ int main(int argc, char** argv) {
   options.add_options()("help,h", "Print the help message.")(
       "print,p", "Roughly prints all benchmarks.")(
       "write,w", po::value<std::string>(&writeFileName),
-      "Writes the benchmarks as json to a file, overriding the previous"
+      "Writes the benchmarks as json to a json file, overriding the previous"
       " content of the file.")(
       "append,a",
-      "Causes the json option to append to the end of the"
-      " file, instead of overriding the previous content of the file.")(
+      "Causes the json option to append to the end of the json array in the "
+      "json file, if there is one, instead of overriding the previous content "
+      "of "
+      "the file.")(
       "configuration-json,j",
       po::value<std::string>(&jsonConfigurationFileName),
       "Set the configuration of benchmarks as described in a json file.")(
@@ -96,12 +158,23 @@ int main(int argc, char** argv) {
   po::store(po::parse_command_line(argc, argv, options), vm);
   po::notify(vm);
 
+  // If write was chosen, then the given file must be a json file.
+  if (vm.count("write") && !writeFileName.ends_with(".json")) {
+    std::cerr << "The file defined via `--write` must be a `.json` file.\n";
+    printUsageAndExit();
+  }
+
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly
   // wanted to see the `help` option.
   if (vm.count("help") || !(vm.count("print") || vm.count("write") ||
                             vm.count("configuration-options"))) {
     printUsageAndExit();
+  }
+
+  // Print all the available configuration options, if wanted.
+  if (vm.count("configuration-options")) {
+    printConfigurationOptionsAndExit();
   }
 
   /*
@@ -112,7 +185,7 @@ int main(int argc, char** argv) {
   nlohmann::json jsonConfig(nlohmann::json::value_t::object);
 
   if (vm.count("configuration-json")) {
-    jsonConfig.update(fileToJson(jsonConfigurationFileName));
+    jsonConfig.update(fileToJson<nlohmann::json>(jsonConfigurationFileName));
   }
   if (vm.count("configuration-shorthand")) {
     jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
@@ -120,20 +193,6 @@ int main(int argc, char** argv) {
   }
 
   BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
-
-  // Print all the available configuration options, if wanted.
-  if (vm.count("configuration-options")) {
-    std::ranges::for_each(
-        BenchmarkRegister::getAllRegisteredBenchmarks(),
-        [](const BenchmarkInterface* bench) {
-          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
-                                                        bench->name(), "'"))
-                    << "\n"
-                    << bench->getConfigManager().printConfigurationDoc(false)
-                    << "\n\n";
-        });
-    exit(0);
-  }
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
@@ -143,7 +202,7 @@ int main(int argc, char** argv) {
   Pairing the measured times up together with the the benchmark classes,
   that created them. Note: All the classes registered in `BenchmarkRegister`
   are always ran in the same order. So the benchmark class and benchmark
-  results are always at the same index position, and are grouped togehter
+  results are always at the same index position, and are grouped together
   correctly.
   */
   const auto& benchmarkClassAndResults{ad_utility::zipVectors(
@@ -152,18 +211,17 @@ int main(int argc, char** argv) {
   // Actually processing the arguments.
   if (vm.count("print")) {
     // Print the results and metadata.
-    std::ranges::for_each(benchmarkClassAndResults,
-                          [](const auto& pair) {
-                            std::cout << benchmarkResultsToString(pair.first,
-                                                                  pair.second)
-                                      << "\n\n";
-                          },
-                          {});
+    ql::ranges::for_each(benchmarkClassAndResults,
+                         [](const auto& pair) {
+                           std::cout << benchmarkResultsToString(pair.first,
+                                                                 pair.second)
+                                     << "\n\n";
+                         },
+                         {});
   }
 
   if (vm.count("write")) {
-    writeJsonToFile(
-        zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults),
-        writeFileName, vm.count("append"));
+    writeBenchmarkClassAndBenchmarkResultsToJsonFile(
+        benchmarkClassAndResults, writeFileName, vm.count("append"));
   }
 }

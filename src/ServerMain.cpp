@@ -3,31 +3,31 @@
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <CompilationInfo.h>
-#include <engine/Server.h>
-#include <global/Constants.h>
-#include <util/ProgramOptionsHelpers.h>
-#include <util/ReadableNumberFact.h>
-
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
+#include "CompilationInfo.h"
+#include "engine/Server.h"
+#include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/MemorySize/MemorySizeParser.h"
+#include "util/ParseableDuration.h"
+#include "util/ProgramOptionsHelpers.h"
+#include "util/ReadableNumberFact.h"
 
 using std::size_t;
 using std::string;
 
 namespace po = boost::program_options;
 
-#define EMPH_ON "\033[1m"
-#define EMPH_OFF "\033[22m"
-
 // Main function.
 int main(int argc, char** argv) {
+  // Copy the git hash and datetime of compilation (which require relinking)
+  // to make them accessible to other parts of the code
+  qlever::version::copyVersionInfo();
   setlocale(LC_CTYPE, "");
 
   std::locale loc;
@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
 
-  NonNegative memoryMaxSizeGb;
+  ad_utility::MemorySize memoryMaxSize;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &RuntimeParameters()};
@@ -68,26 +68,30 @@ int main(int argc, char** argv) {
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
-  add("memory-max-size-gb,m",
-      po::value<NonNegative>(&memoryMaxSizeGb)
-          ->default_value(DEFAULT_MEM_FOR_QUERIES_IN_GB),
-      "Limit on the total amount of memory (in GB) that can be used for "
+  add("memory-max-size,m",
+      po::value<ad_utility::MemorySize>(&memoryMaxSize)
+          ->default_value(DEFAULT_MEM_FOR_QUERIES),
+      "Limit on the total amount of memory that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c",
-      optionFactory.getProgramOption<"cache-max-size-gb">(),
-      "Maximum memory size in GB for all cache entries (pinned and "
+  add("cache-max-size,c", optionFactory.getProgramOption<"cache-max-size">(),
+      "Maximum memory size for all cache entries (pinned and "
       "not pinned). Note that the cache is part of the total memory "
-      "limited by --memory-max-size-gb.");
-  add("cache-max-size-gb-single-entry,e",
-      optionFactory.getProgramOption<"cache-max-size-gb-single-entry">(),
-      "Maximum size in GB for a single cache entry. That is, "
+      "limited by --memory-max-size.");
+  add("cache-max-size-single-entry,e",
+      optionFactory.getProgramOption<"cache-max-size-single-entry">(),
+      "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
+  add("cache-max-size-lazy-result,E",
+      optionFactory.getProgramOption<"cache-max-size-lazy-result">(),
+      "Maximum size up to which lazy results will be cached by aggregating "
+      "partial results. Caching does cause significant overhead for this "
+      "case.");
   add("cache-max-num-entries,k",
       optionFactory.getProgramOption<"cache-max-num-entries">(),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used non-pinned entries from the cache. Note that "
-      "this condition and the size limit specified via --cache-max-size-gb "
+      "this condition and the size limit specified via --cache-max-size "
       "both have to hold (logical AND).");
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. If disabled, the special predicate "
@@ -104,6 +108,24 @@ int main(int argc, char** argv) {
       po::bool_switch(&onlyPsoAndPosPermutations),
       "Only load the PSO and POS permutations. This disables queries with "
       "predicate variables.");
+  add("default-query-timeout,s",
+      optionFactory.getProgramOption<"default-query-timeout">(),
+      "Set the default timeout in seconds after which queries are cancelled"
+      "automatically.");
+  add("service-max-value-rows,S",
+      optionFactory.getProgramOption<"service-max-value-rows">(),
+      "The maximal number of result rows to be passed to a SERVICE operation "
+      "as a VALUES clause to optimize its computation.");
+  add("throw-on-unbound-variables",
+      optionFactory.getProgramOption<"throw-on-unbound-variables">(),
+      "If set to true, the queries that use GROUP BY, BIND, or ORDER BY with "
+      "variables that are unbound in the query throw an exception. These "
+      "queries technically are allowed by the SPARQL standard, but typically "
+      "are the result of typos and unintended by the user");
+  add("request-body-limit",
+      optionFactory.getProgramOption<"request-body-limit">(),
+      "Set the maximum size for the body of requests the server will process. "
+      "Set to zero to disable the limit.");
   po::variables_map optionsMap;
 
   try {
@@ -121,13 +143,11 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
+            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    Server server(
-        port, numSimultaneousQueries,
-        ad_utility::MemorySize::gigabytes(static_cast<size_t>(memoryMaxSizeGb)),
-        std::move(accessToken), !noPatternTrick);
+    Server server(port, numSimultaneousQueries, memoryMaxSize,
+                  std::move(accessToken), !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

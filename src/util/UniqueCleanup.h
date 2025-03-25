@@ -7,16 +7,16 @@
 
 #include <concepts>
 #include <functional>
-#include <memory>
 
+#include "backports/concepts.h"
 #include "util/ResetWhenMoved.h"
 
 namespace ad_utility::unique_cleanup {
 
 /// Wrapper class that allows to call a function
 /// just before the wrapper value T is destroyed.
-template <std::move_constructible T, typename Func = std::function<void(T&&)>>
-class UniqueCleanup {
+CPP_template(typename T, typename Func = std::function<void(T&&)>)(
+    requires std::move_constructible<T>) class UniqueCleanup {
   /// Boolean indicating if object was not moved out of
   ResetWhenMoved<bool, false> active_ = true;
   /// Wrapped value
@@ -31,7 +31,7 @@ class UniqueCleanup {
   ///                 Note: Make sure the function doesn't capture the this
   ///                 pointer as this may lead to segfaults because the pointer
   ///                 will point to the old object after moving.
-  UniqueCleanup(T&& value, Func function)
+  UniqueCleanup(T value, Func function)
       : value_{std::move(value)}, function_{std::move(function)} {}
 
   T& operator*() noexcept { return value_; }
@@ -47,14 +47,8 @@ class UniqueCleanup {
 
   UniqueCleanup& operator=(UniqueCleanup&& cleanupDeleter) noexcept = default;
 
-  /// Runs the cleanup call preemptively by moving out of this instance and
-  /// immediately destructing the new instance
-  void invokeManuallyAndCancel() && {
-    if (active_) {
-      std::invoke(std::move(function_), std::move(value_));
-      active_ = false;
-    }
-  }
+  /// Disable the cleanup call without executing it.
+  void cancel() && { active_ = false; }
 
   ~UniqueCleanup() {
     if (active_) {

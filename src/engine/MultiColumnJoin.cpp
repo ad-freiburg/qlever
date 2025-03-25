@@ -1,13 +1,16 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
+// Copyright 2018 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer [2018 - 2020]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "MultiColumnJoin.h"
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
@@ -16,7 +19,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t2)
     : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1->asString() > t2->asString()) {
+  if (t1->getCacheKey() > t2->getCacheKey()) {
     std::swap(t1, t2);
   }
   std::tie(_left, _right, _joinColumns) =
@@ -25,21 +28,15 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::asStringImpl(size_t indent) const {
+string MultiColumnJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MULTI_COLUMN_JOIN\n" << _left->asString(indent) << " ";
+  os << "MULTI_COLUMN_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "|X|\n" << _right->asString(indent) << " ";
+  os << "|X|\n" << _right->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
@@ -64,7 +61,7 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable MultiColumnJoin::computeResult() {
+Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -75,20 +72,24 @@ ResultTable MultiColumnJoin::computeResult() {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
+  checkCancellation();
+
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   LOG(DEBUG) << "Computing a multi column join between results of size "
-             << leftResult->size() << " and " << rightResult->size() << endl;
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
                          _joinColumns, &idTable);
+
+  checkCancellation();
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
-                                                         *rightResult)};
+          Result::getMergedLocalVocab(*leftResult, *rightResult)};
 }
 
 // _____________________________________________________________________________
@@ -228,40 +229,41 @@ void MultiColumnJoin::computeMultiColumnJoin(
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
+      cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
-  auto findUndef = [](const auto& row, auto begin, auto end,
-                      bool& resultMightBeUnsorted) {
-    return ad_utility::findSmallerUndefRanges(row, begin, end,
-                                              resultMightBeUnsorted);
-  };
-
-  // `isCheap` is true iff there are no UNDEF values in the join columns. In
-  // this case we can use a much cheaper algorithm.
-  // TODO<joka921> There are many other cases where a cheaper implementation can
-  // be chosen, but we leave those for another PR, this is the most common case.
-  namespace stdr = std::ranges;
-  bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
+  // Compute `isCheap`, which is true iff there are no UNDEF values in the join
+  // columns (in which case we can use a simpler and cheaper join algorithm).
+  //
+  // TODO<joka921> This is the most common case. There are many other cases
+  // where the generic `zipperJoinWithUndef` can be optimized. We will those
+  // for a later PR.
+  bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
-           (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
+    return (ql::ranges::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
+           (ql::ranges::any_of(left.getColumn(leftCol), &Id::isUndefined));
   });
+
+  auto checkCancellationLambda = [this] { checkCancellation(); };
 
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop);
+          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
     } else {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
+          ql::ranges::lexicographical_compare, addRow,
+          ad_utility::findSmallerUndefRanges,
+          ad_utility::findSmallerUndefRanges, ad_utility::noop,
+          checkCancellationLambda);
     }
   }();
   *result = std::move(rowAdder).resultTable();
@@ -275,6 +277,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     for (size_t i = 0; i < joinColumns.size(); ++i) {
       cols.push_back(i);
     }
+    checkCancellation();
     Engine::sort(*result, cols);
   }
 
@@ -282,4 +285,13 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // columns than expected, permute them. See the documentation of
   // `JoinColumnMapping` for details.
   result->setColumnSubset(joinColumnData.permutationResult());
+  checkCancellation();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
+  auto copy = std::make_unique<MultiColumnJoin>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

@@ -8,10 +8,15 @@
 #include <limits>
 #include <memory>
 
+#include "engine/PathSearch.h"
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
+#include "parser/PathQuery.h"
+#include "parser/SpatialQuery.h"
+#include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
@@ -49,11 +54,13 @@ struct Service {
   // The visible variables of the service clause.
   std::vector<Variable> visibleVariables_;
   // The URL of the service clause.
-  Iri serviceIri_;
+  TripleComponent::Iri serviceIri_;
   // The prologue (prefix definitions).
   std::string prologue_;
   // The body of the SPARQL query for the remote endpoint.
   std::string graphPatternAsString_;
+  // The existence of the `SILENT`-keyword.
+  bool silent_;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
@@ -75,6 +82,11 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
+  // If not `monostate`, then this group is a `GRAPH` clause, either with a
+  // fixed graph IRI, or with a variable.
+  using GraphSpec =
+      std::variant<std::monostate, TripleComponent::Iri, Variable>;
+  GraphSpec graphSpec_ = std::monostate{};
 };
 
 /// An `OPTIONAL` clause.
@@ -110,18 +122,32 @@ class Subquery {
  public:
   // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
 
-  // Deliberately not explicit, because semantically those are copy/move
-  // constructors.
+  // NOTE: The first two constructors are deliberately not `explicit` because
+  // we want to used them like copy/move constructors (semantically, a
+  // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
-  Subquery(ParsedQuery&&);
+  Subquery(ParsedQuery&&) noexcept;
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
-  Subquery(Subquery&&);
+  Subquery(Subquery&&) noexcept;
   Subquery& operator=(const Subquery&);
-  Subquery& operator=(Subquery&&);
+  Subquery& operator=(Subquery&&) noexcept;
   ParsedQuery& get();
   const ParsedQuery& get() const;
+};
+
+// A SPARQL `DESCRIBE` query.
+struct Describe {
+  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  // The resources (variables or IRIs) that are to be described, for example
+  // `?x` and `<y>` in `DESCRIBE ?x <y>`.
+  std::vector<VarOrIri> resources_;
+  // The FROM clauses of the DESCRIBE query
+  DatasetClauses datasetClauses_;
+  // The WHERE clause of the DESCRIBE query. It is used to compute the values
+  // for the variables in the DESCRIBE clause.
+  Subquery whereClause_;
 };
 
 struct TransPath {
@@ -153,7 +179,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
+                 Minus, GroupGraphPattern, Describe>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
@@ -165,13 +192,6 @@ struct GraphPatternOperation
   [[nodiscard]] const auto& getBasic() const {
     return std::get<BasicGraphPattern>(*this);
   }
-
-  // A string representation of the operation.
-  //
-  // TODO: The implementation of this method duplicates code found in the
-  // implementations of `asStringImpl` for the individual operations in
-  // `src/engine`. This function is therefore probably redundant (but currently
-  // used in some of our unit tests).
-  void toString(std::ostringstream& os, int indentation = 0) const;
 };
+
 }  // namespace parsedQuery

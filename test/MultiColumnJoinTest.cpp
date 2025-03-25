@@ -2,16 +2,18 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
+#include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
 
 #include <array>
 #include <vector>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
-#include "engine/CallFixedSize.h"
 #include "engine/MultiColumnJoin.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IdTestHelpers.h"
+#include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
@@ -31,9 +33,13 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
+  auto* qec = ad_utility::testing::getQec();
+
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  MultiColumnJoin::computeMultiColumnJoin(a, b, jcls, &res);
+  MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
+                  idTableToExecutionTree(qec, b)}
+      .computeMultiColumnJoin(a, b, jcls, &res);
 
   auto expected = makeIdTableFromVector({{2, 1, 3, 3}, {1, 3, 1, 1}});
   ASSERT_EQ(expected, res);
@@ -54,7 +60,9 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back({1, 0});
   jcls.push_back({2, 1});
 
-  MultiColumnJoin::computeMultiColumnJoin(va, vb, jcls, &vres);
+  MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
+                  idTableToExecutionTree(qec, b)}
+      .computeMultiColumnJoin(va, vb, jcls, &vres);
 
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.numColumns());
@@ -69,4 +77,31 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(wantedRes[1], vres[1]);
   ASSERT_EQ(wantedRes[2], vres[2]);
   ASSERT_EQ(wantedRes[3], vres[3]);
+}
+
+// _____________________________________________________________________________
+TEST(MultiColumnJoin, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable a = makeIdTableFromVector({{4, 1, 2}});
+  MultiColumnJoin join{qec, idTableToExecutionTree(qec, a),
+                       idTableToExecutionTree(qec, a)};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(join, IsDeepCopy(*clone));
+
+  std::string_view prefix = "MultiColumnJoin on ";
+  EXPECT_THAT(join.getDescriptor(), ::testing::StartsWith(prefix));
+  EXPECT_THAT(clone->getDescriptor(), ::testing::StartsWith(prefix));
+  // Order of join columns is not deterministic.
+  auto getVars = [prefix](std::string_view string) {
+    string.remove_prefix(prefix.length());
+    std::vector<std::string> vars;
+    for (const auto& split : absl::StrSplit(string, ' ', absl::SkipEmpty())) {
+      vars.emplace_back(split);
+    }
+    ql::ranges::sort(vars);
+    return vars;
+  };
+  EXPECT_EQ(getVars(clone->getDescriptor()), getVars(join.getDescriptor()));
 }

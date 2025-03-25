@@ -4,12 +4,8 @@
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 #pragma once
 
-#include <list>
-
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-
-using std::list;
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class OptionalJoin : public Operation {
  private:
@@ -39,7 +35,7 @@ class OptionalJoin : public Operation {
                std::shared_ptr<QueryExecutionTree> t2);
 
  private:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
@@ -47,11 +43,6 @@ class OptionalJoin : public Operation {
   size_t getResultWidth() const override;
 
   vector<ColumnIndex> resultSortedOn() const override;
-
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -67,24 +58,20 @@ class OptionalJoin : public Operation {
     return {_left.get(), _right.get()};
   }
 
-  /**
-   * @brief Joins two result tables on any number of columns, inserting the
-   *        special value ID_NO_VALUE for any entries marked as optional.
-   * @param a
-   * @param b
-   * @param joinColumns
-   * @param result
-   */
-  static void optionalJoin(
+  // Joins two result tables on any number of columns, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
+  void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   void computeSizeEstimateAndMultiplicities();
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

@@ -5,16 +5,16 @@ queries:
   - query: relativ-star-scientists
     type: text
     sparql: |
-      SELECT ?x ?t ?ql_textscore_t WHERE {
+      SELECT ?x ?t ?ql_score_t_var_x WHERE {
           ?x <is-a> <Scientist> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-      ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_score_t_var_x)
     checks:
       - num_cols: 3
       - num_rows: 4285
-      - selected: [ "?x", "?t", "?ql_textscore_t"]
+      - selected: [ "?x", "?t", "?ql_score_t_var_x"]
       - contains_row:
           - "<Albert_Einstein>"
           - "He realized, however, that the principle of relativity could also be extended
@@ -23,30 +23,27 @@ queries:
           - null
       - contains_row: [ "<Albert_Einstein>", null, null ] # null cells are ignored
       - contains_row: [ "<Luís_Lindley_Cintra>", null, null ] # Test Unicode
-      - order_numeric: {"dir" : "DESC", "var": "?ql_textscore_t"}
+      - order_numeric: {"dir" : "DESC", "var": "?ql_score_t_var_x"}
 
 
-  - query: relativ-star-scientists-from-ulm  # should use TextOperationWithFilter
+  - query: relativ-star-scientists-from-ulm
     type: text
     sparql: |
-      SELECT ?x ?t ?ql_textscore_t WHERE {
+      SELECT ?x ?t WHERE {
           ?x <is-a> <Scientist> .
           ?x <Place_of_birth> <Ulm> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-      ORDER BY DESC(?ql_textscore_t)
-      TEXTLIMIT 1
     checks:
-      - num_cols: 3
-      - num_rows: 1
-      - selected: [ "?x", "?t", "?ql_textscore_t" ]
+      - num_cols: 2
+      - num_rows: 172
+      - selected: [ "?x", "?t"]
       - contains_row:
           - "<Albert_Einstein>"
           - "He realized, however, that the principle of relativity could also be extended
           to gravitational fields, and with his subsequent theory of gravitation in 1916,
           he published a paper on general relativity."
-          - null
 
   - query: relat-star-Physikalische-real-star-scientists-from-ulm
     type: text
@@ -55,59 +52,125 @@ queries:
           ?x <is-a> <Scientist> .
           ?x <Place_of_birth> <Ulm> .
           ?t ql:contains-entity ?x .
-          ?t ql:contains-word "relat* Physikalische rela*"
+          ?t ql:contains-word "RElaT* phySIKalische rela*"
       }
     checks:
-      - num_cols: 5
-      - selected: [ "?x", "?ql_textscore_t", "?t", "?ql_matchingword_t_relat", "?ql_matchingword_t_rela" ]
+      - num_cols: 8
+      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_score_prefix_t_RElaT", "?ql_matchingword_t_relat", "?ql_score_word_t_phySIKalische", "?ql_score_prefix_t_rela", "?ql_matchingword_t_rela" ]
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relationship"
+          - null
+          - null
           - "relationship"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relationship"
+          - null
+          - null
           - "relativity"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relativity"
+          - null
+          - null
           - "relationship"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relativity"
+          - null
+          - null
           - "relativity"
 
   - query: algo-star-female-scientists
     type: text
     sparql: |
-      SELECT ?x ?ql_textscore_t WHERE {
+      SELECT ?x ?ql_score_t_var_x WHERE {
           ?x <is-a> <Scientist> .
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
       }
-      ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_score_t_var_x)
     checks:
       - num_cols: 2
       - num_rows: 27
-      - selected: [ "?x", "?ql_textscore_t" ]
+      - selected: [ "?x", "?ql_score_t_var_x" ]
       - contains_row: [ "<Grete_Hermann>", null ]
-      - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_x"}
+  
+  - query: algo-star-female-scientists-textlimit
+    type: text
+    sparql: |
+      SELECT ?x ?ql_score_t_var_x WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "algo*"
+      }
+      ORDER BY DESC(?ql_score_t_var_x)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 2
+      - num_rows: 16
+      - selected: [ "?x", "?ql_score_t_var_x" ]
+      - contains_row: [ "<Grete_Hermann>", null ]
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_x"}
+  
+  - query: algo-star-female-scientists-textlimit-mult-entities
+    type: text
+    sparql: |
+      SELECT ?s ?ql_score_t_var_s WHERE {
+          ?s <is-a> <Scientist> .
+          ?f <Gender> <Female> .
+          ?t ql:contains-entity ?s .
+          ?t ql:contains-entity ?f .
+          ?t ql:contains-word "algo*"
+      }
+      ORDER BY DESC(?ql_score_t_var_s)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 2
+      - num_rows: 19
+      - selected: [ "?s", "?ql_score_t_var_s" ]
+      - contains_row: [ "<Grete_Hermann>", null ]
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_s"}
+  
+  - query: textlimit-mult-entities-mult-textVars
+    type: text
+    sparql: |
+      SELECT * WHERE {
+          ?s <is-a> <Scientist> .
+          ?f <Gender> <Female> .
+          ?f <Country_of_nationality> <United_Kingdom> .
+          ?t1 ql:contains-entity ?s .
+          ?t1 ql:contains-entity <Ada_Lovelace> .
+          ?t2 ql:contains-entity ?f .
+          ?t1 ql:contains-word "algorithm" .
+          ?t2 ql:contains-word "mathematician"
+      }
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 9
+      - num_rows: 18
 
-
-  - query: algor-start-female-born-before-1940
+  - query: algor-star-female-born-before-1940
     type: text
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      SELECT ?x ?date ?t ?ql_textscore_t ?ql_matchingword_t_algor WHERE {
+      SELECT ?x ?date ?t ?ql_matchingword_t_algor WHERE {
         ?x <is-a> <Scientist> .
         ?x <Date_of_birth> ?date .
         ?x <Gender> <Female> .
@@ -115,29 +178,106 @@ queries:
         ?t ql:contains-word "algor*" .
         FILTER (?date < "1940-01-01"^^xsd:date)
       }
-      ORDER BY DESC(?ql_textscore_t)
     checks:
-      - num_cols: 5
+      - num_cols: 4
       - num_rows: 4
       - contains_row:
         - "<Grete_Hermann>"
         - "1901-03-02"
         - "Hermann's algorithm for primary decomposition is still in use now."
-        - null
         - "algorithm"
       - contains_row:
         - "<Ada_Lovelace>"
         - "1815-12-10"
         - "Her notes on the engine include what is recognised as the first algorithm intended to be carried out by a machine."
-        - null
         - "algorithm"
-      - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
-  - query: algorithm-hermann-start-female-born-before-1940
+  - query: algor-star-female-fixedEntity-ada-ordered
+    type: text
+    sparql: |
+      SELECT * WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <Gender> <Female> .
+        ?text ql:contains-entity ?scientist .
+        ?text ql:contains-entity <Ada_Lovelace> .
+        ?text ql:contains-word "rela*" .
+      }
+      ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
+    checks:
+      - num_cols: 6
+      - num_rows: 7
+      - contains_row:
+        - "<Ada_Lovelace>"
+        - null
+        - "As a teenager, her mathematical talents led her to an ongoing
+        working relationship and friendship with fellow British mathematician
+        Charles Babbage, also known as' the father of computers', and in
+        particular, Babbage's work on the Analytical Engine."
+        - null
+        - null
+        - "relationship"
+      - order_numeric: {"dir": "DESC", 
+      "var" : "?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_"}
+
+  - query: algor-star-female-fixedEntity-ada-ordered-textlimit
+    type: text
+    sparql: |
+      SELECT * WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <Gender> <Female> .
+        ?text ql:contains-entity ?scientist .
+        ?text ql:contains-entity <Ada_Lovelace> .
+        ?text ql:contains-word "rela*" .
+      }
+      ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 6
+      - num_rows: 3
+      - contains_row:
+        - "<Ada_Lovelace>"
+        - null
+        - "As a teenager, her mathematical talents led her to an ongoing
+        working relationship and friendship with fellow British mathematician
+        Charles Babbage, also known as' the father of computers', and in
+        particular, Babbage's work on the Analytical Engine."
+        - null
+        - null
+        - "relationship"
+      - order_numeric: {"dir": "DESC", 
+      "var" : "?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_"}
+    
+  - query: algor-star-female-fixedEntity-ada-fixed-Entity-mary
+    type: text
+    sparql: |
+      SELECT * WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <Gender> <Female> .
+        ?text ql:contains-entity ?scientist .
+        ?text ql:contains-entity <Ada_Lovelace> .
+        ?text ql:contains-entity <Mary_Somerville> .
+        ?text ql:contains-word "rela*" .
+      }
+      TEXTLIMIT 1
+    checks:
+      - num_cols: 7
+      - num_rows: 2
+      - contains_row:
+        - "<Ada_Lovelace>"
+        - null
+        - "She became fascinated with the machine and used her relationship
+        with Somerville to visit Babbage as often as she could."
+        - null
+        - null
+        - null
+        - "relationship"
+
+
+  - query: algorithm-hermann-star-female-born-before-1940
     type: text
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      SELECT ?x ?date ?t ?ql_textscore_t WHERE {
+      SELECT ?x ?date ?t WHERE {
         ?x <is-a> <Scientist> .
         ?x <Date_of_birth> ?date .
         ?x <Gender> <Female> .
@@ -145,16 +285,13 @@ queries:
         ?t ql:contains-word "algorithm hermann" .
         FILTER (?date < "1940-01-01"^^xsd:date)
       }
-      ORDER BY DESC(?ql_textscore_t)
     checks:
-      - num_cols: 4
+      - num_cols: 3
       - num_rows: 1
       - contains_row:
         - "<Grete_Hermann>"
         - "1901-03-02"
         - "Hermann's algorithm for primary decomposition is still in use now."
-        - null
-      - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
   - query: people-born-in-1901
     type: no-text
@@ -217,6 +354,21 @@ queries:
       - selected: [ "?count", "?place" ]
       - contains_row: [ 280, "<New_York_City>" ]
       - order_numeric: { "dir": "DESC", "var": "?count" }
+
+  - query: scientists-group-by-join-avg
+    type: no-text
+    sparql: |
+      SELECT ?place (AVG(?height) as ?avg_height) WHERE {
+          ?x <Country_of_nationality> ?place .
+          ?x <Height> ?height .
+      }
+      GROUP BY ?place
+    checks:
+      - num_cols : 2
+      - num_rows: 40
+      - selected: [ "?place", "?avg_height" ]
+      - contains_row: [ "<Austria>", 1.72 ]
+      - order_string: { "dir": "ASC", var: "?place" }
 
   - query: group-by-and-rand
     type: no-text
@@ -880,6 +1032,34 @@ queries:
       - contains_row: ["<Character_Occupation>"] 
       - contains_row: ["1.87"]
 
+  - query: path_search_all_paths
+    type: no-text
+    sparql: |
+      PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+      SELECT * WHERE {
+        SERVICE pathSearch: {
+          pathSearch: pathSearch:algorithm pathSearch:allPaths;
+      	            pathSearch:source <Mary_Ann_Leeper>;
+      				pathSearch:target <Literature_Subject>;
+      				pathSearch:pathColumn ?path;
+      				pathSearch:edgeColumn ?edge;
+      				pathSearch:start ?start;
+      				pathSearch:end ?end;
+      	{SELECT * WHERE {
+      	  ?start <is-a> ?end
+      	}}
+        }
+      }
+    checks:
+      - num_rows: 17
+      - num_cols: 4
+      - selected: ["?path", "?edge", "?start", "?end"]
+      - contains_row: ["0", "0", "<Mary_Ann_Leeper>", "<Radiobiochemist>"]
+      - contains_row: ["0", "1", "<Radiobiochemist>", "<Chemist>"]
+      - contains_row: ["0", "2", "<Chemist>", "<Literature_Subject>"]
+      - contains_row: ["4", "0", "<Mary_Ann_Leeper>", "<Biochemist>"]
+      - contains_row: ["4", "1", "<Biochemist>", "<Literature_Subject>"]
+
 
   - query : property_path_inverse
     type: no-text
@@ -990,6 +1170,23 @@ queries:
       - num_rows: 1
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
+
+  - query: trailing-values-limit
+    type: no-text
+    sparql: |
+      SELECT * {
+        VALUES (?x) { ("A") }
+      }
+      LIMIT 1
+      VALUES (?x) {
+        ("A")
+        ("A")
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: [ "?x" ]
+      - contains_row: [ "A" ]
 
 
   - query : filter-depending-on-last-optional
@@ -1224,12 +1421,12 @@ queries:
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo* herm* primary"
-      } TEXTLIMIT 1
+      }
     checks:
-      - num_cols: 5
+      - num_cols: 8
       - num_rows: 1
-      - selected: [ "?x", "?ql_textscore_t", "?t", "?ql_matchingword_t_algo", "?ql_matchingword_t_herm" ]
-      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.","algorithm","hermann" ]
+      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_score_prefix_t_algo", "?ql_matchingword_t_algo", "?ql_score_prefix_t_herm", "?ql_matchingword_t_herm", "?ql_score_word_t_primary" ]
+      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.",null,"algorithm",null,"hermann",null ]
 
 
   - query : select_asterisk_regex-lastname-stein
@@ -1732,3 +1929,17 @@ queries:
       - contains_row: [ "<Zelda_Rubinstein>", "Z-da_Rubinst-n", "Zelda_ubinstein" ]
       - contains_row: [ "<Zhang_Peili>", "Zhang_P-li", "Zhang_Peili"]
       - contains_row: [ "<Zlata_Bartl>", "Zlata_Bartl", "Zlata_Batl"]
+
+  - query: pattern-trick-empty-subquery
+    type: no-text
+    sparql: |
+      PREFIX foo: <https://example.org/foo#>
+      SELECT ?p  {
+        ?s foo:bar foo:Baz .
+        ?s ?p ?o
+      }
+      GROUP BY ?p
+    checks:
+      - num_cols: 1
+      - selected: [ "?p" ]
+      - num_rows: 0

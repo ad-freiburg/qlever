@@ -18,15 +18,14 @@
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec), parsedValues_(std::move(parsedValues)) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(parsedValues_._values, [&](const auto& row) {
+      ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
 }
 
 // ____________________________________________________________________________
-string Values::asStringImpl(size_t indent) const {
-  return absl::StrCat(std::string(indent, ' '), "VALUES (",
-                      parsedValues_.variablesToString(), ") { ",
+string Values::getCacheKeyImpl() const {
+  return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
                       parsedValues_.valuesToString(), " }");
 }
 
@@ -109,7 +108,7 @@ void Values::computeMultiplicities() {
 }
 
 // ____________________________________________________________________________
-ResultTable Values::computeResult() {
+Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
@@ -131,8 +130,10 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   for (auto& row : parsedValues_._values) {
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
-      TripleComponent& tc = row[colIdx];
-      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+      const TripleComponent& tc = row[colIdx];
+      // TODO<joka921> We don't want to move, but also don't want to
+      // unconditionally copy.
+      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -145,4 +146,9 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   LOG(INFO) << "Number of entries in local vocabulary per column: "
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Values::cloneImpl() const {
+  return std::make_unique<Values>(*this);
 }

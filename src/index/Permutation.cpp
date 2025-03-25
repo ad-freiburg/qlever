@@ -5,6 +5,8 @@
 #include "index/Permutation.h"
 
 #include "absl/strings/str_cat.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -12,17 +14,30 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      reader_{std::move(allocator)} {}
+      allocator_{std::move(allocator)},
+      permutation_{permutation} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               std::function<bool(Id)> isInternalId,
+                               bool loadInternalPermutation) {
+  isInternalId_ = std::move(isInternalId);
+  if (loadInternalPermutation) {
+    internalPermutation_ =
+        std::make_unique<Permutation>(permutation_, allocator_);
+    internalPermutation_->loadFromDisk(
+        absl::StrCat(onDiskBase, QLEVER_INTERNAL_INDEX_INFIX), isInternalId_,
+        false);
+    internalPermutation_->isInternalPermutation_ = true;
+  }
+  if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
   auto filename = string(onDiskBase + ".index" + fileSuffix_);
+  ad_utility::File file;
   try {
-    file_.open(filename, "r");
+    file.open(filename, "r");
   } catch (const std::runtime_error& e) {
     AD_THROW("Could not open the index file " + filename +
              " for reading. Please check that you have read access to "
@@ -30,7 +45,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
              "message was: " +
              e.what());
   }
-  meta_.readFromFile(&file_);
+  meta_.readFromFile(&file);
+  reader_.emplace(allocator_, std::move(file));
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
@@ -38,36 +54,74 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 
 // _____________________________________________________________________
 IdTable Permutation::scan(
-    Id col0Id, std::optional<Id> col1Id,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
+    const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
 
-  if (!meta_.col0IdExists(col0Id)) {
-    size_t numColumns = col1Id.has_value() ? 1 : 2;
-    return IdTable{numColumns, reader_.allocator()};
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
+  const auto& p = getActualPermutation(scanSpec);
 
-  if (col1Id.has_value()) {
-    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
-                        cancellationHandle);
-  } else {
-    return reader_.scan(metaData, meta_.blockData(), file_, cancellationHandle);
-  }
+  return p.reader().scan(
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      additionalColumns, cancellationHandle,
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // _____________________________________________________________________
-size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return 0;
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
+size_t Permutation::getResultSizeOfScan(
+    const ScanSpecification& scanSpec,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
+  const auto& p = getActualPermutation(scanSpec);
+  return p.reader().getResultSizeOfScan(
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+}
 
-  return reader_.getResultSizeOfScan(metaData, col1Id, meta_.blockData(),
-                                     file_);
+// _____________________________________________________________________
+std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
+    const ScanSpecification& scanSpec,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
+  const auto& p = getActualPermutation(scanSpec);
+  return p.reader().getSizeEstimateForScan(
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+}
+
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol1IdsAndCounts(
+    Id col0Id, const CancellationHandle& cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  const auto& p = getActualPermutation(col0Id);
+  return p.reader().getDistinctCol1IdsAndCounts(
+      col0Id, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      cancellationHandle,
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+}
+
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol0IdsAndCounts(
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  return reader().getDistinctCol0IdsAndCounts(
+      getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
@@ -111,44 +165,105 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 }
 
 // _____________________________________________________________________
+std::optional<CompressedRelationMetadata> Permutation::getMetadata(
+    Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  const auto& p = getActualPermutation(col0Id);
+  if (p.meta_.col0IdExists(col0Id)) {
+    return p.meta_.getMetaData(col0Id);
+  }
+  return p.reader().getMetadataForSmallRelation(
+      p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot), col0Id,
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+}
+
+// _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
-    Id col0Id, std::optional<Id> col1Id) const {
-  if (!meta_.col0IdExists(col0Id)) {
+    const ScanSpecification& scanSpec,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  const auto& p = getActualPermutation(scanSpec);
+  CompressedRelationReader::ScanSpecAndBlocks mb{
+      scanSpec, CompressedRelationReader::getRelevantBlocks(
+                    scanSpec, p.getAugmentedMetadataForPermutation(
+                                  locatedTriplesSnapshot))};
+
+  auto firstAndLastTriple = p.reader().getFirstAndLastTriple(
+      mb, p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+  if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
-
-  auto metadata = meta_.getMetaData(col0Id);
-
-  MetadataAndBlocks result{meta_.getMetaData(col0Id),
-                           CompressedRelationReader::getBlocksFromMetadata(
-                               metadata, col1Id, meta_.blockData()),
-                           col1Id, std::nullopt};
-
-  result.firstAndLastTriple_ = reader_.getFirstAndLastTriple(result, file_);
-  return result;
+  return MetadataAndBlocks{std::move(mb),
+                           std::move(firstAndLastTriple.value())};
 }
 
 // _____________________________________________________________________
 Permutation::IdTableGenerator Permutation::lazyScan(
-    Id col0Id, std::optional<Id> col1Id,
+    const ScanSpecification& scanSpec,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
-    std::shared_ptr<ad_utility::CancellationHandle> cancellationHandle) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return {};
-  }
-  auto relationMetadata = meta_.getMetaData(col0Id);
+    ColumnIndicesRef additionalColumns,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    const LimitOffsetClause& limitOffset) const {
+  const auto& p = getActualPermutation(scanSpec);
   if (!blocks.has_value()) {
-    auto blockSpan = CompressedRelationReader::getBlocksFromMetadata(
-        relationMetadata, col1Id, meta_.blockData());
+    auto blockSpan = CompressedRelationReader::getRelevantBlocks(
+        scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot));
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
-  if (col1Id.has_value()) {
-    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
-                            std::move(blocks.value()), file_,
-                            cancellationHandle);
-  } else {
-    return reader_.lazyScan(meta_.getMetaData(col0Id),
-                            std::move(blocks.value()), file_,
-                            cancellationHandle);
+  ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
+  return p.reader().lazyScan(
+      scanSpec, std::move(blocks.value()), std::move(columns),
+      std::move(cancellationHandle),
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(
+    const ScanSpecification& spec) const {
+  auto isInternal = [this](const std::optional<Id>& id) {
+    return id.has_value() && isInternalId_(id.value());
+  };
+
+  bool isInternalScan = isInternal(spec.col0Id()) ||
+                        isInternal(spec.col1Id()) || isInternal(spec.col2Id());
+
+  if (!isInternalScan) {
+    return *this;
   }
+  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr, [this]() {
+    return absl::StrCat("No internal triples were loaded for the permutation ",
+                        readableName_);
+  });
+  return *internalPermutation_;
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(Id id) const {
+  return getActualPermutation(
+      ScanSpecification{id, std::nullopt, std::nullopt});
+}
+
+// TODO<joka921> The following two functions always assume that there were no
+// updates to the additional triples (which is technically true for now, because
+// we never modify the additional triples with the delta triples, because there
+// is some functionality missing for this. We have to fix this here and in the
+// `DeltaTriples` class.
+
+// ______________________________________________________________________
+const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  static const LocatedTriplesSnapshot emptySnapshot{{}, {}, 0};
+  const auto& actualSnapshot =
+      isInternalPermutation_ ? emptySnapshot : locatedTriplesSnapshot;
+  return actualSnapshot.getLocatedTriplesForPermutation(permutation_);
+}
+
+// ______________________________________________________________________
+const std::vector<CompressedBlockMetadata>&
+Permutation::getAugmentedMetadataForPermutation(
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  if (isInternalPermutation_) {
+    return meta_.blockData();
+  }
+  return getLocatedTriplesForPermutation(locatedTriplesSnapshot)
+      .getAugmentedMetadata();
 }

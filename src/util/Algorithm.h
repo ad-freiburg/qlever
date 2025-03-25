@@ -6,12 +6,12 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
-#include <algorithm>
 #include <numeric>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -28,14 +28,14 @@ namespace ad_utility {
  * @return bool
  */
 template <typename Container, typename T>
-inline bool contains(Container&& container, const T& element) {
+constexpr bool contains(Container&& container, const T& element) {
   // Overload for types like std::string that have a `find` member function
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
   } else {
-    return std::ranges::find(container.begin(), container.end(), element) !=
-           container.end();
+    return ql::ranges::find(std::begin(container), std::end(container),
+                            element) != std::end(container);
   }
 }
 
@@ -58,8 +58,10 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
-void appendVector(std::vector<T>& destination, U&& source) {
+CPP_template(typename T, typename U)(
+    requires ad_utility::SimilarTo<
+        std::vector<T>, U>) void appendVector(std::vector<T>& destination,
+                                              U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
@@ -75,7 +77,7 @@ auto transform(Range&& input, F unaryOp) {
       unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::ranges::transform(
+  ql::ranges::transform(
       ad_utility::makeForwardingIterator<Range>(input.begin()),
       ad_utility::makeForwardingIterator<Range>(input.end()),
       std::back_inserter(out), unaryOp);
@@ -95,7 +97,7 @@ std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
   std::vector<std::pair<T1, T2>> vectorsPairedUp{};
   vectorsPairedUp.reserve(vectorA.size());
 
-  std::ranges::transform(
+  ql::ranges::transform(
       vectorA, vectorB, std::back_inserter(vectorsPairedUp),
       [](const auto& a, const auto& b) { return std::make_pair(a, b); });
 
@@ -129,11 +131,12 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-template <std::ranges::forward_range Range>
-auto removeDuplicates(const Range& input) -> std::vector<
-    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
+CPP_template(typename Range)(requires ql::ranges::forward_range<
+                             Range>) auto removeDuplicates(const Range& input)
+    -> std::vector<typename std::iterator_traits<
+        ql::ranges::iterator_t<Range>>::value_type> {
   using T =
-      typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
+      typename std::iterator_traits<ql::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
   ad_utility::HashSet<T> distinctElements;
   for (const T& element : input) {
@@ -147,15 +150,69 @@ auto removeDuplicates(const Range& input) -> std::vector<
 
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
-template <typename Array, typename Function>
-requires(ad_utility::isArray<std::decay_t<Array>> &&
-         std::invocable<Function, typename Array::value_type>)
-auto transformArray(Array&& input, Function function) {
+CPP_template(typename Array, typename Function)(
+    requires ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
+        Function,
+        typename Array::value_type>) auto transformArray(Array&& input,
+                                                         Function function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};
       },
       AD_FWD(input));
+}
+
+// Same as `std::lower_bound`, but the comparator doesn't compare two values,
+// but an iterator (first argument) and a value (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+    lower_bound_iterator(ForwardIterator first, ForwardIterator last,
+                         const Tp& val, Compare comp) {
+  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(middle, val)) {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    } else
+      len = half;
+  }
+  return first;
+}
+
+// Same as `std::upper_bound`, but the comparator doesn't compare two values,
+// but a value (first argument) and an iterator (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
+CPP_template(typename ForwardIterator, typename Tp, typename Compare)(
+    requires std::forward_iterator<ForwardIterator>) constexpr ForwardIterator
+    upper_bound_iterator(ForwardIterator first, ForwardIterator last,
+                         const Tp& val, Compare comp) {
+  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(val, middle))
+      len = half;
+    else {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    }
+  }
+  return first;
 }
 
 }  // namespace ad_utility

@@ -7,16 +7,18 @@
 #include <string>
 #include <string_view>
 
-#include "../../global/Pattern.h"
-#include "../../util/Exception.h"
-#include "../CompressedString.h"
-#include "../StringSortComparator.h"
-#include "./VocabularyTypes.h"
+#include "global/Pattern.h"
+#include "index/CompressedString.h"
+#include "index/StringSortComparator.h"
+#include "index/vocabulary/VocabularyBinarySearchMixin.h"
+#include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.
-class VocabularyInMemory {
+class VocabularyInMemory
+    : public VocabularyBinarySearchMixin<VocabularyInMemory> {
  public:
   using CharType = char;
   using StringView = std::basic_string_view<CharType>;
@@ -48,65 +50,53 @@ class VocabularyInMemory {
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
 
-  /// Return the highest ID (= index) that occurs in this vocabulary. May only
-  /// becalled if size() > 0.
-  [[nodiscard]] uint64_t getHighestId() const {
-    AD_CONTRACT_CHECK(size() > 0);
-    return size() - 1;
-  }
-
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
-  /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
-  /// `std::lower_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    WordAndIndex result;
-    result._index =
-        std::lower_bound(_words.begin(), _words.end(), word, comparator) -
-        _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
-                       : std::nullopt;
-    return result;
-  }
-
-  /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
-  /// are sorted according to the comparator (exactly like in
-  /// `std::upper_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    WordAndIndex result;
-    result._index =
-        std::upper_bound(_words.begin(), _words.end(), word, comparator) -
-        _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
-                       : std::nullopt;
-    return result;
+  // Conversion function that is used by the Mixin base class.
+  WordAndIndex iteratorToWordAndIndex(auto it) const {
+    if (it == _words.end()) {
+      return WordAndIndex::end();
+    }
+    size_t idx = it - _words.begin();
+    return {_words[idx], idx};
   }
 
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the
   /// documentation of `CompactVectorOfStrings` for details.
-  using WordWriter = typename Words::Writer;
+  struct WordWriter {
+    typename Words::Writer writer_;
+    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    void operator()(std::string_view str) {
+      writer_.push(str.data(), str.size());
+    }
 
-  /// Create an iterable generator that yields the `VocabularyInMemory` from the
-  /// file, without materializing the whole vocabulary in RAM. See the
-  /// documentaion of `CompactVectorOfStrings` for details.
-  static auto makeWordDiskIterator(const string& filename) {
-    return Words::diskIterator(filename);
+    void finish() { writer_.finish(); }
+  };
+
+  // Return a `WordWriter` that directly writes the words to the given
+  // `filename`. The words are not materialized in RAM, but the vocabulary later
+  // has to be explicitly initizlied via `open(filename)`.
+  WordWriter makeDiskWriter(const std::string& filename) const {
+    return WordWriter{filename};
   }
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
 
   /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words) { _words.build(words); }
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    writer.finish();
+    open(filename);
+  }
+
+  // Const access to the underlying words.
+  auto begin() const { return _words.begin(); }
+  auto end() const { return _words.end(); }
 };

@@ -14,11 +14,24 @@
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/SpecialIds.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Date.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+
+namespace ad_utility::detail {
+
+template <typename T, typename U>
+CPP_requires(MoveAssignableWithRequires, requires(T t, U&& u)(t = u));
+
+template <typename T, typename U>
+CPP_concept MoveAssignableWith =
+    CPP_requires_ref(MoveAssignableWithRequires, T, U);
+
+}  // namespace ad_utility::detail
 
 /// A wrapper around a `std::variant` that can hold the different types that the
 /// subject, predicate, or object of a triple can have in the Turtle Parser.
@@ -27,6 +40,8 @@
 /// of any other type).
 class TripleComponent {
  public:
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -39,53 +54,11 @@ class TripleComponent {
     }
   };
 
-  // A class that stores a normalized RDF literal together with its datatype or
-  // language tag.
-  struct Literal {
-   private:
-    // The underlying storage. It consists of the normalized RDF literal
-    // concatenated with its datatype or language tag.
-    std::string content_;
-    // The index in the `content_` member, where the datatype or language tag
-    // begins.
-    size_t startOfDatatype_ = 0;
-
-   public:
-    // Construct from a normalized literal and the (possibly empty) language tag
-    // or datatype.
-    explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
-                     std::string_view langtagOrDatatype = "");
-
-    // Get the literal in the form in which it is stored (the normalized literal
-    // concatenated with the language tag or datatype). It is only allowed to
-    // read the content or to move it out. That way the `Literal` can never
-    // become invalid via the `rawContent` method.
-    const std::string& rawContent() const& { return content_; }
-    std::string&& rawContent() && { return std::move(content_); }
-
-    // Only get the normalized literal without the language tag or datatype.
-    RdfEscaping::NormalizedRDFStringView normalizedLiteralContent() const {
-      return RdfEscaping::NormalizedRDFStringView::make(
-          std::string_view{content_}.substr(0, startOfDatatype_));
-    }
-
-    // Only get the datatype or language tag.
-    std::string_view datatypeOrLangtag() const {
-      return std::string_view{content_}.substr(startOfDatatype_);
-    }
-
-    // Equality and hashing are needed to store a `Literal` in a `HashMap`.
-    bool operator==(const Literal&) const = default;
-    template <typename H>
-    friend H AbslHashValue(H h, const Literal& l) {
-      return H::combine(std::move(h), l.content_);
-    }
-  };
-
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
-                               Variable, Literal, DateOrLargeYear>;
+  using Variant =
+      std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
+                   Literal, Iri, DateYearOrDuration, GeoPoint>;
   Variant _variant;
 
  public:
@@ -94,19 +67,16 @@ class TripleComponent {
   TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  template <typename FirstArg, typename... Args>
-  requires(!std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent> &&
-           std::is_constructible_v<Variant, FirstArg &&, Args && ...>)
-  TripleComponent(FirstArg&& firstArg, Args&&... args)
+  CPP_template(typename FirstArg, typename... Args)(
+      requires CPP_NOT(
+          std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
+      std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
+      TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
-      // Previously we stored variables as strings, so this check is a way
-      // to easily track places where this old behavior is accidentally still
-      // in place.
+      // Storing variables and literals as strings is deprecated. The following
+      // checks help find places, where this is accidentally still done.
       AD_CONTRACT_CHECK(!getString().starts_with("?"));
-
-      // We also used to store literals as `std::string`, so we use a similar
-      // check here.
       AD_CONTRACT_CHECK(!getString().starts_with('"'));
       AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }
@@ -125,9 +95,9 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  template <typename T>
-  requires requires(Variant v, T&& t) { _variant = t; }
-  TripleComponent& operator=(T&& value) {
+  CPP_template(typename T)(requires std::is_assignable_v<Variant, T&&>)
+      TripleComponent&
+      operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
     return *this;
@@ -145,10 +115,11 @@ class TripleComponent {
   TripleComponent& operator=(TripleComponent&&) = default;
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
-  template <typename T>
-  requires requires(T&& t) { _variant == t; }
-  bool operator==(const T& other) const {
-    return _variant == other;
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
+  operator==(const T& other) const {
+    auto ptr = std::get_if<T>(&_variant);
+    return ptr && *ptr == other;
   }
 
   /// Equality comparison between two `TripleComponent`s.
@@ -159,8 +130,9 @@ class TripleComponent {
   /// overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<TripleComponent> auto& tc) {
+  CPP_template(typename H,
+               typename TC)(requires std::same_as<TC, TripleComponent>) friend H
+      AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 
@@ -179,7 +151,20 @@ class TripleComponent {
     return std::holds_alternative<Variable>(_variant);
   }
 
+  [[nodiscard]] bool isBool() const {
+    return std::holds_alternative<bool>(_variant);
+  }
+
+  bool getBool() const { return std::get<bool>(_variant); }
+
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
+  Literal& getLiteral() { return std::get<Literal>(_variant); }
+  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
+
+  bool isIri() const { return std::holds_alternative<Iri>(_variant); }
+
+  Iri& getIri() { return std::get<Iri>(_variant); }
+  const Iri& getIri() const { return std::get<Iri>(_variant); }
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
@@ -202,9 +187,11 @@ class TripleComponent {
   [[nodiscard]] const Variable& getVariable() const {
     return std::get<Variable>(_variant);
   }
+  [[nodiscard]] Variable& getVariable() { return std::get<Variable>(_variant); }
 
-  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
-  Literal& getLiteral() { return std::get<Literal>(_variant); }
+  bool isId() const { return std::holds_alternative<Id>(_variant); }
+  const Id& getId() const { return std::get<Id>(_variant); }
+  Id& getId() { return std::get<Id>(_variant); }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
@@ -226,18 +213,18 @@ class TripleComponent {
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
-    if (isString() || isLiteral()) {
-      VocabIndex idx;
-      const std::string& content =
-          isString() ? getString() : getLiteral().rawContent();
-      if (vocabulary.getId(content, &idx)) {
-        return Id::makeFromVocabIndex(idx);
-      } else {
-        return std::nullopt;
-      }
-    } else {
-      return toValueIdIfNotString();
+    AD_CONTRACT_CHECK(!isString());
+    std::optional<Id> vid = toValueIdIfNotString();
+    if (vid != std::nullopt) return vid;
+    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+    VocabIndex idx;
+    const std::string& content = isLiteral()
+                                     ? getLiteral().toStringRepresentation()
+                                     : getIri().toStringRepresentation();
+    if (vocabulary.getId(content, &idx)) {
+      return Id::makeFromVocabIndex(idx);
     }
+    return std::nullopt;
   }
 
   // Same as the above, but also consider the given local vocabulary. If the
@@ -253,13 +240,19 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isString() || isLiteral());
+      AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+      using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+      auto moveWord = [&]() -> LiteralOrIri {
+        if (isLiteral()) {
+          return LiteralOrIri{std::move(getLiteral())};
+        } else {
+          return LiteralOrIri{std::move(getIri())};
+        }
+      };
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
       // Otherwise, `newWord` would be copied here despite the `std::move`.
-      std::string&& newWord = isString() ? std::move(getString())
-                                         : std::move(getLiteral()).rawContent();
       id = Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+          localVocab.getIndexAndAddIfNotContained(moveWord()));
     }
     return id.value();
   }

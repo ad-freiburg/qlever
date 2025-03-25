@@ -13,14 +13,12 @@
 
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <coroutine>
 #include <exception>
 #include <sstream>
 
-// Coroutines are still experimental in clang libcpp, therefore
-// adapt the appropriate namespaces using the convenience header.
-#include "./Concepts.h"
-#include "./Coroutines.h"
-#include "./Exception.h"
+#include "util/Concepts.h"
+#include "util/Exception.h"
 
 namespace ad_utility::streams {
 
@@ -55,7 +53,6 @@ template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
   std::ostringstream _stream;
   std::exception_ptr _exception;
-  std::exception_ptr* _externalException = nullptr;
 
  public:
   using value_type = std::stringbuf;
@@ -77,19 +74,14 @@ class stream_generator_promise {
    * @return Whether or not the coroutine should get suspended (currently based
    * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
    */
-  suspend_sometimes yield_value(
-      const ad_utility::Streamable auto& value) noexcept {
+  CPP_template(typename S)(requires ad_utility::Streamable<S>) suspend_sometimes
+      yield_value(const S& value) noexcept {
     // _stream appends its result to _value
     _stream << value;
     return suspend_sometimes{isBufferLargeEnough()};
   }
 
-  void unhandled_exception() {
-    _exception = std::current_exception();
-    if (_externalException) {
-      *_externalException = _exception;
-    }
-  }
+  void unhandled_exception() { _exception = std::current_exception(); }
 
   constexpr void return_void() const noexcept {}
 
@@ -103,10 +95,6 @@ class stream_generator_promise {
     if (_exception) {
       std::rethrow_exception(_exception);
     }
-  }
-
-  void assignExceptionToThisPointer(std::exception_ptr* ptr) {
-    _externalException = ptr;
   }
 
  private:
@@ -251,14 +239,6 @@ class [[nodiscard]] basic_stream_generator {
 
   detail::stream_generator_sentinel end() noexcept {
     return detail::stream_generator_sentinel{};
-  }
-
-  // When an exception occurs while iterating, that exception will (in addition
-  // to being thrown "normally") be stored in `*ptr`. This can be used to access
-  // exceptions that occured inside a `stream_generator`, even after the
-  // `stream_generator` was destroyed.
-  void assignExceptionToThisPointer(std::exception_ptr* ptr) {
-    _coroutine.promise().assignExceptionToThisPointer(ptr);
   }
 
  private:

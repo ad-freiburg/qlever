@@ -6,6 +6,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
 namespace sparqlExpression {
@@ -21,16 +22,21 @@ class RandomExpression : public SparqlExpression {
     VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
-    ad_utility::FastRandomIntGenerator<int64_t> randInt;
+    ad_utility::RandomDoubleGenerator randDouble(0.0, 1.0);
 
     // As part of a GROUP BY we only return one value per group.
     if (context->_isPartOfGroupBy) {
-      return Id::makeFromInt(randInt() >> Id::numDatatypeBits);
+      return Id::makeFromDouble(randDouble());
     }
 
-    for (size_t i = 0; i < numElements; ++i) {
-      result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
-    }
+    // 1000 is an arbitrarily chosen interval at which to check for
+    // cancellation.
+    ad_utility::chunkedForLoop<1000>(
+        0, numElements,
+        [&result, &randDouble](size_t) {
+          result.push_back(Id::makeFromDouble(randDouble()));
+        },
+        [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
   }
 

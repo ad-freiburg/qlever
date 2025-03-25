@@ -5,15 +5,14 @@
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
 
+#include <coroutine>
 #include <exception>
 #include <functional>
 #include <iterator>
 #include <type_traits>
 #include <utility>
 
-// Coroutines are still experimental in clang libcpp, therefore adapt the
-// appropriate namespaces by including the convenience header.
-#include "util/Coroutines.h"
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -70,8 +69,9 @@ class generator_promise {
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
-  template <typename U>
-  std::suspend_never await_transform(U&& value) = delete;
+  CPP_template_2(typename U)(
+      requires CPP_NOT(ad_utility::SimilarTo<GetDetails, U>)) std::suspend_never
+      await_transform(U&& value) = delete;
 
   void rethrow_if_exception() const {
     if (m_exception) {
@@ -88,8 +88,9 @@ class generator_promise {
     Details& await_resume() noexcept { return promise_.details(); }
   };
 
-  DetailAwaiter await_transform(
-      [[maybe_unused]] ad_utility::SimilarTo<GetDetails> auto&& detail) {
+  CPP_template(typename DetailT)(
+      requires ad_utility::SimilarTo<GetDetails, DetailT>) DetailAwaiter
+      await_transform([[maybe_unused]] DetailT&& detail) {
     return {*this};
   }
 
@@ -117,7 +118,7 @@ class generator_promise {
 
 struct generator_sentinel {};
 
-template <typename T, typename Details>
+template <typename T, typename Details, bool ConstDummy = false>
 class generator_iterator {
   using promise_type = generator_promise<T, Details>;
   using coroutine_handle = std::coroutine_handle<promise_type>;
@@ -182,7 +183,9 @@ template <typename T, typename Details>
 class [[nodiscard]] generator {
  public:
   using promise_type = detail::generator_promise<T, Details>;
-  using iterator = detail::generator_iterator<T, Details>;
+  using iterator = detail::generator_iterator<T, Details, false>;
+  // TODO<joka921> Check if this fixes anything wrt ::ranges
+  // using const_iterator = detail::generator_iterator<T, Details, true>;
   using value_type = typename iterator::value_type;
 
   generator() noexcept : m_coroutine(nullptr) {}
@@ -215,9 +218,20 @@ class [[nodiscard]] generator {
     return iterator{m_coroutine};
   }
 
+  /*
+  iterator begin() const;
+  detail::generator_sentinel end() const;
+  */
+
   detail::generator_sentinel end() noexcept {
     return detail::generator_sentinel{};
   }
+
+  /*
+  // Not defined and not useful, but required for range-v3
+  const_iterator begin() const;
+  const_iterator end() const;
+  */
 
   void swap(generator& other) noexcept {
     std::swap(m_coroutine, other.m_coroutine);
@@ -271,6 +285,16 @@ fmap(FUNC func, generator<T> source) {
   for (auto&& value : source) {
     co_yield std::invoke(func, static_cast<decltype(value)>(value));
   }
+}
+
+// Get the first element of a generator and verify that it's the only one.
+template <typename T, typename Details>
+T getSingleElement(generator<T, Details> g) {
+  auto it = g.begin();
+  AD_CORRECTNESS_CHECK(it != g.end());
+  T t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == g.end());
+  return t;
 }
 }  // namespace cppcoro
 

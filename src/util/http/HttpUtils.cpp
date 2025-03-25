@@ -5,7 +5,7 @@
 
 #include "./HttpUtils.h"
 
-#include "ctre/ctre.h"
+#include <ctre-unicode.hpp>
 
 // TODO: Which other implementations that are currently still in `HttpUtils.h`
 // should we move here, to `HttpUtils.cpp`?
@@ -13,7 +13,7 @@
 namespace ad_utility::httpUtils {
 
 // The regex for parsing the components of a URL. We need it also as a string
-// (for error messagin) and CTRE has no function for printing a regex as a
+// (for error messaging) and CTRE has no function for printing a regex as a
 // a string, hence the two variables.
 static constexpr char urlRegexString[] =
     "^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$";
@@ -27,7 +27,7 @@ Url::Url(std::string_view url) {
         "URL \"", url, "\" malformed, must match regex ", urlRegexString));
   }
   protocol_ =
-      match.get<1>().to_string() == "http" ? Protocol::HTTP : Protocol::HTTPS;
+      match.get<1>().to_view() == "http" ? Protocol::HTTP : Protocol::HTTPS;
   host_ = match.get<2>().to_string();
   port_ = match.get<4>().to_string();
   if (port_.empty()) {

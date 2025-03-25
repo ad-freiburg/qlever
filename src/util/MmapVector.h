@@ -154,20 +154,21 @@ class MmapVector {
   MmapVector(MmapVector<T>&& other) noexcept;
   MmapVector& operator=(MmapVector<T>&& other) noexcept;
 
-  template <class Arg, typename... Args>
-  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>)
-  MmapVector(Arg&& arg, Args&&... args) : MmapVector<T>() {
+  CPP_template(class Arg, typename... Args)(requires CPP_NOT(
+      std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>))
+      MmapVector(Arg&& arg, Args&&... args)
+      : MmapVector<T>() {
     this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // create Array of given size  fill with default value
-  // file contents will be overriden if existing!
+  // file contents will be overridden if existing!
   // allows read and write access
   void open(size_t size, const T& defaultValue, string filename,
             AccessPattern pattern = AccessPattern::None);
 
-  // create unititialized array of given size at path specified by filename
-  // file will be created or overriden!
+  // create uninitialized array of given size at path specified by filename
+  // file will be created or overridden!
   // allows read and write access
   void open(size_t size, string filename,
             AccessPattern pattern = AccessPattern::None);
@@ -305,15 +306,16 @@ class MmapVectorView : private MmapVector<T> {
   // ____________________________________________________
   size_t size() const { return MmapVector<T>::size(); }
 
-  // default constructor, leaves an unitialized vector that will throw until a
+  // default constructor, leaves an uninitialized vector that will throw until a
   // valid call to open()
   MmapVectorView() = default;
 
   // construct with any combination of arguments that is supported by the open()
   // member function
-  template <typename Arg, typename... Args>
-  requires(!std::same_as<std::remove_cvref_t<Arg>, MmapVectorView>)
-  explicit MmapVectorView(Arg&& arg, Args&&... args) {
+  CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
+      std::same_as<std::remove_cvref_t<Arg>,
+                   MmapVectorView>)) explicit MmapVectorView(Arg&& arg,
+                                                             Args&&... args) {
     open(AD_FWD(arg), AD_FWD(args)...);
   }
 
@@ -342,8 +344,8 @@ class MmapVectorView : private MmapVector<T> {
     open(filename, pattern);
   }
 
-  // explicitly close the vector to an unitialized state and free the associated
-  // ressources
+  // explicitly close the vector to an uninitialized state and free the
+  // associated resources
   void close();
 
   // destructor
@@ -373,9 +375,11 @@ class MmapVectorTmp : public MmapVector<T> {
       : MmapVector<T>(std::move(rhs)) {}
   MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
 
-  template <class Arg, typename... Args>
-  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVectorTmp>)
-  explicit MmapVectorTmp(Arg&& arg, Args&&... args) : MmapVector<T>() {
+  CPP_template(class Arg, typename... Args)(requires CPP_NOT(
+      std::derived_from<std::remove_cvref_t<Arg>,
+                        MmapVectorTmp>)) explicit MmapVectorTmp(Arg&& arg,
+                                                                Args&&... args)
+      : MmapVector<T>() {
     this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 

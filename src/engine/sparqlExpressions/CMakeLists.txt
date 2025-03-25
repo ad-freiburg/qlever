@@ -4,7 +4,24 @@ add_library(sparqlExpressions
         SetOfIntervals.cpp
         SparqlExpressionPimpl.cpp
         SampleExpression.cpp
-        RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp ContainsExpression.cpp
-        LangExpression.cpp NumericUnaryExpressions.cpp NumericBinaryExpressions.cpp DateExpressions.cpp StringExpressions.cpp ConditionalExpressions.cpp)
-
-qlever_target_link_libraries(sparqlExpressions index util)
+        RelationalExpressions.cpp
+        AggregateExpression.cpp
+        StdevExpression.cpp
+        RegexExpression.cpp
+        NumericUnaryExpressions.cpp
+        NumericBinaryExpressions.cpp
+        DateExpressions.cpp
+        StringExpressions.cpp
+        IsSomethingExpressions.cpp
+        ConditionalExpressions.cpp
+        SparqlExpressionTypes.cpp
+        SparqlExpression.cpp
+        ConvertToDtypeConstructor.cpp
+        RdfTermExpressions.cpp
+        LangExpression.cpp
+        ContainsExpression.cpp
+        CountStarExpression.cpp
+        PrefilterExpressionIndex.cpp
+        ContainsExpression.cpp
+        )
+qlever_target_link_libraries(sparqlExpressions util index Boost::url)

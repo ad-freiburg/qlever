@@ -22,6 +22,7 @@
 /// time to compute, status, etc.). Also contains the functionality to print
 /// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
+  using Microseconds = std::chrono::microseconds;
   using Milliseconds = std::chrono::milliseconds;
 
  public:
@@ -38,7 +39,8 @@ class RuntimeInformation {
     lazilyMaterialized,
     optimizedOut,
     failed,
-    failedBecauseChildFailed
+    failedBecauseChildFailed,
+    cancelled
   };
   using enum Status;
 
@@ -46,12 +48,12 @@ class RuntimeInformation {
 
   /// The total time spent computing this operation. This includes the
   /// computation of the children.
-  Milliseconds totalTime_ = ZERO;
+  Microseconds totalTime_ = ZERO;
 
   /// In case this operation was read from the cache, we will store the time
   /// information about the original computation in the following two members.
-  Milliseconds originalTotalTime_ = ZERO;
-  Milliseconds originalOperationTime_ = ZERO;
+  Microseconds originalTotalTime_ = ZERO;
+  Microseconds originalOperationTime_ = ZERO;
 
   /// The estimated cost, size, and column multiplicities of the operation.
   size_t costEstimate_ = 0;
@@ -92,13 +94,14 @@ class RuntimeInformation {
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti);
 
-  /// Set the names of the columns from the HashMap format that is used in the
-  /// rest of the Qlever code.
+  /// Set `columnNames_` from a `VariableToColumnMap`. The former is a vector
+  /// (convenient for this class), the latter is a hash map (appropriate for
+  /// the rest of the code).
   void setColumnNames(const VariableToColumnMap& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children, but always positive.
-  [[nodiscard]] Milliseconds getOperationTime() const;
+  [[nodiscard]] Microseconds getOperationTime() const;
 
   /// Get the cost estimate for this operation. This is the total cost estimate
   /// minus the sum of the cost estimates of all children.
@@ -118,12 +121,19 @@ class RuntimeInformation {
     details_[key] = value.count();
   }
 
+  // Erase the detail with the `key`, do nothing if no such detail exists.
+  void eraseDetail(const std::string& key) {
+    if (details_.contains(key)) {
+      details_.erase(key);
+    }
+  }
+
   // Set the runtime information for a LIMIT or OFFSET operation as the new root
   // of the tree and make the old root the only child of the LIMIT operation.
-  // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
-  // it, and the information whether the `actual` operation (the old root of the
-  // runtime information) is written to the cache, are passed in as arguments.
-  void addLimitOffsetRow(const LimitOffsetClause& l, Milliseconds timeForLimit,
+  // The details of the LIMIT/OFFSET and the information whether the `actual`
+  // operation (the old root of the runtime information) is written to the
+  // cache, are passed in as arguments.
+  void addLimitOffsetRow(const LimitOffsetClause& l,
                          bool fullResultIsNotCached);
 
   static std::string_view toString(Status status);

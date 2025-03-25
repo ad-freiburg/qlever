@@ -4,15 +4,18 @@
 #ifndef QLEVER_TASKQUEUE_H
 #define QLEVER_TASKQUEUE_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <functional>
 #include <optional>
 #include <queue>
 #include <string>
 #include <thread>
 
-#include "./Exception.h"
-#include "./Timer.h"
-#include "./jthread.h"
+#include "util/Exception.h"
+#include "util/ThreadSafeQueue.h"
+#include "util/Timer.h"
+#include "util/jthread.h"
 
 namespace ad_utility {
 /**
@@ -29,19 +32,16 @@ class TaskQueue {
   using Task = std::function<void()>;
   using Timer = ad_utility::Timer;
   using AtomicMs = std::atomic<std::chrono::milliseconds::rep>;
+  using Queue = ad_utility::data_structures::ThreadSafeQueue<Task>;
 
-  std::vector<ad_utility::JThread> _threads;
-  std::queue<Task> _queuedTasks;
-  size_t _queueMaxSize = 1;
-  // CV to notify that a new task has been added to the queue
-  std::condition_variable _newTaskWasPushed;
-  // CV to notify that a task was finished by a thread.
-  std::condition_variable _workerHasFinishedTask;
-  std::mutex _queueMutex;
-  std::atomic<bool> _shutdownQueue = false;
-  std::string _name;
+  std::atomic_flag startedFinishing_ = false;
+  std::atomic_flag finishedFinishing_ = false;
+  size_t queueMaxSize_ = 1;
+  Queue queuedTasks_{queueMaxSize_};
+  std::vector<ad_utility::JThread> threads_;
+  std::string name_;
   // Keep track of the time spent waiting in the push/pop operation
-  AtomicMs _pushTime = 0, _popTime = 0;
+  AtomicMs pushTime_ = 0, popTime_ = 0;
 
  public:
   /// Construct from the maximum size of the queue, and the number of worker
@@ -58,71 +58,43 @@ class TaskQueue {
   /// "pusher" is faster for many tasks, the queue will grow too large to fit
   /// into memory. The task queue will work optimally, when on the average the
   /// workers are at least as fast as the "pusher", but the pusher is faster
-  /// sometimes (which the queue can then accomodate).
+  /// sometimes (which the queue can then accommodate).
   TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
-      : _queueMaxSize{maxQueueSize}, _name{std::move(name)} {
-    AD_CONTRACT_CHECK(_queueMaxSize > 0);
-    _threads.reserve(numThreads);
+      : queueMaxSize_{maxQueueSize}, name_{std::move(name)} {
+    AD_CONTRACT_CHECK(queueMaxSize_ > 0);
+    threads_.reserve(numThreads);
     for (size_t i = 0; i < numThreads; ++i) {
-      _threads.emplace_back(&TaskQueue::function_for_thread, this);
+      threads_.emplace_back(&TaskQueue::function_for_thread, this);
     }
   }
 
   /// Add a task to the queue for Execution. Blocks until there is at least
   /// one free spot in the queue.
-  void push(Task t) {
+  /// Note: If the execution of the task throws, `std::terminate` will be
+  /// called.
+  bool push(Task t) {
     // the actual logic
-    auto action = [&, this] {
-      std::unique_lock l{_queueMutex};
-      _workerHasFinishedTask.wait(
-          l, [&] { return _queuedTasks.size() < _queueMaxSize; });
-      _queuedTasks.push(std::move(t));
-      _newTaskWasPushed.notify_one();
-    };
+    auto action = [&, this] { return queuedTasks_.push(std::move(t)); };
 
-    // If TrackTimes==true, measure the time and add it to _pushTime,
+    // If TrackTimes==true, measure the time and add it to pushTime_,
     // else only perform the pushing.
-    executeAndUpdateTimer(action, _pushTime);
+    return executeAndUpdateTimer(action, pushTime_);
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
   void finish() {
-    std::unique_lock l{_queueMutex};
-
-    // empty queue and _shutdownQueue set is the way of signalling the
-    // destruction to the threads;
-    _shutdownQueue = true;
-    // Wait not only until the queue is empty, but also until the tasks are
-    // actually performed and the threads have joined.
-    l.unlock();
-    _newTaskWasPushed.notify_all();
-    for (auto& thread : _threads) {
-      if (thread.joinable()) {
-        thread.join();
-      }
+    if (startedFinishing_.test_and_set()) {
+      // There was a previous call to `finish()` , so we don't need to do
+      // anything.
+      return;
     }
-  }
-
-  std::optional<Task> popManually() {
-    auto action = [&, this]() -> std::optional<Task> {
-      std::unique_lock l{_queueMutex};
-      _newTaskWasPushed.wait(
-          l, [&] { return !_queuedTasks.empty() || _shutdownQueue; });
-      if (_shutdownQueue && _queuedTasks.empty()) {
-        return std::nullopt;
-      }
-      auto task = std::move(_queuedTasks.front());
-      _queuedTasks.pop();
-      _workerHasFinishedTask.notify_one();
-      return task;
-    };
-    return executeAndUpdateTimer(action, _popTime);
+    finishImpl();
   }
 
   void resetTimers() requires TrackTimes {
-    _pushTime = 0;
-    _popTime = 0;
+    pushTime_ = 0;
+    popTime_ = 0;
   }
 
   // Execute the callable f of type F. If TrackTimes==true, add the passed time
@@ -132,13 +104,9 @@ class TaskQueue {
   template <typename F>
   decltype(auto) executeAndUpdateTimer(F&& f, AtomicMs& duration) {
     if constexpr (TrackTimes) {
-      struct T {
-        ad_utility::Timer _t{ad_utility::Timer::Started};
-        AtomicMs& _target;
-        T(AtomicMs& target) : _target(target) {}
-        ~T() { _target += _t.msecs().count(); }
-      };
-      T timeHandler{duration};
+      ad_utility::Timer t{ad_utility::Timer::Started};
+      auto cleanup =
+          absl::Cleanup{[&duration, &t] { duration += t.msecs().count(); }};
       return f();
     } else {
       return f();
@@ -147,24 +115,46 @@ class TaskQueue {
 
   // __________________________________________________________________________
   std::string getTimeStatistics() const requires TrackTimes {
-    return "Time spent waiting in queue " + _name + ": " +
-           std::to_string(_pushTime) + "ms (push), " +
-           std::to_string(_popTime) + "ms (pop)";
+    return "Time spent waiting in queue " + name_ + ": " +
+           std::to_string(pushTime_) + "ms (push), " +
+           std::to_string(popTime_) + "ms (pop)";
   }
 
-  ~TaskQueue() { finish(); }
+  ~TaskQueue() {
+    if (startedFinishing_.test_and_set()) {
+      // Someone has already called `finish`, we have to wait for the finishing
+      // to complete, otherwise there is a data race on the `threads_`.
+      finishedFinishing_.wait(false);
+    } else {
+      // We are responsible for finishing, but we already have set the
+      // `startedFinishing_` to true, so we can run the `impl` directly.
+      ad_utility::terminateIfThrows([this]() { finishImpl(); },
+                                    "In the destructor of TaskQueue.");
+    }
+  }
 
  private:
   // _________________________________________________________________________
   void function_for_thread() {
-    while (true) {
-      auto optionalTask = popManually();
-      if (!optionalTask) {
-        return;
-      }
-      // perform the task without actually holding the lock.
-      (*optionalTask)();
+    while (auto task = queuedTasks_.pop()) {
+      task.value()();
     }
+  }
+
+  // The implementation of `finish`. Must only be called if this is the thread
+  // that set `startedFinishing_` from false to true.
+  void finishImpl() {
+    queuedTasks_.finish();
+    ql::ranges::for_each(threads_, [](auto& thread) {
+      // If `finish` was called from inside the queue, the calling thread cannot
+      // join itself.
+      AD_CORRECTNESS_CHECK(thread.joinable());
+      if (thread.get_id() != std::this_thread::get_id()) {
+        thread.join();
+      }
+    });
+    finishedFinishing_.test_and_set();
+    finishedFinishing_.notify_all();
   }
 };
 }  // namespace ad_utility

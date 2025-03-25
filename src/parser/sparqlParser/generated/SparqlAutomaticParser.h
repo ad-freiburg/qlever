@@ -37,287 +37,313 @@ class SparqlAutomaticParser : public antlr4::Parser {
     T__26 = 27,
     T__27 = 28,
     T__28 = 29,
-    T__29 = 30,
-    BASE = 31,
-    PREFIX = 32,
-    SELECT = 33,
-    DISTINCT = 34,
-    REDUCED = 35,
-    AS = 36,
-    CONSTRUCT = 37,
-    WHERE = 38,
-    DESCRIBE = 39,
-    ASK = 40,
-    FROM = 41,
-    NAMED = 42,
-    GROUPBY = 43,
-    GROUP_CONCAT = 44,
-    HAVING = 45,
-    ORDERBY = 46,
-    INTERNALSORTBY = 47,
-    ASC = 48,
-    DESC = 49,
-    LIMIT = 50,
-    OFFSET = 51,
-    TEXTLIMIT = 52,
-    VALUES = 53,
-    LOAD = 54,
-    SILENT = 55,
+    BASE = 30,
+    PREFIX = 31,
+    SELECT = 32,
+    DISTINCT = 33,
+    REDUCED = 34,
+    AS = 35,
+    CONSTRUCT = 36,
+    WHERE = 37,
+    DESCRIBE = 38,
+    ASK = 39,
+    FROM = 40,
+    NAMED = 41,
+    GROUPBY = 42,
+    GROUP_CONCAT = 43,
+    HAVING = 44,
+    ORDERBY = 45,
+    INTERNALSORTBY = 46,
+    ASC = 47,
+    DESC = 48,
+    LIMIT = 49,
+    OFFSET = 50,
+    TEXTLIMIT = 51,
+    VALUES = 52,
+    LOAD = 53,
+    SILENT = 54,
+    INTO = 55,
     CLEAR = 56,
     DROP = 57,
     CREATE = 58,
     ADD = 59,
-    DATA = 60,
-    MOVE = 61,
-    COPY = 62,
-    INSERT = 63,
-    DELETE = 64,
-    WITH = 65,
-    USING = 66,
-    DEFAULT = 67,
-    GRAPH = 68,
-    ALL = 69,
-    OPTIONAL = 70,
-    SERVICE = 71,
-    BIND = 72,
-    UNDEF = 73,
-    MINUS = 74,
-    UNION = 75,
-    FILTER = 76,
-    NOT = 77,
-    IN = 78,
-    STR = 79,
-    LANG = 80,
-    LANGMATCHES = 81,
-    DATATYPE = 82,
-    BOUND = 83,
-    IRI = 84,
-    URI = 85,
-    BNODE = 86,
-    RAND = 87,
-    ABS = 88,
-    CEIL = 89,
-    FLOOR = 90,
-    ROUND = 91,
-    CONCAT = 92,
-    STRLEN = 93,
-    UCASE = 94,
-    LCASE = 95,
-    ENCODE = 96,
-    FOR = 97,
-    CONTAINS = 98,
-    STRSTARTS = 99,
-    STRENDS = 100,
-    STRBEFORE = 101,
-    STRAFTER = 102,
-    YEAR = 103,
-    MONTH = 104,
-    DAY = 105,
-    HOURS = 106,
-    MINUTES = 107,
-    SECONDS = 108,
-    TIMEZONE = 109,
-    TZ = 110,
-    NOW = 111,
-    UUID = 112,
-    STRUUID = 113,
-    SHA1 = 114,
-    SHA256 = 115,
-    SHA384 = 116,
-    SHA512 = 117,
-    MD5 = 118,
-    COALESCE = 119,
-    IF = 120,
-    STRLANG = 121,
-    STRDT = 122,
-    SAMETERM = 123,
-    ISIRI = 124,
-    ISURI = 125,
-    ISBLANK = 126,
-    ISLITERAL = 127,
-    ISNUMERIC = 128,
-    REGEX = 129,
-    SUBSTR = 130,
-    REPLACE = 131,
-    EXISTS = 132,
-    COUNT = 133,
-    SUM = 134,
-    MIN = 135,
-    MAX = 136,
-    AVG = 137,
-    SAMPLE = 138,
-    SEPARATOR = 139,
-    IRI_REF = 140,
-    PNAME_NS = 141,
-    PNAME_LN = 142,
-    BLANK_NODE_LABEL = 143,
-    VAR1 = 144,
-    VAR2 = 145,
-    LANGTAG = 146,
-    PREFIX_LANGTAG = 147,
-    INTEGER = 148,
-    DECIMAL = 149,
-    DOUBLE = 150,
-    INTEGER_POSITIVE = 151,
-    DECIMAL_POSITIVE = 152,
-    DOUBLE_POSITIVE = 153,
-    INTEGER_NEGATIVE = 154,
-    DECIMAL_NEGATIVE = 155,
-    DOUBLE_NEGATIVE = 156,
-    EXPONENT = 157,
-    STRING_LITERAL1 = 158,
-    STRING_LITERAL2 = 159,
-    STRING_LITERAL_LONG1 = 160,
-    STRING_LITERAL_LONG2 = 161,
-    ECHAR = 162,
-    NIL = 163,
-    ANON = 164,
-    PN_CHARS_U = 165,
-    VARNAME = 166,
-    PN_PREFIX = 167,
-    PN_LOCAL = 168,
-    PLX = 169,
-    PERCENT = 170,
-    HEX = 171,
-    PN_LOCAL_ESC = 172,
-    WS = 173,
-    COMMENTS = 174
+    TO = 60,
+    DATA = 61,
+    MOVE = 62,
+    COPY = 63,
+    INSERT = 64,
+    DELETE = 65,
+    WITH = 66,
+    USING = 67,
+    DEFAULT = 68,
+    GRAPH = 69,
+    ALL = 70,
+    OPTIONAL = 71,
+    SERVICE = 72,
+    BIND = 73,
+    UNDEF = 74,
+    MINUS = 75,
+    UNION = 76,
+    FILTER = 77,
+    NOT = 78,
+    IN = 79,
+    STR = 80,
+    LANG = 81,
+    LANGMATCHES = 82,
+    DATATYPE = 83,
+    BOUND = 84,
+    IRI = 85,
+    URI = 86,
+    BNODE = 87,
+    RAND = 88,
+    ABS = 89,
+    CEIL = 90,
+    FLOOR = 91,
+    ROUND = 92,
+    CONCAT = 93,
+    STRLEN = 94,
+    UCASE = 95,
+    LCASE = 96,
+    ENCODE_FOR_URI = 97,
+    FOR = 98,
+    CONTAINS = 99,
+    STRSTARTS = 100,
+    STRENDS = 101,
+    STRBEFORE = 102,
+    STRAFTER = 103,
+    YEAR = 104,
+    MONTH = 105,
+    DAY = 106,
+    HOURS = 107,
+    MINUTES = 108,
+    SECONDS = 109,
+    TIMEZONE = 110,
+    TZ = 111,
+    NOW = 112,
+    UUID = 113,
+    STRUUID = 114,
+    SHA1 = 115,
+    SHA256 = 116,
+    SHA384 = 117,
+    SHA512 = 118,
+    MD5 = 119,
+    COALESCE = 120,
+    IF = 121,
+    STRLANG = 122,
+    STRDT = 123,
+    SAMETERM = 124,
+    ISIRI = 125,
+    ISURI = 126,
+    ISBLANK = 127,
+    ISLITERAL = 128,
+    ISNUMERIC = 129,
+    REGEX = 130,
+    SUBSTR = 131,
+    REPLACE = 132,
+    EXISTS = 133,
+    COUNT = 134,
+    SUM = 135,
+    MIN = 136,
+    MAX = 137,
+    AVG = 138,
+    STDEV = 139,
+    SAMPLE = 140,
+    SEPARATOR = 141,
+    IRI_REF = 142,
+    PNAME_NS = 143,
+    PNAME_LN = 144,
+    BLANK_NODE_LABEL = 145,
+    VAR1 = 146,
+    VAR2 = 147,
+    LANGTAG = 148,
+    PREFIX_LANGTAG = 149,
+    INTEGER = 150,
+    DECIMAL = 151,
+    DOUBLE = 152,
+    INTEGER_POSITIVE = 153,
+    DECIMAL_POSITIVE = 154,
+    DOUBLE_POSITIVE = 155,
+    INTEGER_NEGATIVE = 156,
+    DECIMAL_NEGATIVE = 157,
+    DOUBLE_NEGATIVE = 158,
+    EXPONENT = 159,
+    STRING_LITERAL1 = 160,
+    STRING_LITERAL2 = 161,
+    STRING_LITERAL_LONG1 = 162,
+    STRING_LITERAL_LONG2 = 163,
+    ECHAR = 164,
+    NIL = 165,
+    ANON = 166,
+    PN_CHARS_U = 167,
+    VARNAME = 168,
+    PN_PREFIX = 169,
+    PN_LOCAL = 170,
+    PLX = 171,
+    PERCENT = 172,
+    HEX = 173,
+    PN_LOCAL_ESC = 174,
+    WS = 175,
+    COMMENTS = 176
   };
 
   enum {
-    RuleQuery = 0,
-    RulePrologue = 1,
-    RuleBaseDecl = 2,
-    RulePrefixDecl = 3,
-    RuleSelectQuery = 4,
-    RuleSubSelect = 5,
-    RuleSelectClause = 6,
-    RuleVarOrAlias = 7,
-    RuleAlias = 8,
-    RuleAliasWithoutBrackets = 9,
-    RuleConstructQuery = 10,
-    RuleDescribeQuery = 11,
-    RuleAskQuery = 12,
-    RuleDatasetClause = 13,
-    RuleDefaultGraphClause = 14,
-    RuleNamedGraphClause = 15,
-    RuleSourceSelector = 16,
-    RuleWhereClause = 17,
-    RuleSolutionModifier = 18,
-    RuleGroupClause = 19,
-    RuleGroupCondition = 20,
-    RuleHavingClause = 21,
-    RuleHavingCondition = 22,
-    RuleOrderClause = 23,
-    RuleOrderCondition = 24,
-    RuleLimitOffsetClauses = 25,
-    RuleLimitClause = 26,
-    RuleOffsetClause = 27,
-    RuleTextLimitClause = 28,
-    RuleValuesClause = 29,
-    RuleTriplesTemplate = 30,
-    RuleGroupGraphPattern = 31,
-    RuleGroupGraphPatternSub = 32,
-    RuleGraphPatternNotTriplesAndMaybeTriples = 33,
-    RuleTriplesBlock = 34,
-    RuleGraphPatternNotTriples = 35,
-    RuleOptionalGraphPattern = 36,
-    RuleGraphGraphPattern = 37,
-    RuleServiceGraphPattern = 38,
-    RuleBind = 39,
-    RuleInlineData = 40,
-    RuleDataBlock = 41,
-    RuleInlineDataOneVar = 42,
-    RuleInlineDataFull = 43,
-    RuleDataBlockSingle = 44,
-    RuleDataBlockValue = 45,
-    RuleMinusGraphPattern = 46,
-    RuleGroupOrUnionGraphPattern = 47,
-    RuleFilterR = 48,
-    RuleConstraint = 49,
-    RuleFunctionCall = 50,
-    RuleArgList = 51,
-    RuleExpressionList = 52,
-    RuleConstructTemplate = 53,
-    RuleConstructTriples = 54,
-    RuleTriplesSameSubject = 55,
-    RulePropertyList = 56,
-    RulePropertyListNotEmpty = 57,
-    RuleVerb = 58,
-    RuleObjectList = 59,
-    RuleObjectR = 60,
-    RuleTriplesSameSubjectPath = 61,
-    RulePropertyListPath = 62,
-    RulePropertyListPathNotEmpty = 63,
-    RuleVerbPath = 64,
-    RuleVerbSimple = 65,
-    RuleTupleWithoutPath = 66,
-    RuleTupleWithPath = 67,
-    RuleVerbPathOrSimple = 68,
-    RuleObjectListPath = 69,
-    RuleObjectPath = 70,
-    RulePath = 71,
-    RulePathAlternative = 72,
-    RulePathSequence = 73,
-    RulePathElt = 74,
-    RulePathEltOrInverse = 75,
-    RulePathMod = 76,
-    RulePathPrimary = 77,
-    RulePathNegatedPropertySet = 78,
-    RulePathOneInPropertySet = 79,
-    RuleInteger = 80,
-    RuleTriplesNode = 81,
-    RuleBlankNodePropertyList = 82,
-    RuleTriplesNodePath = 83,
-    RuleBlankNodePropertyListPath = 84,
-    RuleCollection = 85,
-    RuleCollectionPath = 86,
-    RuleGraphNode = 87,
-    RuleGraphNodePath = 88,
-    RuleVarOrTerm = 89,
-    RuleVarOrIri = 90,
-    RuleVar = 91,
-    RuleGraphTerm = 92,
-    RuleExpression = 93,
-    RuleConditionalOrExpression = 94,
-    RuleConditionalAndExpression = 95,
-    RuleValueLogical = 96,
-    RuleRelationalExpression = 97,
-    RuleNumericExpression = 98,
-    RuleAdditiveExpression = 99,
-    RuleMultiplicativeExpressionWithSign = 100,
-    RulePlusSubexpression = 101,
-    RuleMinusSubexpression = 102,
-    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 103,
-    RuleMultiplicativeExpression = 104,
-    RuleMultiplyOrDivideExpression = 105,
-    RuleMultiplyExpression = 106,
-    RuleDivideExpression = 107,
-    RuleUnaryExpression = 108,
-    RulePrimaryExpression = 109,
-    RuleBrackettedExpression = 110,
-    RuleBuiltInCall = 111,
-    RuleRegexExpression = 112,
-    RuleLangExpression = 113,
-    RuleSubstringExpression = 114,
-    RuleStrReplaceExpression = 115,
-    RuleExistsFunc = 116,
-    RuleNotExistsFunc = 117,
-    RuleAggregate = 118,
-    RuleIriOrFunction = 119,
-    RuleRdfLiteral = 120,
-    RuleNumericLiteral = 121,
-    RuleNumericLiteralUnsigned = 122,
-    RuleNumericLiteralPositive = 123,
-    RuleNumericLiteralNegative = 124,
-    RuleBooleanLiteral = 125,
-    RuleString = 126,
-    RuleIri = 127,
-    RulePrefixedName = 128,
-    RuleBlankNode = 129,
-    RuleIriref = 130,
-    RulePnameLn = 131,
-    RulePnameNs = 132
+    RuleQueryOrUpdate = 0,
+    RuleQuery = 1,
+    RulePrologue = 2,
+    RuleBaseDecl = 3,
+    RulePrefixDecl = 4,
+    RuleSelectQuery = 5,
+    RuleSubSelect = 6,
+    RuleSelectClause = 7,
+    RuleVarOrAlias = 8,
+    RuleAlias = 9,
+    RuleAliasWithoutBrackets = 10,
+    RuleConstructQuery = 11,
+    RuleDescribeQuery = 12,
+    RuleAskQuery = 13,
+    RuleDatasetClause = 14,
+    RuleDefaultGraphClause = 15,
+    RuleNamedGraphClause = 16,
+    RuleSourceSelector = 17,
+    RuleWhereClause = 18,
+    RuleSolutionModifier = 19,
+    RuleGroupClause = 20,
+    RuleGroupCondition = 21,
+    RuleHavingClause = 22,
+    RuleHavingCondition = 23,
+    RuleOrderClause = 24,
+    RuleOrderCondition = 25,
+    RuleLimitOffsetClauses = 26,
+    RuleLimitClause = 27,
+    RuleOffsetClause = 28,
+    RuleTextLimitClause = 29,
+    RuleValuesClause = 30,
+    RuleUpdate = 31,
+    RuleUpdate1 = 32,
+    RuleLoad = 33,
+    RuleClear = 34,
+    RuleDrop = 35,
+    RuleCreate = 36,
+    RuleAdd = 37,
+    RuleMove = 38,
+    RuleCopy = 39,
+    RuleInsertData = 40,
+    RuleDeleteData = 41,
+    RuleDeleteWhere = 42,
+    RuleModify = 43,
+    RuleDeleteClause = 44,
+    RuleInsertClause = 45,
+    RuleUsingClause = 46,
+    RuleGraphOrDefault = 47,
+    RuleGraphRef = 48,
+    RuleGraphRefAll = 49,
+    RuleQuadPattern = 50,
+    RuleQuadData = 51,
+    RuleQuads = 52,
+    RuleQuadsNotTriples = 53,
+    RuleTriplesTemplate = 54,
+    RuleGroupGraphPattern = 55,
+    RuleGroupGraphPatternSub = 56,
+    RuleGraphPatternNotTriplesAndMaybeTriples = 57,
+    RuleTriplesBlock = 58,
+    RuleGraphPatternNotTriples = 59,
+    RuleOptionalGraphPattern = 60,
+    RuleGraphGraphPattern = 61,
+    RuleServiceGraphPattern = 62,
+    RuleBind = 63,
+    RuleInlineData = 64,
+    RuleDataBlock = 65,
+    RuleInlineDataOneVar = 66,
+    RuleInlineDataFull = 67,
+    RuleDataBlockSingle = 68,
+    RuleDataBlockValue = 69,
+    RuleMinusGraphPattern = 70,
+    RuleGroupOrUnionGraphPattern = 71,
+    RuleFilterR = 72,
+    RuleConstraint = 73,
+    RuleFunctionCall = 74,
+    RuleArgList = 75,
+    RuleExpressionList = 76,
+    RuleConstructTemplate = 77,
+    RuleConstructTriples = 78,
+    RuleTriplesSameSubject = 79,
+    RulePropertyList = 80,
+    RulePropertyListNotEmpty = 81,
+    RuleVerb = 82,
+    RuleObjectList = 83,
+    RuleObjectR = 84,
+    RuleTriplesSameSubjectPath = 85,
+    RulePropertyListPath = 86,
+    RulePropertyListPathNotEmpty = 87,
+    RuleVerbPath = 88,
+    RuleVerbSimple = 89,
+    RuleTupleWithoutPath = 90,
+    RuleTupleWithPath = 91,
+    RuleVerbPathOrSimple = 92,
+    RuleObjectListPath = 93,
+    RuleObjectPath = 94,
+    RulePath = 95,
+    RulePathAlternative = 96,
+    RulePathSequence = 97,
+    RulePathElt = 98,
+    RulePathEltOrInverse = 99,
+    RulePathMod = 100,
+    RulePathPrimary = 101,
+    RulePathNegatedPropertySet = 102,
+    RulePathOneInPropertySet = 103,
+    RuleInteger = 104,
+    RuleTriplesNode = 105,
+    RuleBlankNodePropertyList = 106,
+    RuleTriplesNodePath = 107,
+    RuleBlankNodePropertyListPath = 108,
+    RuleCollection = 109,
+    RuleCollectionPath = 110,
+    RuleGraphNode = 111,
+    RuleGraphNodePath = 112,
+    RuleVarOrTerm = 113,
+    RuleVarOrIri = 114,
+    RuleVar = 115,
+    RuleGraphTerm = 116,
+    RuleExpression = 117,
+    RuleConditionalOrExpression = 118,
+    RuleConditionalAndExpression = 119,
+    RuleValueLogical = 120,
+    RuleRelationalExpression = 121,
+    RuleNumericExpression = 122,
+    RuleAdditiveExpression = 123,
+    RuleMultiplicativeExpressionWithSign = 124,
+    RulePlusSubexpression = 125,
+    RuleMinusSubexpression = 126,
+    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 127,
+    RuleMultiplicativeExpression = 128,
+    RuleMultiplyOrDivideExpression = 129,
+    RuleMultiplyExpression = 130,
+    RuleDivideExpression = 131,
+    RuleUnaryExpression = 132,
+    RulePrimaryExpression = 133,
+    RuleBrackettedExpression = 134,
+    RuleBuiltInCall = 135,
+    RuleRegexExpression = 136,
+    RuleLangExpression = 137,
+    RuleSubstringExpression = 138,
+    RuleStrReplaceExpression = 139,
+    RuleExistsFunc = 140,
+    RuleNotExistsFunc = 141,
+    RuleAggregate = 142,
+    RuleIriOrFunction = 143,
+    RuleRdfLiteral = 144,
+    RuleNumericLiteral = 145,
+    RuleNumericLiteralUnsigned = 146,
+    RuleNumericLiteralPositive = 147,
+    RuleNumericLiteralNegative = 148,
+    RuleBooleanLiteral = 149,
+    RuleString = 150,
+    RuleIri = 151,
+    RulePrefixedName = 152,
+    RuleBlankNode = 153,
+    RuleIriref = 154,
+    RulePnameLn = 155,
+    RulePnameNs = 156
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -337,6 +363,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
+  class QueryOrUpdateContext;
   class QueryContext;
   class PrologueContext;
   class BaseDeclContext;
@@ -367,6 +394,29 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class OffsetClauseContext;
   class TextLimitClauseContext;
   class ValuesClauseContext;
+  class UpdateContext;
+  class Update1Context;
+  class LoadContext;
+  class ClearContext;
+  class DropContext;
+  class CreateContext;
+  class AddContext;
+  class MoveContext;
+  class CopyContext;
+  class InsertDataContext;
+  class DeleteDataContext;
+  class DeleteWhereContext;
+  class ModifyContext;
+  class DeleteClauseContext;
+  class InsertClauseContext;
+  class UsingClauseContext;
+  class GraphOrDefaultContext;
+  class GraphRefContext;
+  class GraphRefAllContext;
+  class QuadPatternContext;
+  class QuadDataContext;
+  class QuadsContext;
+  class QuadsNotTriplesContext;
   class TriplesTemplateContext;
   class GroupGraphPatternContext;
   class GroupGraphPatternSubContext;
@@ -471,13 +521,29 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class PnameLnContext;
   class PnameNsContext;
 
+  class QueryOrUpdateContext : public antlr4::ParserRuleContext {
+   public:
+    QueryOrUpdateContext(antlr4::ParserRuleContext* parent,
+                         size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* EOF();
+    QueryContext* query();
+    UpdateContext* update();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  QueryOrUpdateContext* queryOrUpdate();
+
   class QueryContext : public antlr4::ParserRuleContext {
    public:
     QueryContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PrologueContext* prologue();
     ValuesClauseContext* valuesClause();
-    antlr4::tree::TerminalNode* EOF();
     SelectQueryContext* selectQuery();
     ConstructQueryContext* constructQuery();
     DescribeQueryContext* describeQuery();
@@ -982,13 +1048,402 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   ValuesClauseContext* valuesClause();
 
+  class UpdateContext : public antlr4::ParserRuleContext {
+   public:
+    UpdateContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    std::vector<PrologueContext*> prologue();
+    PrologueContext* prologue(size_t i);
+    std::vector<Update1Context*> update1();
+    Update1Context* update1(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  UpdateContext* update();
+
+  class Update1Context : public antlr4::ParserRuleContext {
+   public:
+    Update1Context(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    LoadContext* load();
+    ClearContext* clear();
+    DropContext* drop();
+    AddContext* add();
+    MoveContext* move();
+    CopyContext* copy();
+    CreateContext* create();
+    InsertDataContext* insertData();
+    DeleteDataContext* deleteData();
+    DeleteWhereContext* deleteWhere();
+    ModifyContext* modify();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  Update1Context* update1();
+
+  class LoadContext : public antlr4::ParserRuleContext {
+   public:
+    LoadContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* LOAD();
+    IriContext* iri();
+    antlr4::tree::TerminalNode* SILENT();
+    antlr4::tree::TerminalNode* INTO();
+    GraphRefContext* graphRef();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  LoadContext* load();
+
+  class ClearContext : public antlr4::ParserRuleContext {
+   public:
+    ClearContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* CLEAR();
+    GraphRefAllContext* graphRefAll();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  ClearContext* clear();
+
+  class DropContext : public antlr4::ParserRuleContext {
+   public:
+    DropContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* DROP();
+    GraphRefAllContext* graphRefAll();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  DropContext* drop();
+
+  class CreateContext : public antlr4::ParserRuleContext {
+   public:
+    CreateContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* CREATE();
+    GraphRefContext* graphRef();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  CreateContext* create();
+
+  class AddContext : public antlr4::ParserRuleContext {
+   public:
+    AddContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* ADD();
+    std::vector<GraphOrDefaultContext*> graphOrDefault();
+    GraphOrDefaultContext* graphOrDefault(size_t i);
+    antlr4::tree::TerminalNode* TO();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  AddContext* add();
+
+  class MoveContext : public antlr4::ParserRuleContext {
+   public:
+    MoveContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* MOVE();
+    std::vector<GraphOrDefaultContext*> graphOrDefault();
+    GraphOrDefaultContext* graphOrDefault(size_t i);
+    antlr4::tree::TerminalNode* TO();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  MoveContext* move();
+
+  class CopyContext : public antlr4::ParserRuleContext {
+   public:
+    CopyContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* COPY();
+    std::vector<GraphOrDefaultContext*> graphOrDefault();
+    GraphOrDefaultContext* graphOrDefault(size_t i);
+    antlr4::tree::TerminalNode* TO();
+    antlr4::tree::TerminalNode* SILENT();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  CopyContext* copy();
+
+  class InsertDataContext : public antlr4::ParserRuleContext {
+   public:
+    InsertDataContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* INSERT();
+    antlr4::tree::TerminalNode* DATA();
+    QuadDataContext* quadData();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  InsertDataContext* insertData();
+
+  class DeleteDataContext : public antlr4::ParserRuleContext {
+   public:
+    DeleteDataContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* DELETE();
+    antlr4::tree::TerminalNode* DATA();
+    QuadDataContext* quadData();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  DeleteDataContext* deleteData();
+
+  class DeleteWhereContext : public antlr4::ParserRuleContext {
+   public:
+    DeleteWhereContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* DELETE();
+    antlr4::tree::TerminalNode* WHERE();
+    QuadPatternContext* quadPattern();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  DeleteWhereContext* deleteWhere();
+
+  class ModifyContext : public antlr4::ParserRuleContext {
+   public:
+    ModifyContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* WHERE();
+    GroupGraphPatternContext* groupGraphPattern();
+    DeleteClauseContext* deleteClause();
+    InsertClauseContext* insertClause();
+    antlr4::tree::TerminalNode* WITH();
+    IriContext* iri();
+    std::vector<UsingClauseContext*> usingClause();
+    UsingClauseContext* usingClause(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  ModifyContext* modify();
+
+  class DeleteClauseContext : public antlr4::ParserRuleContext {
+   public:
+    DeleteClauseContext(antlr4::ParserRuleContext* parent,
+                        size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* DELETE();
+    QuadPatternContext* quadPattern();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  DeleteClauseContext* deleteClause();
+
+  class InsertClauseContext : public antlr4::ParserRuleContext {
+   public:
+    InsertClauseContext(antlr4::ParserRuleContext* parent,
+                        size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* INSERT();
+    QuadPatternContext* quadPattern();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  InsertClauseContext* insertClause();
+
+  class UsingClauseContext : public antlr4::ParserRuleContext {
+   public:
+    UsingClauseContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* USING();
+    IriContext* iri();
+    antlr4::tree::TerminalNode* NAMED();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  UsingClauseContext* usingClause();
+
+  class GraphOrDefaultContext : public antlr4::ParserRuleContext {
+   public:
+    GraphOrDefaultContext(antlr4::ParserRuleContext* parent,
+                          size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* DEFAULT();
+    IriContext* iri();
+    antlr4::tree::TerminalNode* GRAPH();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  GraphOrDefaultContext* graphOrDefault();
+
+  class GraphRefContext : public antlr4::ParserRuleContext {
+   public:
+    GraphRefContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* GRAPH();
+    IriContext* iri();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  GraphRefContext* graphRef();
+
+  class GraphRefAllContext : public antlr4::ParserRuleContext {
+   public:
+    GraphRefAllContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    GraphRefContext* graphRef();
+    antlr4::tree::TerminalNode* DEFAULT();
+    antlr4::tree::TerminalNode* NAMED();
+    antlr4::tree::TerminalNode* ALL();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  GraphRefAllContext* graphRefAll();
+
+  class QuadPatternContext : public antlr4::ParserRuleContext {
+   public:
+    QuadPatternContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    QuadsContext* quads();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  QuadPatternContext* quadPattern();
+
+  class QuadDataContext : public antlr4::ParserRuleContext {
+   public:
+    QuadDataContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    QuadsContext* quads();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  QuadDataContext* quadData();
+
+  class QuadsContext : public antlr4::ParserRuleContext {
+   public:
+    QuadsContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    std::vector<TriplesTemplateContext*> triplesTemplate();
+    TriplesTemplateContext* triplesTemplate(size_t i);
+    std::vector<QuadsNotTriplesContext*> quadsNotTriples();
+    QuadsNotTriplesContext* quadsNotTriples(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  QuadsContext* quads();
+
+  class QuadsNotTriplesContext : public antlr4::ParserRuleContext {
+   public:
+    QuadsNotTriplesContext(antlr4::ParserRuleContext* parent,
+                           size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* GRAPH();
+    VarOrIriContext* varOrIri();
+    TriplesTemplateContext* triplesTemplate();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  QuadsNotTriplesContext* quadsNotTriples();
+
   class TriplesTemplateContext : public antlr4::ParserRuleContext {
    public:
     TriplesTemplateContext(antlr4::ParserRuleContext* parent,
                            size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    TriplesSameSubjectContext* triplesSameSubject();
-    TriplesTemplateContext* triplesTemplate();
+    std::vector<TriplesSameSubjectContext*> triplesSameSubject();
+    TriplesSameSubjectContext* triplesSameSubject(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -2056,6 +2511,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   class RelationalExpressionContext : public antlr4::ParserRuleContext {
    public:
+    antlr4::Token* notToken = nullptr;
     RelationalExpressionContext(antlr4::ParserRuleContext* parent,
                                 size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -2321,8 +2777,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     StrReplaceExpressionContext* strReplaceExpression();
     antlr4::tree::TerminalNode* UCASE();
     antlr4::tree::TerminalNode* LCASE();
-    antlr4::tree::TerminalNode* ENCODE();
-    antlr4::tree::TerminalNode* FOR();
+    antlr4::tree::TerminalNode* ENCODE_FOR_URI();
     antlr4::tree::TerminalNode* CONTAINS();
     antlr4::tree::TerminalNode* STRSTARTS();
     antlr4::tree::TerminalNode* STRENDS();
@@ -2476,6 +2931,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     antlr4::tree::TerminalNode* MIN();
     antlr4::tree::TerminalNode* MAX();
     antlr4::tree::TerminalNode* AVG();
+    antlr4::tree::TerminalNode* STDEV();
     antlr4::tree::TerminalNode* SAMPLE();
     antlr4::tree::TerminalNode* GROUP_CONCAT();
     antlr4::tree::TerminalNode* SEPARATOR();

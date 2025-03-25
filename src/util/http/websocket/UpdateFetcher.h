@@ -19,7 +19,8 @@ class UpdateFetcher {
 
   QueryHub& queryHub_;
   QueryId queryId_;
-  std::shared_ptr<const QueryToSocketDistributor> distributor_{nullptr};
+  std::shared_ptr<const QueryToSocketDistributor> distributor_ =
+      queryHub_.createOrAcquireDistributorForReceiving(queryId_);
   // Counter to ensure sequential processing
   size_t nextIndex_ = 0;
 
@@ -27,13 +28,14 @@ class UpdateFetcher {
   UpdateFetcher(QueryHub& queryHub, QueryId queryId)
       : queryHub_{queryHub}, queryId_{std::move(queryId)} {}
 
+  /// Return the strand on which the calls to `waitForEvent` must be awaited.
+  auto strand() const { return distributor_->strand(); }
+
   /// If an update occurred for the given query since the last time this was
   /// called this resumes immediately. Otherwise it will wait
   /// (in the boost::asio world) for an update to occur and resume then.
-  /// On the first invocation this will briefly synchronize globally to acquire
-  /// an instance of the `QueryToSocketDistributor`. After that it will only
-  /// operate on this newly acquired instance without the need for global
-  /// synchronization, but with query wide synchronization instead.
+  /// Must be awaited on the strand returned by `strand()`, otherwise an
+  /// exception is thrown (see `QueryToSocketDistributor.h` for details)
   net::awaitable<PayloadType> waitForEvent();
 };
 

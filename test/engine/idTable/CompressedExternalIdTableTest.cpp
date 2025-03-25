@@ -9,27 +9,15 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/StxxlSortFunctors.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
 
 namespace {
-// Implementation of a class that inherits from `IdTable` but is copyable
-// (convenient for testing).
-template <size_t N = 0>
-using TableImpl = std::conditional_t<N == 0, IdTable, IdTableStatic<N>>;
-template <size_t N = 0>
-class CopyableIdTable : public TableImpl<N> {
- public:
-  using Base = TableImpl<N>;
-  using Base::Base;
-  CopyableIdTable(const CopyableIdTable& rhs) : Base{rhs.clone()} {}
-  CopyableIdTable& operator=(const CopyableIdTable& rhs) {
-    static_cast<Base&>(*this) = rhs.clone();
-    return *this;
-  }
-};
+
+static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -45,10 +33,10 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
     size_t numColumns = result.numColumns();
     size_t size = result.size();
     result.resize(result.size() + block.size());
-    for (auto i : std::views::iota(0U, numColumns)) {
+    for (auto i : ql::views::iota(0U, numColumns)) {
       decltype(auto) blockCol = block.getColumn(i);
       decltype(auto) resultCol = result.getColumn(i);
-      std::ranges::copy(blockCol, resultCol.begin() + size);
+      ql::ranges::copy(blockCol, resultCol.begin() + size);
     }
   }
   return result;
@@ -87,21 +75,22 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 
   using namespace ::testing;
   std::vector<CopyableIdTable<0>> result;
-  auto tr = std::ranges::transform_view(generators, idTableFromBlockGenerator);
-  std::ranges::copy(tr, std::back_inserter(result));
+  auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
+  ql::ranges::copy(tr, std::back_inserter(result));
   ASSERT_THAT(result, ElementsAreArray(tables));
 }
 
 template <size_t NumStaticColumns>
-void testExternalSorter(size_t numDynamicColumns, size_t numRows,
-                        ad_utility::MemorySize memoryToUse,
-                        source_location l = source_location::current()) {
+void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
+                            ad_utility::MemorySize memoryToUse,
+                            bool mergeMultipleTimes,
+                            source_location l = source_location::current()) {
   auto tr = generateLocationTrace(l);
   std::string filename = "idTableCompressedSorter.testExternalSorter.dat";
   using namespace ad_utility::memory_literals;
 
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, NumStaticColumns>
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, NumStaticColumns>
       writer{filename, numDynamicColumns, memoryToUse,
              ad_utility::testing::makeAllocator(), 5_kB};
 
@@ -114,16 +103,43 @@ void testExternalSorter(size_t numDynamicColumns, size_t numRows,
       writer.push(row);
     }
 
-    std::ranges::sort(randomTable, SortByOPS{});
+    ql::ranges::sort(randomTable, SortByOSP{});
 
-    auto generator = writer.sortedView();
+    if (mergeMultipleTimes) {
+      writer.moveResultOnMerge() = false;
+    }
 
-    using namespace ::testing;
-    auto result =
-        idTableFromRowGenerator<NumStaticColumns>(generator, numDynamicColumns);
-    ASSERT_THAT(result, Eq(randomTable));
+    for (size_t k = 0; k < 5; ++k) {
+      // Also test the case that the blocksize does not exactly divides the
+      // number of inputs.
+      auto blocksize = k == 1 ? 1 : 17;
+      using namespace ::testing;
+      auto generator = k == 0 ? ql::views::join(ad_utility::OwningView{
+                                    writer.getSortedBlocks(blocksize)})
+                              : writer.sortedView();
+      if (mergeMultipleTimes || k == 0) {
+        auto result = idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns);
+        ASSERT_THAT(result, Eq(randomTable)) << "k = " << k;
+      } else {
+        EXPECT_ANY_THROW((idTableFromRowGenerator<NumStaticColumns>(
+            generator, numDynamicColumns)));
+      }
+      // We cannot access or change this value after the first merge.
+      EXPECT_ANY_THROW(writer.moveResultOnMerge());
+    }
     writer.clear();
   }
+}
+
+template <size_t NumStaticColumns>
+void testExternalSorter(size_t numDynamicColumns, size_t numRows,
+                        ad_utility::MemorySize memoryToUse,
+                        source_location l = source_location::current()) {
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, true, l);
+  testExternalSorterImpl<NumStaticColumns>(numDynamicColumns, numRows,
+                                           memoryToUse, false, l);
 }
 
 TEST(CompressedExternalIdTable, sorterRandomInputs) {
@@ -131,10 +147,10 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low
   // memory limit), but also the case that there is a
-  testExternalSorter<0>(3, 10'000, 10_kB);
-  testExternalSorter<0>(3, 1000, 1_MB);
-  testExternalSorter<3>(3, 10'000, 10_kB);
-  testExternalSorter<3>(3, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {
@@ -142,10 +158,10 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
 
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
-  ad_utility::CompressedExternalIdTableSorter<SortByOPS, 0> writer{
-      filename, 3, 100_B, ad_utility::testing::makeAllocator()};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
+      filename, NUM_COLS, 100_B, ad_utility::testing::makeAllocator()};
 
-  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);
+  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
 
   // Pushing always works
   for (const auto& row : randomTable) {
@@ -153,8 +169,9 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   }
 
   auto generator = writer.sortedView();
-  AD_EXPECT_THROW_WITH_MESSAGE((idTableFromRowGenerator<0>(generator, 3)),
-                               ::testing::ContainsRegex("Insufficient memory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (idTableFromRowGenerator<0>(generator, NUM_COLS)),
+      ::testing::ContainsRegex("Insufficient memory"));
 }
 
 template <size_t NumStaticColumns>
@@ -231,7 +248,6 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
       writer.clear(), ::testing::ContainsRegex("currently being iterated"));
 
   auto it = generator.begin();
-  // TODO<joka921> check the exception message;
   AD_EXPECT_THROW_WITH_MESSAGE(
       pushAll(), ::testing::ContainsRegex("currently being iterated"));
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -243,4 +259,18 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
   // All generators have ended, we should be able to push and clear.
   ASSERT_NO_THROW(pushAll());
   ASSERT_NO_THROW(writer.clear());
+}
+
+TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
+  std::string filename = "idTableCompressor.wrongNumCols.dat";
+  using namespace ad_utility::memory_literals;
+  auto alloc = ad_utility::testing::makeAllocator();
+
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 3> writer{filename, 3,
+                                                                   10_B, alloc};
+  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
+  IdTableStatic<0> t1{3, alloc};
+  EXPECT_NO_THROW(erased.pushBlock(t1));
+  EXPECT_NO_THROW(t1.setNumColumns(4));
+  EXPECT_ANY_THROW(erased.pushBlock(t1));
 }

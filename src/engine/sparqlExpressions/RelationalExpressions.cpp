@@ -4,8 +4,8 @@
 
 #include "RelationalExpressions.h"
 
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/LambdaHelpers.h"
@@ -14,6 +14,10 @@
 using namespace sparqlExpression;
 
 namespace {
+
+constexpr int reductionFactorEquals = 1000;
+constexpr int reductionFactorNotEquals = 1;
+constexpr int reductionFactorDefault = 50;
 
 using valueIdComparators::Comparison;
 
@@ -28,9 +32,10 @@ using valueIdComparators::Comparison;
 
 // First the `idGenerator` for constants (string, int, double). It yields the
 // same ID `targetSize` many times.
-template <SingleExpressionResult S>
-requires isConstantResult<S>
-auto idGenerator(S value, size_t targetSize, const EvaluationContext* context)
+CPP_template(typename S)(
+    requires SingleExpressionResult<S> CPP_and
+        isConstantResult<S>) auto idGenerator(const S& value, size_t targetSize,
+                                              const EvaluationContext* context)
     -> cppcoro::generator<const decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
   for (size_t i = 0; i < targetSize; ++i) {
@@ -41,9 +46,10 @@ auto idGenerator(S value, size_t targetSize, const EvaluationContext* context)
 // Version of `idGenerator` for vectors. Asserts that the size of the vector is
 // equal to `targetSize` and the yields the corresponding ID for each of the
 // elements in the vector.
-template <SingleExpressionResult S>
-requires isVectorResult<S>
-auto idGenerator(S values, size_t targetSize, const EvaluationContext* context)
+CPP_template(typename S)(
+    requires SingleExpressionResult<S> CPP_and
+        isVectorResult<S>) auto idGenerator(const S& values, size_t targetSize,
+                                            const EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
   AD_CONTRACT_CHECK(targetSize == values.size());
   for (const auto& el : values) {
@@ -52,12 +58,17 @@ auto idGenerator(S values, size_t targetSize, const EvaluationContext* context)
   }
 }
 
-// For the `Variable` class, the generator from the `sparqlExpressions` module
-// already yields the `ValueIds`.
-auto idGenerator(Variable variable, size_t targetSize,
-                 const EvaluationContext* context) {
-  return sparqlExpression::detail::makeGenerator(std::move(variable),
-                                                 targetSize, context);
+// For the `Variable` and `SetOfIntervals` class, the generator from the
+// `sparqlExpressions` module already yields the `ValueIds`.
+CPP_template(typename S)(
+    requires ad_utility::SimilarToAny<
+        S, Variable,
+        ad_utility::SetOfIntervals>) auto idGenerator(S input,
+                                                      size_t targetSize,
+                                                      const EvaluationContext*
+                                                          context) {
+  return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
+                                                 context);
 }
 
 // Return a pair of generators that generate the values from `value1` and
@@ -66,17 +77,18 @@ auto idGenerator(Variable variable, size_t targetSize,
 // `ValueId, vector<ValueId>, Variable`), then `idGenerator`s are returned for
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
-template <SingleExpressionResult S1, SingleExpressionResult S2>
-auto getGenerators(S1 value1, S2 value2, size_t targetSize,
-                   const EvaluationContext* context) {
+CPP_template(typename S1, typename S2)(
+    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<
+        S2>) auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
+                                const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
-    return std::pair{idGenerator(std::move(value1), targetSize, context),
-                     idGenerator(std::move(value2), targetSize, context)};
+    return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
+                     idGenerator(AD_FWD(value2), targetSize, context)};
   } else {
     return std::pair{sparqlExpression::detail::makeGenerator(
-                         std::move(value1), targetSize, context),
+                         AD_FWD(value1), targetSize, context),
                      sparqlExpression::detail::makeGenerator(
-                         std::move(value2), targetSize, context)};
+                         AD_FWD(value2), targetSize, context)};
   }
 }
 
@@ -92,9 +104,13 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
+  AD_CORRECTNESS_CHECK(
+      columnIndex.has_value(),
+      "The input must be sorted to evaluate a relational expression using "
+      "binary search. This should never happen for unbound variables");
 
   auto getIdFromColumn = ad_utility::makeAssignableLambda(
-      [columnIndex](const auto& idTable, auto i) {
+      [columnIndex = columnIndex.value()](const auto& idTable, auto i) {
         return idTable(i, columnIndex);
       });
 
@@ -126,9 +142,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
-template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
-requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
-    S1 value1, S2 value2, const EvaluationContext* context) {
+CPP_template(Comparison Comp, typename S1, typename S2)(
+    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
+        CPP_and AreComparable<S1, S2>) ExpressionResult
+    evaluateRelationalExpression(S1&& value1, S2&& value2,
+                                 const EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -142,7 +160,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
       auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
-      // TODO<C++23> Use `std::ranges::starts_with`.
+      // TODO<C++23> Use `ql::ranges::starts_with`.
       if (const auto& cols = context->_columnsByWhichResultIsSorted;
           !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =
@@ -155,12 +173,13 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                                 context);
         }
       }
+      context->cancellationHandle_->throwIfCancelled();
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrString>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
       resultFromBinarySearch =
-          value2.visit([&impl](const auto& x) { return impl(x); });
+          std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {
       resultFromBinarySearch = impl(value2);
     }
@@ -170,7 +189,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
   }
 
   auto [generatorA, generatorB] =
-      getGenerators(std::move(value1), std::move(value2), resultSize, context);
+      getGenerators(AD_FWD(value1), AD_FWD(value2), resultSize, context);
   auto itA = generatorA.begin();
   auto itB = generatorB.begin();
 
@@ -185,16 +204,10 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                 AlwaysUndef>(x, y, context)));
       }
     };
-    auto base = []<typename I>(const I& arg) -> decltype(auto) {
-      if constexpr (ad_utility::isSimilar<IdOrString, I>) {
-        return static_cast<const IdOrStringBase&>(arg);
-      } else {
-        return arg;
-      }
-    };
-    ad_utility::visitWithVariantsAndParameters(impl, base(*itA), base(*itB));
+    ad_utility::visitWithVariantsAndParameters(impl, *itA, *itB);
     ++itA;
     ++itB;
+    context->cancellationHandle_->throwIfCancelled();
   }
 
   if constexpr (resultIsConstant) {
@@ -207,17 +220,17 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
 
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
-template <Comparison, typename A, typename B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*)
-    requires StoresBoolean<A> || StoresBoolean<B> {
+CPP_template(Comparison, typename A,
+             typename B)(requires(StoresBoolean<A> || StoresBoolean<B>)) Id
+    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
       "boolean arguments");
 }
 
-template <Comparison Comp, typename A, typename B>
-requires AreIncomparable<A, B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+CPP_template(Comparison Comp, typename A,
+             typename B)(requires AreIncomparable<A, B>) Id
+    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -228,12 +241,14 @@ Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
 
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
-template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires(!AreComparable<A, B> && AreComparable<B, A>)
-ExpressionResult evaluateRelationalExpression(
-    A a, B b, const EvaluationContext* context) {
+CPP_template(Comparison Comp, typename A, typename B)(
+    requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B> CPP_and
+        CPP_NOT(AreComparable<A, B>)
+            CPP_and AreComparable<B, A>) ExpressionResult
+    evaluateRelationalExpression(A&& a, B&& b,
+                                 const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
-      std::move(b), std::move(a), context);
+      AD_FWD(b), AD_FWD(a), context);
 }
 
 }  // namespace
@@ -284,11 +299,11 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   // We support both directions: LANG(?x) = "en" and "en" = LANG(?x).
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
-    const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
+    std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
     const auto* langPtr =
         dynamic_cast<const StringLiteralExpression*>(right.get());
 
-    if (!varPtr || !langPtr) {
+    if (!optVar.has_value() || !langPtr) {
       return std::nullopt;
     }
 
@@ -296,8 +311,8 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // etc.
     // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
-        varPtr->variable(),
-        std::string{langPtr->value().normalizedLiteralContent().get()}};
+        std::move(optVar.value()),
+        std::string{asStringViewUnsafe(langPtr->value().getContent())}};
   };
 
   const auto& child1 = children_[0];
@@ -310,39 +325,200 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   }
 }
 
+namespace {
+// _____________________________________________________________________________
+SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
+    uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
+    const std::optional<Variable>& firstSortedVariable) {
+  AD_CORRECTNESS_CHECK(children.size() >= 1);
+  // For the binary expressions `=` `<=`, etc., we have exactly two children, so
+  // the following line is a noop. For the `IN` expression we expect to have
+  // more results if we have more arguments on the right side that can possibly
+  // match, so we reduce the `reductionFactor`.
+  reductionFactor /= children.size() - 1;
+  auto sizeEstimate = inputSizeEstimate / reductionFactor;
+
+  // By default, we have to linearly scan over the input and write the output.
+  size_t costEstimate = inputSizeEstimate + sizeEstimate;
+
+  // Returns true iff `left` is a variable by which the input is sorted, and
+  // `right` is a constant.
+  auto canBeEvaluatedWithBinarySearch =
+      [&firstSortedVariable](const SparqlExpression::Ptr& left,
+                             const SparqlExpression::Ptr& right) {
+        auto varPtr = dynamic_cast<const VariableExpression*>(left.get());
+        return varPtr && varPtr->value() == firstSortedVariable &&
+               right->isConstantExpression();
+      };
+  // TODO<joka921> This check has to be more complex once we support proper
+  // filtering on the `LocalVocab`.
+  // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
+  // using binary search.
+  if (ql::ranges::all_of(children | ql::views::drop(1),
+                         [&lhs = children.at(0),
+                          &canBeEvaluatedWithBinarySearch](const auto& child) {
+                           // The implementation automatically chooses the
+                           // cheaper direction, so we can do the same when
+                           // estimating the cost.
+                           return canBeEvaluatedWithBinarySearch(lhs, child) ||
+                                  canBeEvaluatedWithBinarySearch(child, lhs);
+                         })) {
+    // When evaluating via binary search, the only significant cost that occurs
+    // is that of writing the output.
+    costEstimate = sizeEstimate;
+  }
+  return {sizeEstimate, costEstimate};
+}
+}  // namespace
+
+// _____________________________________________________________________________
 template <Comparison comp>
 SparqlExpression::Estimates
 RelationalExpression<comp>::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
-    [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) const {
-  size_t sizeEstimate = 0;
+    const std::optional<Variable>& firstSortedVariable) const {
+  uint64_t reductionFactor = 0;
 
   if (comp == valueIdComparators::Comparison::EQ) {
-    sizeEstimate = inputSizeEstimate / 1000;
+    reductionFactor = reductionFactorEquals;
   } else if (comp == valueIdComparators::Comparison::NE) {
-    sizeEstimate = inputSizeEstimate;
+    reductionFactor = reductionFactorNotEquals;
   } else {
-    sizeEstimate = inputSizeEstimate / 50;
+    reductionFactor = reductionFactorDefault;
   }
 
-  size_t costEstimate = sizeEstimate;
+  return getEstimatesForFilterExpressionImpl(inputSizeEstimate, reductionFactor,
+                                             children_, firstSortedVariable);
+}
 
-  auto canBeEvaluatedWithBinarySearch = [&firstSortedVariable](
-                                            const Ptr& left, const Ptr& right) {
-    auto varPtr = dynamic_cast<const VariableExpression*>(left.get());
-    if (!varPtr || varPtr->value() != firstSortedVariable) {
-      return false;
+// _____________________________________________________________________________
+ExpressionResult InExpression::evaluate(
+    sparqlExpression::EvaluationContext* context) const {
+  auto lhs = children_.at(0)->evaluate(context);
+  ExpressionResult result{ad_utility::SetOfIntervals{}};
+  bool firstChild = true;
+  for (const auto& child : children_ | ql::views::drop(1)) {
+    auto rhs = child->evaluate(context);
+    auto evaluateEqualsExpression = [context](const auto& a,
+                                              auto b) -> ExpressionResult {
+      return evaluateRelationalExpression<Comparison::EQ>(a, std::move(b),
+                                                          context);
+    };
+    auto subRes = std::visit(evaluateEqualsExpression, lhs, std::move(rhs));
+    if (firstChild) {
+      firstChild = false;
+      result = std::move(subRes);
+      continue;
     }
-    return right->isConstantExpression();
-  };
-
-  // TODO<joka921> This check has to be more complex once we support proper
-  // filtering on the `LocalVocab`.
-  if (canBeEvaluatedWithBinarySearch(children_[0], children_[1]) ||
-      canBeEvaluatedWithBinarySearch(children_[1], children_[0])) {
-    costEstimate = 0;
+    // TODO We could implement early stopping for entries which are already
+    // true, This could be especially beneficial if some of the `==` expressions
+    // are more expensive than others. Same goes for the `logical or` and
+    // `logical and` expressions.
+    auto expressionForSubRes =
+        std::make_unique<SingleUseExpression>(std::move(subRes));
+    auto expressionForPreviousResult =
+        std::make_unique<SingleUseExpression>(std::move(result));
+    result = makeOrExpression(std::move(expressionForSubRes),
+                              std::move(expressionForPreviousResult))
+                 ->evaluate(context);
   }
-  return {sizeEstimate, costEstimate};
+  return result;
+}
+
+// _____________________________________________________________________________
+// (1) the provided `SparqlExpression* child` is a direct `Variable` expression
+// (e.g. `?x`), return `<Variable, false>`.
+// (2) the provided `SparqlExpression* child` is an expression `YEAR` which
+// refers to a `Variable` value (e.g. `YEAR(?x)`), return `<Variable, true>`.
+// (3) None of the previous expression cases, return default `std::nullopt`.
+// The `bool` flag is relevant later on to differentiate w.r.t. the logic that
+// needs to be applied for the creation of `PrefilterExpression`.
+static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
+    const SparqlExpression* child) {
+  bool isYear = false;
+  if (child->isYearExpression()) {
+    // The direct child is an expression YEAR();
+    isYear = true;
+    const auto& grandChild = child->children();
+    // The expression YEAR() should by definition hold a single child.
+    AD_CORRECTNESS_CHECK(grandChild.size() == 1);
+    child = grandChild[0].get();
+  }
+  if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
+    // (1) isYear is false: The direct child is already a Variable (expression).
+    // (2) isYear is true: The direct child is expression YEAR(). The actual
+    // pre-filter reference Variable is the child of expression YEAR().
+    return std::make_pair(optVariable.value(), isYear);
+  }
+  // No Variable for pre-filtering available.
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+template <Comparison comp>
+std::vector<PrefilterExprVariablePair>
+RelationalExpression<comp>::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  AD_CORRECTNESS_CHECK(children_.size() == 2);
+  const SparqlExpression* child0 = children_.at(0).get();
+  const SparqlExpression* child1 = children_.at(1).get();
+
+  const auto tryGetPrefilterExprVariablePairVec =
+      [](const SparqlExpression* child0, const SparqlExpression* child1,
+         bool reversed) -> std::vector<PrefilterExprVariablePair> {
+    const auto& optVariableIsYearPair = getOptVariableAndIsYear(child0);
+    if (!optVariableIsYearPair.has_value()) return {};
+    const auto& [variable, prefilterDate] = optVariableIsYearPair.value();
+    const auto& optReferenceValue =
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
+    if (!optReferenceValue.has_value()) return {};
+    return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
+        optReferenceValue.value(), variable, reversed, prefilterDate);
+  };
+  // Option 1:
+  // RelationalExpression containing a VariableExpression as the first child
+  // and an IdExpression, IdExpression or IriExpression as the second child.
+  // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(>= 10), ?x>
+  auto resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
+  if (!resVec.empty()) {
+    return resVec;
+  }
+  // Option 2:
+  // RelationalExpression containing an IdExpression, LiteralExpression or
+  // IriExpression as the first child and a VariableExpression as the second
+  // child. (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(<= 10), ?x>
+  // (2) 10 != ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(!= 10), ?x>;
+  // Option 3:
+  // If no PrefilterExpressions could be constructed for this
+  // RelationalExpression, just return the empty vector.
+  return tryGetPrefilterExprVariablePairVec(child1, child0, true);
+}
+
+// _____________________________________________________________________________
+std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
+  return children_;
+}
+
+// _____________________________________________________________________________
+string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
+  std::stringstream result;
+  result << "IN Expression with (";
+  for (const auto& child : children_) {
+    result << ' ' << child->getCacheKey(varColMap);
+  }
+  result << ')';
+  return std::move(result).str();
+}
+
+// _____________________________________________________________________________
+auto InExpression::getEstimatesForFilterExpression(
+    uint64_t inputSizeEstimate,
+    const std::optional<Variable>& firstSortedVariable) const -> Estimates {
+  return getEstimatesForFilterExpressionImpl(
+      inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
 }
 
 // Explicit instantiations

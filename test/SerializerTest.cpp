@@ -2,15 +2,19 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "../src/util/Random.h"
-#include "../src/util/Serializer/ByteBufferSerializer.h"
-#include "../src/util/Serializer/FileSerializer.h"
-#include "../src/util/Serializer/SerializeHashMap.h"
-#include "../src/util/Serializer/SerializeString.h"
-#include "../src/util/Serializer/SerializeVector.h"
-#include "../src/util/Serializer/Serializer.h"
+#include "util/Random.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeHashMap.h"
+#include "util/Serializer/SerializeOptional.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 
 using namespace ad_utility;
 using ad_utility::serialization::ByteBufferReadSerializer;
@@ -57,12 +61,11 @@ class C {
   int b;
 
  public:
-  AD_SERIALIZE_FRIEND_FUNCTION(C);
+  AD_SERIALIZE_FRIEND_FUNCTION(C) {
+    serializer | arg.a;
+    serializer | arg.b;
+  }
 };
-AD_SERIALIZE_FUNCTION(C) {
-  serializer | arg.a;
-  serializer | arg.b;
-}
 
 // D is not serializable
 struct D {};
@@ -163,7 +166,7 @@ TEST(Serializer, SimpleExample) {
     A a{};  // Uninitialized, we will read into it;
     serialization::FileReadSerializer reader{filename};
     reader >> a;
-    // We have succesfully restored the values.
+    // We have successfully restored the values.
     ASSERT_EQ(a.a, 42);
     ASSERT_EQ(a.b, -5);
   }
@@ -372,7 +375,58 @@ TEST(Serializer, Vector) {
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
 
-// Test that we can succesfully write `string_view`s to a serializer and
+TEST(Serializer, Array) {
+  auto testTriviallyCopyableDatatype = [](auto&& writer,
+                                          auto makeReaderFromWriter) {
+    std::array v_in{5, 6, 89, 42, -23948165, 0, 59309289, -42};
+    std::tuple t_in{5, 3.16, 'a', 42, -23948165, 0, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
+    using namespace ad_utility::serialization;
+    static_assert(TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
+    static_assert(
+        ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t_in)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
+  };
+
+  auto testNonTriviallyCopyableDatatype = [](auto&& writer,
+                                             auto makeReaderFromWriter) {
+    using namespace std::string_literals;
+    std::array v_in{"hi"s, "bye"s};
+    std::tuple t_in{5,         3.16,   'a',      "bimmbamm"s,
+                    -23948165, "ups"s, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
+    using namespace ad_utility::serialization;
+    static_assert(!TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
+    static_assert(
+        !ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t_in)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
+  };
+
+  testWithAllSerializers(testTriviallyCopyableDatatype);
+  testWithAllSerializers(testNonTriviallyCopyableDatatype);
+}
+
+// Test that we can successfully write `string_view`s to a serializer and
 // correctly read them as `string`s.
 TEST(Serializer, StringViewToString) {
   auto testString = [](auto&& writer, auto makeReaderFromWriter) {
@@ -486,4 +540,20 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
   testIncrementalSerialization(ints);
   testIncrementalSerialization(strings);
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeOptional) {
+  std::optional<std::string> s = "hallo";
+  std::optional<std::string> nil = std::nullopt;
+  ByteBufferWriteSerializer writer;
+  writer << s;
+  writer << nil;
+  std::optional<std::string> sExpected;
+  std::optional<std::string> nilExpected = "bye";
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  reader >> sExpected;
+  reader >> nilExpected;
+  EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
+  EXPECT_EQ(nilExpected, std::nullopt);
 }

@@ -15,6 +15,16 @@ using std::array;
 using std::string;
 using std::vector;
 
+namespace ad_utility::detail {
+
+template <typename Parser>
+CPP_requires(ParserGetBatchRequires, requires(Parser& p)(p.getBatch()));
+
+template <typename Parser>
+CPP_concept ParserGetBatch = CPP_requires_ref(ParserGetBatchRequires, Parser);
+
+}  // namespace ad_utility::detail
+
 /**
  * A wrapper to make the different Parsers interfaces compatible with the
  * parallel pipeline
@@ -57,11 +67,9 @@ class ParserBatcher {
     }
   }
 
-  // The second requires evaluates to `true` only if the `Parser` type has a
-  // getBatch() member function. The first requires enables this function only
-  // if the second "requires" evaluates to true
-  std::optional<std::vector<TurtleTriple>> getBatch()
-      requires requires(Parser& p) { p.getBatch(); } {
+  CPP_member auto getBatch()
+      -> CPP_ret(std::optional<std::vector<TurtleTriple>>)(
+          requires ad_utility::detail::ParserGetBatch<Parser>) {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }

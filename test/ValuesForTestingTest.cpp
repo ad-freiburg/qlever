@@ -2,10 +2,10 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/ValuesForTesting.h"
 #include "gtest/gtest.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
 TEST(ValuesForTesting, valuesForTesting) {
@@ -19,20 +19,30 @@ TEST(ValuesForTesting, valuesForTesting) {
       getQec(), table.clone(), {Variable{"?x"}, {Variable{"?y"}}}};
   // The following line has no effect. TODO<joka921> provide default
   // implementations for such boilerplate methods in the `Operation` base class.
-  v.setTextLimit(12340);
   ASSERT_EQ(v.getResultWidth(), 2u);
   ASSERT_EQ(v.getSizeEstimate(), 3u);
   ASSERT_EQ(v.getCostEstimate(), 3u);
   ASSERT_EQ(v.getMultiplicity(0), 42.0);
   ASSERT_EQ(v.getMultiplicity(1), 84.0);
 
-  ASSERT_THAT(v.asString(),
-              ::testing::StartsWith("Values for testing with 2 columns and "
-                                    "contents VocabIndex:3 VocabIndex:12"));
+  ASSERT_THAT(v.getCacheKey(),
+              ::testing::StartsWith(
+                  "Values for testing with 2 columns and 3 rows. V:3 V:12"));
+  ASSERT_THAT(v.getCacheKey(), ::testing::EndsWith("Supports limit: 0"));
   ASSERT_EQ(v.getDescriptor(), "explicit values for testing");
   ASSERT_TRUE(v.resultSortedOn().empty());
   ASSERT_TRUE(v.getChildren().empty());
 
   auto result = v.getResult();
   ASSERT_EQ(result->idTable(), table);
+}
+
+// ____________________________________________________________________________
+TEST(ValuesForTesting, cornerCasesCacheKey) {
+  auto empty = makeIdTableFromVector({});
+  auto neutral = makeIdTableFromVector({{}});
+
+  ValuesForTesting vEmpty{getQec(), empty.clone(), {}};
+  ValuesForTesting vNeutral{getQec(), neutral.clone(), {}};
+  EXPECT_NE(vEmpty.getCacheKey(), vNeutral.getCacheKey());
 }

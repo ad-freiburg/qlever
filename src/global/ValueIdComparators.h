@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "global/ValueId.h"
+#include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
 
@@ -72,9 +73,7 @@ inline ValueId toValueId(ComparisonResult comparisonResult) {
 // negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
 // -0.0, ... -infinity]. This is a direct consequence of comparing the bit
 // representation of these values as unsigned integers.
-inline bool compareByBits(ValueId a, ValueId b) {
-  return a.getBits() < b.getBits();
-}
+inline bool compareByBits(ValueId a, ValueId b) { return a < b; }
 
 namespace detail {
 
@@ -108,9 +107,22 @@ template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
                                                          Datatype datatype) {
-  return std::equal_range(
-      begin, end, datatype,
-      detail::makeSymmetricComparator(&ValueId::getDatatype));
+  // In a sorted input, `VocabIndex` and `LocalVocabIndex` IDs might be
+  // interleaved because they logically both store strings. We therefore
+  // need the range where any of those Datatypes match.
+  auto comparatorForVocabTypes = [](Datatype d1, Datatype d2) {
+    auto containsStringType = [](Datatype d) {
+      return ad_utility::contains(ValueId::stringTypes_, d);
+    };
+    if (containsStringType(d1) && containsStringType(d2)) {
+      return false;
+    }
+    return d1 < d2;
+  };
+  auto comparator = detail::makeSymmetricComparator(&ValueId::getDatatype,
+                                                    comparatorForVocabTypes);
+
+  return std::equal_range(begin, end, datatype, comparator);
 }
 
 namespace detail {
@@ -308,6 +320,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
+
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
@@ -337,15 +350,18 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
 inline auto simplifyRanges =
-    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input) {
-      // Eliminate empty ranges
-      std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input,
+                          bool removeEmptyRanges = true) {
+      if (removeEmptyRanges) {
+        // Eliminate empty ranges
+        std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+      }
       std::sort(input.begin(), input.end());
       if (input.empty()) {
         return input;
       }
       // Merge directly adjacent ranges.
-      // TODO<joka921, C++20> use `std::ranges`
+      // TODO<joka921, C++20> use `ql::ranges`
       decltype(input) result;
       result.push_back(input.front());
       for (auto it = input.begin() + 1; it != input.end(); ++it) {
@@ -366,9 +382,13 @@ inline auto simplifyRanges =
 // 2. The condition x `comparison` value is fulfilled, where value is the value
 // of `valueId`.
 // 3. The datatype of x and `valueId` are compatible.
+//
+// When setting the flag argument `removeEmptyRanges` to false, empty ranges
+// [`begin`, `end`] where `begin` is equal to `end` will not be discarded.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
-    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
+    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison,
+    bool removeEmptyRanges = true) {
   // For the evaluation of FILTERs, comparisons that involve undefined values
   // are always false.
   if (valueId.getDatatype() == Datatype::Undefined) {
@@ -377,11 +397,15 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
-      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
-          begin, end, valueId.getDouble(), comparison));
+      return detail::simplifyRanges(
+          detail::getRangesForIntsAndDoubles(begin, end, valueId.getDouble(),
+                                             comparison),
+          removeEmptyRanges);
     case Datatype::Int:
-      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
-          begin, end, valueId.getInt(), comparison));
+      return detail::simplifyRanges(
+          detail::getRangesForIntsAndDoubles(begin, end, valueId.getInt(),
+                                             comparison),
+          removeEmptyRanges);
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
@@ -389,9 +413,12 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::TextRecordIndex:
     case Datatype::Bool:
     case Datatype::Date:
+    case Datatype::GeoPoint:
+    case Datatype::BlankNodeIndex:
       // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
-          detail::getRangesForIndexTypes(begin, end, valueId, comparison));
+          detail::getRangesForIndexTypes(begin, end, valueId, comparison),
+          removeEmptyRanges);
   }
   AD_FAIL();
 }
@@ -410,13 +437,19 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  AD_CONTRACT_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  auto typeBegin = valueIdBegin.getDatatype();
+  auto typeEnd = valueIdEnd.getDatatype();
+  AD_CONTRACT_CHECK(typeBegin == typeEnd ||
+                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
+                     ad_utility::contains(Id::stringTypes_, typeEnd)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
     case Datatype::Bool:
     case Datatype::Undefined:
     case Datatype::Date:
+    case Datatype::GeoPoint:
+    case Datatype::BlankNodeIndex:
       AD_FAIL();
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
@@ -437,10 +470,15 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
   auto isNumeric = [](Datatype type) {
     return type == Datatype::Double || type == Datatype::Int;
   };
+  // TODO<joka921> Make this work for the WordIndex also.
+  auto isString = [](Datatype type) {
+    return ad_utility::contains(ValueId::stringTypes_, type);
+  };
   auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
   // Note: Undefined values cannot be compared to other undefined values.
   return (!isUndefined(typeA)) &&
-         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)));
+         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)) ||
+          (isString(typeA) && isString(typeB)));
 }
 
 // This function is part of the implementation of `compareIds` (see below).
@@ -460,16 +498,38 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     }
   }
 
-  auto visitor = [comparator](const auto& aValue,
-                              const auto& bValue) -> ComparisonResult {
+  // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
+  // on ValueIds already does the right thing.
+  if (a.getDatatype() == Datatype::LocalVocabIndex ||
+      b.getDatatype() == Datatype::LocalVocabIndex) {
+    return fromBool(std::invoke(comparator, a, b));
+  }
+
+  // If both are geo points, compare the raw IDs.
+  if (a.getDatatype() == Datatype::GeoPoint &&
+      b.getDatatype() == Datatype::GeoPoint) {
+    return fromBool(std::invoke(comparator, a.getBits(), b.getBits()));
+  }
+
+  auto visitor = [comparator, &a, &b]<typename A, typename B>(
+                     const A& aValue, const B& bValue) -> ComparisonResult {
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
+      static_assert((!std::is_same_v<A, B>) ||
+                    ad_utility::SameAsAny<A, LocalVocabIndex, GeoPoint,
+                                          Id::UndefinedType>);
+      AD_LOG_ERROR << "Comparison not implemented for types "
+                   << toString(a.getDatatype()) << " and "
+                   << toString(b.getDatatype()) << std::endl;
       AD_FAIL();
     }
   };
-
-  return ValueId::visitTwo(visitor, a, b);
+  return a.visit([&visitor, &b](const auto& aValue) {
+    return b.visit([&visitor, aValue](const auto& bValue) -> ComparisonResult {
+      return visitor(aValue, bValue);
+    });
+  });
 }
 }  // namespace detail
 

@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -8,19 +10,22 @@
 #include <limits>
 #include <optional>
 
-#include "global/Constants.h"
 #include "util/Exception.h"
 
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
-  std::optional<uint64_t> _limit;
-  uint64_t _textLimit = TEXT_LIMIT_DEFAULT;
+  std::optional<uint64_t> _limit = std::nullopt;
   uint64_t _offset = 0;
+  std::optional<uint64_t> textLimit_ = std::nullopt;
+  std::optional<uint64_t> exportLimit_ = std::nullopt;
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
   uint64_t limitOrDefault() const {
     return _limit.value_or(std::numeric_limits<uint64_t>::max());
+  }
+  uint64_t exportLimitOrDefault() const {
+    return exportLimit_.value_or(std::numeric_limits<uint64_t>::max());
   }
 
   // Return the minimum of the offset and the `actualSize` of a query result.
@@ -31,10 +36,10 @@ struct LimitOffsetClause {
     return std::min(actualSize, _offset);
   }
 
-  // When applying the limit and offset to a table of `actualSize`, what is the
-  // actual upper bound (as an index into the table) for the resulting elements.
-  // In the most simple case this is `limit + offset`, but this function handles
-  // all possible overflows. The result will always be `<= actualSize`.
+  // Return the largest index into a table of size `actualSize` when applying
+  // the limit and offset. When a limit and offset are specified and the table
+  // is large enough, this is simply `limit + offset`. Otherwise, it is
+  // appropriately clamped.
   uint64_t upperBound(uint64_t actualSize) const {
     auto val = limitOrDefault() + _offset;
     val = val >= std::max(limitOrDefault(), _offset)
@@ -52,6 +57,11 @@ struct LimitOffsetClause {
     AD_CORRECTNESS_CHECK(upper >= offset);
     return upper - offset;
   }
+
+  // Return true iff there is neither a limit nor an offset clause.
+  // Note: The `TEXTLIMIT` is ignored for this function, as it is irrelevant
+  // almost always.
+  bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
   bool operator==(const LimitOffsetClause&) const = default;
 };

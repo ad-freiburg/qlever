@@ -82,9 +82,13 @@ class Synchronized {
   /// is this a shared_mutex?
   constexpr static bool isShared = AllowsSharedLocking<Mutex>::value;
 
-  /// Not copyable because of the Mutex
-  Synchronized(const Synchronized&) = delete;
-  Synchronized& operator=(const Synchronized&) = delete;
+ public:
+  /// Copying will copy the data, but not request ordering index or the mutex.
+  Synchronized(const Synchronized& rhs) : data_{*rhs.wlock()} {}
+  Synchronized& operator=(const Synchronized& rhs) {
+    *wlock() = *rhs.wlock();
+    return *this;
+  }
   /// default Movable
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
@@ -94,9 +98,10 @@ class Synchronized {
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
-  template <typename Arg, typename... Args>
-  requires(!std::same_as<std::remove_cvref_t<Arg>, Synchronized>)
-  explicit(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
+  CPP_template(typename Arg, typename... Args)(requires CPP_NOT(
+      std::same_as<std::remove_cvref_t<Arg>,
+                   Synchronized>)) explicit(sizeof...(Args) == 0)
+      Synchronized(Arg&& arg, Args&&... args)
       : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 
   template <typename... Args>
@@ -107,7 +112,7 @@ class Synchronized {
    * type, return the result.
    *
    * Note that return type deduction is done via auto which means,
-   * that no references are passed out. This happens deliberatly as
+   * that no references are passed out. This happens deliberately as
    * passing out references to the underlying type would ignore the locking.
    */
   template <typename F>
@@ -116,7 +121,7 @@ class Synchronized {
     return f(data_);
   }
 
-  /// const overload of with WriteLock
+  /// const overload of `withWriteLock`
   template <typename F>
   auto withWriteLock(F f) const {
     std::lock_guard l(mutex());
@@ -146,7 +151,7 @@ class Synchronized {
    * return the result.
    *
    * Note that return type deduction is done via auto which means,
-   * that no references are passed out. This happens deliberatly as
+   * that no references are passed out. This happens deliberately as
    * passing out references to the underlying type would ignore the locking.
    * Only supported if the mutex allows shared locking and the
    * function type F only treats its object as const.
@@ -216,8 +221,8 @@ class Synchronized {
 
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
-  template <typename U>
-  requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&> toBaseReference() {
+  CPP_template_2(typename U)(requires std::is_base_of_v<U, T>)
+      Synchronized<U&, Mutex&> toBaseReference() {
     return {ConstructWithMutex{}, mutex(), data_};
   }
 

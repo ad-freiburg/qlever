@@ -6,23 +6,44 @@
 #include <array>
 #include <tuple>
 
-#include "../global/Id.h"
+#include "global/Id.h"
 
-using std::array;
-using std::tuple;
-
-template <int i0, int i1, int i2>
+template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
-    if (a[i0] == b[i0]) {
-      if (a[i1] == b[i1]) {
-        return a[i2] < b[i2];
-      }
-      return a[i1] < b[i1];
+    if constexpr (!hasGraphColumn) {
+      AD_EXPENSIVE_CHECK(a.size() >= 3 && b.size() >= 3);
+    } else {
+      AD_EXPENSIVE_CHECK(a.size() >= ADDITIONAL_COLUMN_GRAPH_ID &&
+                         b.size() >= ADDITIONAL_COLUMN_GRAPH_ID);
     }
-    return a[i0] < b[i0];
+    constexpr auto compare = &Id::compareWithoutLocalVocab;
+    // TODO<joka921> The manual invoking is ugly, probably we could use
+    // `ql::ranges::lexicographical_compare`, but we have to carefully measure
+    // that this change doesn't slow down the index build.
+    auto c1 = std::invoke(compare, a[i0], b[i0]);
+    if (c1 != 0) {
+      return c1 < 0;
+    }
+    auto c2 = std::invoke(compare, a[i1], b[i1]);
+    if (c2 != 0) {
+      return c2 < 0;
+    }
+    auto c3 = std::invoke(compare, a[i2], b[i2]);
+    if constexpr (!hasGraphColumn) {
+      return c3 < 0;
+    } else {
+      if (c3 != 0) {
+        return c3 < 0;
+      }
+      // If the triples are equal, we compare by the Graph column. This is
+      // necessary to handle UPDATEs correctly.
+      static constexpr auto g = ADDITIONAL_COLUMN_GRAPH_ID;
+      auto cGraph = std::invoke(compare, a[g], b[g]);
+      return cGraph < 0;
+    }
   }
 
   // Value that is strictly smaller than any input element.
@@ -33,11 +54,9 @@ struct SortTriple {
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
-using SortByPOS = SortTriple<1, 2, 0>;
+using SortByPSONoGraphColumn = SortTriple<1, 0, 2, false>;
 using SortBySPO = SortTriple<0, 1, 2>;
-using SortBySOP = SortTriple<0, 2, 1>;
 using SortByOSP = SortTriple<2, 0, 1>;
-using SortByOPS = SortTriple<2, 1, 0>;
 
 // TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
@@ -45,23 +64,11 @@ struct SortText {
                        Score, bool>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
-    if (std::get<0>(a) == std::get<0>(b)) {
-      if (std::get<4>(a) == std::get<4>(b)) {
-        if (std::get<1>(a) == std::get<1>(b)) {
-          if (std::get<2>(a) == std::get<2>(b)) {
-            return std::get<3>(a) < std::get<3>(b);
-          } else {
-            return std::get<2>(a) < std::get<2>(b);
-          }
-        } else {
-          return std::get<1>(a) < std::get<1>(b);
-        }
-      } else {
-        return !std::get<4>(a);
-      }
-    } else {
-      return std::get<0>(a) < std::get<0>(b);
-    }
+    auto permute = [](const T& x) {
+      using namespace std;
+      return tie(get<0>(x), get<4>(x), get<1>(x), get<2>(x), get<3>(x));
+    };
+    return permute(a) < permute(b);
   }
 
   // min sentinel = value which is strictly smaller that any input element

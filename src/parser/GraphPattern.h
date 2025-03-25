@@ -8,12 +8,23 @@
 #include <string>
 #include <vector>
 
+#include "parser/TripleComponent.h"
 #include "parser/data/SparqlFilter.h"
 
 namespace parsedQuery {
 
 // Forward declarations.
 struct GraphPatternOperation;
+
+// Struct that store meta information about a text limit operation.
+// It is used to store the variables that are used in the operation and the IDs
+// of the operations that must be completed before applying the text limit
+// operation.
+struct TextLimitMetaObject {
+  std::vector<Variable> entityVars_;
+  std::vector<Variable> scoreVars_;
+  uint64_t idsOfMustBeFinishedOperations_;
+};
 
 // Groups triplets and filters. Represents a node in a tree (as graph patterns
 // are recursive).
@@ -27,26 +38,25 @@ class GraphPattern {
   GraphPattern& operator=(const GraphPattern& other);
   GraphPattern& operator=(GraphPattern&& other) noexcept;
   ~GraphPattern();
-  void toString(std::ostringstream& os, int indentation = 0) const;
   // Traverse the graph pattern tree and assigns a unique ID to every graph
   // pattern.
-  void recomputeIds(size_t* id_count = nullptr);
 
   // Modify query to take care of language filter. `variable` is the variable,
-  // `languageInQuotes` is the language.
-  void addLanguageFilter(const Variable& variable,
+  // `languageInQuotes` is the language. Return `true` if it could successfully
+  // be applied, false otherwise.
+  bool addLanguageFilter(const Variable& variable,
                          const std::string& languageInQuotes);
 
   bool _optional;
-
-  // An ID that is only used by the QueryPlanner.
-  // TODO<joka921> This should not be part of this class.
-  size_t _id = size_t(-1);
 
   // Filters always apply to the complete GraphPattern, no matter where
   // they appear. For VALUES and Triples, the order matters, so they
   // become children.
   std::vector<SparqlFilter> _filters;
   std::vector<GraphPatternOperation> _graphPatterns;
+
+  // Hashmap that stores for each text variable the corresponding
+  // TextLimitMetaObject
+  ad_utility::HashMap<Variable, TextLimitMetaObject> textLimits_;
 };
 }  // namespace parsedQuery

@@ -17,6 +17,7 @@
 #include <memory>
 #include <memory_resource>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -51,9 +52,8 @@ class LocaleManager {
   using U8String = std::basic_string<uint8_t>;
   using U8StringView = std::basic_string_view<uint8_t>;
 
-  template <typename T>
-  requires(ad_utility::isTypeAnyOf<T, U8String, U8StringView>)
-  class SortKeyImpl {
+  CPP_template(typename T)(requires ad_utility::SimilarToAny<
+                           T, U8String, U8StringView>) class SortKeyImpl {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}
@@ -94,7 +94,8 @@ class LocaleManager {
 
   /// Default constructor. Use the settings from "../global/Constants.h"
   LocaleManager()
-      : LocaleManager(LOCALE_DEFAULT_LANG, LOCALE_DEFAULT_COUNTRY,
+      : LocaleManager(std::string{LOCALE_DEFAULT_LANG},
+                      std::string{LOCALE_DEFAULT_COUNTRY},
                       LOCALE_DEFAULT_IGNORE_PUNCTUATION){};
 
   /**
@@ -160,7 +161,7 @@ class LocaleManager {
    */
   template <typename T, typename U>
   static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
-                     [[maybe_unused]] const Level) {
+                     [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
 
@@ -177,9 +178,12 @@ class LocaleManager {
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  void getSortKey(
-      std::string_view s, const Level level,
-      std::invocable<const uint8_t*, size_t> auto resultFunction) const {
+  // clang-format off
+  CPP_template(typename F)(
+    requires ranges::invocable<F, const uint8_t*, size_t>)
+      // clang-format on
+      void getSortKey(std::string_view s, const Level level,
+                      F resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer`.
@@ -188,10 +192,10 @@ class LocaleManager {
     std::vector<uint8_t> sortKeyBuffer;
     // The actual computation of the sort key is very expensive, so we first
     // allocate a buffer that is typically large enough to store the sort key.
-    sortKeyBuffer.resize(50 * s.size());
+    static constexpr size_t maxBufferSize = std::numeric_limits<int32_t>::max();
+    sortKeyBuffer.resize(std::min(50 * s.size(), maxBufferSize));
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
     static constexpr auto intMax = std::numeric_limits<int32_t>::max();
-    AD_CORRECTNESS_CHECK(sortKeyBuffer.size() <= static_cast<size_t>(intMax));
     auto sz = col.getSortKey(utf16, sortKeyBuffer.data(),
                              static_cast<int32_t>(sortKeyBuffer.size()));
     AD_CONTRACT_CHECK(sz >= 0);
@@ -313,7 +317,7 @@ class LocaleManager {
    * different steps in icu. */
   std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
   const icu::Normalizer2* _normalizer =
       nullptr;  // actually locale-independent but useful to be placed here
@@ -462,6 +466,17 @@ class SimpleStringComparator {
     auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
     return cmp < 0;
   }
+
+  // This method is left undefined on purpose, as it is only used for
+  // constraints checking in the <ranges> header for the UnicodeVocabulary
+  // class.
+  bool operator()(const LocaleManager::SortKey& a, std::string_view s,
+                  [[maybe_unused]] const Level l = Level::PRIMARY) const;
+
+  // Same goes for this function (undefined on purpose).
+  bool operator()(const LocaleManager::SortKey& a,
+                  const LocaleManager::SortKey& b,
+                  [[maybe_unused]] Level level = Level::PRIMARY) const;
 
   /**
    * @brief Transform a string s to the SortKey of the first possible
@@ -659,13 +674,6 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B, C>& a,
                             const SplitValBase<A, B, C>& b,
                             const Level level) const {
-    // Currently all internal words stand before all external words.
-    // TODO<joka921> This has to be changed once we have the IDs interleaved
-    // via the MilestoneIdManager.
-    if (a.isExternalized_ != b.isExternalized_) {
-      return a.isExternalized_ ? 1 : -1;
-    }
-
     if (auto res =
             std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
         res != 0) {
@@ -793,7 +801,7 @@ class TripleComponentComparator {
         auto alloc =
             std::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
-        std::ranges::copy(s, ptr);
+        ql::ranges::copy(s, ptr);
         return {ptr, ptr + s.size()};
       };
       LocaleManager::SortKeyView sortKey;

@@ -5,9 +5,15 @@
 
 #include "parser/GraphPatternOperation.h"
 
+#include <optional>
+#include <string_view>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
+#include "parser/TripleComponent.h"
+#include "util/Exception.h"
 #include "util/Forward.h"
 
 namespace parsedQuery {
@@ -47,14 +53,15 @@ auto m(auto&&... args) {
 // Special member functions for the `Subquery` class
 Subquery::Subquery() : _subquery{m()} {}
 Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
-Subquery::Subquery(ParsedQuery&& pq) : _subquery{m(std::move(pq))} {}
-Subquery::Subquery(Subquery&& pq) : _subquery{m(std::move(pq.get()))} {}
+Subquery::Subquery(ParsedQuery&& pq) noexcept : _subquery{m(std::move(pq))} {}
+Subquery::Subquery(Subquery&& pq) noexcept
+    : _subquery{m(std::move(pq.get()))} {}
 Subquery::Subquery(const Subquery& pq) : _subquery{m(pq.get())} {}
 Subquery& Subquery::operator=(const Subquery& pq) {
   _subquery = m(pq.get());
   return *this;
 }
-Subquery& Subquery::operator=(Subquery&& pq) {
+Subquery& Subquery::operator=(Subquery&& pq) noexcept {
   _subquery = m(std::move(pq.get()));
   return *this;
 }
@@ -65,63 +72,6 @@ const ParsedQuery& Subquery::get() const { return *_subquery; }
 // _____________________________________________________________________________
 void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   ad_utility::appendVector(_triples, std::move(other._triples));
-}
-
-// _____________________________________________________________________________
-void GraphPatternOperation::toString(std::ostringstream& os,
-                                     int indentation) const {
-  for (int j = 1; j < indentation; ++j) os << "  ";
-
-  visit([&os, indentation](auto&& arg) {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, Optional>) {
-      os << "OPTIONAL ";
-      arg._child.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, GroupGraphPattern>) {
-      os << "GROUP ";
-      arg._child.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, Union>) {
-      arg._child1.toString(os, indentation);
-      os << " UNION ";
-      arg._child2.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, Subquery>) {
-      // TODO<joka921> make the subquery a value-semantics type.
-      os << arg.get().asString();
-    } else if constexpr (std::is_same_v<T, Values>) {
-      os << "VALUES (" << arg._inlineValues.variablesToString() << ") "
-         << arg._inlineValues.valuesToString();
-    } else if constexpr (std::is_same_v<T, Service>) {
-      os << "SERVICE " << arg.serviceIri_.toSparql() << " { "
-         << arg.graphPatternAsString_ << " }";
-    } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
-      for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
-        os << "\n";
-        for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._triples[i].asString() << ',';
-      }
-      if (arg._triples.size() > 0) {
-        os << "\n";
-        for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._triples.back().asString();
-      }
-
-    } else if constexpr (std::is_same_v<T, Bind>) {
-      os << "BIND " << arg._expression.getDescriptor() << " as "
-         << arg._target.name() << "\n";
-      // TODO<joka921> proper ToString (are they used for something?)
-    } else if constexpr (std::is_same_v<T, Minus>) {
-      os << "MINUS ";
-      arg._child.toString(os, indentation);
-    } else {
-      static_assert(std::is_same_v<T, TransPath>);
-      /*
-      os << "TRANS PATH from " << arg._left << " to " << arg._right
-         << " with at least " << arg._min << " and at most " << arg._max
-         << " steps of ";
-      arg._childGraphPattern.toString(os, indentation);
-       */
-    }
-  });
 }
 
 // ____________________________________________________________________________

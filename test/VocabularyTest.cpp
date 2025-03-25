@@ -18,20 +18,23 @@ TEST(VocabularyTest, getIdForWordTest) {
 
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
-    v.createFromSet(s);
+    auto filename = "vocTest1.dat";
+    v.createFromSet(s, filename);
     WordVocabIndex idx;
     ASSERT_TRUE(v.getId("ba", &idx));
     ASSERT_EQ(2u, idx.get());
     ASSERT_TRUE(v.getId("a", &idx));
     ASSERT_EQ(0u, idx.get());
     ASSERT_FALSE(v.getId("foo", &idx));
+    ad_utility::deleteFile(filename);
   }
 
   // with case insensitive ordering
   TextVocabulary voc;
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
-  voc.createFromSet(s2);
+  auto filename = "vocTest2.dat";
+  voc.createFromSet(s2, filename);
   WordVocabIndex idx;
   ASSERT_TRUE(voc.getId("Ba", &idx));
   ASSERT_EQ(2u, idx.get());
@@ -39,54 +42,44 @@ TEST(VocabularyTest, getIdForWordTest) {
   ASSERT_EQ(0u, idx.get());
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &idx));
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
   ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
                                 "wordB4"};
-  v.createFromSet(s);
+  auto filename = "vocTest3.dat";
+  v.createFromSet(s, filename);
 
   uint64_t word0 = 0;
-  IdRange retVal;
   // Match exactly one
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal._first.get());
-  ASSERT_EQ(word0 + 1, retVal._last.get());
+  auto retVal = v.getIdRangeForFullTextPrefix("wordA1*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 1, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match all
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal._first.get());
-  ASSERT_EQ(word0 + 4, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("word*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
   // Match first two
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA*", &retVal));
-  ASSERT_EQ(word0, retVal._first.get());
-  ASSERT_EQ(word0 + 1, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("wordA*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match last three
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordB*", &retVal));
-  ASSERT_EQ(word0 + 2, retVal._first.get());
-  ASSERT_EQ(word0 + 4, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("wordB*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 2, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
-  ASSERT_FALSE(v.getIdRangeForFullTextPrefix("foo*", &retVal));
-}
-
-TEST(VocabularyTest, readWriteTest) {
-  {
-    TextVocabulary v;
-    ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
-                                  "wordB4"};
-    v.createFromSet(s);
-    ASSERT_EQ(size_t(5), v.size());
-
-    v.writeToFile("_testtmp_vocfile");
-  }
-
-  TextVocabulary v2;
-  v2.readFromFile("_testtmp_vocfile");
-  ASSERT_EQ(size_t(5), v2.size());
-  remove("_testtmp_vocfile");
+  retVal = v.getIdRangeForFullTextPrefix("foo*");
+  ASSERT_FALSE(retVal.has_value());
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, createFromSetTest) {
@@ -96,13 +89,15 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ba");
   s.insert("car");
   TextVocabulary v;
-  v.createFromSet(s);
+  auto filename = "vocTest4.dat";
+  v.createFromSet(s, filename);
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
   ASSERT_FALSE(v.getId("foo", &idx));
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
@@ -112,17 +107,21 @@ TEST(VocabularyTest, IncompleteLiterals) {
 }
 
 TEST(Vocabulary, PrefixFilter) {
-  RdfsVocabulary voc;
-  voc.setLocale("en", "US", true);
-  ad_utility::HashSet<string> s;
+  RdfsVocabulary vocabulary;
+  vocabulary.setLocale("en", "US", true);
+  ad_utility::HashSet<string> words;
 
-  s.insert("\"exa\"");
-  s.insert("\"exp\"");
-  s.insert("\"ext\"");
-  s.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
-  voc.createFromSet(s);
+  words.insert("\"exa\"");
+  words.insert("\"exp\"");
+  words.insert("\"ext\"");
+  words.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
+  auto filename = "vocTest5.dat";
+  vocabulary.createFromSet(words, filename);
 
-  auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first.get(), 1u);
-  ASSERT_EQ(x.second.get(), 2u);
+  // Found in internal but not in external vocabulary.
+  auto ranges = vocabulary.prefixRanges("\"exp");
+  RdfsVocabulary::PrefixRanges expectedRanges{
+      {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)}}};
+  ASSERT_EQ(ranges, expectedRanges);
+  ad_utility::deleteFile(filename);
 }

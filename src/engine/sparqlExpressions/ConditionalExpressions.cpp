@@ -5,15 +5,18 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
+#include "util/ChunkedForLoop.h"
+#include "util/CompilerWarnings.h"
 
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
 [[maybe_unused]] auto ifImpl =
-    []<SingleExpressionResult T, SingleExpressionResult U>(
-        EffectiveBooleanValueGetter::Result condition, T&& i,
-        U&& e) -> IdOrString requires std::is_rvalue_reference_v<T&&> &&
-                                      std::is_rvalue_reference_v<U&&> {
+    []<typename T, typename U>(EffectiveBooleanValueGetter::Result condition,
+                               T&& i, U&& e)
+    -> CPP_ret(IdOrLiteralOrIri)(
+        requires SingleExpressionResult<T>&& SingleExpressionResult<U>&&
+            std::is_rvalue_reference_v<T&&>&& std::is_rvalue_reference_v<U&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {
@@ -33,6 +36,8 @@ class CoalesceExpression : public VariadicExpression {
 
   // _____________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
+    // Arbitrarily chosen interval after which to check for cancellation.
+    constexpr size_t CHUNK_SIZE = 1'000'000;
     // Set up one vector with the indices of the elements that are still unbound
     // so far and one for the indices that remain unbound after applying one of
     // the children.
@@ -42,68 +47,89 @@ class CoalesceExpression : public VariadicExpression {
     nextUnboundIndices.reserve(ctx->size());
 
     // Initially all result are unbound.
-    for (size_t i = 0; i < ctx->size(); ++i) {
-      // TODO<C++23> use `std::ranges::to<vector>(std::views::iota...)`.
-      unboundIndices.push_back(i);
-    }
-    VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
+    ad_utility::chunkedForLoop<CHUNK_SIZE>(
+        0, ctx->size(),
+        [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
+        [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
+    VectorWithMemoryLimit<IdOrLiteralOrIri> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
-                IdOrString{Id::makeUndefined()});
+                IdOrLiteralOrIri{Id::makeUndefined()});
+    if (result.empty()) {
+      return result;
+    }
 
-    auto isUnbound = [](const IdOrString& x) {
+    ctx->cancellationHandle_->throwIfCancelled();
+
+    auto isUnbound = [](const IdOrLiteralOrIri& x) {
       return (std::holds_alternative<Id>(x) &&
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult = [
-      &nextUnboundIndices, &unboundIndices, &isUnbound, &result
-    ]<SingleExpressionResult T>(T && childResult) requires isConstantResult<T> {
-      IdOrString constantResult{AD_FWD(childResult)};
+    auto visitConstantExpressionResult =
+        CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
+                            &result, ctx)(typename T)(T && childResult)(
+            requires SingleExpressionResult<T> && isConstantResult<T>) {
+      IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
       }
-      for (const auto& idx : unboundIndices) {
-        result[idx] = constantResult;
-      }
+      ad_utility::chunkedForLoop<CHUNK_SIZE>(
+          0, unboundIndices.size(),
+          [&unboundIndices, &result, &constantResult](size_t idx) {
+            // GCC 12 & 13 report this as potential uninitialized
+            // use of a variable when compiling with -O3, which seems to
+            // be a false positive, so we suppress the warning here. See
+            // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109561 for
+            // more information.
+            DISABLE_UNINITIALIZED_WARNINGS
+            result[unboundIndices[idx]] = constantResult;
+          },
+          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
+    ENABLE_UNINITIALIZED_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
     auto visitVectorExpressionResult =
-        [&result, &unboundIndices, &nextUnboundIndices, &ctx, &
-         isUnbound ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
-      static_assert(!isConstantResult<T>);
+        CPP_template_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
+                            &isUnbound)(typename T)(T && childResult)(
+            requires CPP_NOT(isConstantResult<T> && SingleExpressionResult<T> &&
+                             std::is_rvalue_reference_v<T&&>)) {
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
-      // Index of the current row.
-      size_t i = 0;
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
       AD_CORRECTNESS_CHECK(unboundIdxIt != unboundIndices.end());
-      for (auto& el : gen) {
-        // Skip all the indices where the result is already bound from a
-        // previous child.
-        if (i == *unboundIdxIt) {
-          if (IdOrString val{std::move(el)}; isUnbound(val)) {
-            nextUnboundIndices.push_back(i);
-          } else {
-            result.at(*unboundIdxIt) = std::move(val);
-          }
-          ++unboundIdxIt;
-          if (unboundIdxIt == unboundIndices.end()) {
-            return;
-          }
-        }
-        ++i;
-      }
+      auto generatorIterator = gen.begin();
+      ad_utility::chunkedForLoop<CHUNK_SIZE>(
+          0, ctx->size(),
+          [&unboundIdxIt, &isUnbound, &nextUnboundIndices, &result,
+           &unboundIndices,
+           &generatorIterator](size_t i, const auto& breakLoop) {
+            // Skip all the indices where the result is already bound from a
+            // previous child.
+            if (i == *unboundIdxIt) {
+              if (IdOrLiteralOrIri val{std::move(*generatorIterator)};
+                  isUnbound(val)) {
+                nextUnboundIndices.push_back(i);
+              } else {
+                result.at(*unboundIdxIt) = std::move(val);
+              }
+              ++unboundIdxIt;
+              if (unboundIdxIt == unboundIndices.end()) {
+                breakLoop();
+                return;
+              }
+            }
+            ++generatorIterator;
+          },
+          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    auto visitExpressionResult =
-        [
-          &visitConstantExpressionResult, &visitVectorExpressionResult
-        ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
+    auto visitExpressionResult = CPP_template_lambda(
+        &visitConstantExpressionResult,
+        &visitVectorExpressionResult)(typename T)(T && childResult)(
+        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       // If the previous expression result is a constant, we can skip the
       // loop.
       if constexpr (isConstantResult<T>) {
@@ -119,6 +145,7 @@ class CoalesceExpression : public VariadicExpression {
       std::visit(visitExpressionResult, child->evaluate(ctx));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
+      ctx->cancellationHandle_->throwIfCancelled();
       // Early stopping if no more unbound result remain.
       if (unboundIndices.empty()) {
         break;

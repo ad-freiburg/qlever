@@ -3,12 +3,15 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/ValueId.h"
+#include "parser/GeoPoint.h"
+#include "parser/Literal.h"
 #include "parser/TripleComponent.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::literals;
 using namespace ad_utility::testing;
@@ -66,6 +69,24 @@ TEST(TripleComponent, setAndGetVariable) {
   ASSERT_EQ(tc.getVariable(), Variable{"?x"});
 }
 
+TEST(TripleComponent, setAndGetId) {
+  Id id = Id::makeFromVocabIndex(VocabIndex::make(1));
+  TripleComponent tc{id};
+  ASSERT_TRUE(tc.isId());
+  ASSERT_FALSE(tc.isVariable());
+  ASSERT_FALSE(tc.isString());
+  ASSERT_FALSE(tc.isDouble());
+  ASSERT_FALSE(tc.isInt());
+  ASSERT_FALSE(tc.isBool());
+  ASSERT_FALSE(tc.isIri());
+  ASSERT_FALSE(tc.isLiteral());
+  ASSERT_FALSE(tc.isUndef());
+  ASSERT_EQ(tc, id);
+  ASSERT_EQ(tc.getId(), id);
+  const TripleComponent tcConst = std::move(tc);
+  ASSERT_EQ(tcConst.getId(), id);
+}
+
 TEST(TripleComponent, assignmentOperator) {
   TripleComponent object;
   object = -12.435;
@@ -112,7 +133,7 @@ TEST(TripleComponent, toRdfLiteral) {
   object = -43.3;
   ASSERT_EQ(object.toRdfLiteral(),
             R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#decimal>)");
-  object = DateOrLargeYear{123456, DateOrLargeYear::Type::Year};
+  object = DateYearOrDuration{123456, DateYearOrDuration::Type::Year};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
 }
@@ -123,7 +144,15 @@ TEST(TripleComponent, toValueIdIfNotString) {
   tc = 131.4;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
 
-  DateOrLargeYear date{123456, DateOrLargeYear::Type::Year};
+  tc = TripleComponent{GeoPoint(47.9, 7.8)};
+  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+            Datatype::GeoPoint);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+                  47.9);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLng(),
+                  7.8);
+
+  DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), Id::makeFromDate(date));
   tc = "<x>";
@@ -143,20 +172,24 @@ TEST(TripleComponent, toValueId) {
   auto qec = getQec("<x> <y> <z>. <x> <y> \"alpha\".");
   const auto& vocab = qec->getIndex().getVocab();
 
-  TripleComponent tc = "<x>";
-  Id id = I(10293478);
-  qec->getIndex().getId("<x>", &id);
+  TripleComponent tc = iri("<x>");
+  auto getId = makeGetId(qec->getIndex());
+  Id id = getId("<x>");
   ASSERT_EQ(tc.toValueId(vocab).value(), id);
 
   tc = lit("\"alpha\"");
-  qec->getIndex().getId("\"alpha\"", &id);
+  id = getId("\"alpha\"");
   EXPECT_EQ(tc.toValueId(vocab).value(), id);
 
-  tc = "<notexisting>";
+  tc = iri("<notexisting>");
   ASSERT_FALSE(tc.toValueId(vocab).has_value());
   tc = 42;
 
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
+
+  tc = iri(HAS_PATTERN_PREDICATE);
+  ASSERT_EQ(tc.toValueId(vocab).value(),
+            getId(std::string{HAS_PATTERN_PREDICATE}));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {
@@ -191,4 +224,29 @@ TEST(TripleComponent, invalidDatatypeForLiteral) {
 
   // Something that is invalid because it is none of the above
   ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
+}
+
+// _____________________________________________________________________________1
+TEST(TripleComponent, toString) {
+  using namespace ::testing;
+  auto match = [](const auto& matcher) {
+    auto makeTcAndToString = [](auto&& val) {
+      return TripleComponent{AD_FWD(val)}.toString();
+    };
+    return ResultOf(makeTcAndToString, matcher);
+  };
+
+  EXPECT_THAT(GeoPoint(13, 14), match(StartsWith("G:POINT(14.")));
+  EXPECT_THAT("hello", match("hello"));
+  EXPECT_THAT(12, match("12"));
+  EXPECT_THAT(12.3, match("12.3"));
+  using Tc = TripleComponent;
+  EXPECT_THAT(Tc::UNDEF{}, match("UNDEF"));
+  EXPECT_THAT(Variable("?x"), match("?x"));
+  EXPECT_THAT(Tc::Literal::literalWithoutQuotes("hallo"), match("\"hallo\""));
+  EXPECT_THAT(Tc::Iri::fromIrirefWithoutBrackets("blim"), match("<blim>"));
+  EXPECT_THAT(DateYearOrDuration(Date(2000, 1, 1)), match("DATE: 2000-01-01"));
+  EXPECT_THAT(true, match("true"));
+  EXPECT_THAT(false, match("false"));
+  EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }

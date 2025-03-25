@@ -26,7 +26,7 @@ class MultiColumnJoin : public Operation {
                   std::shared_ptr<QueryExecutionTree> t2);
 
  protected:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
@@ -34,11 +34,6 @@ class MultiColumnJoin : public Operation {
   size_t getResultWidth() const override;
 
   vector<ColumnIndex> resultSortedOn() const override;
-
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
 
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
@@ -62,13 +57,15 @@ class MultiColumnJoin : public Operation {
    *width resultWidth (or be left vector that should have resultWidth entries).
    *This method is made public here for unit testing purposes.
    **/
-  static void computeMultiColumnJoin(
+  void computeMultiColumnJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);
 
  private:
-  ResultTable computeResult() override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

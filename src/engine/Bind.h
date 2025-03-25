@@ -1,62 +1,58 @@
-//
-// Created by johannes on 19.04.20.
-//
+//  Copyright 2020, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_BIND_H
-#define QLEVER_BIND_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
-/// BIND operation, currently only supports a very limited subset of expressions
+// BIND operation.
 class Bind : public Operation {
  public:
+  static constexpr size_t CHUNK_SIZE = 10'000;
+
+  // ____________________________________________________________________________
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       parsedQuery::Bind b)
-      : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
+       parsedQuery::Bind b);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] string asStringImpl(size_t indent) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }
   [[nodiscard]] string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
-  void setTextLimit(size_t limit) override;
   size_t getCostEstimate() override;
+  bool supportsLimit() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const {
-    return _bind._target.name();
-  }
-
  protected:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult(bool requestLaziness) override;
+
+  static IdTable cloneSubView(const IdTable& idTable,
+                              const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.
-  template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  void computeExpressionBind(
-      IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-      const ResultTable& inputResultTable,
-      sparqlExpression::SparqlExpression* expression) const;
+  IdTable computeExpressionBind(
+      LocalVocab* localVocab, IdTable idTable,
+      const sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
-
-#endif  // QLEVER_BIND_H

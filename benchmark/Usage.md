@@ -30,15 +30,16 @@ Secondly, you should write your class inside the `ad_benchmark` namespace, where
 Now, the interface for benchmark classes has 5 functions:
 
 - `name`
-- `getMetadata`
+- `getGeneralMetadata`
 - `runAllBenchmarks`
-- `getConfigManager`  
-
-`getMetadata` is for advanced features, and comes with a default implementation, that doesn't actually do anything. So it can be safely ignored for the time being.  
-
-Likewise, `getConfigManager` can always be ignored. This is a function purely for usage by the infrastructure and already implemented.
+- `getConfigManager`
+- `updateDefaultGeneralMetadata`  
 
 `name` should just return the name of your benchmark class, so that you can easily identify it later.
+
+`getGeneralMetadata` and `getConfigManager`are getters for member variables, that are used for advanced features. So they can be safely ignored for the time being.
+
+`updateDefaultGeneralMetadata` exists solely for the infrastructure and should be ignored.
 
 `runAllBenchmarks` is where you actually measure your functions using the classes of `BenchmarkMeasurementContainer.h`, which should be created using `BenchmarkResults`, who will save them and later pass them on for processing by the infrastructure.
 Which could look like this:
@@ -67,7 +68,7 @@ BenchmarkResults runAllBenchmarks(){
   /*
   Create an empty table with a number of rows and columns. Doesn't measure anything.
   The number of columns can not be changed after creation, but the number of rows can.
-  Important: The row names aren't saved in a seperate container, but INSIDE the
+  Important: The row names aren't saved in a separate container, but INSIDE the
   first column of the table.
   */
   auto& table = results.addTable(identifier, {"rowName1", "rowName2", "etc."},
@@ -125,7 +126,7 @@ You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 
 - At `metadata()` of created `ResultTable` objects, in order to give metadata information about the table.
 
-- Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
+- In your own class, under the getter `getGeneralMetadata()`. The returned member variable exists in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one.
 
 ## Runtime configuration
 
@@ -183,7 +184,7 @@ In both of those, you have to write out the complete path to your configuration 
 For example: Let's say, you defined a configuration option `someNumber` and added it with the path `tableSizes/someNumber`. Then, if you wanted to set it to `20` using JSON, you would have to write:
 
 ```json
-{"tableSizes": "someNumber": 20}
+{"tableSizes": "some-number": 20}
 ```
 
 However, **if** the passed values can't be interpreted as the correct types for the configuration options, an exception will be thrown.

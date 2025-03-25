@@ -2,8 +2,9 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TYPEDINDEX_H
-#define QLEVER_TYPEDINDEX_H
+#pragma once
+
+#include <ostream>
 
 #include "util/ConstexprSmallString.h"
 
@@ -61,5 +62,3 @@ struct TypedIndex {
   constexpr TypedIndex(Type value) noexcept : _value{value} {}
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_TYPEDINDEX_H

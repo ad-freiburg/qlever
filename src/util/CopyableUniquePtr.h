@@ -14,15 +14,15 @@
 namespace ad_utility {
 
 /*
-A version of `std::unique_ptr` with a copy assigment operator and a copy
-constructor, which both copy the dereferenced pointer to create a new instace
+A version of `std::unique_ptr` with a copy assignment operator and a copy
+constructor, which both copy the dereferenced pointer to create a new instance
 of the object for the `unique_ptr`.
 Currently not written with support for dynamically-allocated array of objects
 in mind, so that may not work.
 */
-template <typename T, typename Deleter = std::default_delete<T>>
-requires std::is_copy_constructible_v<T>
-class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
+CPP_template(typename T, typename Deleter = std::default_delete<T>)(
+    requires std::is_copy_constructible_v<T>) class CopyableUniquePtr
+    : public std::unique_ptr<T, Deleter> {
   // This makes calling functions, etc. from the base class so much easier.
   using Base = std::unique_ptr<T, Deleter>;
 
@@ -50,7 +50,9 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   CopyableUniquePtr& operator=(CopyableUniquePtr&& ptr) = default;
 
   // Json serialization.
-  friend void to_json(nlohmann::json& j, const CopyableUniquePtr& p) {
+  CPP_template_2(typename S)(
+      requires OrderedOrUnorderedJson<
+          S>) friend void to_json(S& j, const CopyableUniquePtr& p) {
     /*
     The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on

@@ -10,10 +10,10 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -27,7 +27,7 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
@@ -35,8 +35,6 @@ class Filter : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
-
-  void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -56,13 +54,33 @@ class Filter : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 
-  ResultTable computeResult() override;
+  // The method is directly invoked with the construction of this `Filter`
+  // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
+  // from the corresponding `SparqlExpression` and uses them to call
+  // `QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree()` on the
+  // `subtree_`. If necessary the `QueryExecutionTree` for this
+  // entity will be updated.
+  void setPrefilterExpressionForChildren();
 
-  template <size_t WIDTH>
-  void computeFilterImpl(IdTable* outputIdTable,
-                         const ResultTable& inputResultTable);
+  Result computeResult(bool requestLaziness) override;
+
+  // Perform the actual filter operation of the data provided.
+  CPP_template(int WIDTH, typename Table)(
+      requires ad_utility::SimilarTo<
+          Table, IdTable>) void computeFilterImpl(IdTable& dynamicResultTable,
+                                                  Table&& input,
+                                                  const LocalVocab& localVocab,
+                                                  std::vector<ColumnIndex>
+                                                      sortedBy) const;
+
+  // Run `computeFilterImpl` on the provided IdTable
+  CPP_template(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+      IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
+                            const LocalVocab& localVocab) const;
 };

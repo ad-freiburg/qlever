@@ -1,37 +1,101 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
 #pragma once
 
-#include <iomanip>
-#include <iostream>
+#include <gtest/gtest_prod.h>
+
 #include <memory>
-#include <utility>
 
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
-#include "util/Exception.h"
-#include "util/Log.h"
-#include "util/TypeTraits.h"
+#include "util/CopyableSynchronization.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
+enum class ComputationMode {
+  FULLY_MATERIALIZED,
+  ONLY_IF_CACHED,
+  LAZY_IF_SUPPORTED
+};
+
 class Operation {
-  using SharedCancellationHandle =
-      std::shared_ptr<ad_utility::CancellationHandle>;
+ private:
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
 
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
+
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
+  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
+
+  // Collect all the warnings that were created during the creation or
+  // execution of this operation. This attribute is declared mutable in order to
+  // allow const-functions in subclasses of Operation to add warnings.
+  using ThreadsafeWarnings = ad_utility::Synchronized<std::vector<std::string>>;
+  mutable ThreadsafeWarnings warnings_;
+
+  // The limit from a SPARQL `LIMIT` clause.
+
+  // Note: This limit will only be set in the following cases:
+  // 1. This operation is the last operation of a subquery
+  // 2. This operation is the last operation of a query AND it supports an
+  //    efficient calculation of the limit (see also the `supportsLimit()`
+  //    function).
+  // We have chosen this design (in contrast to a dedicated subclass
+  // of `Operation`) to favor such efficient implementations of a limit in the
+  // future.
+  LimitOffsetClause _limit;
+
+  // Mutex that protects the `variableToColumnMap_` below.
+  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
+  // Store the mapping from variables to column indices. `nullopt` means that
+  // this map has not yet been computed. This computation is typically performed
+  // in the const member function `getInternallyVisibleVariableColumns`, so we
+  // have to make it threadsafe.
+  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
+
+  // Store the mapping from variables to column indices that is externally
+  // visible. This might be different from the `variableToColumnMap_` in case of
+  // a subquery that doesn't select all variables.
+  mutable std::optional<VariableToColumnMap>
+      externallyVisibleVariableToColumnMap_;
+
+  // Mutex that protects the `_resultSortedColumns` below.
+  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
+
+  // Store the list of columns by which the result is sorted.
+  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
+      std::nullopt;
+
+  // True if this operation does not support limits/offsets natively and a
+  // limit/offset is applied post computation.
+  bool externalLimitApplied_ = false;
+
+  // See the documentation of the getter function below.
+  bool canResultBeCached_ = true;
+
  public:
+  // Holds a `PrefilterExpression` with its corresponding `Variable`.
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 
@@ -51,7 +115,7 @@ class Operation {
 
   /// get non-owning constant pointers to all the held subtrees to actually use
   /// the Execution Trees as trees
-  std::vector<const QueryExecutionTree*> getChildren() const {
+  virtual std::vector<const QueryExecutionTree*> getChildren() const final {
     vector<QueryExecutionTree*> interm{
         const_cast<Operation*>(this)->getChildren()};
     return {interm.begin(), interm.end()};
@@ -60,6 +124,17 @@ class Operation {
   // recursively collect all Warnings generated by all descendants
   vector<string> collectWarnings() const;
 
+  // Add a warning to the `Operation`. The warning will be returned by
+  // `collectWarnings()` above.
+  void addWarning(std::string warning) const {
+    warnings_.wlock()->push_back(std::move(warning));
+  }
+
+  // If unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a
+  // warning.
+  void addWarningOrThrow(std::string warning) const;
+
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
@@ -67,41 +142,56 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  // Get a unique, not ambiguous string representation for a subtree.
-  // This should act like an ID for each subtree.
-  // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
-  virtual string asString(size_t indent = 0) const final {
-    auto result = asStringImpl(indent);
-    if (_limit._limit.has_value()) {
-      absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
-    }
-    if (_limit._offset != 0) {
-      absl::StrAppend(&result, " OFFSET ", _limit._offset);
-    }
-    return result;
+  const auto& locatedTriplesSnapshot() const {
+    return _executionContext->locatedTriplesSnapshot();
   }
 
+  // Get an updated `QueryExecutionTree` that applies as many of the given
+  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
+  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
+  // is not changed.
+  // Note: The default implementation always returns `nullopt` while this
+  // function is currently only overridden for `IndexScan`. In the future also
+  // other operations could pass on the `PrefilterExpressions` to the
+  // `IndexScan` in their subtree.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+      const {
+    return std::nullopt;
+  };
+
+  // Get a unique, not ambiguous string representation for a subtree.
+  // This should act like an ID for each subtree.
+  // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
+  virtual std::string getCacheKey() const final;
+
+  // If this function returns `false`, then the result of this `Operation` will
+  // never be stored in the cache. It might however be read from the cache.
+  // This can be used, if the operation actually only returns a subset of the
+  // actual result because it has been constrained by a parent operation (e.g.
+  // an IndexScan that has been prefiltered by another operation which it is
+  // joined with).
+  virtual bool canResultBeCached() const { return canResultBeCached_; }
+
+  // After calling this function, `canResultBeCached()` will return `false` (see
+  // above for details).
+  virtual void disableStoringInCache() final { canResultBeCached_ = false; }
+
  private:
-  // The individual implementation of `asString` (see above) that has to be
-  // customized by every child class.
-  virtual string asStringImpl(size_t indent = 0) const = 0;
+  // The individual implementation of `getCacheKey` (see above) that has to
+  // be customized by every child class.
+  virtual string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
   virtual string getDescriptor() const = 0;
   virtual size_t getResultWidth() const = 0;
-  virtual void setTextLimit(size_t limit);
 
   virtual size_t getCostEstimate() = 0;
 
-  virtual uint64_t getSizeEstimate() final {
-    if (_limit._limit.has_value()) {
-      return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
-    } else {
-      return getSizeEstimateBeforeLimit();
-    }
-  }
+  virtual uint64_t getSizeEstimate() final;
 
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
@@ -117,6 +207,20 @@ class Operation {
       const final;
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
+
+  /// Return true if this object is an instance of `IndexScan` and has the
+  /// specified number of variables. For this to work this function needs to
+  /// be overridden by `IndexScan` to do the right thing.
+  virtual bool isIndexScanWithNumVariables(
+      [[maybe_unused]] size_t target) const {
+    return false;
+  }
+
+  // See the member variable with the same name below for documentation.
+  std::optional<std::shared_ptr<const Result>>&
+  precomputedResultBecauseSiblingOfService() {
+    return precomputedResultBecauseSiblingOfService_;
+  }
 
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 
@@ -139,14 +243,17 @@ class Operation {
    * @param isRoot Has be set to `true` iff this is the root operation of a
    * complete query to obtain the expected behavior wrt cache pinning and
    * runtime information in error cases.
-   * @param onlyReadFromCache If set to true the result is only returned if it
-   * can be read from the cache without any computation. If the result is not in
-   * the cache, `nullptr` will be returned.
+   * @param computationMode If set to `CACHE_ONLY` the result is only returned
+   * if it can be read from the cache without any computation. If the result is
+   * not in the cache, `nullptr` will be returned. If set to `LAZY` this will
+   * request the result to be computable at request in chunks. If the operation
+   * does not support this, it will do nothing.
    * @return A shared pointer to the result. May only be `nullptr` if
    * `onlyReadFromCache` is true.
    */
-  shared_ptr<const ResultTable> getResult(bool isRoot = false,
-                                          bool onlyReadFromCache = false);
+  std::shared_ptr<const Result> getResult(
+      bool isRoot = false,
+      ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole
@@ -163,7 +270,15 @@ class Operation {
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
 
-  // True iff this operation directly implement a `LIMIT` clause on its result.
+  // Optimization for lazy operations where the very nature of the operation
+  // makes it unlikely to ever fit in cache when completely materialized.
+  virtual bool unlikelyToFitInCache(
+      [[maybe_unused]] ad_utility::MemorySize maxCacheableSize) const {
+    return false;
+  }
+
+  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
+  // its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
@@ -181,6 +296,10 @@ class Operation {
     return _executionContext;
   }
 
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return getExecutionContext()->getAllocator();
+  }
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
@@ -190,9 +309,20 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ResultTable computeResultOnlyForTesting() final {
-    return computeResult();
+  virtual Result computeResultOnlyForTesting(
+      bool requestLaziness = false) final {
+    return computeResult(requestLaziness);
   }
+
+  const auto& getLimit() const { return _limit; }
+
+ private:
+  // Actual implementation of `clone()` without extra checks.
+  virtual std::unique_ptr<Operation> cloneImpl() const = 0;
+
+ public:
+  // Create a deep copy of this operation.
+  std::unique_ptr<Operation> clone() const;
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -205,29 +335,18 @@ class Operation {
    */
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
-  const auto& getLimit() const { return _limit; }
-
-  /// interface to the generated warnings of this operation
-  std::vector<std::string>& getWarnings() { return _warnings; }
-  [[nodiscard]] const std::vector<std::string>& getWarnings() const {
-    return _warnings;
-  }
+  // get access to the generated warnings of this operation.
+  const ThreadsafeWarnings& getWarnings() const { return warnings_; }
 
   // Check if the cancellation flag has been set and throw an exception if
   // that's the case. This will be called at strategic places on code that
   // potentially can take a (too) long time. This function is designed to be
-  // as lightweight as possible because of that. The `detailSupplier` allows to
-  // pass a message to add to any potential exception that might be thrown.
+  // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      const ad_utility::InvocableWithConvertibleReturnType<
-          std::string_view> auto& detailSupplier) const {
-    cancellationHandle_->throwIfCancelled(detailSupplier);
-  }
-
-  // Same as checkCancellation, but with the descriptor of this operation
-  // as string.
-  AD_ALWAYS_INLINE void checkCancellation() const {
-    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
+      ad_utility::source_location location =
+          ad_utility::source_location::current()) const {
+    cancellationHandle_->throwIfCancelled(location,
+                                          [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;
@@ -247,12 +366,38 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ResultTable computeResult() = 0;
+  virtual Result computeResult(bool requestLaziness) = 0;
+
+  // Update the runtime information of this operation according to the given
+  // arguments, considering the possibility that the initial runtime information
+  // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
+  // `applyToLimit` indicates if the stats should be applied to the runtime
+  // information of the limit, or the runtime information of the actual
+  // operation. If `supportsLimit() == true`, then the operation does already
+  // track the limit stats correctly and there's no need to keep track of both.
+  // Otherwise `externalLimitApplied_` decides how stat tracking should be
+  // handled.
+  void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
+                          std::chrono::microseconds duration) const;
+
+  // Perform the expensive computation modeled by the subclass of this
+  // `Operation`. The value provided by `computationMode` decides if lazy
+  // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
+  // an `ad_utility::Exception`.
+  Result runComputation(const ad_utility::Timer& timer,
+                        ComputationMode computationMode);
+
+  // Call `runComputation` and transform it into a value that could be inserted
+  // into the cache.
+  CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
+                                              ComputationMode computationMode,
+                                              const QueryCacheKey& cacheKey,
+                                              bool pinned, bool isRoot);
 
   // Create and store the complete runtime information for this operation after
-  // it has either been succesfully computed or read from the cache.
+  // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
-      const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
+      const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
       Milliseconds duration) final;
 
   // Similar to the function above, but the components are specified manually.
@@ -261,7 +406,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t numRows, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
@@ -305,56 +450,17 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  std::shared_ptr<RuntimeInformation> _runtimeInfo =
-      std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
-  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
-  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
-
-  // Collect all the warnings that were created during the creation or
-  // execution of this operation.
-  std::vector<std::string> _warnings;
-
-  // The limit from a SPARQL `LIMIT` clause.
-
-  // Note: This limit will only be set in the following cases:
-  // 1. This operation is the last operation of a subquery
-  // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimit()`
-  //    function).
-  // We have chosen this design (in contrast to a dedicated subclass
-  // of `Operation`) to favor such efficient implementations of a limit in the
-  // future.
-  LimitOffsetClause _limit;
-
-  // A mutex that can be "copied". The semantics are, that copying will create
-  // a new mutex. This is sufficient for applications like in
-  // `getInternallyVisibleVariableColumns()` where we just want to make a
-  // `const` member function that modifies a `mutable` member threadsafe.
-  struct CopyableMutex : std::mutex {
-    using std::mutex::mutex;
-    CopyableMutex(const CopyableMutex&) {}
-  };
-
-  // Mutex that protects the `variableToColumnMap_` below.
-  mutable CopyableMutex variableToColumnMapMutex_;
-  // Store the mapping from variables to column indices. `nullopt` means that
-  // this map has not yet been computed. This computation is typically performed
-  // in the const member function `getInternallyVisibleVariableColumns`, so we
-  // have to make it threadsafe.
-  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
-
-  // Store the mapping from variables to column indices that is externally
-  // visible. This might be different from the `variableToColumnMap_` in case of
-  // a subquery that doesn't select all variables.
-  mutable std::optional<VariableToColumnMap>
-      externallyVisibleVariableToColumnMap_;
-
-  // Mutex that protects the `_resultSortedColumns` below.
-  mutable CopyableMutex _resultSortedColumnsMutex;
-
-  // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
-      std::nullopt;
+  FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
+  FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
+  FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
+  FRIEND_TEST(Operation,
+              ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption);
+  FRIEND_TEST(Operation,
+              verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly);
+  FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
+  FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };

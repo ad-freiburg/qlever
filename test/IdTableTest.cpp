@@ -67,7 +67,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
   // The following calls do not change the table, but are also not expected to
   // do so because we explicitly bind to a `value_type`.
   {
-    IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
+    IdTable::row_type row = t[0];  // Explicitly copy/materialize the full row.
     row[0] = V(50);
     // We have changed the copied row, but not the table.
     ASSERT_EQ(V(50), row[0]);
@@ -76,7 +76,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
   {
     // Exactly the same example, but with `iterator`s and `iterator_traits`.
     std::iterator_traits<IdTable::iterator>::value_type row =
-        *t.begin();  // Explitly copy/materialize the full row.
+        *t.begin();  // Explicitly copy/materialize the full row.
     row[0] = V(51);
     // We have changed the copied row, but not the table.
     ASSERT_EQ(V(51), row[0]);
@@ -164,7 +164,7 @@ TEST(IdTable, rowIterators) {
     ASSERT_FALSE(
         std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
 
-    std::ranges::sort(row.begin(), row.end());
+    ql::ranges::sort(row.begin(), row.end());
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -203,8 +203,8 @@ TEST(IdTable, rowIterators) {
     std::sort(std::move(row).begin(), std::move(row).end());
     // The following calls all would not compile:
     // std::sort(row.begin(), row.end());
-    // std::ranges::sort(row);
-    // std::ranges::sort(std::move(row));
+    // ql::ranges::sort(row);
+    // ql::ranges::sort(std::move(row));
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -254,7 +254,7 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
 // to be made. It is necessary because for some `IdTable` instantiations
 // (for example when the data is stored in a `BufferedVector`) the `clone`
 // member function needs additional arguments. Currently, the only additional
-// argument is the filenmae for the copy for `IdTables` that store their data in
+// argument is the filename for the copy for `IdTables` that store their data in
 // a `BufferedVector`. For an example usage see the test cases below.
 auto clone(const auto& table, auto... args) {
   if constexpr (requires { table.clone(); }) {
@@ -358,7 +358,7 @@ TEST(IdTable, insertAtEnd) {
 
     Table t2 = clone(init, std::move(additionalArgs.at(2))...);
     // Test inserting at the end
-    t2.insertAtEnd(t1.begin(), t1.end());
+    t2.insertAtEnd(t1);
     for (size_t i = 0; i < init.size(); i++) {
       ASSERT_EQ(init[i], t2[i]) << i;
     }
@@ -367,6 +367,45 @@ TEST(IdTable, insertAtEnd) {
     }
   };
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, insertAtEndWithPermutationAndLimit) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    Table init{4, std::move(additionalArgs.at(0))...};
+    init.push_back({make(7), make(2), make(4), make(1)});
+    init.push_back({make(0), make(22), make(1), make(4)});
+
+    Table t1{3, std::move(additionalArgs.at(1))...};
+    t1.push_back({make(1), make(0), make(6)});
+    t1.push_back({make(3), make(1), make(8)});
+    t1.push_back({make(0), make(6), make(8)});
+    t1.push_back({make(9), make(2), make(6)});
+
+    Table t2 = clone(init, std::move(additionalArgs.at(2))...);
+    std::vector<ColumnIndex> permutation{2, 1, 0, 3};
+    // Test inserting at the end
+    t2.insertAtEnd(t1, 1, 3, permutation, make(1337));
+    for (size_t i = 0; i < init.size(); i++) {
+      ASSERT_EQ(init[i], t2[i]) << i;
+    }
+    ASSERT_EQ(t2.size(), init.size() + 2);
+
+    EXPECT_EQ(t2.at(2, 0), make(8));
+    EXPECT_EQ(t2.at(2, 1), make(1));
+    EXPECT_EQ(t2.at(2, 2), make(3));
+    EXPECT_EQ(t2.at(2, 3), make(1337));
+
+    EXPECT_EQ(t2.at(3, 0), make(8));
+    EXPECT_EQ(t2.at(3, 1), make(6));
+    EXPECT_EQ(t2.at(3, 2), make(0));
+    EXPECT_EQ(t2.at(3, 3), make(1337));
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable,
+                              "IdTable.insertAtEndWithPermutationAndLimit");
 }
 
 TEST(IdTable, reserve_and_resize) {
@@ -570,8 +609,7 @@ TEST(IdTable, sortTest) {
 
   // Now try the actual sort
   test = orig.clone();
-  std::ranges::sort(test, std::less<>{},
-                    [](const auto& row) { return row[0]; });
+  ql::ranges::sort(test, std::less<>{}, [](const auto& row) { return row[0]; });
 
   // The sorted order of the orig tables should be:
   // 3, 2, 0, 4, 5, 1
@@ -646,7 +684,7 @@ TEST(IdTableStaticTest, insert) {
   IdTableStatic<4> t2 = init.clone();
 
   // Test inserting at the end
-  t2.insertAtEnd(t1.begin(), t1.end());
+  t2.insertAtEnd(t1);
   for (size_t i = 0; i < init.size(); i++) {
     for (size_t j = 0; j < init.numColumns(); j++) {
       EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
@@ -974,6 +1012,54 @@ TEST(IdTable, setColumnSubset) {
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
 
+TEST(IdTableStatic, setColumnSubset) {
+  using IntTable = columnBasedIdTable::IdTable<int, 3>;
+  IntTable t;
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0), ColumnIndex(1)});
+  ASSERT_EQ(3, t.numColumns());
+  ASSERT_EQ(3, t.numRows());
+  ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
+  ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
+  ASSERT_THAT(t.getColumn(2), ::testing::ElementsAre(10, 11, 12));
+
+  // Duplicate columns are not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
+  // A column index is out of range.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2, 3}));
+
+  // For static tables, we need a permutation, a real subset is not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
+}
+TEST(IdTable, deleteColumn) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{3};  // three columns.
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+
+  EXPECT_ANY_THROW(t.deleteColumn(3));
+  EXPECT_ANY_THROW(t.deleteColumn(4));
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  // Set up the expected table.
+  // The middle column was dropped.
+  IntTable e{2};
+  e.push_back({0, 20});
+  e.push_back({1, 21});
+  e.push_back({2, 22});
+  EXPECT_EQ(t.numRows(), 3);
+  EXPECT_EQ(t.numColumns(), 2);
+  EXPECT_EQ(t, e);
+
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  ASSERT_NO_THROW(t.deleteColumn(0));
+  // No more columns left
+  EXPECT_EQ(t.numColumns(), 0);
+  EXPECT_EQ(t.numRows(), 3);
+}
+
 TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;
   {
@@ -1052,8 +1138,56 @@ TEST(IdTable, shrinkToFit) {
 TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
-  static_assert(std::ranges::random_access_range<IdTable>);
-  static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
+  static_assert(ql::ranges::random_access_range<IdTable>);
+  static_assert(ql::ranges::random_access_range<IdTableStatic<1>>);
+
+  static_assert(std::is_copy_constructible_v<IdTableView<1>>);
+}
+
+TEST(IdTable, constructorsAreSfinaeFriendly) {
+  // Check, that constructors that take no allocator are disabled if the
+  // allocator is not default-constructible.
+
+  // `IdTable` (in the public namespace) is templated on an
+  // `AllocatorWithMemoryLimit` which is not default-constructible.
+  static_assert(!std::is_default_constructible_v<IdTable>);
+  static_assert(!std::is_constructible_v<IdTable, size_t>);
+
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  //`IntTable` uses `std::allocator`, which is default-constructible.
+  static_assert(std::is_default_constructible_v<IntTable>);
+  static_assert(std::is_constructible_v<IntTable, size_t>);
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, addEmptyColumn) {
+  using ::testing::ElementsAre;
+  using ::testing::Eq;
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  table.addEmptyColumn();
+
+  EXPECT_EQ(table.numColumns(), 2);
+  EXPECT_THAT(table.getColumn(0), ElementsAre(V(1), V(2)));
+  // The new column is uninitialized, so we can't make any more specific
+  // assertions about its content here.
+  EXPECT_EQ(table.getColumn(1).size(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, moveOrClone) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  auto t2 = table.moveOrClone();
+  EXPECT_EQ(table, t2);
+  auto t3 = std::move(table).moveOrClone();
+  EXPECT_EQ(t3, t2);
+  // `table` was moved from.
+  EXPECT_TRUE(table.empty());
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

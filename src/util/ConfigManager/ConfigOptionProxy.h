@@ -12,9 +12,10 @@
 
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
-namespace detail {
+namespace ConfigManagerImpl {
 /*
 @brief Implementation of proxy/reference to a `ConfigOption`. Also saves the
 type of value, that the configuration option holds. Needed, because without a
@@ -26,16 +27,13 @@ access to the referenced config option.
 @tparam ConfigOptionType The kind of config option, this proxy will reference
 to. Must be `ConfigOption`, or `const ConfigOption`.
 */
-template <typename T, typename ConfigOptionType>
-requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes> &&
-         (std::same_as<ConfigOptionType, ConfigOption> ||
-          std::same_as<ConfigOptionType, const ConfigOption>)
-class ConfigOptionProxyImplementation {
+CPP_template(typename T, typename ConfigOptionType)(
+    requires SupportedConfigOptionType<T> CPP_and ad_utility::SameAsAny<
+        ConfigOptionType, ConfigOption,
+        const ConfigOption>) class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
  public:
-  using Type = T;
-
   // Custom constructor.
   explicit ConfigOptionProxyImplementation(ConfigOptionType& opt)
       : option_(&opt) {
@@ -45,40 +43,45 @@ class ConfigOptionProxyImplementation {
 
   // Get access to the configuration option, this is a proxy for. Const access
   // only for the const version, to make the usage clearer.
-  ConfigOptionType& getConfigOption() const
-      requires std::is_const_v<ConfigOptionType> {
+  const ConfigOptionType& getConfigOption() const
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   ConfigOptionType& getConfigOption()
-      requires(!std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   // (Implicit) conversion to `ConfigOptionType&`.
   explicit(false) operator ConfigOptionType&() const
-      requires(std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 
   explicit(false) operator ConfigOptionType&()
-      requires(!std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 };
 
-}  // namespace detail
+}  // namespace ConfigManagerImpl
 
 // A const proxy/reference to a `ConfigOption`. Also saves the type of
 // value, that the configuration option holds.
 template <typename T>
 class ConstConfigOptionProxy
-    : public detail::ConfigOptionProxyImplementation<T, const ConfigOption> {
-  using Base = detail::ConfigOptionProxyImplementation<T, const ConfigOption>;
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<
+          T, const ConfigOption> {
+  using Base =
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, const ConfigOption>;
 
  public:
+  using value_type = T;
+
+  // Construct proxy for the given option.
   explicit ConstConfigOptionProxy(const ConfigOption& opt) : Base(opt) {}
 };
 
@@ -86,10 +89,15 @@ class ConstConfigOptionProxy
 // value, that the configuration option holds.
 template <typename T>
 class ConfigOptionProxy
-    : public detail::ConfigOptionProxyImplementation<T, ConfigOption> {
-  using Base = detail::ConfigOptionProxyImplementation<T, ConfigOption>;
+    : public ConfigManagerImpl::ConfigOptionProxyImplementation<T,
+                                                                ConfigOption> {
+  using Base =
+      ConfigManagerImpl::ConfigOptionProxyImplementation<T, ConfigOption>;
 
  public:
+  using value_type = T;
+
+  // Construct proxy for the given option.
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.
