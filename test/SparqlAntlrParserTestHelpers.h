@@ -1150,6 +1150,20 @@ inline auto NotExists(Matcher<const ParsedQuery&> pattern) {
       &sparqlExpression::makeUnaryNegateExpression, Exists(pattern));
 }
 
+// Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
+// that matches the given `matcher` when comparing the inner parsed query of the
+// `ExistsExpression`.
+inline auto ContainsExistsFilter =
+    [](const Matcher<const ParsedQuery&>& matcher)
+    -> Matcher<const parsedQuery::GraphPattern&> {
+  return AD_FIELD(parsedQuery::GraphPattern, _filters,
+                  ::testing::ElementsAre(AD_FIELD(
+                      SparqlFilter, expression_,
+                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+                                  getExistsExpressions,
+                                  ::testing::ElementsAre(Exists(matcher))))));
+};
+
 // Check that the given filters are set on the graph pattern.
 inline auto Filters = [](const auto&... filterMatchers)
     -> Matcher<const ParsedQuery::GraphPattern&> {

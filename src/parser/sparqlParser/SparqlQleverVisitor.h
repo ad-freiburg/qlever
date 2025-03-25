@@ -18,18 +18,6 @@
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
 
-template <typename T>
-class Reversed {
-  T& _iterable;
-
- public:
-  explicit Reversed(T& iterable) : _iterable(iterable) {}
-
-  auto begin() { return _iterable.rbegin(); };
-
-  auto end() { return _iterable.rend(); }
-};
-
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
  * a `ParsedQuery`.
@@ -275,6 +263,11 @@ class SparqlQleverVisitor {
       Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
+
+  // Limit the variables in EXISTS expressions of the filter to the ones that
+  // are already known outside the EXISTS expression, so that the filter isn't
+  // optimized away because not all variables are covered.
+  void selectExistsVariables(SparqlFilter& filter) const;
 
   ParsedQuery::GraphPattern visit(Parser::GroupGraphPatternContext* ctx);
 
