@@ -38,13 +38,8 @@
 
 grammar SparqlAutomatic;
 
-// query and update are disjoint in the grammar;
-// add a common parent for easier parsing
-queryOrUpdate: (query | update) EOF
-    ;
-
 query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause
+    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
     ;
 
 prologue
@@ -151,8 +146,8 @@ valuesClause : ( VALUES dataBlock )?;
 
 // We have replaced the original recursive definition with an equivalent
 // non-recursive definition for performance reasons.
-// Original definition: `update: prologue (update1 (';' update)? )? ;`
-update: prologue (update1 (';' prologue update1)* (';' prologue)? )? ;
+// Original definition: `update: prologue (update1 (';' update)? )? EOF ;`
+update: prologue (update1 (';' prologue update1)* (';' prologue)? )? EOF ;
 
 update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
 
