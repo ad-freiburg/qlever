@@ -37,6 +37,8 @@ jobs:
           - compiler: gcc
             compiler-version: 18
           - compiler: clang
+            compiler-version: 8
+          - compiler: clang
             compiler-version: 11
           - compiler: clang
             compiler-version: 12
@@ -45,7 +47,7 @@ jobs:
         include:
           - compiler: gcc
             compiler-version: 8
-            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
             build-type: Debug
             expensive-tests: false
             continue-on-error: true
