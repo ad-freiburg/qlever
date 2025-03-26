@@ -57,7 +57,7 @@ class VectorWithMemoryLimit
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
   VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc){};
+      : Base(init, alloc) {}
 
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not

@@ -40,6 +40,11 @@ class ExportQueryExecutionTrees {
       MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
 
+  // Return the corresponding blank node string representation for the export if
+  // this iri is a blank node iri. Otherwise, return std::nullopt.
+  static std::optional<std::string> blankNodeIriToString(
+      const ad_utility::triple_component::Iri& iri);
+
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
   // used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`

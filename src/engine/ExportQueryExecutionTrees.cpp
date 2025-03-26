@@ -180,9 +180,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
        getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
-                                          qet.getVariableColumns(),
-                                          qet.getQec()->getIndex()};
+      ConstructQueryExportContext context{
+          resultSize + i - range.front(), idTable, pair.localVocab_,
+          qet.getVariableColumns(), qet.getQec()->getIndex()};
       using enum PositionInTriple;
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
@@ -424,7 +424,21 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     default:
       AD_FAIL();
   }
-};
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ExportQueryExecutionTrees::blankNodeIriToString(
+    const ad_utility::triple_component::Iri& iri) {
+  const auto& representation = iri.toStringRepresentation();
+  if (representation.starts_with(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
+    std::string_view view = representation;
+    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
+    view.remove_suffix(1);
+    AD_CORRECTNESS_CHECK(view.starts_with("_:"));
+    return std::string{view};
+  }
+  return std::nullopt;
+}
 
 // _____________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
@@ -446,6 +460,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     if constexpr (onlyReturnLiterals) {
       if (!word.isLiteral()) {
         return std::nullopt;
+      }
+    }
+    if (word.isIri()) {
+      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+        return std::pair{std::move(blankNodeString.value()), nullptr};
       }
     }
     if constexpr (removeQuotesAndAngleBrackets) {
@@ -670,9 +689,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab_,
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
           }
