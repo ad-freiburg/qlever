@@ -1752,13 +1752,13 @@ TEST(SparqlParser, builtInCall) {
                     matchNary(makeReplaceExpressionThreeArgs, Var{"?x"},
                               Var{"?y"}, Var{"?z"}));
   expectBuiltInCall(
-      "replace(?x, ?y, ?z, \"imsu\")",
+      "replace(?x, ?y, ?z, \"imsU\")",
       matchNaryWithChildrenMatchers(
           makeReplaceExpressionThreeArgs, variableExpressionMatcher(Var{"?x"}),
           matchNaryWithChildrenMatchers(
               &makeMergeRegexPatternAndFlagsExpression,
               variableExpressionMatcher(Var{"?y"}),
-              matchLiteralExpression(lit("imsu"))),
+              matchLiteralExpression(lit("imsU"))),
           variableExpressionMatcher(Var{"?z"})));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
@@ -1791,7 +1791,22 @@ TEST(SparqlParser, builtInCall) {
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
-  expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
+  auto makeRegexExpressionTwoArgs = [](auto&& arg0, auto&& arg1) {
+    return makeRegexExpression(AD_FWD(arg0), AD_FWD(arg1), nullptr);
+  };
+  expectBuiltInCall(
+      "regex(?x, \"ab\")",
+      matchNaryWithChildrenMatchers(makeRegexExpressionTwoArgs,
+                                    variableExpressionMatcher(Var{"?x"}),
+                                    matchLiteralExpression(lit("ab"))));
+  expectBuiltInCall(
+      "regex(?x, \"ab\", \"imsU\")",
+      matchNaryWithChildrenMatchers(
+          makeRegexExpressionTwoArgs, variableExpressionMatcher(Var{"?x"}),
+          matchNaryWithChildrenMatchers(
+              &makeMergeRegexPatternAndFlagsExpression,
+              matchLiteralExpression(lit("ab")),
+              matchLiteralExpression(lit("imsU")))));
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
