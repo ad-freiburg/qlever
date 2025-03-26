@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_PRINTERS_PAYLOADVARIABLEPRINTERS_H
+#define QLEVER_TEST_PRINTERS_PAYLOADVARIABLEPRINTERS_H
 #include "./VariablePrinters.h"
 #include "parser/PayloadVariables.h"
 
@@ -18,3 +19,5 @@ inline void PrintTo(const PayloadVariables& pv, std::ostream* os) {
     }
   }
 }
+
+#endif  // QLEVER_TEST_PRINTERS_PAYLOADVARIABLEPRINTERS_H

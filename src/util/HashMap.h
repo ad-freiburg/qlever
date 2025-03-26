@@ -3,7 +3,8 @@
 // Author: Björn Buchhold <buchholb@informatik.uni-freiburg.de>
 // Author: Niklas Schnelle <schnelle@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HASHMAP_H
+#define QLEVER_SRC_UTIL_HASHMAP_H
 
 #include <absl/container/flat_hash_map.h>
 
@@ -28,3 +29,5 @@ template <class K, class V,
 using HashMapWithMemoryLimit =
     std::unordered_map<K, V, HashFct, EqualElem, Alloc>;
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_HASHMAP_H

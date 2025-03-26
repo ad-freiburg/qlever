@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_LRUCACHE_H
+#define QLEVER_SRC_UTIL_LRUCACHE_H
 
 #include <absl/container/flat_hash_map.h>
 
@@ -64,3 +65,5 @@ class LRUCache {
 };
 
 }  // namespace ad_utility::util
+
+#endif  // QLEVER_SRC_UTIL_LRUCACHE_H

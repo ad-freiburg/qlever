@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/TypeTraits.h"
@@ -259,3 +260,5 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
 }  // namespace detail
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H

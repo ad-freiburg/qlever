@@ -3,7 +3,8 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
+#define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -230,3 +231,5 @@ class SpatialJoinAlgorithms {
   std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>
       geometries_;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H

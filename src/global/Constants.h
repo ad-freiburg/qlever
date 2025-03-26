@@ -4,7 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
+#define QLEVER_SRC_GLOBAL_CONSTANTS_H
 
 #include <chrono>
 #include <stdexcept>
@@ -260,3 +261,5 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // Operation string is echoed. This operation string is truncated to ensure
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+#endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_TYPES_H
+#define QLEVER_SRC_PARSER_DATA_TYPES_H
 
 #include <array>
 #include <tuple>
@@ -44,3 +45,5 @@ using ObjectsAndPathTriples =
 
 using VarOrAlias = std::variant<Variable, Alias>;
 }  // namespace ad_utility::sparql_types
+
+#endif  // QLEVER_SRC_PARSER_DATA_TYPES_H

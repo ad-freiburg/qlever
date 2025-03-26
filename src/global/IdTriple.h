@@ -4,7 +4,8 @@
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_IDTRIPLE_H
+#define QLEVER_SRC_GLOBAL_IDTRIPLE_H
 
 #include <array>
 #include <ostream>
@@ -67,3 +68,5 @@ struct IdTriple {
     return {ids_[0], ids_[1], ids_[2], ids_[3]};
   }
 };
+
+#endif  // QLEVER_SRC_GLOBAL_IDTRIPLE_H

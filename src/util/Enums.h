@@ -5,7 +5,8 @@
 // This file contains several `enum`s that can be used for stronger typing
 // and better readability instead of builtin types like `bool`.
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ENUMS_H
+#define QLEVER_SRC_UTIL_ENUMS_H
 
 namespace ad_utility {
 
@@ -14,3 +15,5 @@ namespace ad_utility {
 // `IteratorForAccessOperator` and `IdTable` classes.
 enum struct IsConst { True, False };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_ENUMS_H
