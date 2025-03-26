@@ -198,35 +198,24 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
-// LCASE
-[[maybe_unused]] auto lowercaseImpl =
+template <auto toLowerOrToUpper>
+auto upperOrLowerCaseImpl =
     [](std::optional<ad_utility::triple_component::Literal> input)
     -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto new_content =
-        ad_utility::utf8ToLower(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
+    auto newContent = std::invoke(
+        toLowerOrToUpper, asStringViewUnsafe(input.value().getContent()));
+    input.value().replaceContent(newContent);
     return LiteralOrIri(std::move(input.value()));
   }
 };
-using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
+auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
+auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
 
-// UCASE
-[[maybe_unused]] auto uppercaseImpl =
-    [](std::optional<ad_utility::triple_component::Literal> input)
-    -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    auto new_content =
-        ad_utility::utf8ToUpper(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
-    return LiteralOrIri(std::move(input.value()));
-  }
-};
 using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
+using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {

@@ -150,10 +150,18 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
 void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
 // __________________________________________
-void Literal::replaceContentWithSameLength(const std::string& newContent) {
-  AD_CORRECTNESS_CHECK(newContent.size() == beginOfSuffix_ - 2);
-  for (std::size_t i = 1; i < beginOfSuffix_ - 1; ++i) {
-    content_[i] = newContent[i - 1];
+void Literal::replaceContent(const std::string& newContent) {
+  std::size_t minLength = std::min(beginOfSuffix_ - 2, newContent.size());
+  for (std::size_t i = 0; i < minLength; ++i) {
+    content_[i + 1] = newContent[i];
   }
+  if (newContent.size() <= beginOfSuffix_ - 2) {
+    content_.erase(newContent.size() + 1,
+                   beginOfSuffix_ - 2 - newContent.size());
+  } else {
+    content_.insert(beginOfSuffix_ - 1,
+                    newContent.substr((beginOfSuffix_ - 2)));
+  }
+  beginOfSuffix_ = newContent.size() + 2;
 }
 }  // namespace ad_utility::triple_component
