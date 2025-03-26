@@ -124,7 +124,7 @@ LiteralValueGetterWithoutStrFunction::operator()(
 std::optional<std::string> ReplacementStringGetter::operator()(
     Id id, const EvaluationContext* context) const {
   std::optional<std::string> originalString =
-      StringValueGetter::operator()(id, context);
+      LiteralFromIdGetter{}(id, context);
   if (!originalString.has_value()) {
     return originalString;
   }
