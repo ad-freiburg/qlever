@@ -118,6 +118,8 @@ class DeltaTriples {
   TriplesToHandlesMap triplesInserted_;
   TriplesToHandlesMap triplesDeleted_;
 
+  static constexpr std::string_view storagePath = "updates.qlever";
+
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
@@ -159,6 +161,12 @@ class DeltaTriples {
 
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
+
+  // Write the delta triples to disk to persist them between restarts.
+  void writeToDisk() const;
+
+  // Read the delta triples from disk to restore them after a restart.
+  void readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this

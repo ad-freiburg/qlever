@@ -6,10 +6,12 @@
 
 #include "index/DeltaTriples.h"
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
@@ -266,4 +268,54 @@ void DeltaTriples::setOriginalMetadata(
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::writeToDisk() const {
+  auto toRange = [](const TriplesToHandlesMap& map) {
+    return ad_utility::SizedRange{
+        map | ql::views::keys |
+            ql::views::transform(
+                [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+                  return triple.ids_;
+                }) |
+            ql::views::join,
+        map.size() * 4};
+  };
+  std::filesystem::path tempPath = storagePath;
+  tempPath += ".tmp";
+  ad_utility::serializeIds(
+      tempPath, localVocab_,
+      std::array{toRange(triplesDeleted_), toRange(triplesInserted_)});
+  std::filesystem::rename(tempPath, storagePath);
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::readFromDisk() {
+  AD_CONTRACT_CHECK(localVocab_.empty());
+  auto [vocab, idRanges] =
+      ad_utility::deserializeIds(storagePath, index_.getBlankNodeManager());
+  if (idRanges.empty()) {
+    return;
+  }
+  AD_CORRECTNESS_CHECK(idRanges.size() == 2);
+  auto toTriples = [](const std::vector<Id>& ids) {
+    Triples triples;
+    static_assert(std::tuple_size_v<
+                      decltype(std::declval<Triples::value_type>().payload_)> ==
+                  0);
+    constexpr size_t cols = Triples::value_type::NumCols;
+    AD_CORRECTNESS_CHECK(ids.size() % cols == 0);
+    triples.reserve(ids.size() / cols);
+    for (size_t i = 0; i < ids.size(); i += cols) {
+      triples.emplace_back(
+          std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
+    }
+    return triples;
+  };
+  CancellationHandle cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  localVocab_ = std::move(vocab);
 }

@@ -941,6 +941,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
       usePatterns_ = false;
     }
   }
+  deltaTriples_.value().modify<void>(
+      [](DeltaTriples& deltaTriples) { deltaTriples.readFromDisk(); });
 }
 
 // _____________________________________________________________________________

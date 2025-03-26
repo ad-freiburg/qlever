@@ -164,6 +164,8 @@ class LocalVocab {
   // for testing.
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
+  const Set& primaryWordSet() const { return *primaryWordSet_; }
+
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
       ad_utility::BlankNodeManager* blankNodeManager);
@@ -175,7 +177,6 @@ class LocalVocab {
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
-  const Set& primaryWordSet() const { return *primaryWordSet_; }
 
   // Common implementation for the two methods `getIndexAndAddIfNotContained`
   // and `getIndexOrNullopt` above.

@@ -366,6 +366,21 @@ CPP_template(typename Range, typename ElementType)(
   }
 }
 
+// Helper struct to restore size information for a range that has been
+// transformed.
+template <typename R>
+struct SizedRange {
+  R range;
+  std::size_t size_;
+
+  constexpr auto begin() const { return range.begin(); }
+  constexpr auto end() const { return range.end(); }
+  constexpr std::size_t size() const { return size_; }
+};
+
+template <typename R>
+SizedRange(R&&, std::size_t) -> SizedRange<R>;
+
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.
