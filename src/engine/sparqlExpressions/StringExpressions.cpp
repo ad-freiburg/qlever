@@ -256,7 +256,6 @@ class SubstrImpl {
   IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
       NumericValue start, NumericValue length) const {
-
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
@@ -435,13 +434,13 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), StringValueGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input,
+    [](std::optional<ad_utility::triple_component::Literal> s,
        const std::unique_ptr<re2::RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.getLiteral().has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  auto& in = s.getLiteral().value();
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
@@ -453,8 +452,8 @@ using MergeRegexPatternAndFlagsExpression =
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
