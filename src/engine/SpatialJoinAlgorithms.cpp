@@ -299,50 +299,57 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
 
-  auto joinTypeVal = joinType.value_or(SpatialJoinJoinType::INTERSECTS);
+  auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
 
   double withinDist = -1;
 
-  if (joinTypeVal == SpatialJoinJoinType::WITHIN_DIST)
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST)
     withinDist = maxDist.value_or(0);
 
-  sj::Sweeper sweeper(
-      {NUM_THREADS,
-       NUM_THREADS,
-       10000,
-       "",
-       std::string{static_cast<char>(SpatialJoinJoinType::INTERSECTS)},
-       std::string{static_cast<char>(SpatialJoinJoinType::CONTAINS)},
-       std::string{static_cast<char>(SpatialJoinJoinType::COVERS)},
-       std::string{static_cast<char>(SpatialJoinJoinType::TOUCHES)},
-       std::string{static_cast<char>(SpatialJoinJoinType::EQUALS)},
-       std::string{static_cast<char>(SpatialJoinJoinType::OVERLAPS)},
-       std::string{static_cast<char>(SpatialJoinJoinType::CROSSES)},
-       "\n",
-       true,
-       true,
-       true,
-       true,
-       true,
-       true,
-       false,
-       false,
-       withinDist,
-       [&results, &resultDists, joinTypeVal](size_t t, const char* a,
-                                             const char* b, const char* pred) {
-         if (joinTypeVal == SpatialJoinJoinType::WITHIN_DIST) {
-           results[t].push_back({std::atoi(a), std::atoi(b)});
-           resultDists[t].push_back(atof(pred));
-         } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-           results[t].push_back({std::atoi(a), std::atoi(b)});
-         }
-       },
-       {},
-       {},
-       {}},
-      ".", "");
+  const sj::SweeperCfg sweeperCfg = [&] {
+    sj::SweeperCfg cfg;
 
-  AD_LOG_INFO << "Parsing " << idTableLeft->size() << "x"
+    cfg.numThreads = NUM_THREADS;
+    cfg.numCacheThreads = NUM_THREADS;
+    cfg.geomCacheMaxSize = 10000;
+    cfg.pairStart = "";
+    cfg.sepIsect = std::string{static_cast<char>(SpatialJoinType::INTERSECTS)};
+    cfg.sepContains = std::string{static_cast<char>(SpatialJoinType::CONTAINS)};
+    cfg.sepCovers = std::string{static_cast<char>(SpatialJoinType::COVERS)};
+    cfg.sepTouches = std::string{static_cast<char>(SpatialJoinType::TOUCHES)};
+    cfg.sepEquals = std::string{static_cast<char>(SpatialJoinType::EQUALS)};
+    cfg.sepOverlaps = std::string{static_cast<char>(SpatialJoinType::OVERLAPS)};
+    cfg.sepCrosses = std::string{static_cast<char>(SpatialJoinType::CROSSES)};
+    cfg.pairEnd = "";
+    cfg.useBoxIds = true;
+    cfg.useArea = true;
+    cfg.useOBB = false;
+    cfg.useCutouts = true;
+    cfg.useDiagBox = true;
+    cfg.useFastSweepSkip = true;
+    cfg.useInnerOuter = false;
+    cfg.noGeometryChecks = false;
+    cfg.withinDist = withinDist;
+    cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
+                         size_t t, const char* a, const char* b,
+                         const char* pred) {
+      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+        resultDists[t].push_back(atof(pred));
+      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+      }
+    };
+    cfg.logCb = {};
+    cfg.statsCb = {};
+    cfg.sweepProgressCb = {};
+
+    return cfg;
+  }();
+
+  sj::Sweeper sweeper(sweeperCfg, ".", "");
+
+  AD_LOG_INFO << "Parsing " << idTableLeft->size() << " + "
               << idTableRight->size() << " geometries..." << std::endl;
 
   // Populate the index from the left and right table, but start with the

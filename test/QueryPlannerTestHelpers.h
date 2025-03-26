@@ -376,7 +376,7 @@ inline auto SpatialJoin =
         size_t maxDist, size_t maxResults, Variable left, Variable right,
         std::optional<Variable> distanceVariable,
         PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
-        SpatialJoinJoinType joinType, const ChildArgs&... childMatchers) {
+        SpatialJoinType joinType, const ChildArgs&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
                 AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,

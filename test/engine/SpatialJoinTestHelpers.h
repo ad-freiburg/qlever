@@ -321,7 +321,7 @@ inline std::string createMixedDataset() {
 }
 
 // a mixed dataset, which contains points and areas. One of them is the geometry
-// of germeny, where the distance from the midpoint to the borders can not be
+// of germany, where the distance from the midpoint to the borders can not be
 // ignored or approximated as zero
 inline std::string createTrueDistanceDataset() {
   std::string kg;
@@ -347,6 +347,18 @@ inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
+                                  false, true, std::nullopt, 10_kB);
+  return qec;
+}
+
+inline QueryExecutionContext* buildNonSelfJoinDataset() {
+  std::string kg = createTrueDistanceDataset();
+  kg += absl::StrCat("<nodeArea_add> <hasGeometry> <geometryAreaAdd> .\n",
+                     "<geometryAreaAdd> <asWKT> ", approximatedAreaGermany,
+                     " .\n");
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,

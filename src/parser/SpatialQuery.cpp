@@ -54,21 +54,21 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
     auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
     if (type == "intersects") {
-      joinType_ = SpatialJoinJoinType::INTERSECTS;
+      joinType_ = SpatialJoinType::INTERSECTS;
     } else if (type == "covers") {
-      joinType_ = SpatialJoinJoinType::COVERS;
+      joinType_ = SpatialJoinType::COVERS;
     } else if (type == "contains") {
-      joinType_ = SpatialJoinJoinType::CONTAINS;
+      joinType_ = SpatialJoinType::CONTAINS;
     } else if (type == "touches") {
-      joinType_ = SpatialJoinJoinType::TOUCHES;
+      joinType_ = SpatialJoinType::TOUCHES;
     } else if (type == "crosses") {
-      joinType_ = SpatialJoinJoinType::CROSSES;
+      joinType_ = SpatialJoinType::CROSSES;
     } else if (type == "overlaps") {
-      joinType_ = SpatialJoinJoinType::OVERLAPS;
+      joinType_ = SpatialJoinType::OVERLAPS;
     } else if (type == "equals") {
-      joinType_ = SpatialJoinJoinType::EQUALS;
+      joinType_ = SpatialJoinType::EQUALS;
     } else if (type == "within-dist") {
-      joinType_ = SpatialJoinJoinType::WITHIN_DIST;
+      joinType_ = SpatialJoinType::WITHIN_DIST;
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter <joinType> does not refer to a "
@@ -170,9 +170,9 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   }
 
   // Default join type
-  SpatialJoinJoinType joinType = SpatialJoinJoinType::NONE;
+  SpatialJoinType joinType = SpatialJoinType::NONE;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    joinType = SpatialJoinJoinType::INTERSECTS;
+    joinType = SpatialJoinType::INTERSECTS;
     if (joinType_.has_value()) {
       joinType = joinType_.value();
     }

@@ -15,7 +15,7 @@
 #include "parser/data/Variable.h"
 
 // Selection of a SpatialJoin join type
-enum class SpatialJoinJoinType {
+enum class SpatialJoinType {
   NONE,
   INTERSECTS,
   CONTAINS,
@@ -40,7 +40,7 @@ struct MaxDistanceConfig {
 
 // Full spatial join on selected join type
 struct SJConfig {
-  SpatialJoinJoinType joinType_;
+  SpatialJoinType joinType_;
   std::optional<size_t> maxDist_ = std::nullopt;
 };
 
@@ -80,7 +80,7 @@ struct SpatialJoinConfiguration {
   // runtime characteristics.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
-  SpatialJoinJoinType joinType_ = SpatialJoinJoinType::INTERSECTS;
+  SpatialJoinType joinType_ = SpatialJoinType::INTERSECTS;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -95,7 +95,7 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
-  std::optional<SpatialJoinJoinType> joinType_;
+  std::optional<SpatialJoinType> joinType_;
 };
 
 // The spatial join operation without a limit on the maximum number of results
@@ -174,7 +174,7 @@ class SpatialJoin : public Operation {
   SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // retrieve the currently selected SJ jointype
-  SpatialJoinJoinType getJoinType() const { return config_.joinType_; }
+  SpatialJoinType getJoinType() const { return config_.joinType_; }
 
   // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {

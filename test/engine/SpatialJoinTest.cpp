@@ -264,7 +264,7 @@ class SpatialJoinVarColParamTest
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
       bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
       SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM,
-      SpatialJoinJoinType joinType = SpatialJoinJoinType::WITHIN_DIST) {
+      SpatialJoinType joinType = SpatialJoinType::WITHIN_DIST) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -370,21 +370,21 @@ class SpatialJoinVarColParamTest
     }
   }
 
-  void testGetResultWidthOrVariableToColumnMapSpatialJoinIntersects(
+  void testGetResultWidthOrVariableToColumnMapSpatialJoinContains(
       VarColTestSuiteParam parameters) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
-    auto qec = buildTestQEC();
+    auto qec = buildNonSelfJoinDataset();
     auto spJoin2 = makeSpatialJoin(
         qec, parameters, false, PayloadVariables::all(),
-        SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinJoinType::INTERSECTS);
+        SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::CONTAINS);
     auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
         (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
 
     auto numTriples = qec->getIndex().numTriples().normal;
-    ASSERT_EQ(numTriples, 15);
+    ASSERT_EQ(numTriples, 20);
 
     if (!testVarToColMap) {
       ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
@@ -597,9 +597,8 @@ TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoin) {
                                           SpatialJoinAlgorithm::LIBSPATIALJOIN);
 }
 
-TEST_P(SpatialJoinVarColParamTest,
-       variableToColumnMapLibspatialjoinIntersects) {
-  testGetResultWidthOrVariableToColumnMapSpatialJoinIntersects(GetParam());
+TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinContains) {
+  testGetResultWidthOrVariableToColumnMapSpatialJoinContains(GetParam());
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {
