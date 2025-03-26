@@ -67,25 +67,18 @@ inline void readHeader(std::istream& is) {
 
 // Serialize the local vocabulary to the output stream. Returns a mapping from
 // Ids that map to their string position in the file.
-inline absl::flat_hash_map<Id, std::streampos> serializeLocalVocab(
-    std::ostream& os, const LocalVocab& vocab) {
+inline void serializeLocalVocab(std::ostream& os, const LocalVocab& vocab) {
   AD_CONTRACT_CHECK(vocab.numSets() == 1);
   const auto& words = vocab.primaryWordSet();
   uint64_t size = words.size();
   writeBytes(os, size);
 
-  absl::flat_hash_map<Id, std::streampos> mapping{};
-  mapping.reserve(size);
   for (const auto& localVocabEntry : words) {
     const auto& entryString = localVocabEntry.toStringRepresentation();
-    std::streampos stringStart = os.tellp();
-    AD_CORRECTNESS_CHECK(stringStart != std::streampos{-1});
+    writeBytes(os, Id::makeFromLocalVocabIndex(&localVocabEntry).getBits());
     // Make sure to write the null terminator as well.
     os.write(entryString.c_str(), entryString.size() + 1);
-    // Store offset within the file for each local vocab entry.
-    mapping[Id::makeFromLocalVocabIndex(&localVocabEntry)] = stringStart;
   }
-  return mapping;
 }
 
 // Deserialize the local vocabulary from the input stream.
@@ -97,18 +90,15 @@ deserializeLocalVocab(std::istream& is) {
   absl::flat_hash_map<Id::T, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    std::streampos stringStart = is.tellg();
-    AD_CORRECTNESS_CHECK(stringStart != std::streampos{-1});
+    Id::T bits = readBytes<Id::T>(is);
+    AD_CORRECTNESS_CHECK(Id::fromBits(bits).getDatatype() ==
+                         Datatype::LocalVocabIndex);
     std::string value;
     std::getline(is, value, '\0');
     AD_CORRECTNESS_CHECK(is);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(std::move(value)));
-    mapping.emplace(
-        Id::makeFromLocalVocabIndex(
-            reinterpret_cast<LocalVocabIndex>(std::streamoff{stringStart}))
-            .getBits(),
-        Id::makeFromLocalVocabIndex(localVocabIndex));
+    mapping.emplace(bits, Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
 }
@@ -116,23 +106,14 @@ deserializeLocalVocab(std::istream& is) {
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range)(
-    requires ql::ranges::sized_range<
-        Range>) void serializeIds(std::ostream& os, Range&& range,
-                                  const absl::flat_hash_map<Id, std::streampos>&
-                                      localVocabMapping) {
+    requires ql::ranges::sized_range<Range>) void serializeIds(std::ostream& os,
+                                                               Range&& range) {
   static_assert(sizeof(std::streamoff) == sizeof(LocalVocabIndex));
   uint64_t idCount = ql::ranges::size(range);
   // Store the size of the triples.
   writeBytes(os, idCount);
   for (const Id& value : range) {
-    if (value.getDatatype() == Datatype::LocalVocabIndex) {
-      writeBytes(os, Id::makeFromLocalVocabIndex(
-                         reinterpret_cast<LocalVocabIndex>(
-                             std::streamoff{localVocabMapping.at(value)}))
-                         .getBits());
-    } else {
-      writeBytes(os, value.getBits());
-    }
+    writeBytes(os, value.getBits());
   }
 }
 
@@ -172,9 +153,9 @@ CPP_template(typename Range)(
                                   const LocalVocab& vocab, Range&& idRanges) {
   std::ofstream os{path, std::ios::binary};
   detail::writeHeader(os);
-  auto localVocabMapping = detail::serializeLocalVocab(os, vocab);
+  detail::serializeLocalVocab(os, vocab);
   for (const auto& ids : idRanges) {
-    detail::serializeIds(os, ids, localVocabMapping);
+    detail::serializeIds(os, ids);
   }
 }
 
