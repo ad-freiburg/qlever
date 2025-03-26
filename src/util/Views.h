@@ -366,21 +366,22 @@ CPP_template(typename Range, typename ElementType)(
   }
 }
 
-// Helper struct to restore size information for a range that has been
-// transformed.
-template <typename R>
-struct SizedRange {
-  R range;
-  std::size_t size_;
+// Helper struct to keep size information while joining a range.
+template <typename Range>
+requires requires { std::tuple_size_v<ql::ranges::range_value_t<Range>>; }
+class SizedJoinView : public ql::ranges::join_view<Range> {
+  using Base = ql::ranges::join_view<Range>;
 
-  constexpr auto begin() const { return range.begin(); }
-  constexpr auto end() const { return range.end(); }
-  constexpr std::size_t size() const { return size_; }
+ public:
+  using Base::Base;
+  constexpr std::size_t size() const {
+    return ql::ranges::size(this->base()) *
+           std::tuple_size_v<ql::ranges::range_value_t<Range>>;
+  }
 };
 
-template <typename R>
-SizedRange(R&&, std::size_t) -> SizedRange<R>;
-
+CPP_template(typename R)(requires ql::ranges::viewable_range<R>)
+    SizedJoinView(R&&) -> SizedJoinView<R>;
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.

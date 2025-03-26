@@ -273,14 +273,12 @@ void DeltaTriples::setOriginalMetadata(
 // _____________________________________________________________________________
 void DeltaTriples::writeToDisk() const {
   auto toRange = [](const TriplesToHandlesMap& map) {
-    return ad_utility::SizedRange{
+    return ad_utility::SizedJoinView{
         map | ql::views::keys |
-            ql::views::transform(
-                [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
-                  return triple.ids_;
-                }) |
-            ql::views::join,
-        map.size() * 4};
+        ql::views::transform(
+            [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+              return triple.ids_;
+            })};
   };
   std::filesystem::path tempPath = storagePath;
   tempPath += ".tmp";
