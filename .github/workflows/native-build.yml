@@ -29,6 +29,8 @@ jobs:
         additional-cmake-options: [""]
         exclude:
           - compiler: gcc
+            compiler-version: 8
+          - compiler: gcc
             compiler-version: 15
           - compiler: gcc
             compiler-version: 16
@@ -44,6 +46,8 @@ jobs:
             compiler-version: 12
           - compiler: clang
             compiler-version: 13
+          - compiler: clang
+            compiler-version: 15
         include:
           - compiler: gcc
             compiler-version: 8
