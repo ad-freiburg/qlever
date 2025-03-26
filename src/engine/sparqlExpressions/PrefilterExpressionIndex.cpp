@@ -124,7 +124,7 @@ static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
 static std::vector<BlockMetadata> getRelevantBlocks(
     const BlockSubranges& relevantBlockRanges) {
   std::vector<BlockMetadata> relevantBlocks;
-  relevantBlocks.reserve(ql::concepts::transform_reduce(
+  relevantBlocks.reserve(std::transform_reduce(
       relevantBlockRanges.begin(), relevantBlockRanges.end(), 0ULL, std::plus{},
       [](const BlockSubrange& range) { return range.size(); }));
   ql::ranges::copy(relevantBlockRanges | ql::views::join,
