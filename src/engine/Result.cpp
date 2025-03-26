@@ -63,29 +63,6 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
-
-template<typename F>
-class ResultDataGenerator : ad_utility::CachingTransformInputRange<Result::LazyResult, F> {
-  std::vector<ColumnIndex> sortedBy_;
-  std::optional<IdTable::row_type> previousId_ = std::nullopt;
-
-  ResultDataGenerator(Result::LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-      : ad_utility::CachingTransformInputRange<Result::LazyResult, F>(
-            std::move(idTables),
-            [this](Result::IdTableVocabPair& pair) {
-              auto& idTable = pair.idTable_;
-              if (!idTable.empty()) {
-                if (previousId_.has_value()) {
-                  AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy_)(
-                      idTable.at(0), previousId_.value()));
-                }
-                previousId_ = idTable.at(idTable.size() - 1);
-              }
-              assertSortOrderIsRespected(idTable, sortedBy_);
-              return std::move(pair);
-            }),
-        sortedBy_(std::move(sortedBy)) {}
-};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -116,8 +93,21 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{
-          LazyResult{ResultDataGenerator(std::move(idTables), sortedBy)}}},
+    : data_{GenContainer{LazyResult{ad_utility::CachingTransformInputRange(
+          std::move(idTables),
+          [sortedBy, previousId_ = std::optional<IdTable::row_type>{}](
+              Result::IdTableVocabPair& pair) mutable {
+            auto& idTable = pair.idTable_;
+            if (!idTable.empty()) {
+              if (previousId_.has_value()) {
+                AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
+                    idTable.at(0), previousId_.value()));
+              }
+              previousId_ = idTable.at(idTable.size() - 1);
+            }
+            assertSortOrderIsRespected(idTable, sortedBy);
+            return std::move(pair);
+          })}}},
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
