@@ -581,6 +581,39 @@ Awaitable<Server::PlannedQuery> Server::planQuery(
   co_return plannedQuery;
 }
 
+// ____________________________________________________________________________
+Server::PlannedQuery Server::planQuerySync(
+    ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
+    TimeLimit timeLimit, QueryExecutionContext& qec,
+    ad_utility::SharedCancellationHandle handle) {
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
+  // For the same reason (crashes in the conanbuild) we store the coroutine in
+  // an explicit variable instead of directly `co_await`-ing it.
+  QueryPlanner qp(&qec, handle);
+  auto qett = qp.createExecutionTree(operation);
+  PlannedQuery plannedQuery{std::move(operation), std::move(qett)};
+  handle->throwIfCancelled();
+  // Set some additional attributes on the `PlannedQuery`.
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetCancellationHandle(std::move(handle));
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetTimeConstraint(timeLimit);
+  auto& qet = plannedQuery.queryExecutionTree_;
+  qet.isRoot() = true;  // allow pinning of the final result
+  auto timeForQueryPlanning = requestTimer.msecs();
+  auto& runtimeInfoWholeQuery =
+      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
+            << " ms" << std::endl;
+  LOG(TRACE) << qet.getCacheKey() << std::endl;
+  return plannedQuery;
+}
+
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
@@ -923,21 +956,19 @@ CPP_template_2(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit) {
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
-  std::vector<PlannedQuery> plannedUpdates;
-  for (ParsedQuery update : std::move(updates)) {
-    plannedUpdates.push_back(
-        co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
-                           timeLimit, qec, cancellationHandle));
-  }
+
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &cancellationHandle, &plannedUpdates]() {
+      [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit]() {
         // Update the delta triples.
         return index_.deltaTriplesManager().modify<nlohmann::json>(
-            [this, &requestTimer, &cancellationHandle,
-             &plannedUpdates](auto& deltaTriples) {
+            [this, &requestTimer, &cancellationHandle, &updates, &qec,
+             &timeLimit](auto& deltaTriples) {
               json results = json::array();
-              for (const auto& plannedUpdate : plannedUpdates) {
+              for (ParsedQuery& update : updates) {
+                PlannedQuery plannedUpdate =
+                    planQuerySync(std::move(update), requestTimer, timeLimit,
+                                  qec, cancellationHandle);
                 // Use `this` explicitly to silence false-positive errors on
                 // captured `this` being unused.
                 results.push_back(

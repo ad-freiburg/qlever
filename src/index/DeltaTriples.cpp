@@ -243,7 +243,7 @@ ReturnType DeltaTriplesManager::modify(
         }
       });
 }
-// Explicit instantions
+// Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(

@@ -188,6 +188,10 @@ class Server {
       boost::asio::static_thread_pool& thread_pool, ParsedQuery&& operation,
       const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
       QueryExecutionContext& qec, SharedCancellationHandle handle);
+  PlannedQuery planQuerySync(ParsedQuery&& operation,
+                             const ad_utility::Timer& requestTimer,
+                             TimeLimit timeLimit, QueryExecutionContext& qec,
+                             SharedCancellationHandle handle);
   // Creates a `MessageSender` for the given operation.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)

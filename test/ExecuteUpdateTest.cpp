@@ -44,11 +44,11 @@ TEST(ExecuteUpdate, executeUpdate) {
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
     auto pqs = SparqlParser::parseUpdate(update);
-    EXPECT_THAT(pqs, testing::SizeIs(1));
-    auto pq = std::move(pqs[0]);
-    QueryPlanner qp{qec, sharedHandle};
-    const auto qet = qp.createExecutionTree(pq);
-    ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+    for (auto& pq : pqs) {
+      QueryPlanner qp{qec, sharedHandle};
+      const auto qet = qp.createExecutionTree(pq);
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
+    }
   };
   // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
@@ -94,6 +94,17 @@ TEST(ExecuteUpdate, executeUpdate) {
       "CLEAR DEFAULT",
       testing::HasSubstr(
           "Only INSERT/DELETE update operations are currently supported."));
+  expectExecuteUpdate(
+      "INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
+      NumTriples(2, 0, 2));
+  expectExecuteUpdate(
+      "INSERT DATA { <a> <b> <c> }; INSERT DATA { <a> <b> <c> }",
+      NumTriples(1, 0, 1));
+  expectExecuteUpdate(
+      "INSERT DATA { <a> <b> <c> }; DELETE DATA { <a> <b> <c> }",
+      NumTriples(0, 1, 1));
+  expectExecuteUpdate("INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
+                      NumTriples(0, 8, 8));
 }
 
 // _____________________________________________________________________________
