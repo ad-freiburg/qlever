@@ -77,7 +77,10 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.addTextFromContextFile("group_by_test.words", false);
+    _index.buildTextIndexFile(
+        std::pair<std::string, std::string>{"group_by_test.words",
+                                            "group_by_test.documents"},
+        false);
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();

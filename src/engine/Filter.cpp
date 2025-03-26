@@ -60,7 +60,7 @@ void Filter::setPrefilterExpressionForChildren() {
 }
 
 // _____________________________________________________________________________
-ProtoResult Filter::computeResult(bool requestLaziness) {
+Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
   LOG(DEBUG) << "Filter result computation..." << endl;
@@ -98,7 +98,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
           computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
                                    pair.localVocab_, subRes->sortedBy());
-          resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
+          resultLocalVocab.mergeWith(pair.localVocab_);
         }
       });
 

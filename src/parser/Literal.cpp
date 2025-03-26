@@ -135,4 +135,18 @@ Literal Literal::fromStringRepresentation(std::string internal) {
   return Literal{std::move(internal), endIdx + 1};
 }
 
+// __________________________________________
+void Literal::setSubstr(std::size_t start, std::size_t length) {
+  std::size_t contentLength =
+      beginOfSuffix_ - 2;  // Ignore the two quotation marks
+  AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
+  auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
+  std::shift_left(contentBegin, contentBegin + start + length, start);
+  content_.erase(length + 1, contentLength - length);
+  beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
+}
+
+// __________________________________________
+void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
+
 }  // namespace ad_utility::triple_component

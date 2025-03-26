@@ -66,13 +66,17 @@ auto parse =
 auto parseBlankNode = parse<&Parser::blankNode>;
 auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
 auto parseCollection = parse<&Parser::collection>;
+auto parseCollectionConstruct = parse<&Parser::collection, true>;
 auto parseConstructTriples = parse<&Parser::constructTriples>;
 auto parseGraphNode = parse<&Parser::graphNode>;
+auto parseGraphNodeConstruct = parse<&Parser::graphNode, true>;
 auto parseObjectList = parse<&Parser::objectList>;
 auto parsePropertyList = parse<&Parser::propertyList>;
 auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
 auto parseSelectClause = parse<&Parser::selectClause>;
 auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
+auto parseTriplesSameSubjectConstruct =
+    parse<&Parser::triplesSameSubject, true>;
 auto parseVariable = parse<&Parser::var>;
 auto parseVarOrTerm = parse<&Parser::varOrTerm>;
 auto parseVerb = parse<&Parser::verb>;
@@ -266,12 +270,12 @@ TEST(SparqlParser, ComplexConstructTemplate) {
       parse<&Parser::constructTemplate>(input),
       m::ConstructClause(
           {{Blank("0"), Var("?a"), Blank("3")},
-           {Blank("1"), Iri(first), Blank("2")},
-           {Blank("1"), Iri(rest), Iri(nil)},
-           {Blank("2"), Iri(first), Var("?c")},
+           {Blank("2"), Iri(first), Blank("1")},
            {Blank("2"), Iri(rest), Iri(nil)},
+           {Blank("1"), Iri(first), Var("?c")},
+           {Blank("1"), Iri(rest), Iri(nil)},
            {Blank("3"), Iri(first), Var("?b")},
-           {Blank("3"), Iri(rest), Blank("1")},
+           {Blank("3"), Iri(rest), Blank("2")},
            {Blank("0"), Var("?d"), Blank("4")},
            {Blank("4"), Var("?e"), Blank("5")},
            {Blank("5"), Var("?f"), Var("?g")},
@@ -300,12 +304,20 @@ TEST(SparqlParser, GraphTerm) {
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
   expectCompleteParse(
-      parseCollection("( ?a )"),
+      parseCollectionConstruct("( ?a )"),
       Pair(m::BlankNode(true, "0"),
            ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                                    m::VariableVariant("?a")),
                        ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
                                    m::Iri(nil)))));
+  expectCompleteParse(
+      parseCollection("( ?a )"),
+      Pair(m::VariableVariant("?_QLever_internal_variable_0"),
+           ElementsAre(
+               ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                           m::Iri(first), m::VariableVariant("?a")),
+               ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                           m::Iri(rest), m::Iri(nil)))));
 }
 
 TEST(SparqlParser, RdfCollectionTripleVar) {
@@ -313,8 +325,12 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
   auto Blank = [](const std::string& label) {
     return m::BlankNode(true, label);
   };
+  auto BlankVar = [](int number) {
+    return m::VariableVariant(
+        absl::StrCat("?_QLever_internal_variable_", number));
+  };
   expectCompleteParse(
-      parseCollection("( ?a ?b ?c )"),
+      parseCollectionConstruct("( ?a ?b ?c )"),
       Pair(m::BlankNode(true, "2"),
            ElementsAre(ElementsAre(Blank("0"), m::Iri(first), Var("?c")),
                        ElementsAre(Blank("0"), m::Iri(rest), m::Iri(nil)),
@@ -322,6 +338,15 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
                        ElementsAre(Blank("1"), m::Iri(rest), Blank("0")),
                        ElementsAre(Blank("2"), m::Iri(first), Var("?a")),
                        ElementsAre(Blank("2"), m::Iri(rest), Blank("1")))));
+  expectCompleteParse(
+      parseCollection("( ?a ?b ?c )"),
+      Pair(BlankVar(2),
+           ElementsAre(ElementsAre(BlankVar(0), m::Iri(first), Var("?c")),
+                       ElementsAre(BlankVar(0), m::Iri(rest), m::Iri(nil)),
+                       ElementsAre(BlankVar(1), m::Iri(first), Var("?b")),
+                       ElementsAre(BlankVar(1), m::Iri(rest), BlankVar(0)),
+                       ElementsAre(BlankVar(2), m::Iri(first), Var("?a")),
+                       ElementsAre(BlankVar(2), m::Iri(rest), BlankVar(1)))));
 }
 
 TEST(SparqlParser, BlankNodeAnonymous) {
@@ -368,22 +393,38 @@ TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
   expectCompleteParse(
-      parseTriplesSameSubject("(?a) ?b ?c"),
+      parseTriplesSameSubjectConstruct("(?a) ?b ?c"),
       ElementsAre(
           ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                       m::VariableVariant("?a")),
           ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil)),
           ElementsAre(m::BlankNode(true, "0"), m::VariableVariant("?b"),
                       m::VariableVariant("?c"))));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a) ?b ?c"),
+      ElementsAre(
+          ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                      m::Iri(first), m::VariableVariant("?a")),
+          ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                      m::Iri(rest), m::Iri(nil)),
+          ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                      m::VariableVariant("?b"), m::VariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
   expectCompleteParse(
-      parseTriplesSameSubject("(?a)"),
+      parseTriplesSameSubjectConstruct("(?a)"),
       ElementsAre(
           ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                       m::VariableVariant("?a")),
           ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil))));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a)"),
+      ElementsAre(
+          ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                      m::Iri(first), m::VariableVariant("?a")),
+          ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                      m::Iri(rest), m::Iri(nil))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
@@ -484,12 +525,20 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
 
 TEST(SparqlParser, GraphNodeTriplesNode) {
   expectCompleteParse(
-      parseGraphNode("(?a)"),
+      parseGraphNodeConstruct("(?a)"),
       Pair(m::BlankNode(true, "0"),
            ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                                    m::VariableVariant("?a")),
                        ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
                                    m::Iri(nil)))));
+  expectCompleteParse(
+      parseGraphNode("(?a)"),
+      Pair(m::VariableVariant("?_QLever_internal_variable_0"),
+           ElementsAre(
+               ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                           m::Iri(first), m::VariableVariant("?a")),
+               ElementsAre(m::VariableVariant("?_QLever_internal_variable_0"),
+                           m::Iri(rest), m::Iri(nil)))));
 }
 
 TEST(SparqlParser, VarOrTermVariable) {
@@ -827,8 +876,6 @@ TEST(SparqlParser, propertyPathsWriteToStream) {
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
-  auto expectPropertyListPathFails =
-      ExpectParseFails<&Parser::propertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
   expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
@@ -839,7 +886,6 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
       {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<bar>"), Var{"?baz"}}}, {}});
 
   // A more complex example.
-  expectPropertyListPathFails("<bar> ( ?foo ?baz )");
   auto V = m::VariableVariant;
   auto internal0 = m::InternalVariable("0");
   auto internal1 = m::InternalVariable("1");
@@ -1117,10 +1163,10 @@ TEST(SparqlParser, SelectQuery) {
   // FROM and FROM NAMED clauses can still be specified via arguments.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
+    return m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1129,9 +1175,9 @@ TEST(SparqlParser, SelectQuery) {
       selectABarFooMatcher(m::Graphs{TripleComponent::Iri::fromIriref("<x>")},
                            m::Graphs{TripleComponent::Iri::fromIriref("<y>")}));
 
-  expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
-                    testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
-                                                  DummyGraphPatternMatcher)));
+  expectSelectQuery(
+      "SELECT * WHERE { ?x ?y ?z }",
+      m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
       testing::AllOf(
@@ -1338,9 +1384,9 @@ TEST(SparqlParser, AskQuery) {
   // the FROM NAMED parts can be specified via `namedGraphs`.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::AskQuery(
+    return m::AskQuery(
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
+        defaultGraphs, namedGraphs);
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
@@ -1355,8 +1401,7 @@ TEST(SparqlParser, AskQuery) {
                  selectABarFooMatcher(defaultGraphs, namedGraphs));
 
   // ASK whether there are any triples at all.
-  expectAskQuery("ASK { ?x ?y ?z }",
-                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher)));
+  expectAskQuery("ASK { ?x ?y ?z }", m::AskQuery(DummyGraphPatternMatcher));
 
   // ASK queries may contain neither of LIMIT, OFFSET, or TEXTLIMIT.
   expectAskQueryFails("ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10");
@@ -2006,6 +2051,20 @@ auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
   return builtInCallTestHelpers::matchNaryWithChildrenMatchers(
       &makeUnaryNegateExpression, existsMatcher(pattern));
 }
+
+// Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
+// that matches the given `matcher` when comparing the inner parsed query of the
+// `ExistsExpression`.
+using parsedQuery::GraphPattern;
+Matcher<const GraphPattern&> containsExistsFilter(
+    const Matcher<const ParsedQuery&>& matcher) {
+  return AD_FIELD(
+      GraphPattern, _filters,
+      ::testing::ElementsAre(AD_FIELD(
+          SparqlFilter, expression_,
+          AD_PROPERTY(SparqlExpressionPimpl, getExistsExpressions,
+                      ::testing::ElementsAre(existsMatcher(matcher))))));
+}
 }  // namespace existsTestHelpers
 
 // _____________________________________________________________________________
@@ -2016,13 +2075,19 @@ TEST(SparqlParser, Exists) {
   // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
   // FROM and FROM NAMED clauses can be specified as arguments.
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
-                                 Graphs namedGraphs = std::nullopt) {
-    return testing::AllOf(m::SelectQuery(
-        m::AsteriskSelect(),
-        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
-        defaultGraphs, namedGraphs));
-  };
+  auto selectABarFooMatcher =
+      [](Graphs defaultGraphs = std::nullopt, Graphs namedGraphs = std::nullopt,
+         const std::optional<std::vector<std::string>>& variables =
+             std::nullopt) {
+        auto selectMatcher = variables.has_value()
+                                 ? m::VariablesSelect(variables.value())
+                                 : AllOf(m::AsteriskSelect(),
+                                         m::VariablesSelect({"?a", "?foo"}));
+        return m::SelectQuery(
+            selectMatcher,
+            m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+            defaultGraphs, namedGraphs);
+      };
 
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     existsMatcher(selectABarFooMatcher()));
@@ -2051,6 +2116,39 @@ TEST(SparqlParser, Exists) {
       "NOT EXISTS {?a <bar> ?foo}",
       notExistsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
       datasetClauses);
+
+  auto expectGroupGraphPattern =
+      ExpectCompleteParse<&Parser::groupGraphPattern>{};
+  expectGroupGraphPattern("{ ?a ?b ?c . FILTER EXISTS {?a <bar> ?foo} }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ ?a ?b ?c . FILTER NOT EXISTS {?a <bar> ?foo} }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ FILTER EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+  expectGroupGraphPattern("{ FILTER NOT EXISTS {?a <bar> ?foo} . ?a ?b ?c }",
+                          containsExistsFilter(selectABarFooMatcher(
+                              std::nullopt, std::nullopt, {{"?a"}})));
+
+  auto doesNotBindExists = [&]() {
+    auto innerMatcher = containsExistsFilter(selectABarFooMatcher(
+        std::nullopt, std::nullopt, std::vector<std::string>{}));
+    using parsedQuery::GroupGraphPattern;
+    return AD_FIELD(GraphPattern, _graphPatterns,
+                    ::testing::ElementsAre(
+                        ::testing::VariantWith<GroupGraphPattern>(
+                            AD_FIELD(GroupGraphPattern, _child, innerMatcher)),
+                        ::testing::_));
+  };
+
+  expectGroupGraphPattern(
+      "{ { FILTER EXISTS {?a <bar> ?foo} . ?d ?e ?f } . ?a ?b ?c }",
+      doesNotBindExists());
+  expectGroupGraphPattern(
+      "{ { FILTER NOT EXISTS {?a <bar> ?foo} . ?d ?e ?f  } ?a ?b ?c }",
+      doesNotBindExists());
 }
 
 namespace aggregateTestHelpers {
@@ -2488,4 +2586,38 @@ TEST(SparqlParser, SourceSelector) {
 
   auto expectDefaultGraph = ExpectCompleteParse<&Parser::defaultGraphClause>{};
   expectDefaultGraph("<x>", m::TripleComponentIri("<x>"));
+}
+
+// _____________________________________________________________________________
+TEST(ParserTest, propertyPathInCollection) {
+  std::string query =
+      "PREFIX : <http://example.org/>\n"
+      "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  EXPECT_THAT(
+      SparqlParser::parseQuery(std::move(query)),
+      m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples(
+              {{Var{"?_QLever_internal_variable_2"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                Var{"?_QLever_internal_variable_1"}},
+               {Var{"?_QLever_internal_variable_2"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
+               {Var{"?_QLever_internal_variable_1"},
+                PropertyPath::makeWithChildren(
+                    {PropertyPath::fromIri("<http://example.org/r>")},
+                    PropertyPath::Operation::INVERSE),
+                lit("\"hello\"")},
+               {Var{"?_QLever_internal_variable_3"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                Var{"?_QLever_internal_variable_0"}},
+               {Var{"?_QLever_internal_variable_3"},
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                Var{"?_QLever_internal_variable_2"}},
+               {Var{"?_QLever_internal_variable_0"},
+                PropertyPath::makeModified(
+                    PropertyPath::fromIri("<http://example.org/p>"), "*"),
+                123},
+               {Var{"?s"}, "?p", Var{"?_QLever_internal_variable_3"}}}))));
 }

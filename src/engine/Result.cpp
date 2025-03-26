@@ -288,8 +288,7 @@ void Result::cacheDuringConsumption(
             if (aggregate.has_value()) {
               auto& value = aggregate.value();
               value.idTable_.insertAtEnd(newTablePair.idTable_);
-              value.localVocab_.mergeWith(
-                  std::span{&newTablePair.localVocab_, 1});
+              value.localVocab_.mergeWith(newTablePair.localVocab_);
             } else {
               aggregate.emplace(newTablePair.idTable_.clone(),
                                 newTablePair.localVocab_.clone());

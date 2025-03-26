@@ -68,7 +68,7 @@ class Filter : public Operation {
   // entity will be updated.
   void setPrefilterExpressionForChildren();
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
   CPP_template(int WIDTH, typename Table)(
