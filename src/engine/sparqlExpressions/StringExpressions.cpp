@@ -137,25 +137,33 @@ using StrlenExpression =
 
 // LCASE
 [[maybe_unused]] auto lowercaseImpl =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+    [](std::optional<ad_utility::triple_component::Literal> input)
+    -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return toLiteral(ad_utility::utf8ToLower(input.value()));
+    auto new_content =
+        ad_utility::utf8ToLower(asStringViewUnsafe(input.value().getContent()));
+    input.value().replaceContentWithSameLength(new_content);
+    return LiteralOrIri(std::move(input.value()));
   }
 };
-using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
+using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // UCASE
 [[maybe_unused]] auto uppercaseImpl =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+    [](std::optional<ad_utility::triple_component::Literal> input)
+    -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return toLiteral(ad_utility::utf8ToUpper(input.value()));
+    auto new_content =
+        ad_utility::utf8ToUpper(asStringViewUnsafe(input.value().getContent()));
+    input.value().replaceContentWithSameLength(new_content);
+    return LiteralOrIri(std::move(input.value()));
   }
 };
-using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
+using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -363,12 +371,13 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
+    [](std::optional<ad_utility::triple_component::Literal> s,
+       const std::unique_ptr<re2::RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.getLiteral().has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  auto& in = s.getLiteral().value();
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
@@ -380,8 +389,8 @@ using MergeRegexPatternAndFlagsExpression =
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
