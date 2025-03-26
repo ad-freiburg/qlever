@@ -317,5 +317,4 @@ void DeltaTriples::readFromDisk() {
       std::make_shared<CancellationHandle::element_type>();
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
-  localVocab_ = std::move(vocab);
 }
