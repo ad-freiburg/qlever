@@ -95,15 +95,15 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{LazyResult{ad_utility::CachingTransformInputRange(
           std::move(idTables),
-          [sortedBy, previousId_ = std::optional<IdTable::row_type>{}](
+          [sortedBy, previousId = std::optional<IdTable::row_type>{}](
               Result::IdTableVocabPair& pair) mutable {
             auto& idTable = pair.idTable_;
             if (!idTable.empty()) {
-              if (previousId_.has_value()) {
+              if (previousId.has_value()) {
                 AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
-                    idTable.at(0), previousId_.value()));
+                    idTable.at(0), previousId.value()));
               }
-              previousId_ = idTable.at(idTable.size() - 1);
+              previousId = idTable.at(idTable.size() - 1);
             }
             assertSortOrderIsRespected(idTable, sortedBy);
             return std::move(pair);
