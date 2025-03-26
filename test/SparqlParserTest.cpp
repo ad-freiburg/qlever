@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 
+#include <utility>
 #include <variant>
 
 #include "SparqlAntlrParserTestHelpers.h"
@@ -1406,4 +1407,26 @@ TEST(ParserTest, parseWithDatasets) {
                                        DatasetClause{Iri("<baz>"), false}}),
       m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                      {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
+  auto deleteWhereOp =
+      m::GraphUpdate({SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                  Var("?o"), std::monostate{}}},
+                     {}, std::nullopt);
+  auto deleteWherePattern =
+      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}}));
+  auto insertDataOp =
+      m::GraphUpdate({},
+                     {SparqlTripleSimpleWithGraph{
+                         Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+                     std::nullopt);
+  EXPECT_THAT(SparqlParser::parseUpdate(
+                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+                  {DatasetClause{Iri("<foo>"), false},
+                   DatasetClause{Iri("<bar>"), true}}),
+              testing::ElementsAre(
+                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
+                                  m::datasetClausesMatcher({{Iri("<foo>")}},
+                                                           {{Iri("<bar>")}})),
+                  m::UpdateClause(insertDataOp, m::GraphPattern(),
+                                  m::datasetClausesMatcher({{Iri("<foo>")}},
+                                                           {{Iri("<bar>")}}))));
 }
