@@ -20,4 +20,4 @@ enum struct TextScoringMetric { EXPLICIT, TFIDF, BM25 };
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 
 TextScoringMetric getTextScoringMetricFromString(
-    std::string textScoringMetricString);
+    const std::string& textScoringMetricString);

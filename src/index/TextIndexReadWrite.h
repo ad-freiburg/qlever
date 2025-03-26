@@ -102,8 +102,9 @@ namespace textIndexReadWrite {
 
 // Compress src using zstd and write compressed bytes to file while advancing
 // currentOffset by the nofBytes written
-void zstdCompressAndWrite(const void* src, size_t numBytes,
-                          ad_utility::File& out, off_t& currentOffset);
+template <typename T>
+void zstdCompressAndWrite(const T* src, size_t numBytes, ad_utility::File& out,
+                          off_t& currentOffset);
 
 /**
  * @brief Writes posting to given file. It splits the vector of postings into

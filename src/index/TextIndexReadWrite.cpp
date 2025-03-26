@@ -7,8 +7,9 @@
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
-void zstdCompressAndWrite(const void* src, size_t numBytes,
-                          ad_utility::File& out, off_t& currentOffset) {
+template <typename T>
+void zstdCompressAndWrite(const T* src, size_t numBytes, ad_utility::File& out,
+                          off_t& currentOffset) {
   auto compressed = ZstdWrapper::compress(src, numBytes);
   out.write(compressed.data(), compressed.size());
   currentOffset += compressed.size();

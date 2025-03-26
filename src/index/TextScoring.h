@@ -13,12 +13,13 @@ class ScoreData {
  public:
   ScoreData() = default;
 
-  ScoreData(LocaleManager localeManager) : localeManager_(localeManager){};
+  explicit ScoreData(const LocaleManager& localeManager)
+      : localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(scoringMetric), localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric,
             std::pair<float, float> bAndKParam)
       : scoringMetric_(scoringMetric),
         b_(bAndKParam.first),
@@ -69,7 +70,11 @@ class ScoreData {
       const Index::TextVocab& textVocab, size_t& wordNotFoundErrorMsgCount);
 
   void calculateAVDL() {
-    averageDocumentLength_ =
-        nofDocuments_ ? (totalDocumentLength_ / nofDocuments_) : 0;
+    averageDocumentLength_ = nofDocuments_
+                                 ? (static_cast<float>(totalDocumentLength_) /
+                                    static_cast<float>(nofDocuments_))
+                                 : 0;
   }
 };
+
+void logWordNotFound(const string& word, size_t& wordNotFoundErrorMsgCount);
