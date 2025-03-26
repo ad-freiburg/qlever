@@ -761,7 +761,17 @@ Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
   return {graph, visit(ctx->triplesTemplate())};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
+void Visitor::selectExistsVariables(SparqlFilter& filter) const {
+  for (SparqlExpression* sparqlExpression :
+       filter.expression_.getExistsExpressions()) {
+    auto* existsExpression = dynamic_cast<ExistsExpression*>(sparqlExpression);
+    AD_CORRECTNESS_CHECK(existsExpression);
+    existsExpression->selectVariables(visibleVariables_);
+  }
+}
+
+// _____________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
@@ -792,6 +802,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
   pattern._graphPatterns = std::move(subOps);
   for (auto& filter : filters) {
+    selectExistsVariables(filter);
     if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
         langFilterData.has_value()) {
       const auto& [variable, language] = langFilterData.value();
@@ -1944,7 +1955,7 @@ TripleType Visitor::toRdfCollection(std::vector<TripleType> elements,
                                     Func iriStringToPredicate) {
   typename TripleType::second_type triples;
   GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
-  for (auto graphNode : Reversed{elements}) {
+  for (auto& graphNode : ql::ranges::reverse_view(elements)) {
     GraphTerm currentTerm = newBlankNodeOrVariable();
     triples.push_back(
         {currentTerm,
@@ -2452,8 +2463,8 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   AD_CONTRACT_CHECK(numArgs >= 2 && numArgs <= 3);
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
-    return std::make_unique<sparqlExpression::RegexExpression>(
-        visit(exp[0]), visit(exp[1]), std::move(flags));
+    return makeRegexExpression(visit(exp[0]), visit(exp[1]),
+                               std::move(flags).value_or(nullptr));
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
@@ -2505,7 +2516,18 @@ ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
   auto group = visit(pattern);
   ParsedQuery argumentOfExists =
       std::exchange(parsedQuery_, std::move(queryBackup));
-  argumentOfExists.selectClause().setAsterisk();
+  SelectClause& selectClause = argumentOfExists.selectClause();
+  // Even though we set the `SELECT` clause to `*`, we will limit the visible
+  // variables to a potentially smaller subset when finishing the parsing of the
+  // current group.
+  selectClause.setAsterisk();
+  // `ExistsExpression`s are not parsed like regular `SparqlExpression`s, so
+  // they don't have a proper hierarchy of dependent variables. Because of that,
+  // we need to manually add all variables that are visible after parsing the
+  // body of `EXISTS`.
+  for (const Variable& variable : visibleVariables_) {
+    selectClause.addVisibleVariable(variable);
+  }
   argumentOfExists._rootGraphPattern = std::move(group);
 
   // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from

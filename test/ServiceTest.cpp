@@ -156,8 +156,7 @@ TEST_F(ServiceTest, basicMethods) {
   // Test the basic methods.
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
-  ASSERT_TRUE(
-      serviceOp.getCacheKey().starts_with("SERVICE <http://localhorst/api>"))
+  ASSERT_TRUE(serviceOp.getCacheKey().starts_with("SERVICE "))
       << serviceOp.getCacheKey();
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
@@ -493,6 +492,35 @@ TEST_F(ServiceTest, computeResult) {
   }
 }
 
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+
+  auto sibling = std::make_shared<Values>(
+      testQec,
+      (parsedQuery::SparqlValues){{Variable{"?a"}}, {{TC(iri("<a>"))}}});
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?a"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ SELECT ?obj WHERE { ?a ?b ?c } }",
+      false};
+
+  std::string_view expectedSparqlQuery =
+      " SELECT ?a WHERE { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
+      "?c } } }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({"a"}, {{"a"}}))};
+
+  serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
 TEST_F(ServiceTest, getCacheKey) {
   // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{
@@ -502,42 +530,27 @@ TEST_F(ServiceTest, getCacheKey) {
       "{ }",
       false};
 
-  Service service(
+  Service service1{
       testQec, parsedServiceClause,
       getResultFunctionFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult(
               {"x", "y"},
-              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
 
-  auto baseCacheKey = service.getCacheKey();
+  Service service2{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
 
-  // The cacheKey of the Service Operation has to depend on the cacheKey
-  // of the siblingTree, as it might alter the Service Query.
-  auto iri = ad_utility::testing::iri;
-  using TC = TripleComponent;
-  auto sibling = std::make_shared<Values>(
-      testQec, (parsedQuery::SparqlValues){
-                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
-                    {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}});
-  service.siblingInfo_.emplace(siblingInfoFromOp(sibling));
-
-  auto siblingCacheKey = service.getCacheKey();
-  EXPECT_NE(baseCacheKey, siblingCacheKey);
-
-  auto sibling2 = std::make_shared<Values>(
-      testQec, (parsedQuery::SparqlValues){
-                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}});
-  service.siblingInfo_.emplace(siblingInfoFromOp(sibling2));
-
-  EXPECT_NE(siblingCacheKey, service.getCacheKey());
-
-  // SILENT keyword
-  service.parsedServiceClause_.silent_ = true;
-  EXPECT_NE(baseCacheKey, service.getCacheKey());
+  // Identically constructed services should have have unique cache keys.
+  // Because a remote endpoint cannot be considered cached.
+  EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
 }
 
 // Test that bindingToTripleComponent behaves as expected.

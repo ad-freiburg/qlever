@@ -17,7 +17,11 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {}
+    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+  AD_CORRECTNESS_CHECK(subtree_);
+  subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
+      std::move(subtree_), keepIndices_);
+}
 
 // _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {

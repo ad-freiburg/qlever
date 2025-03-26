@@ -420,7 +420,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
-  mergeCandidate.mergeWith(std::span{&clone, 1});
+  mergeCandidate.mergeWith(clone);
 
   EXPECT_EQ(mergeCandidate.size(), 1);
   EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
@@ -438,17 +438,20 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();
-  clone2.mergeWith(std::span{&original, 1});
-  original.mergeWith(std::span{&clone1, 1});
+  clone2.mergeWith(original);
+  original.mergeWith(clone1);
 
-  // Implementation detail, merging does add to the "other word set" but does
-  // not deduplicate with the primary word set.
-  EXPECT_EQ(original.size(), 2);
+  // Make sure we deduplicate `otherWordSets_` with the primary word set.
+  EXPECT_EQ(original.size(), 1);
   EXPECT_THAT(original.getAllWordsForTesting(),
-              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
-                                   LiteralOrIri::literalWithoutQuotes("test")));
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 
   EXPECT_EQ(clone2.size(), 1);
   EXPECT_THAT(clone2.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+
+  LocalVocab clone3 = original.clone();
+  EXPECT_EQ(clone3.size(), 1);
+  EXPECT_THAT(clone3.getAllWordsForTesting(),
               UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 }
