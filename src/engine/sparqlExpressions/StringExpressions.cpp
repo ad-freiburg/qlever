@@ -372,33 +372,34 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string_view text, std::string_view pattern) {
+    [](ad_utility::triple_component::Literal literal,
+       std::string_view pattern) {
       // Required by the SPARQL standard.
       if (pattern.empty()) {
-        return toLiteral(text);
+        return LiteralOrIri{literal};
       }
-      auto pos = text.find(pattern);
-      if (pos >= text.size()) {
+      auto pos = asStringViewUnsafe(literal.getContent()).find(pattern);
+      if (pos >= literal.getContent().size()) {
         return toLiteral("");
       }
       if constexpr (isStrAfter) {
-        return toLiteral(text.substr(pos + pattern.size()));
+        literal.setSubstr(pos + pattern.size(),
+                          literal.getContent().size() - pos - pattern.size());
       } else {
         // STRBEFORE
-        return toLiteral(text.substr(0, pos));
+        literal.setSubstr(0, pos);
       }
+      return LiteralOrIri{literal};
     };
-
 auto strAfter = strAfterOrBeforeImpl<true>;
-
 using StrAfterExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
+                          LiteralValueGetter>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
+                          LiteralValueGetter>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
