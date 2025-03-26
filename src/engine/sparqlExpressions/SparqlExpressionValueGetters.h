@@ -9,11 +9,11 @@
 #include <re2/re2.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/Result.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
 #include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
+#include "util/LruCache.h"
 #include "util/TypeTraits.h"
 
 /// Several classes that can be used as the `ValueGetter` template
@@ -143,22 +143,6 @@ struct StringValueGetter : Mixin<StringValueGetter> {
                                    const EvaluationContext*) const {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
-};
-// Similar to `StringValueGetter`, but correctly preprocesses strings so that
-// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
-// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
-// the latter represents the format that re2 expects.
-struct ReplacementStringGetter : StringValueGetter,
-                                 Mixin<ReplacementStringGetter> {
-  using Mixin<ReplacementStringGetter>::operator();
-  std::optional<std::string> operator()(ValueId,
-                                        const EvaluationContext*) const;
-
-  std::optional<std::string> operator()(const LiteralOrIri& s,
-                                        const EvaluationContext*) const;
-
- private:
-  static std::string convertToReplacementString(std::string_view view);
 };
 
 // This class can be used as the `ValueGetter` argument of Expression
@@ -295,19 +279,39 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   }
 };
 
-// Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
+// Similar to `LiteralFromIdGetter`, but correctly preprocesses strings so that
+// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
+// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
+// the latter represents the format that re2 expects.
+struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
+  using Mixin<ReplacementStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+ private:
+  static std::string convertToReplacementString(std::string_view view);
+};
+
+// Convert the input into a `shared_ptr<RE2>`. Return nullptr if the input is
 // not convertible to a string.
 struct RegexValueGetter {
+  mutable ad_utility::util::LRUCache<std::string, std::shared_ptr<RE2>> cache_{
+      100};
   template <typename S>
-  auto operator()(S&& input, const EvaluationContext* context) const -> CPP_ret(
-      std::unique_ptr<re2::RE2>)(
-      requires SingleExpressionResult<S>&&
-          ranges::invocable<StringValueGetter, S&&, const EvaluationContext*>) {
-    auto str = StringValueGetter{}(AD_FWD(input), context);
+  auto operator()(S&& input, const EvaluationContext* context) const
+      -> CPP_ret(std::shared_ptr<RE2>)(
+          requires SingleExpressionResult<S>&& ranges::invocable<
+              LiteralFromIdGetter, S&&, const EvaluationContext*>) {
+    auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
     }
-    return std::make_unique<re2::RE2>(str.value(), re2::RE2::Quiet);
+    return cache_.getOrCompute(str.value(), [](const std::string& value) {
+      return std::make_shared<RE2>(value, RE2::Quiet);
+    });
   }
 };
 
