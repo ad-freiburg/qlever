@@ -2589,7 +2589,7 @@ TEST(QueryPlanner, TextSearchService) {
           "SELECT * WHERE {"
           "SERVICE qlts: {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?fail ."
+          "?t qlts:contains ?fail ."
           "?fail qlts:contains-word \"fail\" ."
           "}"
           "}"
@@ -2598,17 +2598,17 @@ TEST(QueryPlanner, TextSearchService) {
           "Unsupported element in textSearchQuery. textSearchQuery may only "
           "consist of triples for configuration"));
 
-  // Predicate text-search
+  // Predicate contains
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search \"fail\" ."
+          "?t qlts:contains \"fail\" ."
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <text-search> needs a variable as subject and one as "
+          "The predicate <contains> needs a variable as subject and one as "
           "object. The subject given was: ?t. The object given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2616,25 +2616,25 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t1 qlts:text-search ?conf ."
-          "?t2 qlts:text-search ?conf ."
+          "?t1 qlts:contains ?conf ."
+          "?t2 qlts:contains ?conf ."
           "}"
           "}"),
       ::testing::HasSubstr("Each text search config should only be linked to a "
                            "single text variable. The second text variable "
                            "given was: ?t2. The config variable was: ?conf"));
 
-  // Predicate contains-word
+  // Predicate word
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "\"fail\" qlts:contains-word \"test\" ."
+          "?t qlts:contains ?conf ."
+          "\"fail\" qlts:word \"test\" ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-word> needs a variable as "
+      ::testing::HasSubstr("The predicate <word> needs a variable as "
                            "subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2642,25 +2642,25 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"test\" ."
-          "?conf qlts:contains-word \"fail\" ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"test\" ."
+          "?conf qlts:word \"fail\" ."
           "}"
           "}"),
       ::testing::HasSubstr(
           "Each text search config should have exactly one occurrence of "
-          "either <contains-word> or <contains-entity>."));
+          "either <word> or <entity>."));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word ?word ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word ?word ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-word> needs a literal as "
+      ::testing::HasSubstr("The predicate <word> needs a literal as "
                            "object. The object given was: ?word"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2668,24 +2668,24 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"\" ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"\" ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-word> shouldn't have an "
+      ::testing::HasSubstr("The predicate <word> shouldn't have an "
                            "empty literal as object."));
 
-  // Predicate contains-entity
+  // Predicate entity
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "\"fail\" qlts:contains-entity ?e ."
+          "?t qlts:contains ?conf ."
+          "\"fail\" qlts:entity ?e ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-entity> needs a variable "
+      ::testing::HasSubstr("The predicate <entity> needs a variable "
                            "as subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2693,41 +2693,41 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-entity ?e ."
-          "?conf qlts:contains-word \"fail\" ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:entity ?e ."
+          "?conf qlts:word \"fail\" ."
           "}"
           "}"),
       ::testing::HasSubstr(
           "Each text search config should have exactly one occurrence of "
-          "either <contains-word> or <contains-entity>."));
+          "either <word> or <entity>."));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-entity 13 ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:entity 13 ."
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <contains-entity> needs a variable as subject and an "
+          "The predicate <entity> needs a variable as subject and an "
           "IRI, literal or variable as object. The object given was: 13"));
 
-  // Predicate bind-match
+  // Predicate prefix-match
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"test\" ."
-          "?conf qlts:bind-match \"fail\" ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"test\" ."
+          "?conf qlts:prefix-match \"fail\" ."
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <bind-match> needs a variable as subject and one "
+          "The predicate <prefix-match> needs a variable as subject and one "
           "as object. The subject given was: ?conf. The object given was: "
           "\"fail\""));
 
@@ -2736,30 +2736,30 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"test\" ."
-          "?conf qlts:bind-match ?match1 ."
-          "?conf qlts:bind-match ?match2 ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"test\" ."
+          "?conf qlts:prefix-match ?match1 ."
+          "?conf qlts:prefix-match ?match2 ."
           "}"
           "}"),
       ::testing::HasSubstr(
           "Each text search config should only contain at most one "
-          "<bind-match>. The second match variable given was: ?match2. The "
+          "<prefix-match>. The second match variable given was: ?match2. The "
           "config variable was: ?conf"));
 
-  // Predicate bind-score
+  // Predicate score
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"test\" ."
-          "?conf qlts:bind-score 100 ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"test\" ."
+          "?conf qlts:score 100 ."
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <bind-score> needs a variable as subject and one "
+          "The predicate <score> needs a variable as subject and one "
           "as object. The subject given was: ?conf. The object given was: "
           "100"));
 
@@ -2768,24 +2768,24 @@ TEST(QueryPlanner, TextSearchService) {
           "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
           "SELECT * WHERE {"
           "SERVICE qlts: {"
-          "?t qlts:text-search ?conf ."
-          "?conf qlts:contains-word \"test\" ."
-          "?conf qlts:bind-score ?score1 ."
-          "?conf qlts:bind-score ?score2 ."
+          "?t qlts:contains ?conf ."
+          "?conf qlts:word \"test\" ."
+          "?conf qlts:score ?score1 ."
+          "?conf qlts:score ?score2 ."
           "}"
           "}"),
       ::testing::HasSubstr(
           "Each text search config should only contain at most one "
-          "<bind-score>. The second match variable given was: ?score2. The "
+          "<score>. The second match variable given was: ?score2. The "
           "config variable was: ?conf"));
 
   // toConfigs errors
-  // No contains-word or contains-entity
+  // No word or entity
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:bind-match ?fail ] ."
+      "?t qlts:contains [qlts:prefix-match ?fail ] ."
       "}"
       "}");
   QueryPlanner qp = makeQueryPlanner();
@@ -2793,14 +2793,14 @@ TEST(QueryPlanner, TextSearchService) {
       qp.createExecutionTree(pq),
       ::testing::HasSubstr(
           "Text search service needs configs with exactly one occurrence of "
-          "either <contains-word> or <contains-entity>."));
+          "either <word> or <entity>."));
 
   // No text variable defined
   pq = SparqlParser::parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:contains-word \"test\" ."
+      "?t qlts:word \"test\" ."
       "}"
       "}");
   qp = makeQueryPlanner();
@@ -2809,35 +2809,35 @@ TEST(QueryPlanner, TextSearchService) {
       ::testing::HasSubstr(
           "Text search service needs a text variable that is linked to one or "
           "multiple text search config variables with the predicate "
-          "<text-search>. \n"
+          "<contains>. \n"
           "The config variable can then be used with the predicates: "
-          "<contains-word>, <contains-entity>, <bind-match>, <bind-score>. \n"
-          "<contains-word>: This predicate needs a literal as object which has "
+          "<word>, <entity>, <prefix-match>, <score>. \n"
+          "<word>: This predicate needs a literal as object which has "
           "one word with optionally a * at the end. This word or prefix is "
           "then used to search the text index. \n"
-          "<contains-entity>: This predicate needs a variable, IRI or literal "
+          "<entity>: This predicate needs a variable, IRI or literal "
           "as object. If a variable is given this variable can be used outside "
           "of this service. If an IRI or literal is given the entity is fixed. "
           "The entity given is then used to search the text index. \n"
           "A config should contain exactly one occurrence of either "
-          "<contains-word> or <contains-entity>. \n"
-          "<bind-match>: This predicate should only be used in a text search "
+          "<word> or <entity>. \n"
+          "<prefix-match>: This predicate should only be used in a text search "
           "config with a word that is a prefix. The object should be a "
           "variable. That variable specifies the variable for the prefix "
           "match.\n"
-          "<bind-score>: The object of this predicate should be a variable. "
+          "<score>: The object of this predicate should be a variable. "
           "That variable specifies the column name for the column containing "
           "the scores of the respective word or entity search. \n"
           "The config variable was: ?t"));
 
-  // <bind-match> in a word search on a non prefix
+  // <prefix-match> in a word search on a non prefix
   pq = SparqlParser::parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search ?conf ."
-      "?conf qlts:contains-word \"test\" ."
-      "?conf qlts:bind-match ?test_match ."
+      "?t qlts:contains ?conf ."
+      "?conf qlts:word \"test\" ."
+      "?conf qlts:prefix-match ?test_match ."
       "}"
       "}");
   qp = makeQueryPlanner();
@@ -2853,8 +2853,8 @@ TEST(QueryPlanner, TextSearchService) {
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t1 qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t2 qlts:text-search [qlts:contains-entity ?fail ] ."
+      "?t1 qlts:contains [qlts:word \"test\" ] ."
+      "?t2 qlts:contains [qlts:entity ?fail ] ."
       "}"
       "}");
   qp = makeQueryPlanner();
@@ -2875,22 +2875,22 @@ TEST(QueryPlanner, TextSearchService) {
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
 
-  // Single contains-word
+  // Single word
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
       "}"
       "}",
       wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "test"}), qec);
 
-  // Single contains-word with prefix
+  // Single word with prefix
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test*\" ] ."
+      "?t qlts:contains [qlts:word \"test*\" ] ."
       "}"
       "}",
       wordScanConf(TextIndexScanForWordConfiguration{
@@ -2898,13 +2898,13 @@ TEST(QueryPlanner, TextSearchService) {
           std::nullopt, true}),
       qec);
 
-  // Double contains-word
+  // Double word
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t qlts:text-search [qlts:contains-word \"part\" ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
+      "?t qlts:contains [qlts:word \"part\" ] ."
       "}"
       "}",
       h::Join(
@@ -2912,13 +2912,13 @@ TEST(QueryPlanner, TextSearchService) {
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "part"})),
       qec);
 
-  // One contains-word and one contains-entity with variable for entity
+  // One word and one entity with variable for entity
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t qlts:text-search [qlts:contains-entity ?e ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
+      "?t qlts:contains [qlts:entity ?e ] ."
       "}"
       "}",
       h::Join(
@@ -2932,13 +2932,13 @@ TEST(QueryPlanner, TextSearchService) {
               VarOrFixedEntity(qec, Var{"?e"})})),
       qec);
 
-  // One contains-word and one contains-entity with literal for entity
+  // One word and one entity with literal for entity
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t qlts:text-search [qlts:contains-entity \"<a>\" ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
+      "?t qlts:contains [qlts:entity \"<a>\" ] ."
       "}"
       "}",
       h::Join(
@@ -2952,13 +2952,13 @@ TEST(QueryPlanner, TextSearchService) {
               VarOrFixedEntity(qec, "<a>")})),
       qec);
 
-  // One contains-word and one contains-entity with IRI for entity
+  // One word and one entity with IRI for entity
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t qlts:text-search [qlts:contains-entity <a> ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
+      "?t qlts:contains [qlts:entity <a> ] ."
       "}"
       "}",
       h::Join(
@@ -2977,9 +2977,9 @@ TEST(QueryPlanner, TextSearchService) {
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
-      "?t qlts:text-search [qlts:contains-word \"part\" ] ."
-      "?t qlts:text-search [qlts:contains-word \"words\" ] ."
+      "?t qlts:contains [qlts:word \"test\" ] ."
+      "?t qlts:contains [qlts:word \"part\" ] ."
+      "?t qlts:contains [qlts:word \"words\" ] ."
       "}"
       "}",
       h::UnorderedJoins(
@@ -2993,10 +2993,10 @@ TEST(QueryPlanner, TextSearchService) {
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"picking*\" ] ."
-      "?t qlts:text-search [qlts:contains-entity <a> ] ."
-      "?t qlts:text-search [qlts:contains-word \"opti\" ] ."
-      "?t qlts:text-search [qlts:contains-word \"testi*\" ] ."
+      "?t qlts:contains [qlts:word \"picking*\" ] ."
+      "?t qlts:contains [qlts:entity <a> ] ."
+      "?t qlts:contains [qlts:word \"opti\" ] ."
+      "?t qlts:contains [qlts:word \"testi*\" ] ."
       "}"
       "}",
       h::UnorderedJoins(
@@ -3017,26 +3017,26 @@ TEST(QueryPlanner, TextSearchService) {
               true})),
       qec);
 
-  // Check full contains-word config
+  // Check full word config
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test*\"; qlts:bind-match "
-      "?test_match; qlts:bind-score ?test_score ] ."
+      "?t qlts:contains [qlts:word \"test*\"; qlts:prefix-match "
+      "?test_match; qlts:score ?test_score ] ."
       "}"
       "}",
       wordScanConf(TextIndexScanForWordConfiguration{
           Var{"?t"}, "test*", Var{"?test_match"}, Var{"?test_score"}, true}),
       qec);
 
-  // Check full contains-entity config
+  // Check full entity config
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
       "SERVICE qlts: {"
-      "?t qlts:text-search [qlts:contains-word \"test\"] ."
-      "?t qlts:text-search [qlts:contains-entity ?e; qlts:bind-score ?e_score] "
+      "?t qlts:contains [qlts:word \"test\"] ."
+      "?t qlts:contains [qlts:entity ?e; qlts:score ?e_score] "
       "."
       "}"
       "}",
