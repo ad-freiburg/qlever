@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(CMAKE_EXPORT_COMPILE_COMMANDS)
-    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+    #set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
 endif()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -428,6 +428,7 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/global)
 add_subdirectory(benchmark)
 
 enable_testing()
