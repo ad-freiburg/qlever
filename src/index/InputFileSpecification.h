@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
+#define QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H
 
 #include <optional>
 #include <string>
@@ -34,3 +35,5 @@ struct InputFileSpecification {
   bool operator==(const InputFileSpecification&) const = default;
 };
 }  // namespace qlever
+
+#endif  // QLEVER_SRC_INDEX_INPUTFILESPECIFICATION_H

@@ -4,7 +4,8 @@
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
+#define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 
 #include <boost/optional.hpp>
 
@@ -228,3 +229,5 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 //
 // 3. If the triple is larger than all triples in the permutation, the block
 // index is one after the largest block index.
+
+#endif  // QLEVER_SRC_INDEX_LOCATEDTRIPLES_H

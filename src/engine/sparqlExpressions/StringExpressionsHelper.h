@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STRINGEXPRESSIONSHELPER_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STRINGEXPRESSIONSHELPER_H
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
@@ -70,3 +71,5 @@ using LiteralExpressionImpl =
                              LiteralValueGetterWithoutStrFunction, N, Function,
                              AdditionalNonStringValueGetters...>;
 }  // namespace sparqlExpression::detail::string_expressions
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STRINGEXPRESSIONSHELPER_H

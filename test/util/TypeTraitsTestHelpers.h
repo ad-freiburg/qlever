@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (October of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_TYPETRAITSTESTHELPERS_H
+#define QLEVER_TEST_UTIL_TYPETRAITSTESTHELPERS_H
 
 /*
 @brief Call the given template function with the cartesian product of the
@@ -32,3 +33,5 @@ template <typename... Parameters>
 constexpr void passListOfTypesToLambda(auto func) {
   (func.template operator()<Parameters>(), ...);
 }
+
+#endif  // QLEVER_TEST_UTIL_TYPETRAITSTESTHELPERS_H

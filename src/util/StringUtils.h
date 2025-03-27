@@ -2,7 +2,8 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
+#define QLEVER_SRC_UTIL_STRINGUTILS_H
 
 #include <string_view>
 
@@ -312,3 +313,5 @@ template <typename Char>
 std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }
+
+#endif  // QLEVER_SRC_UTIL_STRINGUTILS_H

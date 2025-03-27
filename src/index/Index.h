@@ -2,7 +2,9 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_INDEX_H
+#define QLEVER_SRC_INDEX_INDEX_H
 
 #include <optional>
 #include <string>
@@ -280,3 +282,5 @@ class Index {
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
 };
+
+#endif  // QLEVER_SRC_INDEX_INDEX_H

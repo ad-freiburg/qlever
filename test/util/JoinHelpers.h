@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (November of 2022,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_JOINHELPERS_H
+#define QLEVER_TEST_UTIL_JOINHELPERS_H
 
 #include <algorithm>
 
@@ -84,3 +85,5 @@ inline auto makeJoinLambda() {
     return join.join(a, b, result);
   };
 }
+
+#endif  // QLEVER_TEST_UTIL_JOINHELPERS_H

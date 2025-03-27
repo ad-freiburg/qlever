@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H
+#define QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H
 
 #include <string>
 
@@ -79,3 +80,5 @@ class TextIndexScanForEntity : public Operation {
 
   void setVariableToColumnMap();
 };
+
+#endif  // QLEVER_SRC_ENGINE_TEXTINDEXSCANFORENTITY_H
