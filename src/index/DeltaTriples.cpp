@@ -323,9 +323,8 @@ void DeltaTriples::readFromDisk() {
       std::make_shared<CancellationHandle::element_type>();
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
-  AD_LOG_INFO << "Done. Num inserted triples: " << idRanges.at(1).size()
-              << ", num deleted triples: " << idRanges.at(0).size()
-              << std::endl;
+  AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
+              << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
 }
 // _____________________________________________________________________________
 void DeltaTriples::setPersists(std::optional<std::string> filename) {
