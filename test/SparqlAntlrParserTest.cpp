@@ -4,7 +4,6 @@
 //          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <iostream>
@@ -17,7 +16,9 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -1720,6 +1721,16 @@ TEST(SparqlParser, builtInCall) {
 
   expectBuiltInCall("encode_for_uri(?x)",
                     matchUnary(&makeEncodeForUriExpression));
+
+  const auto& blankNodeExpression = makeUniqueBlankNodeExpression(0);
+  const auto& reference = *blankNodeExpression;
+  expectBuiltInCall(
+      "bnode()", testing::Pointee(::testing::ResultOf(
+                     [](const SparqlExpression& expr) -> const std::type_info& {
+                       return typeid(expr);
+                     },
+                     Eq(std::reference_wrapper(typeid(reference))))));
+  expectBuiltInCall("bnode(?x)", matchUnary(&makeBlankNodeExpression));
 }
 
 TEST(SparqlParser, unaryExpression) {

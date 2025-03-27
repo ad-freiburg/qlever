@@ -1785,3 +1785,16 @@ TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
   EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
+  using ad_utility::triple_component::Iri;
+  std::string_view input = "_:test";
+  EXPECT_THAT(ExportQueryExecutionTrees::blankNodeIriToString(
+                  Iri::fromStringRepresentation(absl::StrCat(
+                      QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
+              ::testing::Optional(::testing::Eq(input)));
+  EXPECT_EQ(ExportQueryExecutionTrees::blankNodeIriToString(
+                Iri::fromStringRepresentation("<some_iri>")),
+            std::nullopt);
+}

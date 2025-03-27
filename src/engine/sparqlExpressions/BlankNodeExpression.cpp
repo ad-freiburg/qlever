@@ -15,26 +15,46 @@ namespace sparqlExpression {
 
 namespace detail {
 
+// Turn a blank node string into an iri with a special prefix.
 ad_utility::triple_component::Iri createBlankNodeForLabel(
     std::string_view label) {
+  AD_CONTRACT_CHECK(label.starts_with("_:"));
   std::string iriString =
       absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, label, ">");
   return ad_utility::triple_component::Iri::fromStringRepresentation(
       std::move(iriString));
 }
+
+// Escape a string for use as a blank node label.
+std::string escapeStringForBlankNode(std::string_view input) {
+  std::string output;
+  for (char c : input) {
+    // TODO<RobinTF> Implement actual escaping algorithm.
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+      output.push_back(c);
+    }
+  }
+  return output;
+}
+
+// Map a string to a blank node.
 [[maybe_unused]] auto stringToBlankNodeImpl =
     [](std::optional<std::string> s) -> IdOrLiteralOrIri {
   if (s.has_value()) {
-    std::string label = BlankNode{false, std::move(s.value())}.toSparql();
+    std::string label =
+        BlankNode{false, escapeStringForBlankNode(std::move(s.value()))}
+            .toSparql();
     return LiteralOrIri{createBlankNodeForLabel(label)};
   } else {
     return Id::makeUndefined();
   }
 };
 
+// SparqlExpression representing the term "BNODE("something")".
 using SpecificBlankNodeExpression =
     NARY<1, FV<decltype(stringToBlankNodeImpl), StringValueGetter>>;
 
+// SparqlExpression representing the term "BNODE()".
 class UniqueBlankNodeExpression : public SparqlExpression {
   size_t label_ = 0;
   mutable uint64_t cacheBreaker_ = 0;
