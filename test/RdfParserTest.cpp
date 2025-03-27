@@ -1168,7 +1168,7 @@ TEST(RdfParserTest, specialPredicateA) {
              lit("\"object\"")}});
   };
 
-  auto parseTwoStatements = []<typename Parser>(Parser& parser) {
+  auto parseTwoStatements = [](auto& parser) {
     return parser.statement() && parser.statement();
   };
 

@@ -1992,20 +1992,18 @@ void doAddOptionValidatorTest(
 
 TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
   doAddOptionValidatorTest(
-      []<typename... Ts>(auto validatorFunction,
-                         std::string validatorExceptionMessage,
-                         ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+      [](auto validatorFunction, std::string validatorExceptionMessage,
+         ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
         m.addOptionValidator(validatorFunction, validatorExceptionMessage, "",
                              args...);
       });
 }
 
 TEST(ConfigManagerTest, AddOptionExceptionValidator) {
-  doAddOptionValidatorTest([]<typename... Ts>(
-                               auto validatorFunction,
-                               std::string validatorExceptionMessage,
-                               ConfigManager& m,
-                               ConstConfigOptionProxy<Ts>... args) {
+  doAddOptionValidatorTest([](auto validatorFunction,
+                              std::string validatorExceptionMessage,
+                              ConfigManager& m,
+                              ConstConfigOptionProxy<auto>... args) {
     m.addOptionValidator(
         transformValidatorIntoExceptionValidator<
             decltype(validatorFunction), decltype(args.getConfigOption())...>(
@@ -2103,7 +2101,7 @@ void doAddOptionValidatorExceptionTest(
 
 TEST(ConfigManagerTest, AddOptionNoExceptionValidatorException) {
   doAddOptionValidatorExceptionTest(
-      []<typename... Ts>(ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+      [](ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
         m.addOptionValidator(
             [](const decltype(args.getConfigOption())&...) { return true; }, "",
             "", args...);
@@ -2112,7 +2110,7 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidatorException) {
 
 TEST(ConfigManagerTest, AddOptionExceptionValidatorException) {
   doAddOptionValidatorExceptionTest(
-      []<typename... Ts>(ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
+      [](ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
         m.addOptionValidator(
             [](const decltype(args.getConfigOption())&...)
                 -> std::optional<ErrorMessage> { return {std::nullopt}; },
