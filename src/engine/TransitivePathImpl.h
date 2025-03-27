@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
 #include <utility>
 
@@ -323,3 +324,5 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H

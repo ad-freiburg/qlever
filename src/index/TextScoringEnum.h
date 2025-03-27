@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTSCORINGENUM_H
+#define QLEVER_SRC_INDEX_TEXTSCORINGENUM_H
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
@@ -21,3 +22,5 @@ std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 
 TextScoringMetric getTextScoringMetricFromString(
     std::string textScoringMetricString);
+
+#endif  // QLEVER_SRC_INDEX_TEXTSCORINGENUM_H

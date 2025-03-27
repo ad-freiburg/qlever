@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
+#define QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
 
 #include <memory>
 
@@ -204,3 +205,5 @@ constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 constexpr auto yearSprqlExpr = &makeYearSparqlExpression;
 
 }  // namespace makeSparqlExpression
+
+#endif  // QLEVER_TEST_PREFILTEREXPRESSIONTESTHELPERS_H
