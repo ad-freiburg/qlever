@@ -63,33 +63,6 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
-
-struct AssertThatLimitWasRespectedGenerator
-    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
-  Result::LazyResult original_;
-  std::optional<uint64_t> limit_;
-  std::optional<Result::LazyResult::iterator> originalNext_;
-  uint64_t elementCount_ = 0;
-
-  AssertThatLimitWasRespectedGenerator(Result::LazyResult original,
-                                       LimitOffsetClause limitOffset)
-      : original_(std::move(original)), limit_(limitOffset._limit) {}
-
-  std::optional<Result::IdTableVocabPair> get() {
-    if (!originalNext_.has_value()) {
-      originalNext_ = original_.begin();
-    } else if (originalNext_.value() != original_.end()) {
-      originalNext_.value()++;
-    }
-    if (originalNext_.value() == original_.end()) {
-      return std::nullopt;
-    }
-    Result::IdTableVocabPair& pair = *(originalNext_.value());
-    elementCount_ += pair.idTable_.numRows();
-    AD_CONTRACT_CHECK(!limit_.has_value() || elementCount_ <= limit_.value());
-    return std::optional{std::move(pair)};
-  }
-};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -211,8 +184,15 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
-    AssertThatLimitWasRespectedGenerator generator{std::move(idTables()),
-                                                   limitOffset};
+    ad_utility::CachingTransformInputRange generator{
+        std::move(idTables()),
+        [limit = limitOffset._limit,
+         elementCount = uint64_t{0}](Result::IdTableVocabPair& pair) mutable {
+          elementCount += pair.idTable_.numRows();
+          AD_CONTRACT_CHECK(!limit.has_value() ||
+                            elementCount <= limit.value());
+          return std::move(pair);
+        }};
     data_.emplace<GenContainer>(LazyResult(std::move(generator)));
   }
 }
