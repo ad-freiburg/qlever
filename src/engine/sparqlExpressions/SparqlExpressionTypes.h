@@ -233,7 +233,8 @@ CPP_template(typename T, typename LocalVocabT)(
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
-        [&localVocab]<typename R>(R&& el) mutable {
+        [&localVocab](auto&& el) mutable {
+          using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));

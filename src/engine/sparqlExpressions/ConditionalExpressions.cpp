@@ -11,12 +11,12 @@
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
-[[maybe_unused]] auto ifImpl =
-    []<typename T, typename U>(EffectiveBooleanValueGetter::Result condition,
-                               T&& i, U&& e)
+[[maybe_unused]] auto ifImpl = [](EffectiveBooleanValueGetter::Result condition,
+                                  auto&& i, auto&& e)
     -> CPP_ret(IdOrLiteralOrIri)(
-        requires SingleExpressionResult<T>&& SingleExpressionResult<U>&&
-            std::is_rvalue_reference_v<T&&>&& std::is_rvalue_reference_v<U&&>) {
+        requires SingleExpressionResult<decltype(i)>&& SingleExpressionResult<
+            decltype(e)>&& std::is_rvalue_reference_v<decltype(i)&&>&&
+            std::is_rvalue_reference_v<decltype(e)&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {

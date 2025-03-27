@@ -82,7 +82,7 @@ TEST(ConfigOptionProxy, GetConfigOption) {
 
 TEST(ConfigOptionProxy, ConversionToConfigOption) {
   // A function variant of `std::identity`, where you can give the type.
-  auto identity = []<typename Type>(Type t) -> Type { return t; };
+  auto identity = [](auto t) -> decltype(t) { return t; };
 
   doForTypeInConfigOptionValueType([&identity]<typename T>() {
     T varForConfigOption;

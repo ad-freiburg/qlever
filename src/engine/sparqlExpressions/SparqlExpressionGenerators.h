@@ -123,11 +123,11 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-inline auto applyFunction = []<typename Function, typename... Generators>(
-                                Function&& function, size_t numItems,
-                                Generators... generators)
+inline auto applyFunction = []<typename... Generators>(auto&& function,
+                                                       size_t numItems,
+                                                       Generators... generators)
     -> cppcoro::generator<std::invoke_result_t<
-        Function, ql::ranges::range_value_t<Generators>...>> {
+        decltype(function), ql::ranges::range_value_t<Generators>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 

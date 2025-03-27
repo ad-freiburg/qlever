@@ -25,11 +25,11 @@ namespace detail {
 // This is needed for aggregation together with the `DISTINCT` keyword. For
 // example, `COUNT(DISTINCT ?x)` should count the number of distinct values for
 // `?x`.
-inline auto getUniqueElements = []<typename OperandGenerator>(
-                                    const EvaluationContext* context,
-                                    size_t inputSize,
-                                    OperandGenerator operandGenerator)
-    -> cppcoro::generator<ql::ranges::range_value_t<OperandGenerator>> {
+inline auto getUniqueElements = [](const EvaluationContext* context,
+                                   size_t inputSize, auto operandGenerator)
+    -> cppcoro::generator<
+        ql::ranges::range_value_t<decltype(operandGenerator)>> {
+  using OperandGenerator = decltype(operandGenerator);
   ad_utility::HashSetWithMemoryLimit<
       ql::ranges::range_value_t<OperandGenerator>>
       uniqueHashSet(inputSize, context->_allocator);

@@ -107,7 +107,9 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
 
 // Test the case that multiple workers are pushing concurrently.
 TEST(ThreadSafeQueue, Concurrency) {
-  auto runTest = []<typename Queue>(Queue queue) {
+  auto runTest = [](auto queue) {
+    using Queue = decltype(queue);
+
     std::atomic<size_t> numPushed = 0;
     std::atomic<size_t> numThreadsDone = 0;
     auto push = makePush(queue);
@@ -219,7 +221,9 @@ TEST(ThreadSafeQueue, PushException) {
 
 // ________________________________________________________________
 TEST(ThreadSafeQueue, DisablePush) {
-  auto runTest = []<typename Queue>(Queue queue) {
+  auto runTest = [](auto queue) {
+    using Queue = decltype(queue);
+
     std::atomic<size_t> numPushed = 0;
     auto push = makePush(queue);
 
@@ -340,7 +344,7 @@ TEST(ThreadSafeQueue, queueManager) {
     consumerFinishesEarly,
     bothThrowImmediately
   };
-  auto runTest = []<typename Queue>(TestType testType, Queue&&) {
+  auto runTest = []<typename Queue>(TestType testType, Queue&& queue) {
     std::atomic<size_t> numPushed = 0;
     auto task =
         [&numPushed,
