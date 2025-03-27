@@ -7,6 +7,8 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <optional>
 
 #include "util/Generator.h"

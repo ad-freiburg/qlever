@@ -9,7 +9,7 @@ done <sourcelist
 
 for source in "${SOURCE_FILES[@]}" ;do
   echo $source
-  /local/data-ssd/kalmbacj/llvm-project/llvm/cmake-build-release/bin/backport-defaulted-equality -p cmake-build-clang-18-compile-commands $source
+  /local/data-ssd/kalmbacj/llvm-project/llvm/cmake-build-release/bin/backport-defaulted-equality -p cmake-build-clang-trunk-for-tools $source
 
 done
 sem --wait
