@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
+#define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <fstream>
 #include <future>
@@ -367,3 +368,5 @@ inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
   return res;
 }
 }  // namespace ad_utility::vocabulary_merger
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H

@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
+#define QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H
 
 #include <cstdint>
 #include <random>
@@ -151,3 +152,5 @@ class QueryRegistry {
   }
 };
 }  // namespace ad_utility::websocket
+
+#endif  // QLEVER_SRC_UTIL_HTTP_WEBSOCKET_QUERYID_H

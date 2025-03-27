@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H
+#define QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H
 
 #include "global/IndexTypes.h"
 namespace textIndexScanTestHelpers {
@@ -87,3 +88,5 @@ inline string combineToString(const string& text, const string& word) {
   return ss.str();
 }
 }  // namespace textIndexScanTestHelpers
+
+#endif  // QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H

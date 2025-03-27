@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_CONTENTENCODINGHELPER_H
+#define QLEVER_SRC_UTIL_HTTP_CONTENTENCODINGHELPER_H
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_split.h>
@@ -81,3 +82,5 @@ inline std::ostream& operator<<(std::ostream& out,
 }
 
 }  // namespace ad_utility::content_encoding
+
+#endif  // QLEVER_SRC_UTIL_HTTP_CONTENTENCODINGHELPER_H

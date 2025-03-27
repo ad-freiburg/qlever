@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTSCORING_H
+#define QLEVER_SRC_INDEX_TEXTSCORING_H
 
 #include "index/Index.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -73,3 +74,5 @@ class ScoreData {
         nofDocuments_ ? (totalDocumentLength_ / nofDocuments_) : 0;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_TEXTSCORING_H

@@ -1,7 +1,8 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERPARSER_H
+#define QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERPARSER_H
 
 #include "antlr4-runtime.h"
 
@@ -367,3 +368,5 @@ class AcceptHeaderParser : public antlr4::Parser {
 
  private:
 };
+
+#endif  // QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERPARSER_H

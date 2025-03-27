@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (April of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H
+#define QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H
 
 #include <memory>
 #include <type_traits>
@@ -93,3 +94,5 @@ constexpr CopyableUniquePtr<T> make_copyable_unique(auto&&... args) {
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H

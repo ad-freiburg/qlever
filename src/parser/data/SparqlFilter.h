@@ -1,8 +1,10 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
 // Author: Florian Kramer (flo.kramer@arcor.de)
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_SPARQLFILTER_H
+#define QLEVER_SRC_PARSER_DATA_SPARQLFILTER_H
 
 #include <string>
 
@@ -19,3 +21,5 @@ class SparqlFilter {
     return expression_.getDescriptor() == other.expression_.getDescriptor();
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_SPARQLFILTER_H
