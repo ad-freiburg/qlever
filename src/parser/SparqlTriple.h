@@ -57,7 +57,7 @@ class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
 
 class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
-  using Graph = std::variant<std::monostate, Iri, Variable>;
+  using Graph = std::variant<std::monostate, TripleComponent::Iri, Variable>;
 
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
                               TripleComponent o, Graph g,

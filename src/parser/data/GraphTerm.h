@@ -13,6 +13,7 @@
 #include "./ConstructQueryExportContext.h"
 #include "./Iri.h"
 #include "./Literal.h"
+#include "parser/RdfParser.h"
 
 using GraphTermBase = std::variant<Literal, BlankNode, Iri, Variable>;
 
@@ -35,6 +36,22 @@ class GraphTerm : public GraphTermBase,
   [[nodiscard]] std::string toSparql() const {
     return visit(
         [](const auto& object) -> std::string { return object.toSparql(); });
+  }
+
+  // ___________________________________________________________________________
+  // Constructs a TripleComponent from the GraphTerm.
+  [[nodiscard]] TripleComponent toTripleComponent() const {
+    return visit([]<typename T>(const T& element) -> TripleComponent {
+      if constexpr (std::is_same_v<T, Variable>) {
+        return element;
+      } else if constexpr (std::is_same_v<T, Literal> ||
+                           std::is_same_v<T, Iri>) {
+        return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            element.toSparql());
+      } else {
+        return element.toSparql();
+      }
+    });
   }
 };
 
