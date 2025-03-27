@@ -866,7 +866,8 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
+void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
+                                      bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
@@ -941,8 +942,13 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
       usePatterns_ = false;
     }
   }
-  deltaTriples_.value().modify<void>(
-      [](DeltaTriples& deltaTriples) { deltaTriples.readFromDisk(); });
+  if (persistUpdatesOnDisk) {
+    deltaTriples_.value().modify<void>(
+        [&onDiskBase](DeltaTriples& deltaTriples) {
+          deltaTriples.setPersists(onDiskBase + ".update-triples");
+          deltaTriples.readFromDisk();
+        });
+  }
 }
 
 // _____________________________________________________________________________

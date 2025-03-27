@@ -89,6 +89,9 @@ class DeltaTriples {
   // which are not contained in the vocabulary of the original index).
   LocalVocab localVocab_;
 
+  // See the documentation of `setPersist()` below.
+  std::optional<std::string> filenameForPersisting_;
+
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
   // array.
@@ -117,8 +120,6 @@ class DeltaTriples {
   // may still be in the inserted set and vice versa.
   TriplesToHandlesMap triplesInserted_;
   TriplesToHandlesMap triplesDeleted_;
-
-  static constexpr std::string_view storagePath = "updates.qlever";
 
  public:
   // Construct for given index.
@@ -167,6 +168,11 @@ class DeltaTriples {
 
   // Read the delta triples from disk to restore them after a restart.
   void readFromDisk();
+
+  // If the `filename` is set, then `writeToDisk()` will write these
+  // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
+  // `writeToDisk` will be a nullop.
+  void setPersists(std::optional<std::string> filename);
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this

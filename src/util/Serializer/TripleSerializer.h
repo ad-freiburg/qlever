@@ -86,7 +86,8 @@ inline std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>>
 deserializeLocalVocab(std::istream& is) {
   LocalVocab vocab;
   uint64_t size = readBytes<uint64_t>(is);
-  AD_CORRECTNESS_CHECK(size > 0);
+  // Note:: It might happen that the `size` is zero because the local vocab was
+  // empty.
   absl::flat_hash_map<Id::T, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {

@@ -272,6 +272,9 @@ void DeltaTriples::setOriginalMetadata(
 
 // _____________________________________________________________________________
 void DeltaTriples::writeToDisk() const {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
   auto toRange = [](const TriplesToHandlesMap& map) {
     return ad_utility::SizedJoinView{
         map | ql::views::keys |
@@ -280,19 +283,22 @@ void DeltaTriples::writeToDisk() const {
               return triple.ids_;
             })};
   };
-  std::filesystem::path tempPath = storagePath;
+  std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
   ad_utility::serializeIds(
       tempPath, localVocab_,
       std::array{toRange(triplesDeleted_), toRange(triplesInserted_)});
-  std::filesystem::rename(tempPath, storagePath);
+  std::filesystem::rename(tempPath, filenameForPersisting_.value());
 }
 
 // _____________________________________________________________________________
 void DeltaTriples::readFromDisk() {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
   AD_CONTRACT_CHECK(localVocab_.empty());
-  auto [vocab, idRanges] =
-      ad_utility::deserializeIds(storagePath, index_.getBlankNodeManager());
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getBlankNodeManager());
   if (idRanges.empty()) {
     return;
   }
