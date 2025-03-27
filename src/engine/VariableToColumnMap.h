@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
-#define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
+#pragma once
 
 #include "global/Id.h"
 #include "parser/data/Variable.h"
@@ -81,5 +80,3 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth);
-
-#endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

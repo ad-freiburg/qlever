@@ -4,8 +4,7 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
-#ifndef QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
-#define QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H
+#pragma once
 
 #include <memory_resource>
 
@@ -312,5 +311,3 @@ auto getIdMapLambdas(
       ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
-
-#endif  // QLEVER_SRC_INDEX_INDEXBUILDERTYPES_H

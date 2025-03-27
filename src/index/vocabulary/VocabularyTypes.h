@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
-#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H
+#pragma once
 
 #include <optional>
 
@@ -57,5 +56,3 @@ class WordAndIndex {
   WordAndIndex(std::string_view word, uint64_t index)
       : wordAndIndex_{std::in_place, std::string{word}, index} {}
 };
-
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

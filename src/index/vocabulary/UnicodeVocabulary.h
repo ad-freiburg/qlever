@@ -2,9 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
-#define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
-
+#pragma once
 #include "index/vocabulary/VocabularyTypes.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
@@ -107,5 +105,3 @@ class UnicodeVocabulary {
     _underlyingVocabulary.build(v, filename);
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H

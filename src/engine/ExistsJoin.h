@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_EXISTSJOIN_H
-#define QLEVER_SRC_ENGINE_EXISTSJOIN_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -83,5 +82,3 @@ class ExistsJoin : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
-
-#endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

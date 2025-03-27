@@ -14,8 +14,7 @@
  * be bigger because of the more complex tree structure
  */
 
-#ifndef QLEVER_SRC_UTIL_PRIORITYQUEUE_H
-#define QLEVER_SRC_UTIL_PRIORITYQUEUE_H
+#pragma once
 
 #include <memory>
 #include <queue>
@@ -422,5 +421,3 @@ class HeapBasedPQ {
 };
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_PRIORITYQUEUE_H

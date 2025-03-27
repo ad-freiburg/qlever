@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
-#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -101,5 +100,3 @@ class VocabularyInMemory
   auto begin() const { return _words.begin(); }
   auto end() const { return _words.end(); }
 };
-
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

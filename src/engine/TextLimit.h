@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_TEXTLIMIT_H
-#define QLEVER_SRC_ENGINE_TEXTLIMIT_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -69,5 +68,3 @@ class TextLimit : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }
 };
-
-#endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

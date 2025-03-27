@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
-#define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
+#pragma once
 
 #include <array>
 #include <cstdint>
@@ -388,5 +387,3 @@ class AddCombinedRowToIdTable {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H

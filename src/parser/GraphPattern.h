@@ -1,8 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_PARSER_GRAPHPATTERN_H
-#define QLEVER_SRC_PARSER_GRAPHPATTERN_H
+#pragma once
 
 #include <cstddef>
 #include <sstream>
@@ -61,5 +60,3 @@ class GraphPattern {
   ad_utility::HashMap<Variable, TextLimitMetaObject> textLimits_;
 };
 }  // namespace parsedQuery
-
-#endif  // QLEVER_SRC_PARSER_GRAPHPATTERN_H

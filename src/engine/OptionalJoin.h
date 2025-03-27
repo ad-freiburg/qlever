@@ -1,10 +1,8 @@
 // Copyright 2016, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
-#define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -83,5 +81,3 @@ class OptionalJoin : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
-
-#endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

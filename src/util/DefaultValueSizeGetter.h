@@ -1,10 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (August of 2023,
-
 // schlegea@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
-#define QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
+#pragma once
 
 #include <string>
 #include <type_traits>
@@ -46,5 +44,3 @@ CPP_template(typename StringType)(
 };
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H

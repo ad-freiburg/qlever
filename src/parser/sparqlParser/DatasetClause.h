@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H
+#pragma once
 
 #include "parser/TripleComponent.h"
 
@@ -15,5 +14,3 @@ struct DatasetClause {
   // For testing
   bool operator==(const DatasetClause& other) const = default;
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_DATASETCLAUSE_H

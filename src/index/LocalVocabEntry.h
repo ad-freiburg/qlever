@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
-#define QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
+#pragma once
 
 #include <atomic>
 
@@ -88,5 +87,3 @@ class alignas(16) LocalVocabEntry
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
-
-#endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

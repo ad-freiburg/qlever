@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -283,5 +282,3 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 
 }  // namespace detail
 }  // namespace prefilterExpressions
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_PREFILTEREXPRESSIONINDEX_H

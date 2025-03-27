@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
-#define QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
+#pragma once
 
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
@@ -545,5 +544,3 @@ void expect(std::string query, auto matcher,
                          std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
-
-#endif  // QLEVER_TEST_QUERYPLANNERTESTHELPERS_H

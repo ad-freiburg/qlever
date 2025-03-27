@@ -4,8 +4,7 @@
 
 // Test for UuidExpressionImpl can be found in RandomExpressionTest.cpp
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
@@ -80,5 +79,3 @@ using StrUuidExpression = detail::uuidExpression::UuidExpressionImpl<
     detail::uuidExpression::fromLiteral, detail::uuidExpression::litUuidKey>;
 
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_UUIDEXPRESSIONS_H

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_SRC_INDEX_COMPRESSEDSTRING_H
-#define QLEVER_SRC_INDEX_COMPRESSEDSTRING_H
+#pragma once
 
 #include <functional>
 #include <string>
@@ -59,5 +58,3 @@ class CompressedString : private string {
     return *this;
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_COMPRESSEDSTRING_H

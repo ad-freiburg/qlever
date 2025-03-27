@@ -3,8 +3,7 @@
 // Authors: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SERVER_H
-#define QLEVER_SRC_ENGINE_SERVER_H
+#pragma once
 
 #include <util/http/websocket/MessageSender.h>
 
@@ -284,5 +283,3 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 };
-
-#endif  // QLEVER_SRC_ENGINE_SERVER_H

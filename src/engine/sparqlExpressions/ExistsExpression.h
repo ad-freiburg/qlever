@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H
+#pragma once
 
 #include <variant>
 
@@ -87,5 +86,3 @@ class ExistsExpression : public SparqlExpression {
   std::span<Ptr> childrenImpl() override { return {}; }
 };
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_EXISTSEXPRESSION_H

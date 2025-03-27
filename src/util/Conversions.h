@@ -2,8 +2,7 @@
 // Structures.
 // Author: Björn Buchhold <buchholb>
 
-#ifndef QLEVER_SRC_UTIL_CONVERSIONS_H
-#define QLEVER_SRC_UTIL_CONVERSIONS_H
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -24,5 +23,3 @@ std::string convertToLanguageTaggedPredicate(const std::string& pred,
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag);
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_CONVERSIONS_H

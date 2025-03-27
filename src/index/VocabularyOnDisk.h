@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
-#define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
+#pragma once
 
 #include <string>
 #include <vector>
@@ -123,5 +122,3 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   template <class Iterable>
   void buildFromIterable(Iterable&& iterable, const string& filename);
 };
-
-#endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

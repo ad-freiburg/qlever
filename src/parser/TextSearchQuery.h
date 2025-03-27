@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#ifndef QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H
-#define QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H
+#pragma once
 
 #include <string>
 
@@ -238,5 +237,3 @@ struct TextSearchQuery : MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
-
-#endif  // QLEVER_SRC_PARSER_TEXTSEARCHQUERY_H

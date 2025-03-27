@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
-#define QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
+#pragma once
 
 #include <array>
 #include <cassert>
@@ -898,5 +897,3 @@ template <int COLS>
 using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
-
-#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

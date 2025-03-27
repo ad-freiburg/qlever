@@ -4,8 +4,7 @@
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
+#pragma once
 
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
@@ -637,5 +636,3 @@ class SparqlQleverVisitor {
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

@@ -1,8 +1,7 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASEVISITOR_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASEVISITOR_H
+#pragma once
 
 #include "SparqlAutomaticVisitor.h"
 #include "antlr4-runtime.h"
@@ -793,5 +792,3 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASEVISITOR_H

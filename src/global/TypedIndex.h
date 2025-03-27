@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_GLOBAL_TYPEDINDEX_H
-#define QLEVER_SRC_GLOBAL_TYPEDINDEX_H
+#pragma once
 
 #include <ostream>
 
@@ -63,5 +62,3 @@ struct TypedIndex {
   constexpr TypedIndex(Type value) noexcept : _value{value} {}
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_GLOBAL_TYPEDINDEX_H

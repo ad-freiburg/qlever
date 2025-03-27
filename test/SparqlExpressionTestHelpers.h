@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_SPARQLEXPRESSIONTESTHELPERS_H
-#define QLEVER_TEST_SPARQLEXPRESSIONTESTHELPERS_H
+#pragma once
 
 #include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -144,5 +143,3 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   }
 }
 }  // namespace ad_utility
-
-#endif  // QLEVER_TEST_SPARQLEXPRESSIONTESTHELPERS_H

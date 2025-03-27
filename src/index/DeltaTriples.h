@@ -4,8 +4,7 @@
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
-#define QLEVER_SRC_INDEX_DELTATRIPLES_H
+#pragma once
 
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
@@ -241,5 +240,3 @@ class DeltaTriplesManager {
   // be safely used to execute a query without interfering with future updates.
   SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
 };
-
-#endif  // QLEVER_SRC_INDEX_DELTATRIPLES_H

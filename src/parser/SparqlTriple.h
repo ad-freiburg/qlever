@@ -3,8 +3,7 @@
 //  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_SRC_PARSER_SPARQLTRIPLE_H
-#define QLEVER_SRC_PARSER_SPARQLTRIPLE_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -106,5 +105,3 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
     return {triple.s_, p, triple.o_};
   }
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

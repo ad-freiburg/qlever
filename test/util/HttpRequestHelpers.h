@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H
-#define QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H
+#pragma once
 
 #include "util/HashMap.h"
 #include "util/http/beast.h"
@@ -46,5 +45,3 @@ inline auto makePostRequest(const std::string& target,
 }
 
 }  // namespace ad_utility::testing
-
-#endif  // QLEVER_TEST_UTIL_HTTPREQUESTHELPERS_H

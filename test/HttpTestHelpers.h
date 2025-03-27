@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
-#ifndef QLEVER_TEST_HTTPTESTHELPERS_H
-#define QLEVER_TEST_HTTPTESTHELPERS_H
+#pragma once
 
 #include <gtest/gtest.h>
 
@@ -108,5 +107,3 @@ class TestHttpServer {
   // that the server is always shut down when this object does out of scope.
   ~TestHttpServer() { shutDown(); }
 };
-
-#endif  // QLEVER_TEST_HTTPTESTHELPERS_H

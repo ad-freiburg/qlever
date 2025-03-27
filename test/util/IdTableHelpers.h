@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_TEST_UTIL_IDTABLEHELPERS_H
-#define QLEVER_TEST_UTIL_IDTABLEHELPERS_H
+#pragma once
 
 #include <algorithm>
 #include <concepts>
@@ -261,5 +260,3 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 // local vocabs in a vector.
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
     Result::LazyResult generator, size_t numColumns);
-
-#endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_COMPARISONWITHNAN_H
-#define QLEVER_SRC_UTIL_COMPARISONWITHNAN_H
+#pragma once
 
 #include <cmath>
 #include <type_traits>
@@ -51,5 +50,3 @@ inline auto makeComparatorForNans(Comparator comparator) {
   };
 }
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_COMPARISONWITHNAN_H

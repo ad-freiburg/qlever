@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H
+#pragma once
 
 #include <cmath>
 #include <functional>
@@ -99,5 +98,3 @@ class StdevExpression : public StdevExpressionBase {
 using detail::StdevExpression;
 
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_STDEVEXPRESSION_H

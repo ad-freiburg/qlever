@@ -2,9 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_GLOBAL_PATTERN_H
-#define QLEVER_SRC_GLOBAL_PATTERN_H
-
+#pragma once
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -294,5 +292,3 @@ struct hash<Pattern> {
   }
 };
 }  // namespace std
-
-#endif  // QLEVER_SRC_GLOBAL_PATTERN_H

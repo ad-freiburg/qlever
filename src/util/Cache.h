@@ -4,8 +4,7 @@
 // Author: Niklas Schnelle (schnelle@informatik.uni-freiburg.de)
 // Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_CACHE_H
-#define QLEVER_SRC_UTIL_CACHE_H
+#pragma once
 
 #include <cassert>
 #include <concepts>
@@ -492,5 +491,3 @@ CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
 #endif
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_CACHE_H

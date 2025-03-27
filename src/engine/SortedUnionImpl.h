@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H
-#define QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H
+#pragma once
 
 #include <optional>
 
@@ -243,5 +242,3 @@ SortedUnionImpl(IterationData<Range1>, IterationData<Range2>, bool,
                 std::span<const ColumnIndex, SPAN_SIZE>, Func)
     -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
 }  // namespace sortedUnion
-
-#endif  // QLEVER_SRC_ENGINE_SORTEDUNIONIMPL_H

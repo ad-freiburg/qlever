@@ -3,8 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
-#define QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
+#pragma once
 
 #include <memory>
 #include <optional>
@@ -271,5 +270,3 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H

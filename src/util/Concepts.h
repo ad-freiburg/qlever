@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_CONCEPTS_H
-#define QLEVER_SRC_UTIL_CONCEPTS_H
+#pragma once
 
 #include <sstream>
 
@@ -23,5 +22,3 @@ CPP_requires(is_streamable_, requires(T x, std::ostream& os)(os << x));
 template <typename T>
 CPP_concept Streamable = CPP_requires_ref(detail::is_streamable_, T);
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_CONCEPTS_H

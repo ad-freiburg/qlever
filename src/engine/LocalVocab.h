@@ -3,8 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_LOCALVOCAB_H
-#define QLEVER_SRC_ENGINE_LOCALVOCAB_H
+#pragma once
 
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
@@ -183,5 +182,3 @@ class LocalVocab {
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
-
-#endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

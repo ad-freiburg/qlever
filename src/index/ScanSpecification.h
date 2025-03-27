@@ -2,9 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_SCANSPECIFICATION_H
-#define QLEVER_SRC_INDEX_SCANSPECIFICATION_H
-
+#pragma once
 #include <optional>
 
 #include "engine/LocalVocab.h"
@@ -104,5 +102,3 @@ class ScanSpecificationAsTripleComponent {
   // Getter for testing.
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 };
-
-#endif  // QLEVER_SRC_INDEX_SCANSPECIFICATION_H

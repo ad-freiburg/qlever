@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_GENERATORS_H
-#define QLEVER_SRC_UTIL_GENERATORS_H
+#pragma once
 
 #include <absl/cleanup/cleanup.h>
 
@@ -163,5 +162,3 @@ cppcoro::generator<T> generatorFromActionWithCallback(
   }
 }
 };  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_GENERATORS_H

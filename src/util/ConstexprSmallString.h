@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
-#define QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
+#pragma once
 
 #include <array>
 #include <stdexcept>
@@ -90,5 +89,3 @@ struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
   }
 };
 }  // namespace std
-
-#endif  // QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H

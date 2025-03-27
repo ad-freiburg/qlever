@@ -2,8 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H
-#define QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H
+#pragma once
 
 #include <functional>
 #include <type_traits>
@@ -29,5 +28,3 @@
 #define DISABLE_WARNINGS_GCC_13
 #define ENABLE_WARNINGS_GCC_13
 #endif
-
-#endif  // QLEVER_SRC_UTIL_SUPPRESSWARNINGS_H

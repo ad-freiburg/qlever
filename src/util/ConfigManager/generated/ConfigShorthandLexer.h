@@ -1,8 +1,7 @@
 
 // Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
-#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDLEXER_H
-#define QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDLEXER_H
+#pragma once
 
 #include "antlr4-runtime.h"
 
@@ -52,5 +51,3 @@ class ConfigShorthandLexer : public antlr4::Lexer {
 
   // Individual semantic predicate functions triggered by sempred() above.
 };
-
-#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDLEXER_H

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
-#define QLEVER_SRC_UTIL_BLANKNODEMANAGER_H
+#pragma once
 
 #include <gtest/gtest_prod.h>
 
@@ -140,5 +139,3 @@ class BlankNodeManager {
 };
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_BLANKNODEMANAGER_H

@@ -2,10 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
-#define QLEVER_SRC_INDEX_INDEXIMPL_H
+#pragma once
 
 #include <array>
 #include <memory>
@@ -802,5 +800,3 @@ class IndexImpl {
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
 };
-
-#endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

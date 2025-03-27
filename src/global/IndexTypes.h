@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_GLOBAL_INDEXTYPES_H
-#define QLEVER_SRC_GLOBAL_INDEXTYPES_H
+#pragma once
 
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
@@ -18,5 +17,3 @@ using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, "BlankNodeIndex">;
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, "DocumentIndex">;
-
-#endif  // QLEVER_SRC_GLOBAL_INDEXTYPES_H

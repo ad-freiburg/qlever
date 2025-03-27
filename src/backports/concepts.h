@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_BACKPORTS_CONCEPTS_H
-#define QLEVER_SRC_BACKPORTS_CONCEPTS_H
+#pragma once
 
 #include <concepts/concepts.hpp>
 
@@ -98,5 +97,3 @@ using namespace std;
 #endif
 
 }  // namespace ql::concepts
-
-#endif  // QLEVER_SRC_BACKPORTS_CONCEPTS_H

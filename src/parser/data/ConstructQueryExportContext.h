@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
-#define QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H
+#pragma once
 
 #include <string>
 
@@ -24,5 +23,3 @@ struct ConstructQueryExportContext {
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
 };
-
-#endif  // QLEVER_SRC_PARSER_DATA_CONSTRUCTQUERYEXPORTCONTEXT_H

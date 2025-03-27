@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_QUERYPLANNINGCOSTFACTORS_H
-#define QLEVER_SRC_ENGINE_QUERYPLANNINGCOSTFACTORS_H
+#pragma once
 
 #include <string>
 
@@ -22,5 +21,3 @@ class QueryPlanningCostFactors {
  private:
   ad_utility::HashMap<string, double> _factors;
 };
-
-#endif  // QLEVER_SRC_ENGINE_QUERYPLANNINGCOSTFACTORS_H

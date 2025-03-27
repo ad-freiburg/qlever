@@ -4,8 +4,7 @@
 
 // Library for symmetric serialization.
 
-#ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
-#define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
+#pragma once
 
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -265,5 +264,3 @@ CPP_template(typename T,
 }
 
 }  // namespace ad_utility::serialization
-
-#endif  // QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H

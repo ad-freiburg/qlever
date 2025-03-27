@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_LAZYJSONPARSER_H
-#define QLEVER_SRC_UTIL_LAZYJSONPARSER_H
+#pragma once
 
 #include <optional>
 #include <variant>
@@ -114,5 +113,3 @@ class LazyJsonParser {
   const std::string suffixInArray_;
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_LAZYJSONPARSER_H

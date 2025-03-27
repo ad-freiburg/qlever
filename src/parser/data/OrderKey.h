@@ -1,9 +1,7 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_PARSER_DATA_ORDERKEY_H
-#define QLEVER_SRC_PARSER_DATA_ORDERKEY_H
+#pragma once
 
 #include <string>
 #include <variant>
@@ -42,5 +40,3 @@ struct OrderClause {
   IsInternalSort isInternalSort = IsInternalSort::False;
   std::vector<OrderKey> orderKeys;
 };
-
-#endif  // QLEVER_SRC_PARSER_DATA_ORDERKEY_H

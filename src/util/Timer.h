@@ -1,9 +1,7 @@
 // Copyright 2011-2023, University of Freiburg, Chair of Algorithms and Data
 // Structures.
-
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-#ifndef QLEVER_SRC_UTIL_TIMER_H
-#define QLEVER_SRC_UTIL_TIMER_H
+#pragma once
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -230,5 +228,3 @@ using detail::TimeBlockAndLog;
 using timer::TimeBlockAndLog;
 using timer::Timer;
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_TIMER_H

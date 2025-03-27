@@ -3,8 +3,7 @@
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
-#define QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -528,5 +527,3 @@ consteval MemorySize operator""_TB(unsigned long long int terabytes) {
 }
 }  // namespace memory_literals
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_SERVICE_H
-#define QLEVER_SRC_ENGINE_SERVICE_H
+#pragma once
 
 #include <functional>
 
@@ -169,5 +168,3 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
-
-#endif  // QLEVER_SRC_ENGINE_SERVICE_H

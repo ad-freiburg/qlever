@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_PARSER_UPDATECLAUSE_H
-#define QLEVER_SRC_PARSER_UPDATECLAUSE_H
+#pragma once
 
 #include "parser/Iri.h"
 #include "parser/SelectClause.h"
@@ -79,5 +78,3 @@ struct UpdateClause : ClauseBase {
   explicit UpdateClause(updateClause::Operation op) : op_{std::move(op)} {}
 };
 }  // namespace parsedQuery
-
-#endif  // QLEVER_SRC_PARSER_UPDATECLAUSE_H

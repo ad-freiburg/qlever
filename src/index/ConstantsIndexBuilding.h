@@ -1,9 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
-#ifndef QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
-#define QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H
+#pragma once
 
 #include <atomic>
 #include <cstdint>
@@ -108,5 +106,3 @@ constexpr inline size_t NumColumnsIndexBuilding = 4;
 // The maximal number of distinct graphs in a block such that this information
 // is stored in the metadata of the block.
 constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
-
-#endif  // QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H

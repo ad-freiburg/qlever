@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
-#define QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H
+#pragma once
 
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -337,5 +336,3 @@ CPP_template(typename UnderlyingVocabulary,
     return {std::move(decompressedWord), wordAndIndex.index()};
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_VOCABULARY_COMPRESSEDVOCABULARY_H

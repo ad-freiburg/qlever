@@ -1,8 +1,7 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICVISITOR_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICVISITOR_H
+#pragma once
 
 #include "SparqlAutomaticParser.h"
 #include "antlr4-runtime.h"
@@ -477,5 +476,3 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual std::any visitPnameNs(
       SparqlAutomaticParser::PnameNsContext* context) = 0;
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICVISITOR_H

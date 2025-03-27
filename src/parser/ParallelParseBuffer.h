@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H
-#define QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H
+#pragma once
 
 #include <array>
 #include <future>
@@ -181,5 +180,3 @@ class ParallelParseBuffer {
     return {true, std::move(buf)};
   }
 };
-
-#endif  // QLEVER_SRC_PARSER_PARALLELPARSEBUFFER_H
