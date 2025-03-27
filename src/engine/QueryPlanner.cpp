@@ -584,11 +584,12 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 // old and the new value for equality for each of these rewrites. Then also
 // add an index scan for the rewritten triple.
 constexpr auto handleRepeatedVariablesImpl =
-    []<typename... T>(const auto& triple, auto& addIndexScan,
-                      const auto& generateUniqueVarName, const auto& addFilter,
-                      std::span<const Permutation::Enum> permutations,
-                      T... rewritePositions)
-    -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    [](const auto& triple, auto& addIndexScan,
+       const auto& generateUniqueVarName, const auto& addFilter,
+       std::span<const Permutation::Enum> permutations,
+       auto... rewritePositions)
+    -> CPP_ret(void)(
+        requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
                       generateUniqueVarName));
@@ -628,10 +629,11 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
+      [&triple, &addIndexScan, &addFilter, &generate](
           std::span<const Permutation::Enum> permutations,
-          T... rewritePositions)
-      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+          auto... rewritePositions)
+      -> CPP_ret(void)(
+          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);
@@ -681,10 +683,11 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
+      [&triple, &addIndexScan, &addFilter, &generate](
           std::span<const Permutation::Enum> permutations,
-          T... rewritePositions)
-      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+          auto... rewritePositions)
+      -> CPP_ret(void)(
+          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);

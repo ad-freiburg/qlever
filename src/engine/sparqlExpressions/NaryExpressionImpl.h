@@ -116,8 +116,9 @@ inline auto makeNumericExpression() {
   return [](const auto&... args) {
     CPP_assert(
         (concepts::same_as<std::decay_t<decltype(args)>, NumericValue> && ...));
-    auto visitor = []<typename... Ts>(const Ts&... t) {
-      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+    auto visitor = [](const auto&... t) {
+      if constexpr ((... ||
+                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return Id::makeUndefined();
       } else {
         return makeNumericId(Function{}(t...));
@@ -135,8 +136,9 @@ template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
-inline auto areAllSetOfIntervals = []<typename... Ts>(const Ts&...) constexpr {
-  return (... && ad_utility::isSimilar<Ts, ad_utility::SetOfIntervals>);
+inline auto areAllSetOfIntervals = [](const auto&... t) constexpr {
+  return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
+                                       ad_utility::SetOfIntervals>);
 };
 template <typename F>
 using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;

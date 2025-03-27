@@ -20,6 +20,38 @@
 
 namespace ad_utility {
 
+namespace {
+
+// Helper function, that check, if a given validator behaves as
+// wanted, before and after being transformed into an exception validator.
+template <typename ValidatorFunc, typename... ParameterTypes>
+auto checkValidator(
+    // ValidatorFunction<ParameterTypes...> auto func,
+    ValidatorFunc func, const std::tuple<ParameterTypes...>& validValues,
+    const std::tuple<ParameterTypes...>& nonValidValues,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "checkValidator")};
+
+  ASSERT_TRUE(std::apply(func, validValues));
+  ASSERT_FALSE(std::apply(func, nonValidValues));
+
+  // Transform and check.
+  auto transformedFunc =
+      transformValidatorIntoExceptionValidator<ValidatorFunc,
+                                               ParameterTypes...>(func, "test");
+  static_assert(
+      ExceptionValidatorFunction<decltype(transformedFunc), ParameterTypes...>);
+  ASSERT_STREQ(std::apply(transformedFunc, nonValidValues)
+                   .value_or(ErrorMessage{""})
+                   .getMessage()
+                   .c_str(),
+               "test");
+  ASSERT_FALSE(std::apply(transformedFunc, validValues).has_value());
+}
+
+}  // namespace
+
 TEST(ValidatorConceptTest, ValidatorConcept) {
   // Lambda function types for easier test creation.
   using SingleIntValidatorFunction = decltype([](const int&) { return true; });
@@ -424,36 +456,6 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
 
 // Rather basic test, if things behave as wanted with the helper function.
 TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
-  // Helper function, that check, if a given validator behaves as
-  // wanted, before and after being transformed into an exception validator.
-  auto checkValidator = []<typename ValidatorFunc, typename... ParameterTypes>(
-                            // ValidatorFunction<ParameterTypes...> auto func,
-                            ValidatorFunc func,
-                            const std::tuple<ParameterTypes...>& validValues,
-                            const std::tuple<ParameterTypes...>& nonValidValues,
-                            ad_utility::source_location l =
-                                ad_utility::source_location::current()) {
-    // For generating better messages, when failing a test.
-    auto trace{generateLocationTrace(l, "checkValidator")};
-
-    ASSERT_TRUE(std::apply(func, validValues));
-    ASSERT_FALSE(std::apply(func, nonValidValues));
-
-    // Transform and check.
-    auto transformedFunc =
-        transformValidatorIntoExceptionValidator<ValidatorFunc,
-                                                 ParameterTypes...>(func,
-                                                                    "test");
-    static_assert(ExceptionValidatorFunction<decltype(transformedFunc),
-                                             ParameterTypes...>);
-    ASSERT_STREQ(std::apply(transformedFunc, nonValidValues)
-                     .value_or(ErrorMessage{""})
-                     .getMessage()
-                     .c_str(),
-                 "test");
-    ASSERT_FALSE(std::apply(transformedFunc, validValues).has_value());
-  };
-
   // Test with a few generated validators..
   checkValidator(generateDummyNonExceptionValidatorFunction<bool>(0),
                  std::make_tuple(false), std::make_tuple(true));

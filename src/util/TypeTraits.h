@@ -250,10 +250,9 @@ inline auto visitWithVariantsAndParameters =
 ///       2. The order in which the function is called is unspecified.
 template <typename Function, typename Tuple>
 auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
-  auto transformer =
-      [f = std::forward<Function>(f)]<typename... Args>(Args&&... args) {
-        return std::tuple{f(std::forward<Args>(args))...};
-      };
+  auto transformer = [f = std::forward<Function>(f)](auto&&... args) {
+    return std::tuple{f(std::forward<decltype(args)>(args))...};
+  };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
 

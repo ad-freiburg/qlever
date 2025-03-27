@@ -1201,16 +1201,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
-        [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
+        [&isGrowthFunction](auto&... args) -> auto& {
       // Put them into a tuple, so that we can easily look them up.
-      auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
+      auto tup = std::tuple<decltype(args)...>{AD_FWD(args)...};
 
       // Get the index of the first growth function.
-      constexpr static size_t idx =
-          ad_utility::getIndexOfFirstTypeToPassCheck<isGrowthFunction, Ts...>();
+      constexpr static size_t idx = ad_utility::getIndexOfFirstTypeToPassCheck<
+          isGrowthFunction, std::decay_t<decltype(args)>...>();
 
       // Do we have a valid index?
-      static_assert(idx < sizeof...(Ts),
+      static_assert(idx < sizeof...(args),
                     "There was no growth function in this parameter pack.");
 
       return std::get<idx>(tup);
