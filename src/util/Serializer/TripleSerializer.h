@@ -11,111 +11,106 @@
 #include <fstream>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "util/Exception.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeString.h"
 #include "util/TypeTraits.h"
+#include "util/Views.h"
 
 namespace ad_utility {
 
 namespace detail {
 
-constexpr std::string_view magicBytes = "QLEVER";
-
-template <typename T>
-CPP_concept isTrivialValue =
-    std::is_trivially_constructible_v<T> && std::is_trivially_copyable_v<T> &&
-    std::is_trivially_copy_constructible_v<T> &&
-    std::is_trivially_move_constructible_v<T> &&
-    std::is_trivially_copy_assignable_v<T> &&
-    std::is_trivially_move_assignable_v<T> &&
-    std::is_trivially_destructible_v<T>;
-
-// Write a value of type T to the output stream.
-CPP_template(typename T)(requires isTrivialValue<T>) void writeBytes(
-    std::ostream& os, const T& type) {
-  os.write(reinterpret_cast<const char*>(&type), sizeof(T));
+static const std::string& magicBytes() {
+  static std::string bytes = "QLEVER.UPDATE";
+  return bytes;
 }
 
-// Read a value of type T from the input stream.
-CPP_template(typename T)(requires isTrivialValue<T>) T
-    readBytes(std::istream& is) {
+// Read a value of type T from the `serializer`.
+CPP_template(typename T, typename Serializer)(
+    requires serialization::ReadSerializer<Serializer>) T
+    readValue(Serializer& serializer) {
   T value;
-  is.read(reinterpret_cast<char*>(&value), sizeof(T));
+  serializer >> value;
   return value;
 }
 
 // Write the header of the file format to the output stream. We are currently at
 // version 0.
-inline void writeHeader(std::ostream& os) {
-  // Magic bytes to identify the file format.
-  os.write(magicBytes.data(), magicBytes.size());
-  // Version number of the file format.
+CPP_template(typename Serializer)(
+    requires serialization::WriteSerializer<
+        Serializer>) void writeHeader(Serializer& serializer) {
+  serializer << magicBytes();
   uint16_t version = 0;
-  writeBytes(os, version);
+  serializer << version;
 }
 
 // Read the header of the file format from the input stream and ensure that it
 // is correct.
-inline void readHeader(std::istream& is) {
-  auto magicBuffer = readBytes<std::array<char, magicBytes.size()>>(is);
-  AD_CORRECTNESS_CHECK(
-      (std::string_view{magicBuffer.data(), magicBuffer.size()}) == magicBytes);
-  uint16_t version = readBytes<uint16_t>(is);
+CPP_template(typename Serializer)(
+    requires serialization::ReadSerializer<
+        Serializer>) void readHeader(Serializer& serializer) {
+  std::string magicByteBuffer;
+  serializer >> magicByteBuffer;
+  AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes());
+  uint16_t version;
+  serializer >> version;
   AD_CORRECTNESS_CHECK(version == 0);
 }
 
 // Serialize the local vocabulary to the output stream. Returns a mapping from
 // Ids that map to their string position in the file.
-inline void serializeLocalVocab(std::ostream& os, const LocalVocab& vocab) {
+CPP_template(typename Serializer)(
+    requires serialization::WriteSerializer<
+        Serializer>) void serializeLocalVocab(Serializer& serializer,
+                                              const LocalVocab& vocab) {
   AD_CONTRACT_CHECK(vocab.numSets() == 1);
   const auto& words = vocab.primaryWordSet();
-  uint64_t size = words.size();
-  writeBytes(os, size);
-
+  serializer << words.size();
   for (const auto& localVocabEntry : words) {
-    const auto& entryString = localVocabEntry.toStringRepresentation();
-    writeBytes(os, Id::makeFromLocalVocabIndex(&localVocabEntry).getBits());
-    // Make sure to write the null terminator as well.
-    os.write(entryString.c_str(), entryString.size() + 1);
+    serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
+    serializer << localVocabEntry.toStringRepresentation();
   }
 }
 
 // Deserialize the local vocabulary from the input stream.
-inline std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>>
-deserializeLocalVocab(std::istream& is) {
+CPP_template(typename Serializer)(
+    requires serialization::ReadSerializer<Serializer>) inline std::
+    tuple<LocalVocab, absl::flat_hash_map<Id, Id>> deserializeLocalVocab(
+        Serializer& serializer) {
   LocalVocab vocab;
-  uint64_t size = readBytes<uint64_t>(is);
+  auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
-  absl::flat_hash_map<Id::T, Id> mapping{};
+  absl::flat_hash_map<Id, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    Id::T bits = readBytes<Id::T>(is);
-    AD_CORRECTNESS_CHECK(Id::fromBits(bits).getDatatype() ==
-                         Datatype::LocalVocabIndex);
-    std::string value;
-    std::getline(is, value, '\0');
-    AD_CORRECTNESS_CHECK(is);
+    auto id = readValue<Id>(serializer);
+    auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(std::move(value)));
-    mapping.emplace(bits, Id::makeFromLocalVocabIndex(localVocabIndex));
+        LocalVocabEntry::fromStringRepresentation(std::move(s)));
+    mapping.emplace(id, Id::makeFromLocalVocabIndex(localVocabIndex));
   }
   return {std::move(vocab), std::move(mapping)};
 }
 
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
-CPP_template(typename Range)(
-    requires ql::ranges::sized_range<Range>) void serializeIds(std::ostream& os,
+CPP_template(typename Range, typename Serializer)(
+    requires ql::ranges::sized_range<Range>) void serializeIds(Serializer&
+                                                                   serializer,
                                                                Range&& range) {
-  static_assert(sizeof(std::streamoff) == sizeof(LocalVocabIndex));
-  uint64_t idCount = ql::ranges::size(range);
-  // Store the size of the triples.
-  writeBytes(os, idCount);
+  ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
+      vectorSerializer{std::move(serializer)};
   for (const Id& value : range) {
-    writeBytes(os, value.getBits());
+    vectorSerializer.push(value);
   }
+  vectorSerializer.finish();
+  serializer = std::move(vectorSerializer).serializer();
 }
 
 // Deserialize a range of Ids from the input stream. If an Id is of type
@@ -123,24 +118,19 @@ CPP_template(typename Range)(
 CPP_template(typename BlankNodeFunc)(
     requires ad_utility::InvocableWithConvertibleReturnType<BlankNodeFunc,
                                                             BlankNodeIndex>)
-    std::vector<Id> deserializeIds(
-        std::istream& is, const absl::flat_hash_map<Id::T, Id>& mapping,
-        BlankNodeFunc newBlankNodeIndex) {
-  uint64_t idCount = readBytes<uint64_t>(is);
-  std::vector<Id> ids;
-  ids.reserve(idCount);
+    std::vector<Id> deserializeIds(auto& serializer,
+                                   const absl::flat_hash_map<Id, Id>& mapping,
+                                   BlankNodeFunc newBlankNodeIndex) {
+  std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
   absl::flat_hash_map<Id, BlankNodeIndex> blankNodeMapping;
-  for (uint64_t i = 0; i < idCount; ++i) {
-    Id id = Id::fromBits(readBytes<Id::T>(is));
+  for (Id& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      ids.push_back(mapping.at(id.getBits()));
+      id = mapping.at(id);
     } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
       BlankNodeIndex index = blankNodeMapping.contains(id)
                                  ? blankNodeMapping[id]
                                  : (blankNodeMapping[id] = newBlankNodeIndex());
-      ids.push_back(Id::makeFromBlankNodeIndex(index));
-    } else {
-      ids.push_back(id);
+      id = Id::makeFromBlankNodeIndex(index);
     }
   }
   return ids;
@@ -152,26 +142,33 @@ CPP_template(typename Range)(
     requires ql::ranges::range<
         Range>) void serializeIds(const std::filesystem::path& path,
                                   const LocalVocab& vocab, Range&& idRanges) {
-  std::ofstream os{path, std::ios::binary};
-  detail::writeHeader(os);
-  detail::serializeLocalVocab(os, vocab);
+  serialization::FileWriteSerializer serializer{path.c_str()};
+  detail::writeHeader(serializer);
+  detail::serializeLocalVocab(serializer, vocab);
+  serializer << uint64_t{ql::ranges::size(idRanges)};
   for (const auto& ids : idRanges) {
-    detail::serializeIds(os, ids);
+    detail::serializeIds(serializer, ids);
   }
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
     const std::filesystem::path& path, BlankNodeManager* blankNodeManager) {
-  std::ifstream is{path, std::ios::binary};
-  if (!is) {
-    return {LocalVocab{}, std::vector<std::vector<Id>>{}};
+  // TODO<joka921, RobinTF> check for a better way to check for a nonexisting
+  // path.
+  {
+    std::ifstream is{path, std::ios::binary};
+    if (!is) {
+      return {LocalVocab{}, std::vector<std::vector<Id>>{}};
+    }
   }
-  detail::readHeader(is);
-  auto [vocab, mapping] = detail::deserializeLocalVocab(is);
+  serialization::FileReadSerializer serializer{path.c_str()};
+  detail::readHeader(serializer);
+  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer);
   std::vector<std::vector<Id>> idVectors;
-  while (is.peek() != std::char_traits<char>::eof()) {
-    idVectors.push_back(
-        detail::deserializeIds(is, mapping, [blankNodeManager, &vocab]() {
+  auto numRanges = detail::readValue<uint64_t>(serializer);
+  for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {
+    idVectors.push_back(detail::deserializeIds(
+        serializer, mapping, [blankNodeManager, &vocab]() {
           return vocab.getBlankNodeIndex(blankNodeManager);
         }));
   }

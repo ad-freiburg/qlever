@@ -327,3 +327,7 @@ void DeltaTriples::readFromDisk() {
               << ", num deleted triples: " << idRanges.at(0).size()
               << std::endl;
 }
+// _____________________________________________________________________________
+void DeltaTriples::setPersists(std::optional<std::string> filename) {
+  filenameForPersisting_ = std::move(filename);
+}
