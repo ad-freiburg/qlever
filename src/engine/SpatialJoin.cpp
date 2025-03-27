@@ -131,7 +131,7 @@ string SpatialJoin::getCacheKeyImpl() const {
       os << "maxResults: " << maxResults.value() << "\n";
     }
 
-    // Uses distance variable?
+    // Uses libspatialjoin?
     auto algo = getAlgorithm();
     if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
       os << "libspatialjoin on: " << (int)config_.joinType_ << "\n";

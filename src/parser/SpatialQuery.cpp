@@ -130,16 +130,26 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
+  // Default algorithm
+  SpatialJoinAlgorithm algo = SPATIAL_JOIN_DEFAULT_ALGORITHM;
+  if (algo_.has_value()) {
+    algo = algo_.value();
+  }
+
   if (!left_.has_value()) {
     throw SpatialSearchException("Missing parameter <left> in spatial search.");
-  } else if (!maxDist_.has_value() && !maxResults_.has_value() &&
-             !joinType_.has_value()) {
+  }
+
+  if (algo != SpatialJoinAlgorithm::LIBSPATIALJOIN && !maxDist_.has_value() &&
+      !maxResults_.has_value()) {
     throw SpatialSearchException(
-        "Neither <numNearestNeighbors> nor <maxDistance> nor <joinType> were "
+        "Neither <numNearestNeighbors> nor <maxDistance> were "
         "provided. At "
         "least "
-        "one of them is required.");
-  } else if (!right_.has_value()) {
+        "one of them is required for the selected algorithm.");
+  }
+
+  if (!right_.has_value()) {
     throw SpatialSearchException(
         "Missing parameter <right> in spatial search.");
   }
@@ -161,12 +171,6 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "SERVICE, but the <payload> parameter was set. Please move the "
         "declaration of the right variable into the SERVICE if you wish to use "
         "<payload>.");
-  }
-
-  // Default algorithm
-  SpatialJoinAlgorithm algo = SPATIAL_JOIN_DEFAULT_ALGORITHM;
-  if (algo_.has_value()) {
-    algo = algo_.value();
   }
 
   // Default join type

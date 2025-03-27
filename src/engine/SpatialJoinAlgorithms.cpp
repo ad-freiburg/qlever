@@ -301,6 +301,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
 
+  // withinDist < 0 means "withinDist disabled"
   double withinDist = -1;
 
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST)

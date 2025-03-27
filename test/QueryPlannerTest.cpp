@@ -1709,6 +1709,19 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::INTERSECTS, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:intersects ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -2175,7 +2188,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("Neither <numNearestNeighbors> nor "
-                               "<maxDistance> nor <joinType> were provided"));
+                               "<maxDistance> were provided"));
 }
 
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {

@@ -38,7 +38,7 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
-// Full spatial join on selected join type
+// Full spatial join on selected join type with optional maximum distance.
 struct SJConfig {
   SpatialJoinType joinType_;
   std::optional<size_t> maxDist_ = std::nullopt;
@@ -76,8 +76,7 @@ struct SpatialJoinConfiguration {
   // You may use PayloadAllVariables to select all columns of the right table.
   PayloadVariables payloadVariables_ = PayloadVariables::all();
 
-  // Choice of algorithm. Both algorithms have equal results, but different
-  // runtime characteristics.
+  // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
   SpatialJoinType joinType_ = SpatialJoinType::INTERSECTS;

@@ -46,6 +46,8 @@ struct SpatialQuery : MagicServiceQuery {
   // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;
 
+  // Optional join type for libspatialjoin. If it is not given, INTERSECT
+  // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
 
   // Helper: if the spatial query was constructed from a special triple
