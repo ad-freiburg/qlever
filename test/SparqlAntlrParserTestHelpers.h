@@ -10,8 +10,10 @@
 
 #include <iostream>
 #include <string>
+#include <typeindex>
 #include <vector>
 
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/DatasetClauses.h"
@@ -677,21 +679,6 @@ inline auto Triples = [](const vector<SparqlTriple>& triples)
                testing::UnorderedElementsAreArray(triples)));
 };
 
-// Match a `Describe` clause.
-inline auto Describe = [](const std::vector<p::Describe::VarOrIri>& resources,
-                          const p::DatasetClauses& datasetClauses,
-                          const Matcher<const ParsedQuery&>& subquery)
-    -> Matcher<const p::GraphPatternOperation&> {
-  using namespace ::testing;
-  auto getSubquery = [](const p::Subquery& subquery) -> const ParsedQuery& {
-    return subquery.get();
-  };
-  return detail::GraphPatternOperation<p::Describe>(AllOf(
-      AD_FIELD(p::Describe, resources_, Eq(resources)),
-      AD_FIELD(p::Describe, datasetClauses_, Eq(datasetClauses)),
-      AD_FIELD(p::Describe, whereClause_, ResultOf(getSubquery, subquery))));
-};
-
 namespace detail {
 inline auto Optional =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
@@ -910,16 +897,30 @@ inline auto ConstructQuery(
 
 // A matcher for a `DescribeQuery`
 inline auto DescribeQuery(
-    const Matcher<const p::GraphPatternOperation&>& describeMatcher,
+    const Matcher<const p::GraphPattern&>& describeMatcher,
     const ScanSpecificationAsTripleComponent::Graphs& defaultGraphs =
         std::nullopt,
     const ScanSpecificationAsTripleComponent::Graphs& namedGraphs =
         std::nullopt) {
   using Var = ::Variable;
   return ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}},
-                        GraphPattern(describeMatcher), defaultGraphs,
-                        namedGraphs);
+                        describeMatcher, defaultGraphs, namedGraphs);
 }
+
+// Match a `Describe` clause.
+inline auto Describe = [](const std::vector<p::Describe::VarOrIri>& resources,
+                          const p::DatasetClauses& datasetClauses,
+                          const Matcher<const ParsedQuery&>& subquery)
+    -> Matcher<const p::GraphPattern&> {
+  using namespace ::testing;
+  auto getSubquery = [](const p::Subquery& subquery) -> const ParsedQuery& {
+    return subquery.get();
+  };
+  return GraphPattern(detail::GraphPatternOperation<p::Describe>(AllOf(
+      AD_FIELD(p::Describe, resources_, Eq(resources)),
+      AD_FIELD(p::Describe, datasetClauses_, Eq(datasetClauses)),
+      AD_FIELD(p::Describe, whereClause_, ResultOf(getSubquery, subquery)))));
+};
 
 // _____________________________________________________________________________
 inline auto VisibleVariables =
@@ -1039,6 +1040,147 @@ inline auto Quad = [](const TripleComponent& s, const TripleComponent& p,
       AD_FIELD(SparqlTripleSimpleWithGraph, p_, testing::Eq(p)),
       AD_FIELD(SparqlTripleSimpleWithGraph, o_, testing::Eq(o)),
       AD_FIELD(SparqlTripleSimpleWithGraph, g_, testing::Eq(g)));
+};
+
+// Some helper matchers for testing SparqlExpressions
+namespace builtInCall {
+using namespace sparqlExpression;
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// (via `dynamic_cast`) points to an object of type `Expression`, and that this
+// `Expression` matches the `matcher`.
+template <typename Expression, typename Matcher = decltype(testing::_)>
+auto matchPtr(Matcher matcher = Matcher{})
+    -> testing::Matcher<const SparqlExpression::Ptr&> {
+  return testing::Pointee(
+      testing::WhenDynamicCastTo<const Expression&>(matcher));
+}
+
+// Return a matcher that matches a `SparqlExpression::Ptr` that stores a
+// `VariableExpression` with the given  `variable`.
+inline auto variableExpressionMatcher = [](const ::Variable& variable) {
+  return matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
+};
+
+// Return a matcher that matches a `SparqlExpression::Ptr`that stores an
+// `Expression` (template argument), the children of which match the
+// `childrenMatchers`.
+template <typename Expression>
+auto matchPtrWithChildren(auto&&... childrenMatchers)
+    -> Matcher<const SparqlExpression::Ptr&> {
+  return matchPtr<Expression>(
+      AD_PROPERTY(SparqlExpression, childrenForTesting,
+                  testing::ElementsAre(childrenMatchers...)));
+}
+
+// Same as `matchPtrWithChildren` above, but the children are all variables.
+template <typename Expression>
+auto matchPtrWithVariables(const std::same_as<::Variable> auto&... children)
+    -> Matcher<const SparqlExpression::Ptr&> {
+  return matchPtrWithChildren<Expression>(
+      variableExpressionMatcher(children)...);
+}
+
+// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
+// (via `dynamic_cast`) to an object of the same type that a call to the
+// `makeFunction` yields. The matcher also checks that the expression's children
+// match the `childrenMatchers`.
+auto matchNaryWithChildrenMatchers(auto makeFunction,
+                                   auto&&... childrenMatchers)
+    -> Matcher<const SparqlExpression::Ptr&> {
+  using namespace sparqlExpression;
+  auto typeIdLambda = [](const auto& ptr) {
+    return std::type_index{typeid(*ptr)};
+  };
+
+  [[maybe_unused]] auto makeDummyChild = [](auto&&) -> SparqlExpression::Ptr {
+    return std::make_unique<VariableExpression>(::Variable{"?x"});
+  };
+  auto expectedTypeIndex =
+      typeIdLambda(makeFunction(makeDummyChild(childrenMatchers)...));
+  Matcher<const SparqlExpression::Ptr&> typeIdMatcher =
+      ::testing::ResultOf(typeIdLambda, ::testing::Eq(expectedTypeIndex));
+  return ::testing::AllOf(typeIdMatcher,
+                          ::testing::Pointee(AD_PROPERTY(
+                              SparqlExpression, childrenForTesting,
+                              ::testing::ElementsAre(childrenMatchers...))));
+}
+
+inline auto idExpressionMatcher = [](Id id) {
+  return matchPtr<IdExpression>(
+      AD_PROPERTY(IdExpression, value, testing::Eq(id)));
+};
+
+// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
+// (via `dynamic_cast`) to an object of the same type that a call to the
+// `makeFunction` yields. The matcher also checks that the expression's children
+// are the `variables`.
+auto matchNary(auto makeFunction,
+               QL_CONCEPT_OR_NOTHING(
+                   ad_utility::SimilarTo<::Variable>) auto&&... variables)
+    -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  using namespace sparqlExpression;
+  return matchNaryWithChildrenMatchers(makeFunction,
+                                       variableExpressionMatcher(variables)...);
+}
+auto matchUnary(auto makeFunction) -> Matcher<const SparqlExpression::Ptr&> {
+  return matchNary(makeFunction, ::Variable{"?x"});
+}
+
+template <typename T>
+auto matchLiteralExpression(const T& value)
+    -> Matcher<const SparqlExpression::Ptr&> {
+  using Expr = sparqlExpression::detail::LiteralExpression<T>;
+  return testing::Pointee(testing::WhenDynamicCastTo<const Expr&>(
+      AD_PROPERTY(Expr, value, testing::Eq(value))));
+}
+}  // namespace builtInCall
+
+// Match an EXISTS function
+inline auto Exists(Matcher<const ParsedQuery&> pattern) {
+  return testing::Pointee(
+      testing::WhenDynamicCastTo<const sparqlExpression::ExistsExpression&>(
+          AD_PROPERTY(sparqlExpression::ExistsExpression, argument, pattern)));
+}
+
+// Match a NOT EXISTS function
+inline auto NotExists(Matcher<const ParsedQuery&> pattern) {
+  return builtInCall::matchNaryWithChildrenMatchers(
+      &sparqlExpression::makeUnaryNegateExpression, Exists(pattern));
+}
+
+// Return a matcher that checks if a `GraphPattern` contains an EXISTS filter
+// that matches the given `matcher` when comparing the inner parsed query of the
+// `ExistsExpression`.
+inline auto ContainsExistsFilter =
+    [](const Matcher<const ParsedQuery&>& matcher)
+    -> Matcher<const parsedQuery::GraphPattern&> {
+  return AD_FIELD(parsedQuery::GraphPattern, _filters,
+                  ::testing::ElementsAre(AD_FIELD(
+                      SparqlFilter, expression_,
+                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+                                  getExistsExpressions,
+                                  ::testing::ElementsAre(Exists(matcher))))));
+};
+
+// Check that the given filters are set on the graph pattern.
+inline auto Filters = [](const auto&... filterMatchers)
+    -> Matcher<const ParsedQuery::GraphPattern&> {
+  return AD_FIELD(ParsedQuery::GraphPattern, _filters,
+                  testing::ElementsAre(filterMatchers...));
+};
+
+// Matcher for `FILTER EXISTS` filters.
+inline auto ExistsFilter =
+    [](const Matcher<const parsedQuery::GraphPattern&>& m,
+       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+           std::nullopt) -> Matcher<const SparqlFilter&> {
+  return AD_FIELD(SparqlFilter, expression_,
+                  AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getPimpl,
+                              Exists(SelectQuery(VariablesSelect({}), m,
+                                                 defaultGraphs, namedGraphs))));
 };
 
 }  // namespace matchers
