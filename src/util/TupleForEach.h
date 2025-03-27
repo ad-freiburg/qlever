@@ -10,8 +10,8 @@
 namespace ad_utility {
 template <typename Tuple, typename Function>
 void forEachInTuple(Tuple&& tuple, Function&& function) {
-  auto forEachInParamPack = [&]<typename... Ts>(Ts&&... parameters) {
-    (..., function(std::forward<Ts>(parameters)));
+  auto forEachInParamPack = [&](auto&&... parameters) {
+    (..., function(std::forward<decltype(parameters)>(parameters)));
   };
   std::apply(forEachInParamPack, std::forward<Tuple>(tuple));
 }
@@ -24,8 +24,9 @@ void forEachInTuple(Tuple&& tuple, Function&& function) {
 ///                 in the `tuple` and must always return the same type.
 template <typename Tuple, typename Function>
 auto tupleToArray(Tuple&& tuple, Function&& function) {
-  auto paramPackToArray = [&]<typename... Ts>(Ts&&... parameters) {
-    return std::array{function(std::forward<Ts>(parameters))...};
+  auto paramPackToArray = [&](auto&&... parameters) {
+    return std::array{
+        function(std::forward<decltype(parameters)>(parameters))...};
   };
   return std::apply(paramPackToArray, std::forward<Tuple>(tuple));
 }

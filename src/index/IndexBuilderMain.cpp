@@ -175,8 +175,8 @@ int main(int argc, char** argv) {
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
-  auto add = [&boostOptions]<typename... Args>(Args&&... args) {
-    boostOptions.add_options()(std::forward<Args>(args)...);
+  auto add = [&boostOptions](auto&&... args) {
+    boostOptions.add_options()(std::forward<decltype(args)>(args)...);
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&baseName)->required(),

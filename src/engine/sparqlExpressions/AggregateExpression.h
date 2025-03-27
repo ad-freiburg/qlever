@@ -105,11 +105,13 @@ using AGG_EXP = AggregateExpression<
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
-  return []<typename... Args>(const Args&... args)
+  return [](const auto&... args)
              -> CPP_ret(NumericValue)(
-                 requires(concepts::same_as<Args, NumericValue>&&...)) {
-    auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
-      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+                 requires(concepts::same_as<std::decay_t<decltype(args)>,
+                                            NumericValue>&&...)) {
+    auto visitor = [](const auto&... t) -> NumericValue {
+      if constexpr ((... ||
+                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return NotNumeric{};
       } else {
         return (NumericOperation{}(t...));
