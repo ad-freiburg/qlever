@@ -511,8 +511,10 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     return fromBool(std::invoke(comparator, a.getBits(), b.getBits()));
   }
 
-  auto visitor = [comparator, &a, &b]<typename A, typename B>(
-                     const A& aValue, const B& bValue) -> ComparisonResult {
+  auto visitor = [comparator, &a, &b](const auto& aValue,
+                                      const auto& bValue) -> ComparisonResult {
+    using A = std::decay_t<decltype(aValue)>;
+    using B = std::decay_t<decltype(bValue)>;
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {

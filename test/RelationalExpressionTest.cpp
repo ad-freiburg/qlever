@@ -90,7 +90,8 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 
 // Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
 // `VectorWithMemoryLimit` of any of those types.
-auto liftToValueId = []<typename T>(const T& t) {
+auto liftToValueId = [](const auto& t) {
+  using T = std::decay_t<decltype(t)>;
   if constexpr (SingleExpressionResult<T>) {
     if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
       return t.clone();

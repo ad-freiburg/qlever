@@ -105,7 +105,8 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) -> const Id& {
+  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+    using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {

@@ -320,7 +320,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
-  auto toTripleComponent = []<typename T>(const T& item) {
+  auto toTripleComponent = [](const auto& item) {
+    using T = std::decay_t<decltype(item)>;
     namespace tc = ad_utility::triple_component;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
@@ -335,7 +336,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+    using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return PropertyPath::fromVariable(item);
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {

@@ -145,8 +145,8 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
 
-  auto getMediaTypeFromPart =
-      []<typename T>(const T& part) -> std::optional<MediaType> {
+  auto getMediaTypeFromPart = [](const auto& part) -> std::optional<MediaType> {
+    using T = std::decay_t<decltype(part)>;
     static constexpr std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
       return detail::SUPPORTED_MEDIA_TYPES.at(0);

@@ -172,12 +172,13 @@ ResultTable::operator std::string() const {
 
   // Convert an `EntryType` of `ResultTable` to a screen friendly
   // format.
-  auto entryToStringVisitor = []<typename T>(const T& entry) {
+  auto entryToStringVisitor = [](const auto& entry) {
     /*
     `EntryType` has multiple distinct possible types, that all need different
     handling. Fortunately, we can decide the handling at compile time and
     throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
     */
+    using T = std::decay_t<decltype(entry)>;
     if constexpr (std::is_same_v<T, std::monostate>) {
       // No value, print it as NA.
       return "NA"s;

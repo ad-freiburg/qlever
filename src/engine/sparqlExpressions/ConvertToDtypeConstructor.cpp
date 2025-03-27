@@ -135,7 +135,8 @@ inline const auto castStringToDateTimeValueId = [](OptStringOrDate input) {
 
   using DYD = DateYearOrDuration;
   std::optional<DYD> optValueId = std::visit(
-      [&]<typename T>(const T& value) {
+      [&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
         if constexpr (ad_utility::isSimilar<T, DYD>) {
           return ToJustXsdDate ? DYD::convertToXsdDate(value)
                                : DYD::convertToXsdDatetime(value);

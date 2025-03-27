@@ -10,7 +10,8 @@
 
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
-  auto impl = []<typename T>(const T& value) -> std::string {
+  auto impl = [](const auto& value) -> std::string {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, NoTimeZone>) {
       return "";
     } else if constexpr (std::is_same_v<T, TimeZoneZ>) {

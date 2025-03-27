@@ -13,7 +13,8 @@
 #include "util/Views.h"
 
 TEST(Views, BufferedAsyncView) {
-  auto testWithVector = []<typename T>(const T& inputVector) {
+  auto testWithVector = [](const auto& inputVector) {
+    using T = std::decay_t<decltype(inputVector)>;
     auto view = ad_utility::bufferedAsyncView(inputVector, 100);
     T result;
     result.reserve(inputVector.size());

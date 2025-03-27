@@ -553,7 +553,8 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   const auto retrieveValueIdOrThrowErr =
       [](const IdOrLocalVocabEntry& referenceValue) {
         return std::visit(
-            []<typename T>(const T& value) -> ValueId {
+            [](const auto& value) -> ValueId {
+              using T = std::decay_t<decltype(value)>;
               if constexpr (ad_utility::isSimilar<T, ValueId>) {
                 return value;
               } else {

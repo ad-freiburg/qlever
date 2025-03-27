@@ -94,7 +94,10 @@ static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
                                 const auto&... wantedContent) {
   // Calls the correct assert function based on type.
-  auto assertEqual = []<typename T>(const T& a, const T& b) {
+  auto assertEqual = [](const auto& a, const auto& b) {
+    static_assert(std::is_same_v<decltype(a), decltype(b)>,
+                  "Arguments shall be of the same type");
+    using T = std::decay_t<decltype(a)>;
     if constexpr (std::is_floating_point_v<T>) {
       ASSERT_NEAR(a, b, 0.01);
     } else {
@@ -104,8 +107,9 @@ static void checkResultTableRow(const ResultTable& table,
 
   size_t column = 0;
   auto check = [&table, &rowNumber, &column,
-                &assertEqual]<typename T>(const T& wantedContent) mutable {
+                &assertEqual](const auto& wantedContent) mutable {
     // `getEntry` should ONLY work with `T`
+    using T = std::decay_t<decltype(wantedContent)>;
     doForTypeInResultTableEntryType(
         [&table, &rowNumber, &column, &assertEqual,
          &wantedContent]<typename PossiblyWrongType>() {

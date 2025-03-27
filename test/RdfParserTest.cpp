@@ -482,7 +482,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
     }
   };
   auto runCommonTests = [&assertParsingFails, &testTripleObjects,
-                         &parseAllTriples]<typename Parser>(const Parser&) {
+                         &parseAllTriples](const auto& p) {
+    using Parser = std::decay_t<decltype(p)>;
     {
       // Test the default mode (overflowing integers throw an exception).
       std::vector<std::string> inputs{

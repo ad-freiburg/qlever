@@ -76,8 +76,9 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
   A `std::variant` gets saved as a json object with those two fields, so this
   is just a plain json check.
   */
-  auto checkJson = [&j, &variant, &typeToVariantIndex]<typename ValueType>(
-                       const ValueType& wantedValue) {
+  auto checkJson = [&j, &variant,
+                    &typeToVariantIndex](const auto& wantedValue) {
+    using ValueType = std::decay_t<decltype(wantedValue)>;
     ASSERT_EQ(typeToVariantIndex.template operator()<ValueType>(variant),
               j["index"].get<size_t>());
     ASSERT_EQ(wantedValue, j["value"].get<ValueType>());
@@ -93,27 +94,27 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
   deserialization. Needs to be different from newValue, so that we can make
   sure, that the variant is actually changed by the deserialization.
   */
-  auto doSimpleTest =
-      [&j, &variant, &checkJson, &typeToVariantIndex]<typename NewValueType>(
-          const NewValueType& newValue, const auto& intermediateValue) {
-        // Serialize `variant` after setting it to the new value.
-        variant = newValue;
-        j = variant;
+  auto doSimpleTest = [&j, &variant, &checkJson, &typeToVariantIndex](
+                          const auto& newValue, const auto& intermediateValue) {
+    using NewValueType = std::decay_t<decltype(newValue)>;
+    // Serialize `variant` after setting it to the new value.
+    variant = newValue;
+    j = variant;
 
-        // Was it serialized, as it should?
-        checkJson(newValue);
+    // Was it serialized, as it should?
+    checkJson(newValue);
 
-        /*
-        Set `variant` to a intermediate value, before checking, if it
-        deserializes correctly.
-        */
-        variant = intermediateValue;
-        variant = j.get<VariantType>();
+    /*
+    Set `variant` to a intermediate value, before checking, if it
+    deserializes correctly.
+    */
+    variant = intermediateValue;
+    variant = j.get<VariantType>();
 
-        ASSERT_EQ(typeToVariantIndex.template operator()<NewValueType>(variant),
-                  variant.index());
-        ASSERT_EQ(newValue, std::get<NewValueType>(variant));
-      };
+    ASSERT_EQ(typeToVariantIndex.template operator()<NewValueType>(variant),
+              variant.index());
+    ASSERT_EQ(newValue, std::get<NewValueType>(variant));
+  };
 
   // Do simple tests for monostate, float and int.
   doSimpleTest((int)42, (float)6.5);

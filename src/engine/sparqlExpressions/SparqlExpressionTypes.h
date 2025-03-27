@@ -121,9 +121,10 @@ CPP_template(typename ResultT)(
     requires ad_utility::SimilarTo<ResultT,
                                    ExpressionResult>) inline ExpressionResult
     copyExpressionResult(ResultT&& result) {
-  auto copyIfCopyable =
-      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
-                                     requires SingleExpressionResult<R>) {
+  auto copyIfCopyable = [](const auto& x)
+      -> CPP_ret(ExpressionResult)(
+          requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
+    using R = std::decay_t<decltype(x)>;
     if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
