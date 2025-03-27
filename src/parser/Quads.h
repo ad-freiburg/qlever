@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <absl/functional/function_ref.h>
+
 #include <vector>
 
 #include "parser/GraphPatternOperation.h"
@@ -30,7 +32,7 @@ struct Quads {
 
   // Run the function for all variables in the quads. The function may be called
   // twice for the same variable.
-  void forAllVariables(const std::function<void(const Variable&)>& f);
+  void forAllVariables(absl::FunctionRef<void(const Variable&)> f);
 
   // Return the quads in a format for use as an update template.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph() const;

@@ -72,7 +72,7 @@ Quads::toGraphPatternOperations() const {
 }
 
 // ____________________________________________________________________________________
-void Quads::forAllVariables(const std::function<void(const Variable&)>& f) {
+void Quads::forAllVariables(absl::FunctionRef<void(const Variable&)> f) {
   auto visitGraphTerm = [&f](const GraphTerm& t) {
     if (std::holds_alternative<Variable>(t)) {
       f(std::get<Variable>(t));
