@@ -146,7 +146,10 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool createTextIndex, bool addWordsFromLiterals,
                     std::optional<std::pair<std::string, std::string>>
                         contentsOfWordsFileAndDocsFile,
-                    ad_utility::MemorySize parserBufferSize) {
+                    ad_utility::MemorySize parserBufferSize,
+                    std::optional<TextScoringMetric> scoringMetric,
+                    std::optional<pair<float, float>> bAndKParam,
+                    qlever::Filetype indexType) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -188,10 +191,19 @@ Index makeTestIndex(const std::string& indexBasename,
     index.usePatterns() = usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
-    qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
-                                        std::nullopt};
+    qlever::InputFileSpecification spec{inputFilename, indexType, std::nullopt};
     index.createFromFiles({spec});
     if (createTextIndex) {
+      if (scoringMetric.has_value()) {
+        if (!bAndKParam.has_value()) {
+          index.storeTextScoringParamsInConfiguration(scoringMetric.value(),
+                                                      0.75, 1.75);
+        } else {
+          index.storeTextScoringParamsInConfiguration(
+              scoringMetric.value(), bAndKParam.value().first,
+              bAndKParam.value().second);
+        }
+      }
       if (contentsOfWordsFileAndDocsFile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
         // index from them
@@ -207,13 +219,19 @@ Index makeTestIndex(const std::string& indexBasename,
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
         if (addWordsFromLiterals) {
-          index.addTextFromContextFile(indexBasename + ".wordsfile", true);
+          index.buildTextIndexFile(
+              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
+                                                  indexBasename + ".docsfile"},
+              true);
         } else {
-          index.addTextFromContextFile(indexBasename + ".wordsfile", false);
+          index.buildTextIndexFile(
+              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
+                                                  indexBasename + ".docsfile"},
+              false);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.addTextFromContextFile("", true);
+        index.buildTextIndexFile(std::nullopt, true);
       }
     }
   }
@@ -252,7 +270,10 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool createTextIndex, bool addWordsFromLiterals,
                               std::optional<std::pair<std::string, std::string>>
                                   contentsOfWordsFileAndDocsFile,
-                              ad_utility::MemorySize parserBufferSize) {
+                              ad_utility::MemorySize parserBufferSize,
+                              std::optional<TextScoringMetric> scoringMetric,
+                              std::optional<std::pair<float, float>> bAndKParam,
+                              qlever::Filetype indexType) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -288,12 +309,16 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
             SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<std::optional<string>, bool, bool, bool,
-                         ad_utility::MemorySize>;
+  using Key = std::tuple<
+      std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
+      std::optional<std::pair<std::string, std::string>>,
+      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
-  auto key = Key{turtleInput, loadAllPermutations, usePatterns,
-                 usePrefixCompression, blocksizePermutations};
+  auto key = Key{turtleInput,           loadAllPermutations,
+                 usePatterns,           usePrefixCompression,
+                 blocksizePermutations, contentsOfWordsFileAndDocsFile,
+                 scoringMetric,         bAndKParam};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -313,7 +338,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                     testIndexBasename, turtleInput, loadAllPermutations,
                     usePatterns, usePrefixCompression, blocksizePermutations,
                     createTextIndex, addWordsFromLiterals,
-                    contentsOfWordsFileAndDocsFile, parserBufferSize)),
+                    contentsOfWordsFileAndDocsFile, parserBufferSize,
+                    scoringMetric, bAndKParam, indexType)),
                 std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();

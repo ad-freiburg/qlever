@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
+#define QLEVER_SRC_ENGINE_EXECUTEUPDATE_H
 
 #include <gtest/gtest_prod.h>
 
@@ -85,3 +86,5 @@ class ExecuteUpdate {
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
 };
+
+#endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

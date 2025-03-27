@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
+#define QLEVER_SRC_PARSER_SPATIALQUERY_H
 
 #include "parser/GraphPattern.h"
 #include "parser/MagicServiceQuery.h"
@@ -72,3 +73,5 @@ struct SpatialQuery : MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_SPATIALQUERY_H

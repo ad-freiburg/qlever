@@ -4,7 +4,8 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
+#define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
 #include <boost/optional.hpp>
 #include <vector>
@@ -635,3 +636,5 @@ class QueryPlanner {
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

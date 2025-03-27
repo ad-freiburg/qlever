@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
+#define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 
 #include <array>
 #include <cstdint>
@@ -155,7 +156,7 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
     if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
       currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+      mergedVocab_.mergeWith(table.getLocalVocab());
     }
   }
 
@@ -387,3 +388,5 @@ class AddCombinedRowToIdTable {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H

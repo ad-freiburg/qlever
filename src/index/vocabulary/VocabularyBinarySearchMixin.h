@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYBINARYSEARCHMIXIN_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYBINARYSEARCHMIXIN_H
 
 #include <cstdint>
 #include <optional>
@@ -90,3 +91,5 @@ class VocabularyBinarySearchMixin {
     return std::pair{begin, end};
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYBINARYSEARCHMIXIN_H

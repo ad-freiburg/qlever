@@ -1,4 +1,5 @@
-#pragma once
+#ifndef QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
+#define QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 
 #include <cstdlib>
 
@@ -432,3 +433,5 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
 }
 
 }  // namespace SpatialJoinTestHelpers
+
+#endif  // QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
