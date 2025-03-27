@@ -26,9 +26,9 @@ def add_include_guard(file_path):
         lines[pragma_once_index] = f"#ifndef {guard_macro}\n"
         lines.insert(pragma_once_index + 1, f"#define {guard_macro}\n")
         if insert_empty_line_after:
-            lines.insert(pragma_once_index + 2, "")
+            lines.insert(pragma_once_index + 2, "\n")
         if insert_empty_line_before:
-            lines.insert(pragma_once_index - 1, "")
+            lines.insert(pragma_once_index - 1, "\n")
         lines.append(f"\n#endif // {guard_macro}\n")
 
         # Write the changes back to the file
