@@ -6,6 +6,8 @@
 #define QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
 
 #include "backports/algorithm.h"
+#include "global/Id.h"
+#include "util/Generator.h"
 
 namespace ad_utility {
 // The following functions `findSmallerUndefRanges...` have the following in
