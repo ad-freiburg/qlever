@@ -1,8 +1,7 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLEXER_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLEXER_H
+#pragma once
 
 #include "antlr4-runtime.h"
 
@@ -215,5 +214,3 @@ class SparqlAutomaticLexer : public antlr4::Lexer {
 
   // Individual semantic predicate functions triggered by sempred() above.
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICLEXER_H

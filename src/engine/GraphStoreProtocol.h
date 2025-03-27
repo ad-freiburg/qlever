@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
-#define QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H
+#pragma once
 
 #include <gtest/gtest_prod.h>
 
@@ -135,5 +134,3 @@ class GraphStoreProtocol {
     }
   }
 };
-
-#endif  // QLEVER_SRC_ENGINE_GRAPHSTOREPROTOCOL_H

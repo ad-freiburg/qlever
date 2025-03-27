@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_GLOBAL_SPECIALIDS_H
-#define QLEVER_SRC_GLOBAL_SPECIALIDS_H
+#pragma once
 
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -56,5 +55,3 @@ static constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
   return {Id::fromBits(1), upperBound};
 }
 }  // namespace qlever
-
-#endif  // QLEVER_SRC_GLOBAL_SPECIALIDS_H

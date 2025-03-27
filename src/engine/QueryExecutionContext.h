@@ -3,8 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
-#ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
-#define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
+#pragma once
 
 #include <memory>
 #include <string>
@@ -171,5 +170,3 @@ class QueryExecutionContext {
   // mutex.
   bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 };
-
-#endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

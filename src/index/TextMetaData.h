@@ -1,8 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_INDEX_TEXTMETADATA_H
-#define QLEVER_SRC_INDEX_TEXTMETADATA_H
+#pragma once
 
 #include <cstdio>
 #include <vector>
@@ -135,5 +134,3 @@ class TextMetaData {
     serializer | arg._blocks;
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_TEXTMETADATA_H

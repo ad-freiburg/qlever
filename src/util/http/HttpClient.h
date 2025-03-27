@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
-#define QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H
+#pragma once
 
 // IMPORTANT: The header `util/HttpServer/beast.h` redefines some variables
 // (important for our code) which are also defined in some of the ´<boost/...>´
@@ -96,5 +95,3 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain");
-
-#endif  // QLEVER_SRC_UTIL_HTTP_HTTPCLIENT_H

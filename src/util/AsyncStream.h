@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_ASYNCSTREAM_H
-#define QLEVER_SRC_UTIL_ASYNCSTREAM_H
+#pragma once
 
 #include <absl/cleanup/cleanup.h>
 
@@ -79,5 +78,3 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
   });
 }
 }  // namespace ad_utility::streams
-
-#endif  // QLEVER_SRC_UTIL_ASYNCSTREAM_H

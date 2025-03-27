@@ -3,8 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_PARSER_PARSEDQUERY_H
-#define QLEVER_SRC_PARSER_PARSEDQUERY_H
+#pragma once
 
 #include <initializer_list>
 #include <string>
@@ -250,5 +249,3 @@ class ParsedQuery {
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 };
-
-#endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

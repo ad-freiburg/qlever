@@ -1,8 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H
-#define QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H
+#pragma once
 
 #include <array>
 #include <tuple>
@@ -82,5 +81,3 @@ struct SortText {
             std::numeric_limits<Score>::max(), true};
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H

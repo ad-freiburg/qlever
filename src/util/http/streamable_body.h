@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H
-#define QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H
+#pragma once
 
 #include <exception>
 
@@ -133,5 +132,3 @@ static_assert(boost::beast::http::is_body<streamable_body>::value,
               "Body type requirements not met");
 
 }  // namespace ad_utility::httpUtils::httpStreams
-
-#endif  // QLEVER_SRC_UTIL_HTTP_STREAMABLE_BODY_H

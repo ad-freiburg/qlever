@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
-#define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
@@ -252,5 +251,3 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
   bool knownEmptyResult() override { return false; }
   uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 };
-
-#endif  // QLEVER_TEST_ENGINE_VALUESFORTESTING_H

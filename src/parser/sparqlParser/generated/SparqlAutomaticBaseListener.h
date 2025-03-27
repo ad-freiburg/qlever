@@ -1,8 +1,7 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H
+#pragma once
 
 #include "SparqlAutomaticListener.h"
 #include "antlr4-runtime.h"
@@ -813,5 +812,3 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void visitTerminal(antlr4::tree::TerminalNode* /*node*/) override {}
   virtual void visitErrorNode(antlr4::tree::ErrorNode* /*node*/) override {}
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICBASELISTENER_H

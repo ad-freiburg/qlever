@@ -4,8 +4,7 @@
 
 // Type traits for template metaprogramming
 
-#ifndef QLEVER_SRC_UTIL_TYPETRAITS_H
-#define QLEVER_SRC_UTIL_TYPETRAITS_H
+#pragma once
 #include <concepts>
 #include <tuple>
 #include <type_traits>
@@ -363,5 +362,3 @@ CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 template <typename T>
 CPP_concept FloatingPoint = std::is_floating_point_v<T>;
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_TYPETRAITS_H

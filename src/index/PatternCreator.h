@@ -7,8 +7,7 @@
  *       these patterns to disk, and to read them from disk.
  */
 
-#ifndef QLEVER_SRC_INDEX_PATTERNCREATOR_H
-#define QLEVER_SRC_INDEX_PATTERNCREATOR_H
+#pragma once
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
@@ -191,5 +190,3 @@ class PatternCreator {
     return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
-
-#endif  // QLEVER_SRC_INDEX_PATTERNCREATOR_H

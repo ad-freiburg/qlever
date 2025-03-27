@@ -4,8 +4,7 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
-#define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
+#pragma once
 
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -247,5 +246,3 @@ class ExportQueryExecutionTrees {
               ensureGeneratorIsNotConsumedWhenNotRequired);
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
 };
-
-#endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

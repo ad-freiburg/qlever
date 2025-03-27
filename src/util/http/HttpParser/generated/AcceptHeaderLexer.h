@@ -1,8 +1,7 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERLEXER_H
-#define QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERLEXER_H
+#pragma once
 
 #include "antlr4-runtime.h"
 
@@ -73,5 +72,3 @@ class AcceptHeaderLexer : public antlr4::Lexer {
 
   // Individual semantic predicate functions triggered by sempred() above.
 };
-
-#endif  // QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERLEXER_H

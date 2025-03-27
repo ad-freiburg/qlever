@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#ifndef QLEVER_SRC_UTIL_READABLENUMBERFACT_H
-#define QLEVER_SRC_UTIL_READABLENUMBERFACT_H
+#pragma once
 
 #include <locale>
 #include <string>
@@ -36,5 +35,3 @@ class ReadableNumberFacet : public std::numpunct<char> {
   virtual string do_grouping() const { return "\003"; }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_READABLENUMBERFACT_H

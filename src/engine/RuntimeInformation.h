@@ -4,8 +4,7 @@
 //   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
-#define QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -157,5 +156,3 @@ struct RuntimeInformationWholeQuery {
   friend void to_json(nlohmann::ordered_json& j,
                       const RuntimeInformationWholeQuery& rti);
 };
-
-#endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H

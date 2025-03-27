@@ -1,8 +1,7 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
-#define QLEVER_SRC_PARSER_PROPERTYPATH_H
+#pragma once
 
 #include <cstdint>
 #include <initializer_list>
@@ -124,5 +123,3 @@ class PropertyPath {
    */
   bool canBeNull_ = false;
 };
-
-#endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

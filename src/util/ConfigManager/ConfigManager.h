@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGMANAGER_H
-#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGMANAGER_H
+#pragma once
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/strings/str_cat.h>
@@ -817,5 +816,3 @@ class ConfigManager {
 }  // namespace ConfigManagerImpl
 using ConfigManagerImpl::ConfigManager;
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGMANAGER_H

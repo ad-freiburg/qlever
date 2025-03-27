@@ -3,8 +3,7 @@
 // Authors:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2022      Julian Mundhahs (mundhahj@tf.informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_UTIL_PARSEEXCEPTION_H
-#define QLEVER_SRC_UTIL_PARSEEXCEPTION_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -82,5 +81,3 @@ class NotSupportedException : public ParseException {
       std::optional<ExceptionMetadata> metadata = std::nullopt)
       : ParseException{cause, std::move(metadata), "Not supported:"} {}
 };
-
-#endif  // QLEVER_SRC_UTIL_PARSEEXCEPTION_H

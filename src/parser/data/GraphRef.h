@@ -2,8 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_PARSER_DATA_GRAPHREF_H
-#define QLEVER_SRC_PARSER_DATA_GRAPHREF_H
+#pragma once
 
 #include <variant>
 
@@ -30,5 +29,3 @@ struct ALL {
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;
 using GraphOrDefault = std::variant<GraphRef, DEFAULT>;
-
-#endif  // QLEVER_SRC_PARSER_DATA_GRAPHREF_H

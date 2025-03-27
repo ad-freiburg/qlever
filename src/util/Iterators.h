@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_ITERATORS_H
-#define QLEVER_SRC_UTIL_ITERATORS_H
+#pragma once
 
 #include <cstdint>
 #include <iterator>
@@ -422,5 +421,3 @@ ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
   return t;
 }
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_ITERATORS_H

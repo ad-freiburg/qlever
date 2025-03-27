@@ -1,8 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
-#define QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
+#pragma once
 
 #include "util/ExceptionHandling.h"
 
@@ -82,5 +81,3 @@ CPP_template(typename F)(requires std::invocable<F>)
 }
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H

@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_CHECKUSEPATTERNTRICK_H
-#define QLEVER_SRC_ENGINE_CHECKUSEPATTERNTRICK_H
+#pragma once
 #include <optional>
 
 #include "parser/ParsedQuery.h"
@@ -59,5 +58,3 @@ bool isVariableContainedInGraphPatternOperation(
     const SparqlTriple* tripleToIgnore);
 
 }  // namespace checkUsePatternTrick
-
-#endif  // QLEVER_SRC_ENGINE_CHECKUSEPATTERNTRICK_H

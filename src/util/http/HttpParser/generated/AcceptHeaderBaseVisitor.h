@@ -1,8 +1,7 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASEVISITOR_H
-#define QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASEVISITOR_H
+#pragma once
 
 #include "AcceptHeaderVisitor.h"
 #include "antlr4-runtime.h"
@@ -86,5 +85,3 @@ class AcceptHeaderBaseVisitor : public AcceptHeaderVisitor {
     return visitChildren(ctx);
   }
 };
-
-#endif  // QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASEVISITOR_H

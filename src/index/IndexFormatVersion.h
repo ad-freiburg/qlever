@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_INDEXFORMATVERSION_H
-#define QLEVER_SRC_INDEX_INDEXFORMATVERSION_H
+#pragma once
 
 #include <cstdint>
 
@@ -39,5 +38,3 @@ struct IndexFormatVersion {
 inline const IndexFormatVersion& indexFormatVersion{
     1572, DateYearOrDuration{Date{2024, 10, 22}}};
 }  // namespace qlever
-
-#endif  // QLEVER_SRC_INDEX_INDEXFORMATVERSION_H

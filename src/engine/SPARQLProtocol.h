@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H
-#define QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H
+#pragma once
 
 #include "engine/ParsedRequestBuilder.h"
 
@@ -51,5 +50,3 @@ class SPARQLProtocol {
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       const RequestType& request);
 };
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

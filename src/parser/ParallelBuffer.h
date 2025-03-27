@@ -3,8 +3,7 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#ifndef QLEVER_SRC_PARSER_PARALLELBUFFER_H
-#define QLEVER_SRC_PARSER_PARALLELBUFFER_H
+#pragma once
 #include <re2/re2.h>
 
 #include <future>
@@ -111,5 +110,3 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   std::string endRegexAsString_;
   bool exhausted_ = false;
 };
-
-#endif  // QLEVER_SRC_PARSER_PARALLELBUFFER_H

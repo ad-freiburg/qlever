@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
-#define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
+#pragma once
 
 #include <type_traits>
 #include <vector>
@@ -763,5 +762,3 @@ class CompressedRelationReader {
  * that the given permutation has.
  * 2. Then add assertions that we only get valid column indices specified.
  */
-
-#endif  // QLEVER_SRC_INDEX_COMPRESSEDRELATION_H

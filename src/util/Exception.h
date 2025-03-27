@@ -3,8 +3,7 @@
 // Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
 //         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_UTIL_EXCEPTION_H
-#define QLEVER_SRC_UTIL_EXCEPTION_H
+#pragma once
 #include <exception>
 #include <functional>
 #include <sstream>
@@ -189,5 +188,3 @@ static constexpr bool areExpensiveChecksEnabled = false;
 }
 #define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif
-
-#endif  // QLEVER_SRC_UTIL_EXCEPTION_H

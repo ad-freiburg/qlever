@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
-#ifndef QLEVER_SRC_ENGINE_ORDERBY_H
-#define QLEVER_SRC_ENGINE_ORDERBY_H
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -87,5 +86,3 @@ class OrderBy : public Operation {
     return subtree_->getVariableColumns();
   }
 };
-
-#endif  // QLEVER_SRC_ENGINE_ORDERBY_H

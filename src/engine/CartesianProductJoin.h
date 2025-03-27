@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
-#define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#pragma once
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -127,5 +126,3 @@ class CartesianProductJoin : public Operation {
       std::vector<std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
-
-#endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

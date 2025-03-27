@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_RESULTTYPE_H
-#define QLEVER_SRC_ENGINE_RESULTTYPE_H
+#pragma once
 
 namespace qlever {
 
@@ -32,5 +31,3 @@ enum class ResultType {
   LOCAL_VOCAB
 };
 }  // namespace qlever
-
-#endif  // QLEVER_SRC_ENGINE_RESULTTYPE_H

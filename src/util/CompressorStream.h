@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_COMPRESSORSTREAM_H
-#define QLEVER_SRC_UTIL_COMPRESSORSTREAM_H
+#pragma once
 
 // For some include orders the EOF constant is not defined although `<cstdio>`
 // was included, so we define it manually.
@@ -55,5 +54,3 @@ cppcoro::generator<std::string> compressStream(
   }
 }
 }  // namespace ad_utility::streams
-
-#endif  // QLEVER_SRC_UTIL_COMPRESSORSTREAM_H

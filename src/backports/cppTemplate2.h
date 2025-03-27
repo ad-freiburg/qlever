@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_BACKPORTS_CPPTEMPLATE2_H
-#define QLEVER_SRC_BACKPORTS_CPPTEMPLATE2_H
+#pragma once
 #include <concepts/concepts.hpp>
 
 // The internal reimplementation of a `CPP_variadic_template` macro
@@ -131,5 +130,3 @@ CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_3_, __VA_ARGS__)        \
 
 #define CPP_LAMBDA_ARGS_MUT(...) (__VA_ARGS__) mutable CPP_LAMBDA_AUX_
 #define CPP_lambda_mut_20(...) [__VA_ARGS__] CPP_LAMBDA_ARGS_MUT
-
-#endif  // QLEVER_SRC_BACKPORTS_CPPTEMPLATE2_H

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (October of 2023, schlegea@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H
-#define QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H
+#pragma once
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -40,5 +39,3 @@ inline std::array<ad_utility::RandomSeed, NumSeeds> createArrayOfRandomSeeds(
                        [&generator]() { return std::invoke(generator); });
   return seeds;
 }
-
-#endif  // QLEVER_TEST_UTIL_RANDOMTESTHELPERS_H

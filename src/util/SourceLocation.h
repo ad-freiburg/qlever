@@ -8,12 +8,9 @@
 // libraries that include the `<source_location>` header,
 // `ad_utility::source_location` is merely an alias for `std::source_location`.
 
-#ifndef QLEVER_SRC_UTIL_SOURCELOCATION_H
-#define QLEVER_SRC_UTIL_SOURCELOCATION_H
+#pragma once
 
 #include <source_location>
 namespace ad_utility {
 using source_location = std::source_location;
 }
-
-#endif  // QLEVER_SRC_UTIL_SOURCELOCATION_H

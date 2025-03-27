@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb> and Zhiwei Zhang <zhang>
 
-#ifndef QLEVER_SRC_UTIL_SIMPLE8BCODE_H
-#define QLEVER_SRC_UTIL_SIMPLE8BCODE_H
+#pragma once
 #include <assert.h>
 #include <stdint.h>
 
@@ -167,5 +166,3 @@ class Simple8bCode {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_SIMPLE8BCODE_H

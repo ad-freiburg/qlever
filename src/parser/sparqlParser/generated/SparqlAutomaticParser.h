@@ -1,8 +1,7 @@
 
 // Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICPARSER_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICPARSER_H
+#pragma once
 
 #include "antlr4-runtime.h"
 
@@ -3173,5 +3172,3 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
  private:
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_GENERATED_SPARQLAUTOMATICPARSER_H

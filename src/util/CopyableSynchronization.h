@@ -3,8 +3,7 @@
 // Author:
 //   Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H
-#define QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H
+#pragma once
 
 #include <mutex>
 #include <shared_mutex>
@@ -50,5 +49,3 @@ class CopyableAtomic : public std::atomic<T> {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_COPYABLESYNCHRONIZATION_H

@@ -2,8 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#ifndef QLEVER_SRC_PARSER_LITERALORIRI_H
-#define QLEVER_SRC_PARSER_LITERALORIRI_H
+#pragma once
 
 #include <variant>
 
@@ -139,5 +138,3 @@ class alignas(16) LiteralOrIri {
 };
 
 }  // namespace ad_utility::triple_component
-
-#endif  // QLEVER_SRC_PARSER_LITERALORIRI_H

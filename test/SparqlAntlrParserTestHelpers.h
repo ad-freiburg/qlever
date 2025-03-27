@@ -4,8 +4,7 @@
 //   2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //   2022 Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#ifndef QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H
-#define QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H
+#pragma once
 
 #include <gmock/gmock.h>
 
@@ -1043,5 +1042,3 @@ inline auto Quad = [](const TripleComponent& s, const TripleComponent& p,
 };
 
 }  // namespace matchers
-
-#endif  // QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H

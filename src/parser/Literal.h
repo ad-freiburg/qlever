@@ -2,8 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#ifndef QLEVER_SRC_PARSER_LITERAL_H
-#define QLEVER_SRC_PARSER_LITERAL_H
+#pragma once
 
 #include <optional>
 #include <variant>
@@ -104,5 +103,3 @@ class Literal {
   void removeDatatypeOrLanguageTag();
 };
 }  // namespace ad_utility::triple_component
-
-#endif  // QLEVER_SRC_PARSER_LITERAL_H

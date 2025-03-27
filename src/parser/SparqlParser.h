@@ -1,8 +1,7 @@
 // Copyright 2022, University of Freiburg,
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
-#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_H
-#define QLEVER_SRC_PARSER_SPARQLPARSER_H
+#pragma once
 
 #include <string>
 
@@ -19,5 +18,3 @@ class SparqlParser {
   static ParsedQuery parseQuery(std::string operation,
                                 const std::vector<DatasetClause>& datasets);
 };
-
-#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_H

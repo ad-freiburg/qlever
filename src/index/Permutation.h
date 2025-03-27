@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_INDEX_PERMUTATION_H
-#define QLEVER_SRC_INDEX_PERMUTATION_H
+#pragma once
 
 #include <array>
 #include <string>
@@ -202,5 +201,3 @@ class Permutation {
 
   bool isInternalPermutation_ = false;
 };
-
-#endif  // QLEVER_SRC_INDEX_PERMUTATION_H

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
-#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -278,5 +277,3 @@ CPP_concept SupportedConfigOptionType =
 }  // namespace ConfigManagerImpl
 using ConfigManagerImpl::ConfigOption;
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H

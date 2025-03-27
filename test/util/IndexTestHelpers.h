@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
-#define QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
+#pragma once
 
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
@@ -81,5 +80,3 @@ QueryExecutionContext* getQec(
 std::function<Id(const std::string&)> makeGetId(const Index& index);
 
 }  // namespace ad_utility::testing
-
-#endif  // QLEVER_TEST_UTIL_INDEXTESTHELPERS_H

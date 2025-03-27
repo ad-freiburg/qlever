@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H
-#define QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H
+#pragma once
 
 #include <absl/cleanup/cleanup.h>
 
@@ -19,5 +18,3 @@ template <ad_utility::ParameterName Name, typename Value>
     RuntimeParameters().set<Name>(originalValue);
   }};
 }
-
-#endif  // QLEVER_TEST_UTIL_RUNTIMEPARAMETERSTESTHELPERS_H

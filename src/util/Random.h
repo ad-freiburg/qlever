@@ -4,8 +4,7 @@
 
 // Simple interfaces for the random facilities from the STL
 
-#ifndef QLEVER_SRC_UTIL_RANDOM_H
-#define QLEVER_SRC_UTIL_RANDOM_H
+#pragma once
 
 #include <array>
 #include <boost/uuid/uuid_generators.hpp>
@@ -129,5 +128,3 @@ void randomShuffle(RandomIt begin, RandomIt end,
 }
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_RANDOM_H

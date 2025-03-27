@@ -3,8 +3,7 @@
 // Authors: Andre Schlegel (schlegea@informatik.uni-freiburg.de)
 //          Johannes Kalmbach, kalmbach@cs.uni-freiburg.de
 
-#ifndef QLEVER_SRC_UTIL_STRINGUTILSIMPL_H
-#define QLEVER_SRC_UTIL_STRINGUTILSIMPL_H
+#pragma once
 
 #include <ctre-unicode.hpp>
 
@@ -99,5 +98,3 @@ std::string insertThousandSeparator(const std::string_view str,
 template std::string insertThousandSeparator<'.'>(const std::string_view str,
                                                   const char separatorSymbol);
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_STRINGUTILSIMPL_H

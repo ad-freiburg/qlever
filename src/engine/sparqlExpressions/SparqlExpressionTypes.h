@@ -3,8 +3,7 @@
 
 // Several helper types needed for the SparqlExpression module
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
+#pragma once
 
 #include <vector>
 
@@ -376,5 +375,3 @@ CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
 
 }  // namespace detail
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H

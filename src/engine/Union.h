@@ -1,8 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#ifndef QLEVER_SRC_ENGINE_UNION_H
-#define QLEVER_SRC_ENGINE_UNION_H
+#pragma once
 
 #include <array>
 #include <memory>
@@ -124,5 +123,3 @@ class Union : public Operation {
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 };
-
-#endif  // QLEVER_SRC_ENGINE_UNION_H

@@ -1,8 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#ifndef QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
-#define QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
+#pragma once
 
 #include <array>
 #include <vector>
@@ -72,5 +71,3 @@ class MultiColumnJoin : public Operation {
 
   void computeSizeEstimateAndMultiplicities();
 };
-
-#endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H

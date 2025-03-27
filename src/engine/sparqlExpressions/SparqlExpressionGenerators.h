@@ -3,8 +3,7 @@
 
 // Several templated helper functions that are used for the Expression module
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -198,5 +197,3 @@ inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value,
 }
 
 }  // namespace sparqlExpression::detail
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H

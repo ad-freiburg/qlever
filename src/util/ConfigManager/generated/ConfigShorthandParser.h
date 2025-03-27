@@ -1,8 +1,7 @@
 
 // Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
-#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDPARSER_H
-#define QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDPARSER_H
+#pragma once
 
 #include "antlr4-runtime.h"
 
@@ -129,5 +128,3 @@ class ConfigShorthandParser : public antlr4::Parser {
 
  private:
 };
-
-#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_GENERATED_CONFIGSHORTHANDPARSER_H

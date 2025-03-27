@@ -3,8 +3,7 @@
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_SORT_H
-#define QLEVER_SRC_ENGINE_SORT_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -79,5 +78,3 @@ class Sort : public Operation {
 
   string getCacheKeyImpl() const override;
 };
-
-#endif  // QLEVER_SRC_ENGINE_SORT_H

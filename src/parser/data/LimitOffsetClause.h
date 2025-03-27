@@ -4,8 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H
-#define QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H
+#pragma once
 
 #include <cstdint>
 #include <limits>
@@ -66,5 +65,3 @@ struct LimitOffsetClause {
 
   bool operator==(const LimitOffsetClause&) const = default;
 };
-
-#endif  // QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H

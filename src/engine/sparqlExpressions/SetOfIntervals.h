@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
-#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H
+#pragma once
 
 #include <limits>
 #include <utility>
@@ -85,5 +84,3 @@ struct SetOfIntervals {
 };
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SETOFINTERVALS_H

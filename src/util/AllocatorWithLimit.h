@@ -3,8 +3,7 @@
 // Author: Johannes Kalmbach (April of 2020,
 // kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_UTIL_ALLOCATORWITHLIMIT_H
-#define QLEVER_SRC_UTIL_ALLOCATORWITHLIMIT_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -283,5 +282,3 @@ AllocatorWithLimit<T> makeUnlimitedAllocator() {
 }
 
 }  // namespace ad_utility
-
-#endif  // QLEVER_SRC_UTIL_ALLOCATORWITHLIMIT_H
