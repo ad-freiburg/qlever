@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_GLOBAL_ID_H
+#define QLEVER_SRC_GLOBAL_ID_H
 
 #include <cstdint>
 
@@ -19,3 +21,5 @@ using WordIndex = uint64_t;
 using WordOrEntityIndex = uint64_t;
 using TextBlockIndex = uint64_t;
 using CompressionCode = uint64_t;
+
+#endif  // QLEVER_SRC_GLOBAL_ID_H

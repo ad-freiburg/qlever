@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_PROGRESSBAR_H
+#define QLEVER_SRC_UTIL_PROGRESSBAR_H
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
@@ -173,3 +174,5 @@ class ProgressBar {
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_PROGRESSBAR_H

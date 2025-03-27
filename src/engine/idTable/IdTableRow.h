@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H
+#define QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H
 
 #include <array>
 #include <iostream>
@@ -433,3 +434,5 @@ class RowReference
 };
 
 }  // namespace columnBasedIdTable
+
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLEROW_H

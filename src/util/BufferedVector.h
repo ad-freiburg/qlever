@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_BUFFEREDVECTOR_H
+#define QLEVER_SRC_UTIL_BUFFEREDVECTOR_H
+
 #include <vector>
 
 #include "MmapVector.h"
@@ -195,3 +197,5 @@ class BufferedVector {
   bool isInternal() const { return _isInternal; }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_BUFFEREDVECTOR_H

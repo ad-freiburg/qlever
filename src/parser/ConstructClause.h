@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H
+#define QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H
 
 #include "parser/SelectClause.h"
 #include "parser/data/Types.h"
@@ -28,3 +29,5 @@ struct ConstructClause : ClauseBase {
   }
 };
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H

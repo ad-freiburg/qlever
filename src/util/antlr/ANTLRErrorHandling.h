@@ -4,7 +4,8 @@
 //   2021 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //   2022 Julian Mundhahs (mundhahj@tf.informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ANTLR_ANTLRERRORHANDLING_H
+#define QLEVER_SRC_UTIL_ANTLR_ANTLRERRORHANDLING_H
 
 #include <concepts>
 #include <string>
@@ -48,3 +49,5 @@ CPP_template(typename GrammarParseException)(
   }
 };
 }  // namespace ad_utility::antlr_utility
+
+#endif  // QLEVER_SRC_UTIL_ANTLR_ANTLRERRORHANDLING_H
