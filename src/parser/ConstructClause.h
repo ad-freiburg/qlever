@@ -7,7 +7,6 @@
 #define QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H
 
 #include "backports/algorithm.h"
-
 #include "parser/SelectClause.h"
 #include "parser/data/Types.h"
 #include "parser/data/Variable.h"
