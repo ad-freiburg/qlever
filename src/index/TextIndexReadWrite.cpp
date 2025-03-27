@@ -7,9 +7,10 @@
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
-void zstdCompressAndWrite(const void* src, size_t numBytes,
-                          ad_utility::File& out, off_t& currentOffset) {
-  auto compressed = ZstdWrapper::compress(src, numBytes);
+template <typename T>
+void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+                      off_t& currentOffset) {
+  auto compressed = ZstdWrapper::compress(src.data(), src.size() * sizeof(T));
   out.write(compressed.data(), compressed.size());
   currentOffset += compressed.size();
 }
@@ -59,8 +60,7 @@ ContextListMetaData writePostings(ad_utility::File& out,
     ql::ranges::transform(
         postings, std::back_inserter(scores),
         [](const auto& posting) { return std::get<2>(posting); });
-    zstdCompressAndWrite(scores.data(), scores.size() * sizeof(Score), out,
-                         currentOffset);
+    compressAndWrite<float>(scores, out, currentOffset);
   }
 
   meta._lastByte = currentOffset - 1;

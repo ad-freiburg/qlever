@@ -119,7 +119,7 @@ void IndexImpl::logEntityNotFound(const string& word,
 
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(
-    std::optional<std::pair<string, string>> wordsAndDocsFile,
+    const std::optional<std::pair<string, string>>& wordsAndDocsFile,
     bool addWordsFromLiterals) {
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
@@ -605,7 +605,7 @@ IdTable IndexImpl::readContextListHelper(
       });
 
   // Helper lambda to read wordIndexList
-  auto wordIndexToId = [&](auto wordIndex) -> Id {
+  auto wordIndexToId = [isWordCl](auto wordIndex) {
     if (isWordCl) {
       return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
     }
@@ -619,8 +619,8 @@ IdTable IndexImpl::readContextListHelper(
       textIndexFile_, wordIndexToId);
 
   // Helper lambdas to read scoreList
-  auto scoreToId = [](auto score) -> Id {
-    if constexpr (std::is_same_v<decltype(score), uint16_t>) {
+  auto scoreToId = []<typename T>(T score) {
+    if constexpr (std::is_same_v<T, uint16_t>) {
       return Id::makeFromInt(static_cast<uint64_t>(score));
     } else {
       return Id::makeFromDouble(static_cast<double>(score));

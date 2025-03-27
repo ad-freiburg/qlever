@@ -224,10 +224,10 @@ int main(int argc, char** argv) {
       "Sets the k param in the BM25 scoring metric for the fulltext index."
       "This has to be greater than or equal to 0.");
   add("set-scoring-metric,S", po::value(&scoringMetric),
-      "Sets the scoring metric used. Options are \"explicit\" for explicit "
+      R"(Sets the scoring metric used. Options are "explicit" for explicit )"
       "scores that are read from the wordsfile, "
-      "\"tf-idf\" for tf idf "
-      "and \"bm25\" for bm25. The default is count.");
+      R"("tf-idf" for tf idf )"
+      R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),
