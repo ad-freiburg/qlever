@@ -7,10 +7,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_EXPORT_COMPILE_COMMANDS)
-    #set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
-endif()
-
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # will not take effect without FORCE
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
@@ -445,7 +441,7 @@ qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Bo
 
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
-#target_precompile_headers(ServerMain REUSE_FROM engine)
+target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
