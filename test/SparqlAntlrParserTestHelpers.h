@@ -32,7 +32,8 @@
 // human-readable output if a test fails.
 inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   std::visit(
-      [&]<typename T>(const T& object) {
+      [&](const auto& object) {
+        using T = std::decay_t<decltype(object)>;
         if constexpr (ad_utility::isSimilar<T, Literal>) {
           out << "Literal " << object.literal();
         } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {

@@ -282,7 +282,8 @@ class Date {
   }
 
   constexpr void setTimeZone(TimeZone timeZone) {
-    auto getTimeZone = []<typename T>(const T& value) -> int {
+    auto getTimeZone = [](const auto& value) -> int {
+      using T = std::decay_t<decltype(value)>;
       if constexpr (std::is_same_v<T, NoTimeZone>) {
         return 0;
       } else if constexpr (std::is_same_v<T, TimeZoneZ>) {

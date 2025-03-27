@@ -156,7 +156,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   // This function returns true if and only if the given `row` (which is an
   // element of `left` or `right`) contains no UNDEF values. It is used inside
   // the following `mergeWithUndefRight` function.
-  auto containsNoUndefined = []<typename T>(const T& row) {
+  auto containsNoUndefined = [](const auto& row) {
+    using T = std::decay_t<decltype(row)>;
     if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
                   isSimilar<FindSmallerUndefRangesRight, Noop>) {
       return true;

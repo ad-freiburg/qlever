@@ -11,8 +11,8 @@ using namespace sparqlExpression::detail;
 
 // ____________________________________________________________________________
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
-  auto evaluator =
-      [context]<typename T>(const T& childResult) -> ExpressionResult {
+  auto evaluator = [context](const auto& childResult) -> ExpressionResult {
+    using T = std::decay_t<decltype(childResult)>;
     if (getResultSize(*context, childResult) == 0) {
       return Id::makeUndefined();
     }

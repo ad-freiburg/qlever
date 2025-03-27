@@ -2876,7 +2876,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(
     const parsedQuery::TextSearchQuery& textSearchQuery) {
-  auto visitor = [this]<typename T>(T& arg) -> SubtreePlan {
+  auto visitor = [this](auto& arg) -> SubtreePlan {
+    using T = std::decay_t<decltype(arg)>;
     static_assert(
         ad_utility::SimilarToAny<T, TextIndexScanForEntityConfiguration,
                                  TextIndexScanForWordConfiguration>);

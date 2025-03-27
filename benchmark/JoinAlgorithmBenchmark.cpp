@@ -761,8 +761,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     @param canBeEqual If true, the generated lambda also returns true, if the
     values are equal.
     */
-    auto generateBiggerEqualLambda = []<typename T>(const T& minimumValue,
-                                                    bool canBeEqual) {
+    auto generateBiggerEqualLambda = [](const auto& minimumValue,
+                                        bool canBeEqual) {
+      using T = std::decay_t<decltype(minimumValue)>;
       return [minimumValue, canBeEqual](const T& valueToCheck) {
         return valueToCheck > minimumValue ||
                (canBeEqual && valueToCheck == minimumValue);
@@ -1220,9 +1221,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     created, if it's a function, and return the result. Otherwise  return the
     given `possibleGrowthFunction`.
     */
-    auto returnOrCall = [&isGrowthFunction]<typename T>(
-                            const T& possibleGrowthFunction,
-                            const size_t nextRowIdx) {
+    auto returnOrCall = [&isGrowthFunction](const auto& possibleGrowthFunction,
+                                            const size_t nextRowIdx) {
+      using T = std::decay_t<decltype(possibleGrowthFunction)>;
       if constexpr (isGrowthFunction.template operator()<T>()) {
         return possibleGrowthFunction(nextRowIdx);
       } else {

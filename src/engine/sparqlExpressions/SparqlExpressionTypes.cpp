@@ -9,7 +9,8 @@ namespace sparqlExpression {
 // _____________________________________________________________________________
 void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
   std::visit(
-      [&os]<typename T>(const T& s) {
+      [&os](const auto& s) {
+        using T = std::decay_t<decltype(s)>;
         auto& stream = *os;
         if constexpr (concepts::same_as<T, ValueId>) {
           stream << s;

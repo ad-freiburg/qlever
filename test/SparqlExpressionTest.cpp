@@ -143,7 +143,8 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
     return std::visit(
-        []<typename U>(const U& el) {
+        [](const auto& el) {
+          using U = std::decay_t<decltype(el)>;
           return ::testing::MatcherCast<const IdOrLiteralOrIri&>(
               ::testing::VariantWith<U>(nonVectorResultMatcher(el)));
         },
@@ -157,19 +158,19 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
 // `expected` being a single element or a vector and the case of `expected`
 // storing `Ids` which have to be handled using the `matchId` matcher (see
 // above) are all handled correctly.
-auto sparqlExpressionResultMatcher =
-    []<typename Expected>(const Expected& expected) {
-      CPP_assert(SingleExpressionResult<Expected>);
-      if constexpr (isVectorResult<Expected>) {
-        auto matcherVec =
-            ad_utility::transform(expected, [](const auto& singleExpected) {
-              return nonVectorResultMatcher(singleExpected);
-            });
-        return ::testing::ElementsAreArray(matcherVec);
-      } else {
-        return nonVectorResultMatcher(expected);
-      }
-    };
+auto sparqlExpressionResultMatcher = [](const auto& expected) {
+  using Expected = std::decay_t<decltype(expected)>;
+  CPP_assert(SingleExpressionResult<Expected>);
+  if constexpr (isVectorResult<Expected>) {
+    auto matcherVec =
+        ad_utility::transform(expected, [](const auto& singleExpected) {
+          return nonVectorResultMatcher(singleExpected);
+        });
+    return ::testing::ElementsAreArray(matcherVec);
+  } else {
+    return nonVectorResultMatcher(expected);
+  }
+};
 
 // A generic function that can copy all kinds of `SingleExpressionResult`s. Note
 // that we have disabled the implicit copying of vector results, but for testing
@@ -194,7 +195,8 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   IdTable table{alloc};
 
   // Get the size of `operand`: size for a vector, 1 otherwise.
-  auto getResultSize = []<typename T>(const T& operand) -> size_t {
+  auto getResultSize = [](const auto& operand) -> size_t {
+    using T = std::decay_t<decltype(operand)>;
     if constexpr (isVectorResult<T>) {
       return operand.size();
     }

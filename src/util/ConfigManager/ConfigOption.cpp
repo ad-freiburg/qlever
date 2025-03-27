@@ -28,7 +28,8 @@
 namespace ad_utility::ConfigManagerImpl {
 // ____________________________________________________________________________
 std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
-  auto toStringVisitor = []<typename T>(const T&) -> std::string {
+  auto toStringVisitor = [](const auto& t) -> std::string {
+    using T = std::decay_t<decltype(t)>;
     if constexpr (std::is_same_v<T, bool>) {
       return "boolean";
     } else if constexpr (std::is_same_v<T, std::string>) {
@@ -111,7 +112,8 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   option is meant to hold?
   */
   if (!std::visit(
-          [&isValueTypeSubType, &json]<typename T>(const T&) {
+          [&isValueTypeSubType, &json](const auto& t) {
+            using T = std::decay_t<decltype(t)>;
             return isValueTypeSubType.operator()<typename T::Type>(
                 json, isValueTypeSubType);
           },
@@ -152,8 +154,9 @@ std::string ConfigOption::contentOfAvailableTypesToString(
 
   // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   // Converts a `AvailableTypes` to their string representation.
-  auto availableTypesToString = []<typename T>(const T& content,
-                                               auto&& variantSubTypeToString) {
+  auto availableTypesToString = [](const auto& content,
+                                   auto&& variantSubTypeToString) {
+    using T = std::decay_t<decltype(content)>;
     // Return the internal value of the `std::optional`.
     if constexpr (std::is_same_v<T, std::string>) {
       // Add "", so that it's more obvious, that it's a string.
