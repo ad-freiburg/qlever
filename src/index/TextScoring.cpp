@@ -7,6 +7,27 @@
 #include "index/Index.h"
 
 // ____________________________________________________________________________
+void logWordNotFound(const string& word, size_t& wordNotFoundErrorMsgCount) {
+  if (wordNotFoundErrorMsgCount < 20) {
+    LOG(WARN) << "The following word was found in the docsfile but not in "
+                 "the wordsfile: "
+              << word << '\n';
+    ++wordNotFoundErrorMsgCount;
+    if (wordNotFoundErrorMsgCount == 1) {
+      LOG(WARN) << "Note that this might be intentional if for example stop "
+                   "words from the documents where omitted in the wordsfile to "
+                   "make the text index more efficient and effective. \n";
+    } else if (wordNotFoundErrorMsgCount == 20) {
+      LOG(WARN) << "There are more words not in the KB during score "
+                   "calculation..."
+                << " suppressing further warnings...\n";
+    }
+  } else {
+    wordNotFoundErrorMsgCount++;
+  }
+}
+
+// ____________________________________________________________________________
 void ScoreData::calculateScoreData(const string& docsFileName,
                                    bool addWordsFromLiterals,
                                    const Index::TextVocab& textVocab,
@@ -148,25 +169,4 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   float tfStar = (static_cast<float>(tf) * (k_ + 1)) /
                  (k_ * alpha + static_cast<float>(tf));
   return tfStar * idf;
-}
-
-// ____________________________________________________________________________
-void logWordNotFound(const string& word, size_t& wordNotFoundErrorMsgCount) {
-  if (wordNotFoundErrorMsgCount < 20) {
-    LOG(WARN) << "The following word was found in the docsfile but not in "
-                 "the wordsfile: "
-              << word << '\n';
-    ++wordNotFoundErrorMsgCount;
-    if (wordNotFoundErrorMsgCount == 1) {
-      LOG(WARN) << "Note that this might be intentional if for example stop "
-                   "words from the documents where omitted in the wordsfile to "
-                   "make the text index more efficient and effective. \n";
-    } else if (wordNotFoundErrorMsgCount == 20) {
-      LOG(WARN) << "There are more words not in the KB during score "
-                   "calculation..."
-                << " suppressing further warnings...\n";
-    }
-  } else {
-    wordNotFoundErrorMsgCount++;
-  }
 }

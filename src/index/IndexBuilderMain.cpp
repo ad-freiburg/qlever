@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
       R"(Sets the scoring metric used. Options are "explicit" for explicit )"
       "scores that are read from the wordsfile, "
       R"("tf-idf" for tf idf )"
-      R"(and "bm25" for bm25. The default is count.)");
+      R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),

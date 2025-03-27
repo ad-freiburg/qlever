@@ -13,18 +13,19 @@ class ScoreData {
  public:
   ScoreData() = default;
 
-  explicit ScoreData(const LocaleManager& localeManager)
-      : localeManager_(localeManager){};
+  explicit ScoreData(LocaleManager localeManager)
+      : localeManager_(std::move(localeManager)){};
 
-  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric)
-      : scoringMetric_(scoringMetric), localeManager_(localeManager){};
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
+      : scoringMetric_(std::move(scoringMetric)),
+        localeManager_(std::move(localeManager)){};
 
-  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric,
-            std::pair<float, float> bAndKParam)
-      : scoringMetric_(scoringMetric),
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
+            const std::pair<float, float>& bAndKParam)
+      : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
         k_(bAndKParam.second),
-        localeManager_(localeManager){};
+        localeManager_(std::move(localeManager)){};
 
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
@@ -76,5 +77,3 @@ class ScoreData {
                                  : 0;
   }
 };
-
-void logWordNotFound(const string& word, size_t& wordNotFoundErrorMsgCount);

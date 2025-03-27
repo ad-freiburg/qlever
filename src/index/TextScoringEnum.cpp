@@ -29,5 +29,10 @@ TextScoringMetric getTextScoringMetricFromString(
   if (textScoringMetricString == "bm25") {
     return BM25;
   }
+  if (textScoringMetricString == "explicit") {
+    return EXPLICIT;
+  }
+  AD_LOG_WARN << R"(Faulty text scoring metric given: ")"
+              << textScoringMetricString << R"(". Defaulting to "explicit")";
   return EXPLICIT;
 }
