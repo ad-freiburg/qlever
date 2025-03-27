@@ -10,6 +10,7 @@
 
 #include <string>
 
+#include "util/Exception.h"
 #include "util/StringUtils.h"
 #include "util/Timer.h"
 
