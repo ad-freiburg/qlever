@@ -63,36 +63,6 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
-
-template <typename PerformCheck>
-struct CheckDefinednessGenerator
-    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
-  Result::LazyResult original_;
-  VariableToColumnMap varColMap_;
-  PerformCheck performCheck_;
-  std::optional<Result::LazyResult::iterator> originalNext_;
-
-  CheckDefinednessGenerator(Result::LazyResult original,
-                            VariableToColumnMap varColMap,
-                            PerformCheck performCheck)
-      : original_(std::move(original)),
-        varColMap_(varColMap),
-        performCheck_(std::move(performCheck)) {}
-
-  std::optional<Result::IdTableVocabPair> get() {
-    if (!originalNext_.has_value()) {
-      originalNext_ = original_.begin();
-    } else if (originalNext_.value() != original_.end()) {
-      originalNext_.value()++;
-    }
-    if (originalNext_.value() == original_.end()) {
-      return std::nullopt;
-    }
-    Result::IdTableVocabPair& pair = *(originalNext_.value());
-    AD_EXPENSIVE_CHECK(performCheck_(varColMap_, pair.idTable_));
-    return std::optional{std::move(pair)};
-  }
-};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -244,8 +214,13 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     AD_EXPENSIVE_CHECK(performCheck(
         varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
   } else {
-    CheckDefinednessGenerator generator{std::move(idTables()), varColMap,
-                                        std::move(performCheck)};
+    ad_utility::CachingTransformInputRange generator{
+        std::move(idTables()),
+        [varColMap = varColMap, performCheck = std::move(performCheck)](
+            Result::IdTableVocabPair& pair) {
+          AD_EXPENSIVE_CHECK(performCheck_(varColMap, pair.idTable_));
+          return std::move(pair);
+        }};
     data_.emplace<GenContainer>(LazyResult(std::move(generator)));
   }
 }
