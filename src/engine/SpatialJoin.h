@@ -3,7 +3,8 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
+#define QLEVER_SRC_ENGINE_SPATIALJOIN_H
 
 #include <memory>
 #include <optional>
@@ -228,3 +229,5 @@ class SpatialJoin : public Operation {
 
   SpatialJoinConfiguration config_;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

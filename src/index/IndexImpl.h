@@ -3,7 +3,9 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
+#define QLEVER_SRC_INDEX_INDEXIMPL_H
 
 #include <array>
 #include <memory>
@@ -800,3 +802,5 @@ class IndexImpl {
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
 };
+
+#endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

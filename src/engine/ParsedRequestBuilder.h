@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
+#define QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H
 
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
@@ -81,3 +82,5 @@ struct ParsedRequestBuilder {
       const RequestType& request,
       const ad_utility::url_parser::ParamValueMap& params);
 };
+
+#endif  // QLEVER_SRC_ENGINE_PARSEDREQUESTBUILDER_H

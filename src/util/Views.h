@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_VIEWS_H
+#define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
 #include <span>
@@ -380,3 +381,5 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
 #endif
+
+#endif  // QLEVER_SRC_UTIL_VIEWS_H

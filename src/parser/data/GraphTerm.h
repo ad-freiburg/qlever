@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_GRAPHTERM_H
+#define QLEVER_SRC_PARSER_DATA_GRAPHTERM_H
 
 #include <string>
 #include <variant>
@@ -36,3 +37,5 @@ class GraphTerm : public GraphTermBase,
         [](const auto& object) -> std::string { return object.toSparql(); });
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_GRAPHTERM_H
