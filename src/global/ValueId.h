@@ -411,7 +411,8 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr]<typename T>(T&& value) {
+    auto visitor = [&ostr](auto&& value) {
+      using T = decltype(value);
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         // already handled above
         AD_FAIL();

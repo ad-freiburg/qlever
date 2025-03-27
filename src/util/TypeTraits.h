@@ -230,17 +230,18 @@ using TupleCat =
 /// inherit from std::variant, or treat a parameter that is a std::variant as an
 /// "ordinary" parameter to the `Function`, you cannot use this function.
 inline auto visitWithVariantsAndParameters =
-    []<typename Function, typename... ParametersOrVariants>(
-        Function&& f, ParametersOrVariants&&... parametersOrVariants) {
-      auto liftToVariant = []<typename T>(T&& t) {
+    [](auto&& f, auto&&... parametersOrVariants) {
+      auto liftToVariant = [](auto&& t) {
+        using T = decltype(t);
         if constexpr (isVariant<std::decay_t<T>>) {
           return AD_FWD(t);
         } else {
           return std::variant<std::decay_t<T>>{AD_FWD(t)};
         }
       };
-      return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(
-                               parametersOrVariants))...);
+      return std::visit(
+          f, liftToVariant(std::forward<decltype(parametersOrVariants)>(
+                 parametersOrVariants))...);
     };
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.

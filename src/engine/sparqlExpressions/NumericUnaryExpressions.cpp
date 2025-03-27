@@ -94,7 +94,8 @@ inline const auto abs = makeNumericExpression<decltype(absImpl)>();
 NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
 
 // Rounding.
-inline const auto roundImpl = []<typename T>(T num) {
+inline const auto roundImpl = [](auto num) {
+  using T = decltype(num);
   if constexpr (ad_utility::FloatingPoint<T>) {
     auto res = std::round(num);
     // In SPARQL, negative numbers are rounded towards zero if they lie exactly
@@ -109,7 +110,8 @@ inline const auto round = makeNumericExpression<decltype(roundImpl)>();
 NARY_EXPRESSION(RoundExpression, 1, FV<decltype(round), NumericValueGetter>);
 
 // Ceiling.
-inline const auto ceilImpl = []<typename T>(T num) {
+inline const auto ceilImpl = [](auto num) {
+  using T = decltype(num);
   if constexpr (ad_utility::FloatingPoint<T>) {
     return std::ceil(num);
   } else {
@@ -120,7 +122,8 @@ inline const auto ceil = makeNumericExpression<decltype(ceilImpl)>();
 NARY_EXPRESSION(CeilExpression, 1, FV<decltype(ceil), NumericValueGetter>);
 
 // Flooring.
-inline const auto floorImpl = []<typename T>(T num) {
+inline const auto floorImpl = [](auto num) {
+  using T = decltype(num);
   if constexpr (ad_utility::FloatingPoint<T>) {
     return std::floor(num);
   } else {
