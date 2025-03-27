@@ -3,7 +3,8 @@
 // Author:
 //   2024      Fabian Krause (fabian.krause@students.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
+#define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -173,3 +174,5 @@ struct SampleAggregationData {
 
   void reset() { *this = SampleAggregationData{}; }
 };
+
+#endif  // QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H

@@ -3,7 +3,8 @@
 // Authors: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_THREADSAFEQUEUE_H
+#define QLEVER_SRC_UTIL_THREADSAFEQUEUE_H
 
 #include <condition_variable>
 #include <mutex>
@@ -286,3 +287,5 @@ cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
 }
 
 }  // namespace ad_utility::data_structures
+
+#endif  // QLEVER_SRC_UTIL_THREADSAFEQUEUE_H

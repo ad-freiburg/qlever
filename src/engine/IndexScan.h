@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
+#define QLEVER_SRC_ENGINE_INDEXSCAN_H
 
 #include <string>
 
@@ -236,3 +238,5 @@ class IndexScan final : public Operation {
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H

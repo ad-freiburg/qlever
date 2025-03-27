@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
+#define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
@@ -375,3 +376,5 @@ class GapEncode {
 template <typename View>
 GapEncode(View&& view)
     -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
+
+#endif  // QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H

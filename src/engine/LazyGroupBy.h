@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_LAZYGROUPBY_H
+#define QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 
 #include "engine/GroupBy.h"
 
@@ -58,3 +59,5 @@ class LazyGroupBy {
 
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);
 };
+
+#endif  // QLEVER_SRC_ENGINE_LAZYGROUPBY_H

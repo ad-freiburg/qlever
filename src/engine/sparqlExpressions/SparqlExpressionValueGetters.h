@@ -5,7 +5,9 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //           Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONVALUEGETTERS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONVALUEGETTERS_H
+
 #include <re2/re2.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
@@ -406,3 +408,5 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
 };
 
 }  // namespace sparqlExpression::detail
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONVALUEGETTERS_H

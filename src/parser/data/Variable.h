@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_VARIABLE_H
+#define QLEVER_SRC_PARSER_DATA_VARIABLE_H
 
 #include <optional>
 #include <string>
@@ -85,3 +86,5 @@ class Variable {
   // it at the end of target
   void appendEscapedWord(std::string_view word, std::string& target) const;
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_VARIABLE_H

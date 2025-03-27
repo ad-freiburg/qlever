@@ -2,7 +2,8 @@
 //                 Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
+#define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
 
 #include <array>
 #include <tuple>
@@ -54,3 +55,5 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       [&serializer, &arg]<size_t I> { serializer | std::get<I>(arg); });
 }
 }  // namespace ad_utility::serialization
+
+#endif  // QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H

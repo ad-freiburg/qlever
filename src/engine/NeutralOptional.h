@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
+#define QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
 
 #include "engine/Operation.h"
 
@@ -39,3 +40,5 @@ class NeutralOptional : public Operation {
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
