@@ -26,10 +26,10 @@ class GraphTerm : public GraphTermBase,
   [[nodiscard]] std::optional<std::string> evaluate(
       const ConstructQueryExportContext& context, PositionInTriple role) const {
     // TODO<C++23>: Use std::visit when it is possible
-    return visit([&context, &role]<typename T>(
-                     const T& object) -> std::optional<std::string> {
-      return object.evaluate(context, role);
-    });
+    return visit(
+        [&context, &role](const auto& object) -> std::optional<std::string> {
+          return object.evaluate(context, role);
+        });
   }
 
   // ___________________________________________________________________________

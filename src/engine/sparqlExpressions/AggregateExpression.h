@@ -172,9 +172,8 @@ class AvgExpression : public AvgExpressionBase {
 // IRI). This always returns a `bool`, see `ValueIdComparators.h` for details.
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(
-        const T& a, const U& b,
-        const EvaluationContext* ctx) -> IdOrLiteralOrIri {
+    [](const auto& a, const auto& b,
+       const EvaluationContext* ctx) -> IdOrLiteralOrIri {
   // TODO<joka921> moveTheStrings.
   return toBoolNotUndef(
              sparqlExpression::compareIdsOrStrings<

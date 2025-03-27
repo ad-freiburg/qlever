@@ -74,7 +74,7 @@ bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxDist() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
+  auto visitor = [](const auto& config) -> std::optional<size_t> {
     return config.maxDist_;
   };
   return std::visit(visitor, config_.task_);

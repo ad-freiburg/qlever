@@ -273,7 +273,7 @@ TEST(ThreadSafeQueue, DisablePush) {
 // worker threads as well as in the consumer threads. By `safe` we mean that the
 // program is neither terminated nor does it run into a deadlock.
 TEST(ThreadSafeQueue, SafeExceptionHandling) {
-  auto runTest = []<typename Queue>(bool workerThrows, Queue&& queue) {
+  auto runTest = [](bool workerThrows, auto&& queue) {
     auto throwingProcedure = [&]() {
       auto threadFunction = [&queue, workerThrows] {
         try {

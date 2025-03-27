@@ -1274,8 +1274,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     const auto numberOfGroups = getNumberOfGroups();
 
     std::visit(
-        [&resizeVectors, &aggregationTypeWithData,
-         numberOfGroups]<typename T>(T& arg) {
+        [&resizeVectors, &aggregationTypeWithData, numberOfGroups](auto& arg) {
           resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
