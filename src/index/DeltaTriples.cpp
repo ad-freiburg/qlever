@@ -296,6 +296,8 @@ void DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
+  AD_LOG_INFO << "Reading and processing persisted updates from "
+              << filenameForPersisting_.value() << "..." << std::endl;
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());
@@ -319,6 +321,9 @@ void DeltaTriples::readFromDisk() {
   };
   CancellationHandle cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
-  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  AD_LOG_INFO << "Done. Num inserted triples: " << idRanges.at(1).size()
+              << ", num deleted triples: " << idRanges.at(0).size()
+              << std::endl;
 }
