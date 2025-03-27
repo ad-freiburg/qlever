@@ -21,8 +21,8 @@ def add_include_guard(file_path):
             break
 
     if pragma_once_index != -1:
-        insert_empty_line_before = pragma_once_index > 0 and not lines[pragma_once_index - 1].strip().empty()
-        insert_empty_line_after = pragma_once_index < len(lines) - 1 and not lines[pragma_once_index + 1].strip().empty()
+        insert_empty_line_before = pragma_once_index > 0 and len(lines[pragma_once_index - 1].strip()) > 0
+        insert_empty_line_after = pragma_once_index < len(lines) - 1 and len(lines[pragma_once_index + 1]) > 0
         lines[pragma_once_index] = f"#ifndef {guard_macro}\n"
         lines.insert(pragma_once_index + 1, f"#define {guard_macro}\n")
         if insert_empty_line_after:
