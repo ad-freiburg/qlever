@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"request-body-limit">(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
-  add("persist-update", po::bool_switch(&persistUpdates),
+  add("persist-updates", po::bool_switch(&persistUpdates),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
   po::variables_map optionsMap;
