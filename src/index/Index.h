@@ -94,7 +94,8 @@ class Index {
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file
   // handles.
-  void createFromOnDiskIndex(const std::string& onDiskBase);
+  void createFromOnDiskIndex(const std::string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).

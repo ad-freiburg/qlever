@@ -257,7 +257,8 @@ class IndexImpl {
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
   // Adds a text index to a complete KB index. Reads words from the given
   // wordsfile and calculates bm25 scores with the docsfile if given.

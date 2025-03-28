@@ -47,6 +47,7 @@ int main(int argc, char** argv) {
   bool noPatterns;
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
+  bool persistUpdates;
 
   ad_utility::MemorySize memoryMaxSize;
 
@@ -126,6 +127,9 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"request-body-limit">(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
+  add("persist-updates", po::bool_switch(&persistUpdates),
+      "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
+      "will be lost when the engine is stopped");
   po::variables_map optionsMap;
 
   try {
@@ -148,7 +152,8 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
                   std::move(accessToken), !noPatternTrick);
-    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
+    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
+               persistUpdates);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

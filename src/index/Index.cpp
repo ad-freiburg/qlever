@@ -20,8 +20,9 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
-  pimpl_->createFromOnDiskIndex(onDiskBase);
+void Index::createFromOnDiskIndex(const std::string& onDiskBase,
+                                  bool persistUpdatesOnDisk) {
+  pimpl_->createFromOnDiskIndex(onDiskBase, persistUpdatesOnDisk);
 }
 
 // ____________________________________________________________________________

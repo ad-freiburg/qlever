@@ -242,7 +242,7 @@ Index makeTestIndex(const std::string& indexBasename,
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
     index.loadAllPermutations() = true;
-    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename, false));
     EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
@@ -250,7 +250,7 @@ Index makeTestIndex(const std::string& indexBasename,
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;
-  index.createFromOnDiskIndex(indexBasename);
+  index.createFromOnDiskIndex(indexBasename, false);
   if (createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
