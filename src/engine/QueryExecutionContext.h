@@ -115,6 +115,13 @@ class QueryExecutionContext {
     return *sharedLocatedTriplesSnapshot_;
   }
 
+  // The QEC is currently shared between the shared updates. For correct
+  // updates, the LT Snapshot has to be updated after each update.
+  void updateLocatedTriplesSnapshot() {
+    sharedLocatedTriplesSnapshot_ =
+        _index.deltaTriplesManager().getCurrentSnapshot();
+  }
+
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
 
   [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()

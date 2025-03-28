@@ -542,60 +542,13 @@ std::pair<bool, bool> Server::determineResultPinning(
 }
 
 // ____________________________________________________________________________
-Awaitable<Server::PlannedQuery> Server::planQuery(
-    net::static_thread_pool& threadPool, ParsedQuery&& operation,
-    const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
-    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle) {
-  // The usage of an `optional` here is required because of a limitation in
-  // Boost::Asio which forces us to use default-constructible result types with
-  // `computeInNewThread`. We also can't unwrap the optional directly in this
-  // function, because then the conan build fails in a very strange way,
-  // probably related to issues in GCC's coroutine implementation.
-  // For the same reason (crashes in the conanbuild) we store the coroutine in
-  // an explicit variable instead of directly `co_await`-ing it.
-  auto coroutine = computeInNewThread(
-      threadPool,
-      [&operation, &qec, &handle]() -> std::optional<QueryExecutionTree> {
-        QueryPlanner qp(&qec, handle);
-        auto qet = qp.createExecutionTree(operation);
-        handle->throwIfCancelled();
-        return qet;
-      },
-      handle);
-  auto qetOpt = co_await std::move(coroutine);
-  PlannedQuery plannedQuery{std::move(operation), std::move(qetOpt).value()};
-  // Set some additional attributes on the `PlannedQuery`.
-  plannedQuery.queryExecutionTree_.getRootOperation()
-      ->recursivelySetCancellationHandle(std::move(handle));
-  plannedQuery.queryExecutionTree_.getRootOperation()
-      ->recursivelySetTimeConstraint(timeLimit);
-  auto& qet = plannedQuery.queryExecutionTree_;
-  qet.isRoot() = true;  // allow pinning of the final result
-  auto timeForQueryPlanning = requestTimer.msecs();
-  auto& runtimeInfoWholeQuery =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-  LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
-            << " ms" << std::endl;
-  LOG(TRACE) << qet.getCacheKey() << std::endl;
-  co_return plannedQuery;
-}
-
-// ____________________________________________________________________________
-Server::PlannedQuery Server::planQuerySync(
+Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
     TimeLimit timeLimit, QueryExecutionContext& qec,
     ad_utility::SharedCancellationHandle handle) {
-  // The usage of an `optional` here is required because of a limitation in
-  // Boost::Asio which forces us to use default-constructible result types with
-  // `computeInNewThread`. We also can't unwrap the optional directly in this
-  // function, because then the conan build fails in a very strange way,
-  // probably related to issues in GCC's coroutine implementation.
-  // For the same reason (crashes in the conanbuild) we store the coroutine in
-  // an explicit variable instead of directly `co_await`-ing it.
   QueryPlanner qp(&qec, handle);
-  auto qett = qp.createExecutionTree(operation);
-  PlannedQuery plannedQuery{std::move(operation), std::move(qett)};
+  auto executionTree = qp.createExecutionTree(operation);
+  PlannedQuery plannedQuery{std::move(operation), std::move(executionTree)};
   handle->throwIfCancelled();
   // Set some additional attributes on the `PlannedQuery`.
   plannedQuery.queryExecutionTree_.getRootOperation()
@@ -807,9 +760,23 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
-  PlannedQuery plannedQuery =
-      co_await planQuery(queryThreadPool_, std::move(query), requestTimer,
-                         timeLimit, qec, cancellationHandle);
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
+  // For the same reason (crashes in the conanbuild) we store the coroutine in
+  // an explicit variable instead of directly `co_await`-ing it.
+  auto coroutine = computeInNewThread(
+      queryThreadPool_,
+      [this, &query, &requestTimer, &timeLimit, &qec,
+       &cancellationHandle]() -> std::optional<PlannedQuery> {
+        return this->planQuery(std::move(query), requestTimer, timeLimit, qec,
+                               cancellationHandle);
+      },
+      cancellationHandle);
+  auto plannedQueryOpt = co_await std::move(coroutine);
+  auto plannedQuery = plannedQueryOpt.value();
   auto qet = plannedQuery.queryExecutionTree_;
 
   // Read the export limit from the send` parameter (historical name). This
@@ -960,23 +927,24 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit]() {
-        // Update the delta triples.
-        return index_.deltaTriplesManager().modify<nlohmann::json>(
-            [this, &requestTimer, &cancellationHandle, &updates, &qec,
-             &timeLimit](auto& deltaTriples) {
-              json results = json::array();
-              for (ParsedQuery& update : updates) {
-                PlannedQuery plannedUpdate =
-                    planQuerySync(std::move(update), requestTimer, timeLimit,
-                                  qec, cancellationHandle);
+        json results = json::array();
+        for (ParsedQuery& update : updates) {
+          PlannedQuery plannedUpdate =
+              planQuery(std::move(update), requestTimer, timeLimit, qec,
+                        cancellationHandle);
+          qec.updateLocatedTriplesSnapshot();
+          // Update the delta triples.
+          results.push_back(index_.deltaTriplesManager().modify<nlohmann::json>(
+              [this, &requestTimer, &cancellationHandle,
+               &plannedUpdate](auto& deltaTriples) {
                 // Use `this` explicitly to silence false-positive errors on
                 // captured `this` being unused.
-                results.push_back(
-                    this->processUpdateImpl(plannedUpdate, requestTimer,
-                                            cancellationHandle, deltaTriples));
-              }
-              return results;
-            });
+                return this->processUpdateImpl(plannedUpdate, requestTimer,
+                                               cancellationHandle,
+                                               deltaTriples);
+              }));
+        }
+        return results;
       },
       cancellationHandle);
   auto response = co_await std::move(coroutine);
