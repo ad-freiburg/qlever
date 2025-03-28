@@ -55,7 +55,8 @@ Index makeTestIndex(
         contentsOfWordsFileAndDocsfile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
+    qlever::Filetype indexType = qlever::Filetype::Turtle);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -73,7 +74,8 @@ QueryExecutionContext* getQec(
         contentsOfWordsFileAndDocsfile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
+    qlever::Filetype indexType = qlever::Filetype::Turtle);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

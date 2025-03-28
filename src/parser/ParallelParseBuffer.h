@@ -10,7 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "../util/Log.h"
+#include "parser/RdfParser.h"
+#include "util/Log.h"
 
 using std::array;
 using std::string;

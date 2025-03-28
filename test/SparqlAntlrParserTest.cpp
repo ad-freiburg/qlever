@@ -2173,51 +2173,36 @@ TEST(SparqlParser, Quads) {
   };
 
   expectQuads("?a <b> <c>",
-              UnorderedElementsAre(m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"),
-                                           std::monostate{})));
+              m::Quads({{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}, {}));
   expectQuads("GRAPH <foo> { ?a <b> <c> }",
-              UnorderedElementsAre(
-                  m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
-  expectQuads("GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
-              UnorderedElementsAre(
-                  m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
-                  m::Quad(Iri("<d>"), Iri("<e>"), Var("?f"), ::Iri("<bar>"))));
+              m::Quads({}, {{Iri("<foo>"),
+                             {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
+  expectQuads(
+      "GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
+      m::Quads({},
+               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
+                {Iri("<bar>"), {{::Iri("<d>"), ::Iri("<e>"), Var("?f")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
-      UnorderedElementsAre(
-          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
-          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
-          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{})));
+      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
+                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
+               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> GRAPH <bar> { "
       "<j> <k> <l> }",
-      UnorderedElementsAre(
-          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
-          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
-          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{}),
-          m::Quad(Iri("<j>"), Iri("<k>"), Iri("<l>"), ::Iri("<bar>"))));
-
-  expectQuads(
-      "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> . GRAPH <bar> { "
-      "<j> <k> <l> }",
-      UnorderedElementsAre(
-          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
-          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
-          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{}),
-          m::Quad(Iri("<j>"), Iri("<k>"), Iri("<l>"), ::Iri("<bar>"))));
+      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
+                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
+               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
+                {Iri("<bar>"), {{::Iri("<j>"), ::Iri("<k>"), ::Iri("<l>")}}}}));
 }
 
 TEST(SparqlParser, QuadData) {
   auto expectQuadData =
       ExpectCompleteParse<&Parser::quadData>{defaultPrefixMap};
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
 
   expectQuadData("{ <a> <b> <c> }",
-                 ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"),
-                                     std::monostate{})));
+                 Quads{{{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {}});
   expectQuadDataFails("{ <a> <b> ?c }");
   expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
   expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
@@ -2313,16 +2298,16 @@ TEST(SparqlParser, Update) {
   expectUpdate(
       "INSERT DATA { GRAPH <foo> { } }",
       m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
-  expectUpdate(
-      "INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")}},
-                         std::nullopt),
-          m::GraphPattern()));
-  expectUpdate(
+  expectUpdate("INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
+               m::UpdateClause(
+                   m::GraphUpdate(
+                       {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
+                       std::nullopt),
+                   m::GraphPattern()));
+  expectUpdateFails(
       "INSERT DATA { GRAPH ?f { } }",
-      m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
+      testing::HasSubstr(
+          "Invalid SPARQL query: Variables (?f) are not allowed here."));
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(
@@ -2474,14 +2459,19 @@ TEST(SparqlParser, QuadsNotTriples) {
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
   const auto Iri = TripleComponent::Iri::fromIriref;
+  auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
+                       const ad_utility::sparql_types::Triples& triples)
+      -> testing::Matcher<const Quads::GraphBlock&> {
+    return testing::FieldsAre(testing::Eq(graph),
+                              testing::ElementsAreArray(triples));
+  };
 
   expectQuadsNotTriples(
       "GRAPH <foo> { <a> <b> <c> }",
-      testing::ElementsAre(
-          m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
+      GraphBlock(Iri("<foo>"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
   expectQuadsNotTriples(
       "GRAPH ?f { <a> <b> <c> }",
-      ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), Var{"?f"})));
+      GraphBlock(Var("?f"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
   expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
   expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }

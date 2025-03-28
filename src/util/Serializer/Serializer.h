@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZER_H
 
+#include <stdexcept>
+
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 

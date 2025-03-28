@@ -16,6 +16,7 @@
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
+#include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
 
@@ -28,6 +29,7 @@ class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using VarOrIri = ad_utility::sparql_types::VarOrIri;
   using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
       ad_utility::sparql_types::PathObjectPairsAndTriples;
@@ -239,9 +241,9 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
+  Quads visit(Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::InsertClauseContext* ctx);
+  Quads visit(Parser::InsertClauseContext* ctx);
 
   GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
@@ -249,19 +251,13 @@ class SparqlQleverVisitor {
 
   GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadPatternContext* ctx);
+  Quads visit(Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
+  Quads visit(Parser::QuadDataContext* ctx);
 
-  // Parse the triples and set the graph for all of them.
-  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx,
-      const SparqlTripleSimpleWithGraph::Graph& graph);
+  Quads visit(Parser::QuadsContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
-
-  vector<SparqlTripleSimpleWithGraph> visit(
-      Parser::QuadsNotTriplesContext* ctx);
+  Quads::GraphBlock visit(Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
 
@@ -416,7 +412,7 @@ class SparqlQleverVisitor {
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  GraphTerm visit(Parser::VarOrIriContext* ctx);
+  VarOrIri visit(Parser::VarOrIriContext* ctx);
 
   static Variable visit(Parser::VarContext* ctx);
 
@@ -624,9 +620,6 @@ class SparqlQleverVisitor {
   // part of the query result.
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
-
-  // Constructs a TripleComponent from a GraphTerm.
-  static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
 
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of

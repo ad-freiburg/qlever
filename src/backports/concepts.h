@@ -35,6 +35,19 @@
 // `CPP_template_lambda_mut(capture)(typenames...)(arg)(requires ...)`: Same as
 //  `CPP_template_lambda` but for mutable lambdas.
 //
+// `CPP_variadic_template`
+// Similar to CPP_template(_2), but works for variadic functions.
+//
+// `CPP_class_template`, Similar to `CPP_variadic_template`, but
+// preferred for classes. The differences between the two are as follows:
+// `CPP_variadic_template` supports overloading of a function (which is
+// irrelevant for classes) whereas in `CPP_variadic_class_template` the
+// constraints are implemented as types, not as values. It can be beneficial in
+// generic metaprogramming to have a template with only type parameters, e.g. to
+// match it via `template<template<typename...> typename T>`. For the same
+// reasons, `CPP_variadic_template` is preferable for classes that only have
+// non-type template parameters, although those are much rarer.
+//
 // Example usages:
 //
 // `QL_CONCEPT_OR_NOTHING(std::view) auto x = someFunction();`
@@ -67,6 +80,7 @@
 #define CPP_and_def CPP_and_sfinae_def
 #define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
+#define CPP_class_template CPP_template_VARIADIC_CLASS_SFINAE
 #define CPP_member_def CPP_member_def_sfinae
 #define CPP_lambda CPP_lambda_sfinae
 #define CPP_template_lambda CPP_template_lambda_sfinae
@@ -80,6 +94,7 @@
 #define CPP_and_def CPP_and
 #define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
+#define CPP_class_template CPP_template
 #define CPP_member_def CPP_member
 #define CPP_lambda CPP_LAMBDA_20
 #define CPP_template_lambda CPP_TEMPLATE_LAMBDA_20

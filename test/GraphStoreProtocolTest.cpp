@@ -50,7 +50,7 @@ TEST(GraphStoreProtocolTest, transformPost) {
       iri("<bar>"),
       m::UpdateClause(
           m::GraphUpdate({},
-                         {{iri("<a>"), iri("<b>"), iri("<c>"), Iri("<bar>")}},
+                         {{iri("<a>"), iri("<b>"), iri("<c>"), iri("<bar>")}},
                          std::nullopt),
           m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
