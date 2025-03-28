@@ -220,13 +220,14 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 // _____________________________________________________________________________
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
-    const std::function<ReturnType(DeltaTriples&)>& function) {
+    const std::function<ReturnType(DeltaTriples&)>& function,
+    bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
   return deltaTriples_.withWriteLock(
-      [this, &function](DeltaTriples& deltaTriples) {
+      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
         auto updateSnapshot = [this, &deltaTriples] {
           auto newSnapshot = deltaTriples.getSnapshot();
           currentLocatedTriplesSnapshot_.withWriteLock(
@@ -234,24 +235,33 @@ ReturnType DeltaTriplesManager::modify(
                 currentSnapshot = std::move(newSnapshot);
               });
         };
+        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
+                                       writeToDiskAfterRequest]() {
+          if (writeToDiskAfterRequest) {
+            deltaTriples.writeToDisk();
+          }
+          updateSnapshot();
+        };
 
         if constexpr (std::is_void_v<ReturnType>) {
           function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
         } else {
           ReturnType returnValue = function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
           return returnValue;
         }
       });
 }
 // Explicit instantions
 template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&);
+    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&);
+    const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&);
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
@@ -319,7 +329,7 @@ void DeltaTriples::readFromDisk() {
     }
     return triples;
   };
-  CancellationHandle cancellationHandle =
+  auto cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
   insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
@@ -329,4 +339,18 @@ void DeltaTriples::readFromDisk() {
 // _____________________________________________________________________________
 void DeltaTriples::setPersists(std::optional<std::string> filename) {
   filenameForPersisting_ = std::move(filename);
+  if (filenameForPersisting_) {
+    readFromDisk();
+  }
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+    std::string filename) {
+  modify<void>(
+      [&filename](DeltaTriples& deltaTriples) {
+        deltaTriples.setPersists(std::move(filename));
+        deltaTriples.readFromDisk();
+      },
+      false);
 }

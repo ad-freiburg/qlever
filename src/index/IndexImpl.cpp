@@ -894,11 +894,16 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
   // TODO<joka921> We could delegate the setting of the metadata to the
   // `Permutation`class, but we first have to deal with The delta triples for
   // the additional permutations.
+  // The setting of the metadata doesn't affect the contents of the delta
+  // triples, so we don't need to call `writeToDisk`, therefore the second
+  // argument to `modify` is `false`.
   auto setMetadata = [this](const Permutation& p) {
-    deltaTriplesManager().modify<void>([&p](DeltaTriples& deltaTriples) {
-      deltaTriples.setOriginalMetadata(p.permutation(),
-                                       p.metaData().blockDataShared());
-    });
+    deltaTriplesManager().modify<void>(
+        [&p](DeltaTriples& deltaTriples) {
+          deltaTriples.setOriginalMetadata(p.permutation(),
+                                           p.metaData().blockDataShared());
+        },
+        false);
   };
 
   auto load = [this, &isInternalId, &setMetadata](
@@ -943,11 +948,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
     }
   }
   if (persistUpdatesOnDisk) {
-    deltaTriples_.value().modify<void>(
-        [&onDiskBase](DeltaTriples& deltaTriples) {
-          deltaTriples.setPersists(onDiskBase + ".update-triples");
-          deltaTriples.readFromDisk();
-        });
+    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
+        ".update-triples");
   }
 }
 

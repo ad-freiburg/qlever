@@ -25,10 +25,7 @@ namespace ad_utility {
 
 namespace detail {
 
-static const std::string& magicBytes() {
-  static std::string bytes = "QLEVER.UPDATE";
-  return bytes;
-}
+static const inline std::string magicBytes = "QLEVER.UPDATE";
 
 // Read a value of type T from the `serializer`.
 CPP_template(typename T, typename Serializer)(
@@ -44,7 +41,7 @@ CPP_template(typename T, typename Serializer)(
 CPP_template(typename Serializer)(
     requires serialization::WriteSerializer<
         Serializer>) void writeHeader(Serializer& serializer) {
-  serializer << magicBytes();
+  serializer << magicBytes;
   uint16_t version = 0;
   serializer << version;
 }
@@ -56,7 +53,7 @@ CPP_template(typename Serializer)(
         Serializer>) void readHeader(Serializer& serializer) {
   std::string magicByteBuffer;
   serializer >> magicByteBuffer;
-  AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes());
+  AD_CORRECTNESS_CHECK(magicByteBuffer == magicBytes);
   uint16_t version;
   serializer >> version;
   AD_CORRECTNESS_CHECK(version == 0);
@@ -153,15 +150,20 @@ CPP_template(typename Range)(
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
     const std::filesystem::path& path, BlankNodeManager* blankNodeManager) {
-  // TODO<joka921, RobinTF> check for a better way to check for a nonexisting
-  // path.
-  {
-    std::ifstream is{path, std::ios::binary};
-    if (!is) {
-      return {LocalVocab{}, std::vector<std::vector<Id>>{}};
-    }
+  if (!std::filesystem::exists(path)) {
+    return {};
   }
-  serialization::FileReadSerializer serializer{path.c_str()};
+  auto serializer = [p = path.c_str()]() {
+    try {
+      return serialization::FileReadSerializer{p};
+    } catch (const std::runtime_error& err) {
+      throw std::runtime_error{absl::StrCat(
+          "The file '", p,
+          "' exists, but cannot be opened for reading. Please check the file "
+          "permissions. The error received when opening it was: ",
+          err.what())};
+    }
+  }();
   detail::readHeader(serializer);
   auto [vocab, mapping] = detail::deserializeLocalVocab(serializer);
   std::vector<std::vector<Id>> idVectors;
