@@ -6,6 +6,9 @@
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 
+#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
+
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/box.hpp>
@@ -86,6 +89,7 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
+  Result LibspatialjoinAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
@@ -195,6 +199,15 @@ class SpatialJoinAlgorithms {
   // the poles or the -180/180 longitude line, then it is disjoint in the
   // cartesian coordinates. The boxes themselves are disjoint to each other.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
+
+  // this helper functions parses WKT geometries from the column col in
+  // restable and adds them to the libspatialjoin sweeper. The side specifies
+  // whether we are parsing the left, or right side of the spatial join. The
+  // parsing is multithreaded, numThreads specifies the number of threads to
+  // be used.
+  util::geo::I32Box lsjParse(bool side, const IdTable* restable,
+                             ColumnIndex col, sj::Sweeper& sweeper,
+                             size_t numThreads) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;

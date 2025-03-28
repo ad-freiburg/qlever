@@ -105,7 +105,17 @@ FetchContent_Declare(
         GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
 )
 
-
+#################################
+# libspatialjoin
+################################
+FetchContent_Declare(
+        spatialjoin
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG a4b651a2053ec315c605ba90f4a02fcef267a0c5
+)
+# disable bzip2 and zlib support in spatialjoin, we don't need it
+add_definitions("-DSPATIALJOIN_NO_BZIP2=True")
+add_definitions("-DSPATIALJOIN_NO_ZLIB=True")
 
 ################################
 # Threading
@@ -340,7 +350,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3 spatialjoin)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)

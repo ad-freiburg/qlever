@@ -26,7 +26,7 @@ using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
 // Shortcut for SpatialJoin task parameters
-using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig, SJConfig>;
 
 namespace computeResultTest {
 

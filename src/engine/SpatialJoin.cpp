@@ -84,6 +84,8 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
+    } else if constexpr (std::is_same_v<T, SJConfig>) {
+      return std::nullopt;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return config.maxResults_;
@@ -129,6 +131,12 @@ string SpatialJoin::getCacheKeyImpl() const {
       os << "maxResults: " << maxResults.value() << "\n";
     }
 
+    // Uses libspatialjoin?
+    auto algo = getAlgorithm();
+    if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      os << "libspatialjoin on: " << (int)config_.joinType_ << "\n";
+    }
+
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
@@ -163,6 +171,9 @@ string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
+    } else if constexpr (std::is_same_v<T, SJConfig>) {
+      return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
+                          config.joinType_);
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -222,6 +233,20 @@ size_t SpatialJoin::getCostEstimate() {
 
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
       return n * m;
+    } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      // Let n be the size of the left table and m the size of the right table
+      // and o = n + m.
+      // We first sort these objects in O(n log n), afterwards we iterate over
+      // the sorted list of objects, keeping track of the active boxes. This can
+      // be done in O(o log i), where i is the maximum number of active boxes
+      // at any time. For a full self-join on planet.osm, i was upper-bounded
+      // by around 10,000, so log i can - for all practical purposes - be
+      // considered a constant of 4.
+      // The actual cost of comparing the candidate geometries cannot be
+      // meaningfully estimated here, as we know nothing about the invidiual
+      // geometries
+      auto numObjects = n + m;
+      return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
@@ -383,7 +408,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults()};
+                                   getMaxDist(),      getMaxResults(),
+                                   config_.joinType_};
 }
 
 // ____________________________________________________________________________
@@ -397,6 +423,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return algorithms.LibspatialjoinAlgorithm();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");
