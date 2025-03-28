@@ -424,7 +424,21 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     default:
       AD_FAIL();
   }
-};
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ExportQueryExecutionTrees::blankNodeIriToString(
+    const ad_utility::triple_component::Iri& iri) {
+  const auto& representation = iri.toStringRepresentation();
+  if (representation.starts_with(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
+    std::string_view view = representation;
+    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
+    view.remove_suffix(1);
+    AD_CORRECTNESS_CHECK(view.starts_with("_:"));
+    return std::string{view};
+  }
+  return std::nullopt;
+}
 
 // _____________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
@@ -446,6 +460,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     if constexpr (onlyReturnLiterals) {
       if (!word.isLiteral()) {
         return std::nullopt;
+      }
+    }
+    if (word.isIri()) {
+      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+        return std::pair{std::move(blankNodeString.value()), nullptr};
       }
     }
     if constexpr (removeQuotesAndAngleBrackets) {

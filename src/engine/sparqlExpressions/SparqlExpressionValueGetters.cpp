@@ -194,7 +194,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 
 // _____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
-    ValueId id, const sparqlExpression::EvaluationContext* context) const {
+    ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
           context->_qec.getIndex(), id, context->_localVocab);
