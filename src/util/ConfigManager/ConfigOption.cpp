@@ -97,8 +97,9 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       the type explicitly, because the bit type is not something, that this
       function allows.
       */
-      return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
-                                 const std::vector<InnerType>&) {
+      return j.is_array() && [&j,
+                              &isValueTypeSubType](const std::vector<auto>& v) {
+        using InnerType = typename std::decay_t<decltype(v)>::value_type;
         return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
           return isValueTypeSubType.template operator()<InnerType>(
               entry, AD_FWD(isValueTypeSubType));
@@ -135,7 +136,9 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   }
 
   std::visit(
-      [&json, this]<typename T>(const Data<T>&) { setValue(json.get<T>()); },
+      [&json, this](const Data<auto>& d) {
+        setValue(json.get<typename std::decay_t<decltype(d)>::Type>());
+      },
       data_);
   configurationOptionWasSet_ = true;
 }
@@ -261,7 +264,10 @@ ConfigOption::operator std::string() const {
 // ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
   return std::visit(
-      []<typename T>(const Data<T>&) { return availableTypesToString<T>(); },
+      [](const Data<auto>& d) {
+        return availableTypesToString<
+            typename std::decay_t<decltype(d)>::Type>();
+      },
       data_);
 }
 }  // namespace ad_utility::ConfigManagerImpl

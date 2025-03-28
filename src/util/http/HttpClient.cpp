@@ -104,10 +104,10 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
-  auto wait = [&client, &handle]<typename T>(
-                  net::awaitable<T> awaitable,
-                  ad_utility::source_location loc =
-                      ad_utility::source_location::current()) -> T {
+  auto wait = [&client, &handle](net::awaitable<auto> awaitable,
+                                 ad_utility::source_location loc =
+                                     ad_utility::source_location::current())
+      -> decltype(awaitable)::value_type {
     return ad_utility::runAndWaitForAwaitable(
         ad_utility::interruptible(std::move(awaitable), handle, std::move(loc)),
         client->ioContext_);

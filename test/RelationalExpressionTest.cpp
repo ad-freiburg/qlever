@@ -913,9 +913,11 @@ TEST(RelationalExpression, FilterEstimates) {
   };
   // Implementation for testing the size estimates of different relational
   // expressions.
-  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
-                                  ad_utility::source_location l =
-                                      source_location::current()) {
+  auto testImpl = [&](std::type_identity<auto> ti, size_t expectedSize,
+                      ad_utility::source_location l =
+                          source_location::current()) {
+    using T = decltype(ti)::type;
+
     auto tr = generateLocationTrace(l);
 
     auto first = makeVar("?x");

@@ -70,10 +70,11 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractDatasetClause) {
-  auto expect = []<typename T>(const auto& request, TI<T>,
-                               const std::vector<DatasetClause>& expected,
-                               const ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+  auto expect = [](const auto& request, TI<auto> ti,
+                   const std::vector<DatasetClause>& expected,
+                   const ad_utility::source_location l =
+                       ad_utility::source_location::current()) {
+    using T = decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     // Initialize an empty operation with no dataset clauses set.
@@ -100,11 +101,11 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
-  auto expect = []<typename T>(const auto& request, TI<T>,
-                               std::string_view paramName,
-                               const Operation& expected,
-                               const ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+  auto expect = [](const auto& request, TI<auto> ti, std::string_view paramName,
+                   const Operation& expected,
+                   const ad_utility::source_location l =
+                       ad_utility::source_location::current()) {
+    using T = decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,

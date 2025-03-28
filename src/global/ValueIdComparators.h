@@ -349,30 +349,29 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
-inline auto simplifyRanges =
-    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input,
-                          bool removeEmptyRanges = true) {
-      if (removeEmptyRanges) {
-        // Eliminate empty ranges
-        std::erase_if(input, [](const auto& p) { return p.first == p.second; });
-      }
-      std::sort(input.begin(), input.end());
-      if (input.empty()) {
-        return input;
-      }
-      // Merge directly adjacent ranges.
-      // TODO<joka921, C++20> use `ql::ranges`
-      decltype(input) result;
-      result.push_back(input.front());
-      for (auto it = input.begin() + 1; it != input.end(); ++it) {
-        if (it->first == result.back().second) {
-          result.back().second = it->second;
-        } else {
-          result.push_back(*it);
-        }
-      }
-      return result;
-    };
+inline auto simplifyRanges = [](std::vector<std::pair<auto, auto>> input,
+                                bool removeEmptyRanges = true) {
+  if (removeEmptyRanges) {
+    // Eliminate empty ranges
+    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+  }
+  std::sort(input.begin(), input.end());
+  if (input.empty()) {
+    return input;
+  }
+  // Merge directly adjacent ranges.
+  // TODO<joka921, C++20> use `ql::ranges`
+  decltype(input) result;
+  result.push_back(input.front());
+  for (auto it = input.begin() + 1; it != input.end(); ++it) {
+    if (it->first == result.back().second) {
+      result.back().second = it->second;
+    } else {
+      result.push_back(*it);
+    }
+  }
+  return result;
+};
 
 }  // namespace detail
 

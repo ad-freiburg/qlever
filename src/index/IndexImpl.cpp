@@ -1118,10 +1118,11 @@ void IndexImpl::readConfiguration() {
         configurationJson_["languages-internal"]);
   }
 
-  auto loadDataMember = [this]<typename Target>(
-                            std::string_view key, Target& target,
-                            std::optional<std::type_identity_t<Target>>
-                                defaultValue = std::nullopt) {
+  auto loadDataMember = [this](std::string_view key, auto& target,
+                               std::optional<std::type_identity_t<
+                                   std::decay_t<decltype(target)>>>
+                                   defaultValue = std::nullopt) {
+    using Target = std::decay_t<decltype(target)>;
     auto it = configurationJson_.find(key);
     if (it == configurationJson_.end()) {
       if (defaultValue.has_value()) {
