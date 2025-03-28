@@ -85,6 +85,9 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
   };
   expectIrisAre("0Rr_3.", {makeIri("0Rr_3.46_0"), makeIri("0Rr_3.46_1"),
                            makeIri("0Rr_3.46_2")});
+  expectIrisAre("\n?^~",
+                {makeIri(".10.63.94.126_0"), makeIri(".10.63.94.126_1"),
+                 makeIri(".10.63.94.126_2")});
   expectIrisAre(
       "..", {makeIri(".46.46_0"), makeIri(".46.46_1"), makeIri(".46.46_2")});
   expectIrisAre("", {makeIri("_0"), makeIri("_1"), makeIri("_2")});
@@ -98,12 +101,25 @@ TEST(BlankNodeExpression, uniqueCacheKey) {
   auto expression1 = makeUniqueBlankNodeExpression(0);
   EXPECT_EQ(expression0->getCacheKey({}), expression1->getCacheKey({}));
   EXPECT_NE(expression1->getCacheKey({}), expression1->getCacheKey({}));
+
+  auto expression2 =
+      makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
+          Literal::literalWithoutQuotes("Test")));
+  EXPECT_THAT(
+      expression2->getCacheKey({}),
+      ::testing::HasSubstr(expression2->children()[0]->getCacheKey({})));
+  EXPECT_NE(expression1->getCacheKey({}), expression2->getCacheKey({}));
+  EXPECT_NE(expression2->getCacheKey({}), expression2->getCacheKey({}));
 }
 
 // _____________________________________________________________________________
-TEST(BlankNodeExpression, noChildren) {
+TEST(BlankNodeExpression, correctChildren) {
   auto expression0 = makeUniqueBlankNodeExpression(0);
   EXPECT_TRUE(expression0->children().empty());
+  auto expression1 =
+      makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
+          Literal::literalWithoutQuotes("Test")));
+  EXPECT_EQ(expression1->children().size(), 1);
 }
 
 // _____________________________________________________________________________
@@ -136,4 +152,31 @@ TEST(BlankNodeExpression, uniqueValuesAcrossInstances) {
                 elem);
           },
           ::testing::IsFalse())));
+}
+
+// _____________________________________________________________________________
+TEST(BlankNodeExpression, consistentCounterWithUndefined) {
+  TestContext context;
+  VectorWithMemoryLimit<IdOrLiteralOrIri> vector{context.context._allocator};
+  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("T1")});
+  vector.emplace_back(Id::makeUndefined());
+  vector.emplace_back(LiteralOrIri{Literal::literalWithoutQuotes("T2")});
+
+  auto expression0 =
+      makeBlankNodeExpression(std::make_unique<SingleUseExpression>(
+          ExpressionResult{std::move(vector)}));
+
+  using namespace ::testing;
+  // Make sure counter is incremented too for undefined values.
+  EXPECT_THAT(expression0->evaluate(&context.context),
+              VariantWith<VectorWithMemoryLimit<IdOrLiteralOrIri>>(ElementsAre(
+                  VariantWith<LocalVocabEntry>(AD_PROPERTY(
+                      LiteralOrIri, toStringRepresentation,
+                      StrEq("<http://qlever.cs.uni-freiburg.de/"
+                            "builtin-functions/blank-node/_:unT1_0>"))),
+                  VariantWith<Id>(Eq(Id::makeUndefined())),
+                  VariantWith<LocalVocabEntry>(AD_PROPERTY(
+                      LiteralOrIri, toStringRepresentation,
+                      StrEq("<http://qlever.cs.uni-freiburg.de/"
+                            "builtin-functions/blank-node/_:unT2_2>"))))));
 }
