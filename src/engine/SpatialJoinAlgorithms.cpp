@@ -301,11 +301,20 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
 
+  spatialJoin_.value()->runtimeInfo().addDetail("number of geometries left",
+                                                idTableLeft->size());
+  spatialJoin_.value()->runtimeInfo().addDetail("number of geometries right",
+                                                idTableRight->size());
+  spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
+                                                NUM_THREADS);
+
   // withinDist < 0 means "withinDist disabled"
   double withinDist = -1;
 
-  if (joinTypeVal == SpatialJoinType::WITHIN_DIST)
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     withinDist = maxDist.value_or(0);
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
+  }
 
   const sj::SweeperCfg sweeperCfg = [&] {
     sj::SweeperCfg cfg;
@@ -350,8 +359,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
   sj::Sweeper sweeper(sweeperCfg, ".", "", "spatialjoin");
 
-  AD_LOG_INFO << "Parsing " << idTableLeft->size() << " + "
-              << idTableRight->size() << " geometries..." << std::endl;
+  ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Populate the index from the left and right table, but start with the
   // smaller one and calculate a bbox on the fly to be used as a filter for the
@@ -369,11 +377,18 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // flush geometries
   sweeper.flush();
 
-  AD_LOG_INFO << "Sweeping..." << std::endl;
+  spatialJoin_.value()->runtimeInfo().addDetail("time for reading geometries",
+                                                tParse.msecs().count());
+
+  ad_utility::Timer tSweep{ad_utility::Timer::Started};
 
   // start sweep process, predicates are calculated here
   sweeper.sweep();
-  AD_LOG_INFO << "Done sweeping..." << std::endl;
+
+  spatialJoin_.value()->runtimeInfo().addDetail("time for spatialjoin sweep",
+                                                tSweep.msecs().count());
+
+  ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
   // collect results and add them to result table
   for (size_t t = 0; t < NUM_THREADS; t++) {
@@ -385,6 +400,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
                           res.second, Id::makeFromDouble(dist));
     }
   }
+
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "time for collecting results from threads", tCollect.msecs().count());
 
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
