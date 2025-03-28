@@ -76,17 +76,17 @@ CPP_template(typename Serializer)(
 
 // Deserialize the local vocabulary from the input stream.
 CPP_template(typename Serializer)(
-    requires serialization::ReadSerializer<Serializer>) inline std::
-    tuple<LocalVocab, absl::flat_hash_map<Id, Id>> deserializeLocalVocab(
+    requires serialization::ReadSerializer<Serializer>) std::
+    tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
         Serializer& serializer) {
   LocalVocab vocab;
   auto size = readValue<uint64_t>(serializer);
   // Note:: It might happen that the `size` is zero because the local vocab was
   // empty.
-  absl::flat_hash_map<Id, Id> mapping{};
+  absl::flat_hash_map<Id::T, Id> mapping{};
   mapping.reserve(size);
   for (uint64_t i = 0; i < size; ++i) {
-    auto id = readValue<Id>(serializer);
+    auto id = readValue<Id::T>(serializer);
     auto s = readValue<std::string>(serializer);
     auto localVocabIndex = vocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::fromStringRepresentation(std::move(s)));
@@ -115,14 +115,14 @@ CPP_template(typename Range, typename Serializer)(
 CPP_template(typename BlankNodeFunc)(
     requires ad_utility::InvocableWithConvertibleReturnType<BlankNodeFunc,
                                                             BlankNodeIndex>)
-    std::vector<Id> deserializeIds(auto& serializer,
-                                   const absl::flat_hash_map<Id, Id>& mapping,
-                                   BlankNodeFunc newBlankNodeIndex) {
+    std::vector<Id> deserializeIds(
+        auto& serializer, const absl::flat_hash_map<Id::T, Id>& mapping,
+        BlankNodeFunc newBlankNodeIndex) {
   std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
   absl::flat_hash_map<Id, BlankNodeIndex> blankNodeMapping;
   for (Id& id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      id = mapping.at(id);
+      id = mapping.at(id.getBits());
     } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
       BlankNodeIndex index = blankNodeMapping.contains(id)
                                  ? blankNodeMapping[id]
