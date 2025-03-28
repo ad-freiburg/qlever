@@ -795,9 +795,8 @@ class TripleComponentComparator {
       // For the non-owning sort key we allocate all the strings using the
       // `allocator`
       AD_CONTRACT_CHECK(allocator != nullptr);
-      auto add =
-          [allocator]<typename Char>(
-              std::basic_string_view<Char> s) -> std::basic_string_view<Char> {
+      auto add = [allocator](std::basic_string_view<auto> s) -> decltype(s) {
+        using Char = decltype(s)::value_type;
         auto alloc =
             std::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());

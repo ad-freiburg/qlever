@@ -16,6 +16,20 @@ These are tests for all the custom converter for third party classes in
 `json.h`.
 */
 
+namespace {
+
+// Helper function, that translates the given type `T` to its index number in
+// the given variant.
+// Most of this code is from: `https://stackoverflow.com/a/52305530`
+template <typename T, typename... Ts>
+constexpr auto typeToVariantIndex(std::variant<Ts...>) {
+  std::size_t i = 0;
+  ((!std::is_same_v<T, Ts> && ++i) && ...);
+  return i;
+}
+
+}  // namespace
+
 // `std::optional`
 TEST(JsonCustomConverterForThirdParty, StdOptional) {
   nlohmann::json j;
@@ -60,27 +74,15 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
   using VariantType = std::variant<std::monostate, int, float>;
   VariantType variant;
 
-  // Helper function, that translates the given type `T` to its index number in
-  // the given variant.
-  // Most of this code is from: `https://stackoverflow.com/a/52305530`
-  constexpr auto typeToVariantIndex =
-      []<typename T, typename... Ts>(std::variant<Ts...>) {
-        size_t i = 0;
-        ((!std::is_same_v<T, Ts> && ++i) && ...);
-        return i;
-      };
-
   /*
   @brief Quick check, if the the given json object has the values for `index`
   and `value`, that are wanted.
   A `std::variant` gets saved as a json object with those two fields, so this
   is just a plain json check.
   */
-  auto checkJson = [&j, &variant,
-                    &typeToVariantIndex](const auto& wantedValue) {
+  auto checkJson = [&j, &variant](const auto& wantedValue) {
     using ValueType = std::decay_t<decltype(wantedValue)>;
-    ASSERT_EQ(typeToVariantIndex.template operator()<ValueType>(variant),
-              j["index"].get<size_t>());
+    ASSERT_EQ(typeToVariantIndex<ValueType>(variant), j["index"].get<size_t>());
     ASSERT_EQ(wantedValue, j["value"].get<ValueType>());
   };
 
@@ -94,9 +96,10 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
   deserialization. Needs to be different from newValue, so that we can make
   sure, that the variant is actually changed by the deserialization.
   */
-  auto doSimpleTest = [&j, &variant, &checkJson, &typeToVariantIndex](
+  auto doSimpleTest = [&j, &variant, &checkJson](
                           const auto& newValue, const auto& intermediateValue) {
     using NewValueType = std::decay_t<decltype(newValue)>;
+
     // Serialize `variant` after setting it to the new value.
     variant = newValue;
     j = variant;
@@ -111,8 +114,7 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
     variant = intermediateValue;
     variant = j.get<VariantType>();
 
-    ASSERT_EQ(typeToVariantIndex.template operator()<NewValueType>(variant),
-              variant.index());
+    ASSERT_EQ(typeToVariantIndex<NewValueType>(variant), variant.index());
     ASSERT_EQ(newValue, std::get<NewValueType>(variant));
   };
 

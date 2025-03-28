@@ -146,28 +146,32 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto setAndTest = [&otherGettersDontWork]<typename Type>(
-                        ConfigOption& option, Type* variablePointer,
-                        const ConversionTestCase<Type>& toSetTo) {
-    ASSERT_FALSE(option.wasSetAtRuntime());
+  auto setAndTest =
+      [&otherGettersDontWork](
+          ConfigOption& option, auto* variablePointer,
+          const ConversionTestCase<
+              std::remove_pointer_t<decltype(variablePointer)>>& toSetTo) {
+        using Type = std::remove_pointer_t<decltype(variablePointer)>;
+        ASSERT_FALSE(option.wasSetAtRuntime());
 
-    option.setValue(toSetTo.value);
+        option.setValue(toSetTo.value);
 
-    ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
-    ASSERT_EQ(toSetTo.value, option.getValue<Type>());
-    ASSERT_EQ(toSetTo.value, *variablePointer);
+        ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
+        ASSERT_EQ(toSetTo.value, option.getValue<Type>());
+        ASSERT_EQ(toSetTo.value, *variablePointer);
 
-    // Make sure, that the other getters don't work.
-    otherGettersDontWork.template operator()<Type>(option);
-  };
+        // Make sure, that the other getters don't work.
+        otherGettersDontWork.template operator()<Type>(option);
+      };
 
   /*
   Run a normal test case of creating a configuration option, checking it and
   setting it. With or without a default value.
   */
-  auto testCaseWithDefault = [&setAndTest,
-                              &otherGettersDontWork]<typename Type>(
-                                 const ConversionTestCase<Type>& toSetTo) {
+  auto testCaseWithDefault = [&setAndTest, &otherGettersDontWork](
+                                 const ConversionTestCase<auto>& toSetTo) {
+    using Type = std::decay_t<decltype(toSetTo.value)>;
+
     // Every configuration option keeps updating an external variable with
     // the value, that it itself holds. This is the one.
     Type configurationOptionValue;
@@ -195,34 +199,35 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
   };
 
-  auto testCaseWithoutDefault =
-      [&otherGettersDontWork,
-       &setAndTest]<typename Type>(const ConversionTestCase<Type>& toSetTo) {
-        // Every configuration option keeps updating an external variable with
-        // the value, that it itself holds. This is the one.
-        Type configurationOptionValue;
+  auto testCaseWithoutDefault = [&otherGettersDontWork, &setAndTest](
+                                    const ConversionTestCase<auto>& toSetTo) {
+    using Type = std::decay_t<decltype(toSetTo.value)>;
 
-        ConfigOption option{
-            ConfigOption("Without_default", "", &configurationOptionValue)};
+    // Every configuration option keeps updating an external variable with
+    // the value, that it itself holds. This is the one.
+    Type configurationOptionValue;
 
-        // Make sure, that we truly don't have a default value, that can be
-        // gotten.
-        ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(),
-                     ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        otherGettersDontWork.template operator()<Type>(option);
+    ConfigOption option{
+        ConfigOption("Without_default", "", &configurationOptionValue)};
 
-        setAndTest.template operator()<Type>(option, &configurationOptionValue,
-                                             toSetTo);
+    // Make sure, that we truly don't have a default value, that can be
+    // gotten.
+    ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    otherGettersDontWork.template operator()<Type>(option);
 
-        // Is it still the case, that we don't have a default value?
-        ASSERT_TRUE(!option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(),
-                     ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        ASSERT_EQ("None", option.getDefaultValueAsString());
-      };
+    setAndTest.template operator()<Type>(option, &configurationOptionValue,
+                                         toSetTo);
+
+    // Is it still the case, that we don't have a default value?
+    ASSERT_TRUE(!option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    ASSERT_EQ("None", option.getDefaultValueAsString());
+  };
 
   // Do a test case for every possible type.
   testCaseWithDefault(

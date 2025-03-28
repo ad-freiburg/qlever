@@ -77,7 +77,7 @@ ResultGroup::operator std::string() const {
   of "\n\n" with the string list representation of the vector.
   */
   auto vectorToStringListOrNone =
-      []<typename T>(const std::vector<T>& vec) -> std::string {
+      [](const std::vector<auto>& vec) -> std::string {
     if (vec.empty()) {
       return " None";
     }
