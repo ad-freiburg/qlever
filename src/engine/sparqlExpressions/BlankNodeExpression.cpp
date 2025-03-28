@@ -40,8 +40,14 @@ std::string escapeStringForBlankNode(std::string_view input) {
 // SparqlExpression representing the term "BNODE()".
 class BlankNodeExpression : public SparqlExpression {
   std::variant<size_t, Ptr> label_;
-  mutable uint64_t counter_ = 0;
-  mutable uint64_t cacheBreaker_ = 0;
+  // Counter that is incremented for each blank node created to ensure its
+  // uniqueness.
+  mutable std::atomic_uint64_t counter_ = 0;
+  // Counter that is incremented for each cache key to ensure its uniqueness.
+  // This needs to be separate from `counter_` to ensure that two
+  // `BlankNodeExpression`s with the same label return the same blank node
+  // during evaluation regardless of how many times `getCacheKey` is called.
+  mutable std::atomic_uint64_t cacheBreaker_ = 0;
 
  public:
   // ___________________________________________________________________________
@@ -64,17 +70,25 @@ class BlankNodeExpression : public SparqlExpression {
         0, numElements,
         [this, &result, &blankNodePrefix, &getNextLabel](size_t) {
           const auto& label = getNextLabel();
+          // TODO<RobinTF> Encoding blank nodes as IRIs is very
+          // memory-inefficient given that we only need to ensure distinctness.
+          // But for now this is the easiest way to implement it without
+          // changing large parts of the code.
           if (label.has_value()) {
             auto uniqueIri = absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX,
                                           "_:", blankNodePrefix, label.value(),
-                                          "_", counter_, ">");
+                                          "_", counter_.load(), ">");
             result.push_back(LiteralOrIri{
                 ad_utility::triple_component::Iri::fromStringRepresentation(
                     std::move(uniqueIri))});
           } else {
             result.push_back(Id::makeUndefined());
           }
-          counter_++;
+          // TODO<RobinTF> Using a counter during value generation assumes that
+          // the row index won't change after the value is generated. This is
+          // not guaranteed and could lead to inconsistencies, but fixing this
+          // behaviour would require a larger refactoring.
+          ++counter_;
         },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
@@ -93,6 +107,9 @@ class BlankNodeExpression : public SparqlExpression {
           if constexpr (isConstantResult<T>) {
             const auto& value = StringValueGetter{}(AD_FWD(element), context);
             if (!value.has_value()) {
+              // Increment the counter for every element in the context for
+              // consistency.
+              counter_ += context->size();
               return Id::makeUndefined();
             }
             auto escapedValue = escapeStringForBlankNode(value.value());

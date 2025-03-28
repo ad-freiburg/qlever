@@ -9,7 +9,11 @@
 
 namespace sparqlExpression {
 
+// Create a `SparqlExpression` representing the term `BNODE(?x)`.
 SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child);
+
+// Create a `SparqlExpression` representing the term `BNODE()`. You need to make
+// sure that the passed label is unique across all other calls to `BNODE()`.
 SparqlExpression::Ptr makeUniqueBlankNodeExpression(size_t label);
 }  // namespace sparqlExpression
 
