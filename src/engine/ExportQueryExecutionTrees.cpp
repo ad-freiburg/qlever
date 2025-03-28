@@ -180,9 +180,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
        getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{
-          resultSize + i - range.front(), idTable, pair.localVocab_,
-          qet.getVariableColumns(), qet.getQec()->getIndex()};
+      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
+                                          qet.getVariableColumns(),
+                                          qet.getQec()->getIndex()};
       using enum PositionInTriple;
       for (const auto& triple : constructTriples) {
         auto subject = triple[0].evaluate(context, SUBJECT);
