@@ -370,7 +370,7 @@ class SpatialJoinVarColParamTest
     }
   }
 
-  // TODO: comment (avoid redundancy with commment below).
+  // TODO: comment (avoid redundancy with comment below).
   void testGetResultWidthOrVariableToColumnMapSpatialJoinContains(
       VarColTestSuiteParam parameters) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
