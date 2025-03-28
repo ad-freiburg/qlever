@@ -348,7 +348,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     return cfg;
   }();
 
-  sj::Sweeper sweeper(sweeperCfg, ".", "");
+  sj::Sweeper sweeper(sweeperCfg, ".", "", "spatialjoin");
 
   AD_LOG_INFO << "Parsing " << idTableLeft->size() << " + "
               << idTableRight->size() << " geometries..." << std::endl;
