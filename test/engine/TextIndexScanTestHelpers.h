@@ -5,7 +5,11 @@
 #ifndef QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_TEXTINDEXSCANTESTHELPERS_H
 
+#include "engine/QueryExecutionContext.h"
+#include "engine/Result.h"
+#include "global/Id.h"
 #include "global/IndexTypes.h"
+
 namespace textIndexScanTestHelpers {
 // NOTE: this function exploits a "lucky accident" that allows us to
 // obtain the textRecord using indexToString.
@@ -15,9 +19,9 @@ namespace textIndexScanTestHelpers {
 // possible retrieval of the literals text with the getTextExcerpt function.
 // The only problem is the increased size of the docsDB and the double saving
 // of the literals.
-inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
-                                           const Result& result,
-                                           const size_t& rowIndex) {
+inline std::string getTextRecordFromResultTable(
+    const QueryExecutionContext* qec, const Result& result,
+    const size_t& rowIndex) {
   size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
   uint64_t textRecordIdFromTable =
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
@@ -39,17 +43,17 @@ inline const TextRecordIndex getTextRecordIdFromResultTable(
 }
 
 // Only use on prefix search results
-inline string getEntityFromResultTable(const QueryExecutionContext* qec,
-                                       const Result& result,
-                                       const size_t& rowIndex) {
+inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
+                                            const Result& result,
+                                            const size_t& rowIndex) {
   return qec->getIndex().indexToString(
       result.idTable().getColumn(1)[rowIndex].getVocabIndex());
 }
 
 // Only use on prefix search results
-inline string getWordFromResultTable(const QueryExecutionContext* qec,
-                                     const Result& result,
-                                     const size_t& rowIndex) {
+inline std::string getWordFromResultTable(const QueryExecutionContext* qec,
+                                          const Result& result,
+                                          const size_t& rowIndex) {
   return std::string{qec->getIndex().indexToString(
       result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
@@ -82,7 +86,8 @@ inline float calculateTFIDFFromParameters(size_t tf, size_t df,
   return tf * idf;
 }
 
-inline string combineToString(const string& text, const string& word) {
+inline std::string combineToString(const std::string& text,
+                                   const std::string& word) {
   std::stringstream ss;
   ss << "Text: " << text << ", Word: " << word << std::endl;
   return ss.str();
