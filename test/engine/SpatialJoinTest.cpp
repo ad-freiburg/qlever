@@ -370,11 +370,13 @@ class SpatialJoinVarColParamTest
     }
   }
 
+  // TODO: comment (avoid redundancy with commment below).
   void testGetResultWidthOrVariableToColumnMapSpatialJoinContains(
       VarColTestSuiteParam parameters) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildNonSelfJoinDataset();
+
     auto spJoin2 = makeSpatialJoin(
         qec, parameters, false, PayloadVariables::all(),
         SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::CONTAINS);
@@ -384,7 +386,7 @@ class SpatialJoinVarColParamTest
         (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
 
     auto numTriples = qec->getIndex().numTriples().normal;
-    ASSERT_EQ(numTriples, 20);
+    ASSERT_EQ(numTriples, 22);
 
     if (!testVarToColMap) {
       ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
@@ -592,11 +594,16 @@ TEST_P(SpatialJoinVarColParamTest, variableToColumnMap) {
   testGetResultWidthOrVariableToColumnMap(GetParam());
 }
 
+// Test `libspatialjoin` with `within-dist` spatial join type. This is
+// essentially a self-join (but the payload may be different for the two
+// sides).
 TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoin) {
   testGetResultWidthOrVariableToColumnMap(GetParam(),
                                           SpatialJoinAlgorithm::LIBSPATIALJOIN);
 }
 
+// Test `libspatialjoin` with `contains` spatial join type. Here the two sides
+// have different sets of objects,
 TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinContains) {
   testGetResultWidthOrVariableToColumnMapSpatialJoinContains(GetParam());
 }

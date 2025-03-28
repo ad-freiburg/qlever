@@ -355,11 +355,16 @@ inline QueryExecutionContext* buildMixedAreaPointQEC(
   return qec;
 }
 
+// Create `QueryExecutionContext` with a dataset that contains an additional
+// area without `<name>` predicate (so that our `libspatialjoin` test has two
+// sides of diferent size), as well as an object with an invalid geometry.
 inline QueryExecutionContext* buildNonSelfJoinDataset() {
   std::string kg = createTrueDistanceDataset();
-  kg += absl::StrCat("<nodeArea_add> <hasGeometry> <geometryAreaAdd> .\n",
-                     "<geometryAreaAdd> <asWKT> ", approximatedAreaGermany,
-                     " .\n");
+  kg += absl::StrCat(
+      "<nodeAreaAdded> <hasGeometry> <geometryAreaAdded> .\n",
+      "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
+      "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
+      "<geometryInvalidAdded> <asWKT> 42 .\n");
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
