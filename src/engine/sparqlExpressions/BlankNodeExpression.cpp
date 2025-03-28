@@ -97,7 +97,7 @@ class BlankNodeExpression : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
     if (std::holds_alternative<size_t>(label_)) {
-      return evaluateImpl(context, [&]() -> std::optional<size_t> {
+      return evaluateImpl(context, [this]() -> std::optional<size_t> {
         return std::get<size_t>(label_);
       });
     }
