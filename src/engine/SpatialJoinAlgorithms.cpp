@@ -389,7 +389,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     for (size_t i = 0; i < results[t].size(); i++) {
       const auto& res = results[t][i];
       double dist = 0;
-      if (withinDist >= 0) dist = resultDists[t][i];
+      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+        dist = resultDists[t][i];
+      }
       addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
                           res.second, Id::makeFromDouble(dist));
     }
