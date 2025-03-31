@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoin.h"
 
@@ -84,7 +85,7 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
-    } else if constexpr (std::is_same_v<T, SJConfig>) {
+    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
       return std::nullopt;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
@@ -171,7 +172,7 @@ string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
-    } else if constexpr (std::is_same_v<T, SJConfig>) {
+    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
       return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
                           config.joinType_);
     } else {
@@ -234,17 +235,19 @@ size_t SpatialJoin::getCostEstimate() {
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
       return n * m;
     } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-      // Let n be the size of the left table and m the size of the right table
-      // and o = n + m.
-      // We first sort these objects in O(n log n), afterwards we iterate over
-      // the sorted list of objects, keeping track of the active boxes. This can
-      // be done in O(o log i), where i is the maximum number of active boxes
-      // at any time. For a full self-join on planet.osm, i was upper-bounded
-      // by around 10,000, so log i can - for all practical purposes - be
-      // considered a constant of 4.
-      // The actual cost of comparing the candidate geometries cannot be
-      // meaningfully estimated here, as we know nothing about the invidiual
-      // geometries
+      // We take the cost estimate to be `4 * (n + m)`, where `n` and `m` are
+      // the size of the left and right table, respectively. Reasoning:
+      //
+      // Let `N = n + m` be the number of the union of the two sets of objects.
+      // We first sort these objects in time `O(N log n)`, and then iterate
+      // over these objects, keeping track of the active boxes. This can be done
+      // in time `O(N log M)`, where `M` is the maximum number of active boxes
+      // at any time. For a full self-join on the complete OSM data, `M` is at
+      // most 10'000, so for all practical purposes we can consider `log M` to
+      // be a constant of 4.
+      //
+      // The actual cost of comparing the candidate cannot be meaningfully
+      // estimated here, as we know nothing about the invidiual geometries.
       auto numObjects = n + m;
       return numObjects * 4;
     } else {

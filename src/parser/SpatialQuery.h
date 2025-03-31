@@ -1,6 +1,7 @@
 // Copyright 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Authors: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
 #define QLEVER_SRC_PARSER_SPATIALQUERY_H

@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
 #define QLEVER_SRC_ENGINE_SPATIALJOIN_H
@@ -15,7 +16,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
-// Selection of a SpatialJoin join type
+// The supported spatial join types (geometry predicates).
 enum class SpatialJoinType {
   NONE,
   INTERSECTS,
@@ -39,15 +40,16 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
-// Full spatial join on selected join type with optional maximum distance.
-struct SJConfig {
+// Spatial join using one of the join types above. The maximal distance is
+// relevant only for the `WITHIN_DIST` join type.
+struct SpatialJoinConfig {
   SpatialJoinType joinType_;
   std::optional<size_t> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
 using SpatialJoinTask =
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SJConfig>;
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm {

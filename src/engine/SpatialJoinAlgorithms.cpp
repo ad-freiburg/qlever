@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoinAlgorithms.h"
 
@@ -35,30 +36,28 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       geometries_{qec->getAllocator()} {}
 
 // ____________________________________________________________________________
-util::geo::I32Box SpatialJoinAlgorithms::lsjParse(bool side,
-                                                  const IdTable* restable,
-                                                  ColumnIndex col,
-                                                  sj::Sweeper& sweeper,
-                                                  size_t numThreads) const {
-  // initialize WKT parser
+util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
+    bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
+    sj::Sweeper& sweeper, size_t numThreads) const {
+  // Initialize the parser.
   sj::WKTParser parser(&sweeper, numThreads);
 
-  // iterate over all rows and add them to the parser
-  for (size_t row = 0; row < restable->size(); row++) {
-    auto id = restable->at(row, col);
+  // Iterate over all rows in `idTable` and parse the geometries from `column`.
+  for (size_t row = 0; row < idTable->size(); row++) {
+    auto id = idTable->at(row, column);
     if (id.getDatatype() == Datatype::VocabIndex) {
       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
-      parser.parseWKT(wkt.c_str(), row, side);
+      parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
     } else if (id.getDatatype() == Datatype::GeoPoint) {
       const auto& p = id.getGeoPoint();
-      parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row, side);
+      parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row,
+                        leftOrRightSide);
     }
   }
 
-  // wait for all parse threads to finish
+  // Wait for all parser threads to finish, then return the bounding box of all
+  // the geometries parsed so far.
   parser.done();
-
-  // return the bounding box of the geometries parsed so far
   return parser.getBoundingBox();
 }
 
@@ -292,33 +291,27 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
               joinType] = params_;
+  // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
-
   size_t NUM_THREADS = std::thread::hardware_concurrency();
-
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
-
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
 
-  spatialJoin_.value()->runtimeInfo().addDetail("number of geometries left",
-                                                idTableLeft->size());
-  spatialJoin_.value()->runtimeInfo().addDetail("number of geometries right",
-                                                idTableRight->size());
+  // Add number of threads to runtime informaton.
   spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
                                                 NUM_THREADS);
 
-  // withinDist < 0 means "withinDist disabled"
+  // Set the distance for the `WITHIN_DIST` join type.
   double withinDist = -1;
-
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     withinDist = maxDist.value_or(0);
     spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
   }
 
+  // Configure the sweeper.
   const sj::SweeperCfg sweeperCfg = [&] {
     sj::SweeperCfg cfg;
-
     cfg.numThreads = NUM_THREADS;
     cfg.numCacheThreads = NUM_THREADS;
     cfg.geomCacheMaxSize = 10000;
@@ -353,7 +346,6 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.logCb = {};
     cfg.statsCb = {};
     cfg.sweepProgressCb = {};
-
     return cfg;
   }();
 
@@ -361,36 +353,37 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
 
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
-  // Populate the index from the left and right table, but start with the
-  // smaller one and calculate a bbox on the fly to be used as a filter for the
-  // larger one
+  // Parse the geometries from the left and right input table, starting with the
+  // smaller one. Compute the bounding box of the smaller table (appropriately
+  // inflated for `WITHIN_DIST` joins) and only add those geometries from the
+  // larger table that intersect this bounding box.
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
+    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper,
+                                   NUM_THREADS);
     sweeper.setFilterBox(box);
-    lsjParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
+    libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
   } else {
-    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
+    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
+                                   NUM_THREADS);
     sweeper.setFilterBox(box);
-    lsjParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
+    libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
   }
 
-  // flush geometries
+  // Flush the geometries and add the time for parsing and processing the
+  // geometries to the runtime information.
   sweeper.flush();
-
   spatialJoin_.value()->runtimeInfo().addDetail("time for reading geometries",
                                                 tParse.msecs().count());
 
+  // Now do the sweep, which performs the actual spatial join.
   ad_utility::Timer tSweep{ad_utility::Timer::Started};
-
-  // start sweep process, predicates are calculated here
   sweeper.sweep();
-
   spatialJoin_.value()->runtimeInfo().addDetail("time for spatialjoin sweep",
                                                 tSweep.msecs().count());
-
   ad_utility::Timer tCollect{ad_utility::Timer::Started};
 
-  // collect results and add them to result table
+  // Collect the results and add them to the result table. For `WITHIN_DIST`,
+  // also add the distance for each pair of objects in the result.
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
       const auto& res = results[t][i];
@@ -400,10 +393,10 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
                           res.second, Id::makeFromDouble(dist));
     }
   }
-
   spatialJoin_.value()->runtimeInfo().addDetail(
       "time for collecting results from threads", tCollect.msecs().count());
 
+  // Return the result.
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
