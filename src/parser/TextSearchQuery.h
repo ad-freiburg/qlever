@@ -24,18 +24,18 @@
  *
  *         Description of struct variables:
  *         - std::optional<bool> isWordSearch_: This has a value as soon as
- *        either the predicate <contains-word> or <contains-entity> is
+ *        either the predicate <word> or <entity> is
  *        encountered with the config and is respectively true or false.
  *        - std::optional<Variable> textVar_: This has a value if set through
- *        the predicate <text-search>. This textVar_ is later passed to the
+ *        the predicate <contains>. This textVar_ is later passed to the
  *        constructed word or entity search.
  *        - std::optional<std::string> word_: This is set directly with the
- *        predicate <contains-word>.
+ *        predicate <word>.
  *        - std::optional<Variable> matchVar_: This is set with the predicate
- *        <bind-match> and used to specify the variable for the prefix match
+ *        <prefix-match> and used to specify the variable for the prefix match
  *        of a word search.
  *        - std::optional<Variable> scoreVar_: This is set with the predicate
- *        <bind-score> and used to specify the variable for the score of either
+ *        <score> and used to specify the variable for the score of either
  *        the entity or word search.
  *        - std::optional<std::variant<Variable, std::string>> entity_: This
  *        is the specified entity for the entity search. Can be Variable or
@@ -203,7 +203,7 @@ struct TextSearchQuery : MagicServiceQuery {
   static void checkSubjectAndObjectAreVariables(std::string_view predString,
                                                 const TripleComponent& subject,
                                                 const TripleComponent& object);
-  // Checks if query already encountered <contains-word> or <contains-entity>
+  // Checks if query already encountered <word> or <entity>
   // before this. If yes throws exception.
   void checkOneContainsWordOrEntity(const TripleComponent& subject);
 

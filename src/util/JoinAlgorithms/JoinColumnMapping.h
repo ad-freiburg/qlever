@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "engine/LocalVocab.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 
 namespace ad_utility {

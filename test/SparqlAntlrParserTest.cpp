@@ -1731,6 +1731,8 @@ TEST(SparqlParser, builtInCall) {
                      },
                      Eq(std::reference_wrapper(typeid(reference))))));
   expectBuiltInCall("bnode(?x)", matchUnary(&makeBlankNodeExpression));
+  // Not implemented yet
+  expectFails("sameTerm(?a, ?b)");
 }
 
 TEST(SparqlParser, unaryExpression) {
