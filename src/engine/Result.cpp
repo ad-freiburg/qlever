@@ -145,8 +145,6 @@ void Result::applyLimitOffset(
                   limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    using IdTableLoopControl =
-        ad_utility::loopControl::LoopControl<Result::IdTableVocabPair>;
     ad_utility::CachingContinuableTransformInputRange generator{
         std::move(idTables()),
         [limitOffset = limitOffset,

@@ -17,6 +17,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/InputRangeUtils.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -41,6 +42,10 @@ class Result {
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
+  // A commonly used LoopControl type for CachingContinuableTransformInputRange
+  // generators
+  using IdTableLoopControl =
+      ad_utility::loopControl::LoopControl<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.
