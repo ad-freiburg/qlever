@@ -85,7 +85,7 @@ class BlankNodeExpression : public SparqlExpression {
 
   // Perform the actual evaluation of the expression. This creates a blank node
   // based on the result of `getNextLabel`.
-  CPP_template_2(typename Printable, typename Func)(
+  CPP_template(typename Printable, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
           Func, std::optional<Printable>>
           CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
