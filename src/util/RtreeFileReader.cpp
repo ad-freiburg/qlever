@@ -8,8 +8,6 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/vector.hpp>
 
-#include "./Rtree.h"
-
 FileReader::iterator& FileReader::iterator::operator++() {
   BasicGeometry::BoundingBox box;
   uint64_t id;
@@ -75,8 +73,8 @@ void FileReaderWithoutIndex::SaveEntry(BasicGeometry::BoundingBox boundingBox,
                                        uint64_t index,
                                        std::ofstream& convertOfs) {
   /**
-   * Save a single entry (which was e.g. converted by ConvertWordToRtreeEntry)
-   * to the disk
+     * Save a single entry (which was e.g. converted by ConvertWordToRtreeEntry)
+     * to the disk
    */
   static_assert(std::is_trivially_copyable_v<BasicGeometry::BoundingBox>);
   convertOfs.write(reinterpret_cast<const char*>(&boundingBox),
@@ -87,7 +85,7 @@ void FileReaderWithoutIndex::SaveEntry(BasicGeometry::BoundingBox boundingBox,
 void FileReader::SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
                                          std::ofstream& convertOfs) {
   /**
-   * Save a single entry, containing its postion in the x- and y-sorting
+     * Save a single entry, containing its postion in the x- and y-sorting
    */
 
   static_assert(std::is_trivially_copyable_v<BasicGeometry::BoundingBox>);
@@ -104,21 +102,17 @@ void FileReader::SaveEntryWithOrderIndex(RTreeValueWithOrderIndex treeValue,
 multiBoxGeo FileReaderWithoutIndex::LoadEntries(
     const std::filesystem::path& file) {
   multiBoxGeo boxes;
-
   for (const RTreeValue& element : FileReaderWithoutIndex(file)) {
     boxes.push_back(element);
   }
-
   return boxes;
 }
 
 multiBoxWithOrderIndex FileReader::LoadEntriesWithOrderIndex(
     const std::filesystem::path& file) {
   multiBoxWithOrderIndex boxes;
-
   for (const RTreeValueWithOrderIndex& element : FileReader(file)) {
     boxes.push_back(element);
   }
-
   return boxes;
 }

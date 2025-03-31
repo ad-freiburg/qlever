@@ -13,11 +13,10 @@
 
 class BasicGeometry {
  public:
-  typedef boost::geometry::model::point<
+  using Point = boost::geometry::model::point<
       double, 2,
-      boost::geometry::cs::spherical_equatorial<boost::geometry::degree>>
-      Point;
-  typedef boost::geometry::model::box<Point> BoundingBox;
+      boost::geometry::cs::spherical_equatorial<boost::geometry::degree>>;
+  using BoundingBox = boost::geometry::model::box<Point>;
 
   static double GetMinX(BoundingBox boundingBox) {
     return boundingBox.min_corner().get<0>();
@@ -47,23 +46,11 @@ class BasicGeometry {
   static BasicGeometry::BoundingBox CombineBoundingBoxes(
       const BasicGeometry::BoundingBox& b1,
       const BasicGeometry::BoundingBox& b2) {
-    auto minX = [](BasicGeometry::BoundingBox b) -> double {
-      return b.min_corner().get<0>();
-    };
-    auto minY = [](BasicGeometry::BoundingBox b) -> double {
-      return b.min_corner().get<1>();
-    };
-    auto maxX = [](BasicGeometry::BoundingBox b) -> double {
-      return b.max_corner().get<0>();
-    };
-    auto maxY = [](BasicGeometry::BoundingBox b) -> double {
-      return b.max_corner().get<1>();
-    };
 
-    double globalMinX = minX(b1) < minX(b2) ? minX(b1) : minX(b2);
-    double globalMinY = minY(b1) < minY(b2) ? minY(b1) : minY(b2);
-    double globalMaxX = maxX(b1) > maxX(b2) ? maxX(b1) : maxX(b2);
-    double globalMaxY = maxY(b1) > maxY(b2) ? maxY(b1) : maxY(b2);
+    double globalMinX = std::min(GetMinX(b1), GetMinX(b2));
+    double globalMinY = std::min(GetMinY(b1), GetMinY(b2));
+    double globalMaxX = std::max(GetMaxX(b1), GetMaxX(b2));
+    double globalMaxY = std::max(GetMaxY(b1), GetMaxY(b2));
 
     return {{globalMinX, globalMinY}, {globalMaxX, globalMaxY}};
   }
@@ -77,10 +64,20 @@ class BasicGeometry {
     return true;
   }
 
+  static double AreaOfBoundingBox(BasicGeometry::BoundingBox box) {
+    return ((BasicGeometry::GetMaxX(box) -
+             BasicGeometry::GetMinX(box)) *
+            (BasicGeometry::GetMaxY(box) -
+             BasicGeometry::GetMinY(box)));
+  }
+
   static bool IsBorderOfSplitCandidate(uint64_t current, uint64_t splitSize,
                                        uint64_t M) {
-    if (((current + 1) % splitSize == 0 && (current + 1) / splitSize < M) ||
-        (current % splitSize == 0 && current / splitSize >= 1))
+    // this element is left to the position of splitting
+    bool isLeftSplitCandidate = current % splitSize == 0 && current > 0;
+    // this element is right to the position of splitting
+    bool isRightSplitCandidate = (current + 1) % splitSize == 0 && (current + 1) / splitSize < M;
+    if (isLeftSplitCandidate || isRightSplitCandidate)
       return true;
     return false;
   }
@@ -91,8 +88,8 @@ class BasicGeometry {
   static std::optional<BoundingBox> ConvertWordToRtreeEntry(
       std::string_view wkt) {
     /**
-     * Convert a single wkt literal to a boundingbox.
-     * Get the bounding box of either a multipolygon, polygon or a linestring
+      * Convert a single wkt literal to a boundingbox.
+      * Get the bounding box of either a multipolygon, polygon or a linestring
      */
     if (!wkt.starts_with("\"MULTIPOLYGON") && !wkt.starts_with("\"POLYGON") &&
         !wkt.starts_with("\"LINESTRING")) {
@@ -122,6 +119,7 @@ class BasicGeometry {
 
     return {BasicGeometry::CreateBoundingBox(minX, minY, maxX, maxY)};
   }
+
 };
 
 // ___________________________________________________________________________
@@ -130,13 +128,14 @@ class BasicGeometry {
 struct RTreeValue {
   BasicGeometry::BoundingBox box{};
   uint64_t id = 0;
-  [[nodiscard]] double MinX() const { return box.min_corner().get<0>(); }
-  [[nodiscard]] double MaxX() const { return box.max_corner().get<0>(); }
-  [[nodiscard]] double MinY() const { return box.min_corner().get<1>(); }
-  [[nodiscard]] double MaxY() const { return box.max_corner().get<1>(); }
+  [[nodiscard]] double MinX() const { return BasicGeometry::GetMinX(box); }
+  [[nodiscard]] double MaxX() const { return BasicGeometry::GetMaxX(box); }
+  [[nodiscard]] double MinY() const { return BasicGeometry::GetMinY(box); }
+  [[nodiscard]] double MaxY() const { return BasicGeometry::GetMaxY(box); }
 
-  bool operator==(const RTreeValue& other) const {
-    if (id != other.id) return false;
+  bool operator==(const RTreeValue& other) const
+  {
+    if (id != other.id) { return false };
     if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
     return true;
   }
@@ -156,7 +155,8 @@ struct RTreeValueWithOrderIndex : RTreeValue {
   uint64_t orderX = 0;
   uint64_t orderY = 0;
 
-  bool operator==(const RTreeValueWithOrderIndex& other) const {
+  bool operator==(const RTreeValueWithOrderIndex& other) const
+  {
     if (id != other.id) return false;
     if (!BasicGeometry::BoundingBoxesAreEqual(box, other.box)) return false;
     if (orderX != other.orderX) return false;

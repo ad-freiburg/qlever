@@ -3,67 +3,95 @@
 //  Author: Noah Nock <noah.v.nock@gmail.com>
 
 #include "./RtreeNode.h"
-
 #include "./RtreeFileReader.h"
 
+// ___________________________________________________________________________
 ConstructionNode::ConstructionNode(uint64_t id, OrderedBoxes orderedBoxes)
-    : RtreeNode{id} {
-  this->orderedBoxes_ = orderedBoxes;
-  // calculate the boundingBoxes
-  this->boundingBox_ = orderedBoxes.GetBoundingBox();
-}
+    : RtreeNode{id, orderedBoxes.GetBoundingBox()}, orderedBoxes_{std::move(orderedBoxes)} { }
 
+// ___________________________________________________________________________
 void ConstructionNode::AddChildrenToItem() {
   /**
-   * Add all children of a certain node at once.
-   * This is used when a leaf node is reached.
+     * Add all children of a certain node at once.
+     * This is used when a leaf node is reached.
    */
-  if (this->GetOrderedBoxes().WorkInRam()) {
+  if (orderedBoxes().WorkInRam()) {
     for (RTreeValueWithOrderIndex box :
-         this->GetOrderedBoxes().GetRectanglesInRam()) {
+         orderedBoxes().GetRectanglesInRam()) {
       RtreeNode leafNode = RtreeNode(box.id, box.box);
-      this->AddChild(leafNode);
+      AddChild(leafNode);
     }
   } else {
     for (const RTreeValueWithOrderIndex& element :
-         FileReader(this->GetOrderedBoxes().GetRectanglesOnDisk())) {
+         FileReader(orderedBoxes().GetRectanglesOnDisk())) {
       RtreeNode leafNode = RtreeNode(element.id, element.box);
-      this->AddChild(leafNode);
+      AddChild(leafNode);
     }
   }
 }
 
-OrderedBoxes& ConstructionNode::GetOrderedBoxes() {
-  return this->orderedBoxes_;
+// ___________________________________________________________________________
+OrderedBoxes& ConstructionNode::orderedBoxes() {
+  return orderedBoxes_;
 }
 
-void RtreeNode::AddChild(RtreeNode& child) {
-  BasicGeometry::BoundingBox box = child.GetBoundingBox();
-  uint64_t entryId = child.GetId();
-  RTreeValue entry = {box, entryId};
-  this->children_.push_back(entry);
+// ___________________________________________________________________________
+void RtreeNode::AddChild(const RtreeNode& child) {
+  if (!isSearchNode_) {
+    RTreeValue entry = {child.GetBoundingBox(), child.GetId()};
+    children_.push_back(entry);
+  } else {
+    childNodes_.push_back(child);
+  }
 }
 
-BasicGeometry::BoundingBox RtreeNode::GetBoundingBox() const {
-  return this->boundingBox_;
+
+// ___________________________________________________________________________
+const BasicGeometry::BoundingBox& RtreeNode::GetBoundingBox() const {
+  return boundingBox_;
 }
 
+// ___________________________________________________________________________
 void RtreeNode::SetIsLastInnerNode(bool isLast) {
-  this->isLastInnerNode_ = isLast;
+  isLastInnerNode_ = isLast;
 }
 
-uint64_t RtreeNode::GetId() const { return this->id_; }
+// ___________________________________________________________________________
+uint64_t RtreeNode::GetId() const { return id_; }
 
+// ___________________________________________________________________________
 RtreeNode::RtreeNode() = default;
 
+// ___________________________________________________________________________
 RtreeNode::RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox,
-                     bool isLastInnerNode, multiBoxGeo children) {
-  this->id_ = id;
-  this->boundingBox_ = boundingBox;
-  this->children_ = std::move(children);
-  this->isLastInnerNode_ = isLastInnerNode;
+                     bool isLastInnerNode, multiBoxGeo children)
+    : id_{id}, boundingBox_{std::move(boundingBox)}, isLastInnerNode_{isLastInnerNode},
+      children_{std::move(children)}, childNodes_{std::vector<RtreeNode>()}, isSearchNode_{false}{ }
+
+// ___________________________________________________________________________
+void RtreeNode::SetIsSearchNode(bool isSearchNode) {
+  isSearchNode_ = isSearchNode;
 }
 
-bool RtreeNode::GetIsLastInnerNode() const { return this->isLastInnerNode_; }
+// ___________________________________________________________________________
+void RtreeNode::ClearUnusedChildren() {
+  if (isSearchNode_) {
+    children_ = {};
+  } else {
+    childNodes_ = {};
+  }
+}
 
-multiBoxGeo RtreeNode::GetChildren() { return this->children_; }
+// ___________________________________________________________________________
+std::vector<RtreeNode> RtreeNode::GetSearchChildren() {
+  return childNodes_;
+}
+
+// ___________________________________________________________________________
+bool RtreeNode::GetIsLastInnerNode() const { return isLastInnerNode_; }
+
+// ___________________________________________________________________________
+bool RtreeNode::GetIsSearchNode() const { return isSearchNode_; }
+
+// ___________________________________________________________________________
+multiBoxGeo RtreeNode::GetChildren() { return children_; }

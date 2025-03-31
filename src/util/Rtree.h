@@ -14,11 +14,13 @@
 #include <fstream>
 #include <optional>
 #include <variant>
+#include <unordered_map>
 
 #include "./RtreeBasicGeometry.h"
 
 // ___________________________________________________________________________
 // Forward declaration
+class RtreeNode;
 struct RTreeValue;
 struct RTreeValueWithOrderIndex;
 using multiBoxGeo = std::vector<RTreeValue>;
@@ -30,16 +32,13 @@ struct SplitBuffers;
 // Data type to store all the information of the rectangles (in ram or on disk)
 // + the small lists for one dimension
 struct RectanglesForOrderedBoxes {
-  std::variant<multiBoxWithOrderIndex, std::filesystem::path> rectangles;
-  multiBoxWithOrderIndex rectanglesSmall;
+  std::variant<multiBoxWithOrderIndex, std::filesystem::path> rectangles = {};
+  multiBoxWithOrderIndex rectanglesSmall = multiBoxWithOrderIndex();
 
-  RectanglesForOrderedBoxes() {
-    rectangles = {};
-    rectanglesSmall = multiBoxWithOrderIndex();
-  }
+  RectanglesForOrderedBoxes() = default;
 
   void Clear() {
-    rectanglesSmall = multiBoxWithOrderIndex();
+    rectanglesSmall.clear();
     if (std::holds_alternative<multiBoxWithOrderIndex>(rectangles)) {
       rectangles = multiBoxWithOrderIndex();
     }
@@ -51,17 +50,20 @@ struct RectanglesForOrderedBoxes {
 class Rtree {
  private:
   uintmax_t maxBuildingRamUsage_;
+  std::string searchFolder_;
+  std::unique_ptr<RtreeNode> rootNode_;
 
  public:
   // ___________________________________________________________________________
   // Build the whole Rtree with the raw data in onDiskBase + fileSuffix +
   // ".tmp", M as branching factor and folder as Rtree destination
-  uint64_t BuildTree(const std::string& onDiskBase, const std::string& fileSuffix,
-                 size_t M, const std::string& folder) const;
+  [[nodiscard]] uint64_t BuildTree(const std::string& onDiskBase, const std::string& fileSuffix,
+                                   size_t M, const std::string& folder) const;
   // ___________________________________________________________________________
   // Search for an intersection of query with any elements of the Rtree
-  static multiBoxGeo SearchTree(BasicGeometry::BoundingBox query,
-                                const std::string& folder);
+  multiBoxGeo SearchTree(BasicGeometry::BoundingBox query);
+  multiBoxGeo SearchTree(BasicGeometry::BoundingBox query, const std::string& folder);
+  void SetupForSearch(std::string folder);
   explicit Rtree(uintmax_t maxBuildingRamUsage);
 };
 
@@ -69,7 +71,7 @@ class Rtree {
 // Data structure handling the datapoints of the Rtree sorted in x and y
 // direction (either on ram or on disk)
 class OrderedBoxes {
- public: // TODO
+ private:
   bool workInRam_{};
   uint64_t size_{};
   BasicGeometry::BoundingBox boundingBox_{};
@@ -89,7 +91,7 @@ class OrderedBoxes {
   // ___________________________________________________________________________
   // Get the position and dimension of the best split possible to maximize the
   // quality of the Rtree
-  SplitResult GetBestSplit();
+  SplitResult GetBestSplit(size_t M);
   // ___________________________________________________________________________
   // Actually splitting the rectangles at the given split by splitResult
   std::pair<BasicGeometry::BoundingBox, BasicGeometry::BoundingBox>

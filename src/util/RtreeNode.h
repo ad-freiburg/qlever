@@ -17,8 +17,14 @@ class RtreeNode {
   BasicGeometry::BoundingBox boundingBox_{};
   bool isLastInnerNode_ =
       false;  // when true, this means that the node is the last inner node and
-  // all of its children are leafs
+              // all of its children are leafs
+  // ___________________________________________________________________________
+  // These children are for reading from disk
   multiBoxGeo children_;
+  // ___________________________________________________________________________
+  // These children are used when they are loaded in cache
+  std::vector<RtreeNode> childNodes_{};
+  bool isSearchNode_ = false;
 
   template <class Archive>
   void serialize(Archive& a, [[maybe_unused]] const unsigned int version) {
@@ -33,11 +39,15 @@ class RtreeNode {
   explicit RtreeNode(uint64_t id, BasicGeometry::BoundingBox boundingBox = {},
                      bool isLastInnerNode = false, multiBoxGeo children = {});
   [[nodiscard]] uint64_t GetId() const;
-  [[nodiscard]] BasicGeometry::BoundingBox GetBoundingBox() const;
-  void AddChild(RtreeNode& child);
+  [[nodiscard]] const BasicGeometry::BoundingBox& GetBoundingBox() const;
+  void AddChild(const RtreeNode& child);
   void SetIsLastInnerNode(bool isLast);
+  void ClearUnusedChildren();
   [[nodiscard]] bool GetIsLastInnerNode() const;
   multiBoxGeo GetChildren();
+  std::vector<RtreeNode> GetSearchChildren();
+  void SetIsSearchNode(bool isSearchNode);
+  [[nodiscard]]bool GetIsSearchNode() const;
 
   bool operator==(const RtreeNode& other) const
   {
@@ -60,7 +70,7 @@ class ConstructionNode : public RtreeNode {
 
  public:
   ConstructionNode(uint64_t id, OrderedBoxes orderedBoxes);
-  OrderedBoxes& GetOrderedBoxes();
+  OrderedBoxes& orderedBoxes();
   void AddChildrenToItem();
 };
 

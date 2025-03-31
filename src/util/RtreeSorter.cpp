@@ -293,10 +293,3 @@ OrderedBoxes SortInput(const std::string& onDiskBase,
   }
   return ExternalSort(onDiskBase, fileSuffix, M, maxBuildingRamUsage);
 }
-
-/*OrderedBoxes SortInput(const std::filesystem::path& onDiskBase, size_t M,
-uintmax_t maxBuildingRamUsage, bool workInRam) { if (workInRam) { return
-InternalSort(onDiskBase, M); } else { return ExternalSort(onDiskBase, M,
-                        maxBuildingRamUsage);
-  }
-}*/
