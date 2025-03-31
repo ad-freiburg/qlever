@@ -216,9 +216,8 @@ class Index {
                                              float b, float k);
 
   const std::string& getTextName() const;
-
   const std::string& getKbName() const;
-
+  const std::string& getOnDiskBase() const;
   const std::string& getIndexId() const;
 
   NumNormalAndInternal numTriples() const;

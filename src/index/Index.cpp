@@ -230,6 +230,11 @@ const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 
 // ____________________________________________________________________________
+const std::string& Index::getOnDiskBase() const {
+  return pimpl_->getOnDiskBase();
+}
+
+// ____________________________________________________________________________
 const std::string& Index::getIndexId() const { return pimpl_->getIndexId(); }
 
 // ____________________________________________________________________________

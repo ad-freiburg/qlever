@@ -377,6 +377,7 @@ inline auto SpatialJoin =
         size_t maxDist, size_t maxResults, Variable left, Variable right,
         std::optional<Variable> distanceVariable,
         PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
+        std::optional<SpatialJoinType> joinType,
         const ChildArgs&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
@@ -388,7 +389,8 @@ inline auto SpatialJoin =
                             Eq(distanceVariable)),
                 AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
                             Eq(payloadVariables)),
-                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
+                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm)),
+                AD_PROPERTY(SpatialJoin, getJoinType, Eq(joinType))));
     };
 
 // Match a GroupBy operation
