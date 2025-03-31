@@ -298,7 +298,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
 
-  // Add number of threads to runtime informaton.
+  // Add number of threads to runtime information.
   spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
                                                 NUM_THREADS);
 

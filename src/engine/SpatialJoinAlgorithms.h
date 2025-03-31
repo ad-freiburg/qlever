@@ -195,7 +195,7 @@ class SpatialJoinAlgorithms {
   size_t convertGeoPointToPoint(GeoPoint point);
 
   // This helper function calculates the query box. The query box is a box
-  // that is guranteed to contain all possible candidates of a `WITHIN_DIST`
+  // that is guaranteed to contain all possible candidates of a `WITHIN_DIST`
   // query. It returns a `std::vector` because if the box crosses the poles or
   // the -180/180 longitude line, we have to cut them into multiple boxes.
   // If there is more than one box, the boxes are disjoint.
@@ -208,7 +208,8 @@ class SpatialJoinAlgorithms {
   // is multithreaded, using up to `numThreads` threads.
   util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
                                         const IdTable* idTable,
-                                        ColumnIndex colum, sj::Sweeper& sweeper,
+                                        ColumnIndex column,
+                                        sj::Sweeper& sweeper,
                                         size_t numThreads) const;
 
   QueryExecutionContext* qec_;
