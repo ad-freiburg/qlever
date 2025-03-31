@@ -482,7 +482,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       0,
       0,
       0,
-      // Amount of continous triple ranges (currently always 2, insert + delete)
+      // Amount of continuous triple ranges (currently 2, insert + delete)
       2,
       0,
       0,
