@@ -169,7 +169,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
+  LocalVocab& _localVocab;
 
   // If the expression is part of a GROUP BY then this member has to be set to
   // the variables by which the input is grouped. These variables will then be
@@ -205,7 +205,7 @@ struct EvaluationContext {
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab,
+                    LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
 

@@ -129,13 +129,14 @@ CPP_template_def(int WIDTH, typename Table)(
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                       const LocalVocab& localVocab,
                       std::vector<ColumnIndex> sortedBy) const {
+  LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-      getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
-      deadline_);
+      getExecutionContext()->getAllocator(), dummyLocalVocab,
+      cancellationHandle_, deadline_);
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
