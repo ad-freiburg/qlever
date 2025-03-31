@@ -73,6 +73,7 @@ class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
+  FRIEND_TEST(DeltaTriplesTest, storeAndRestoreData);
 
  public:
   using Triples = std::vector<IdTriple<0>>;
@@ -125,7 +126,7 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {};
+  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
