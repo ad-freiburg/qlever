@@ -136,12 +136,8 @@ string SpatialJoin::getCacheKeyImpl() const {
     auto algo = getAlgorithm();
     if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
       auto joinType = getJoinType();
-      if (joinType.has_value()) {
-        os << "libspatialjoin on: " << (int)joinType.value() << "\n";
-      } else {
-        os << "libspatialjoin on: <?>"
-           << "\n";
-      }
+      os << "libspatialjoin on: "
+         << (int)joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
     }
 
     // Uses distance variable?
