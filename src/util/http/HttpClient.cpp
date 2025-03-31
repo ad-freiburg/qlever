@@ -187,6 +187,25 @@ HttpClientImpl<StreamType>::sendWebSocketHandshake(
   return response;
 }
 
+namespace {
+struct RequestSender {
+  const ad_utility::httpUtils::Url& url;
+  const boost::beast::http::verb& method;
+  ad_utility::SharedCancellationHandle handle;
+  std::string_view requestData;
+  std::string_view contentTypeHeader;
+  std::string_view acceptHeader;
+
+  template <typename Client>
+  constexpr HttpOrHttpsResponse operator()() const {
+    auto client = std::make_unique<Client>(url.host(), url.port());
+    return Client::sendRequest(std::move(client), method, url.host(),
+                               url.target(), std::move(handle), requestData,
+                               contentTypeHeader, acceptHeader);
+  }
+};
+}  // namespace
+
 // Explicit instantiations for HTTP and HTTPS, see the bottom of
 // `HttpClient.h`.
 template class HttpClientImpl<beast::tcp_stream>;
@@ -198,12 +217,10 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
-    auto client = std::make_unique<Client>(url.host(), url.port());
-    return Client::sendRequest(std::move(client), method, url.host(),
-                               url.target(), std::move(handle), requestData,
-                               contentTypeHeader, acceptHeader);
-  };
+  RequestSender sendRequest{
+      url,         method, std::move(handle), requestData, contentTypeHeader,
+      acceptHeader};
+
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();
   } else {

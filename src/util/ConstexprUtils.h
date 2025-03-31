@@ -116,6 +116,24 @@ void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
                    });
 }
 
+namespace detail {
+// Helper for the `getIndexOfFirstTypeToPassCheck` function (see below).
+template <auto checkFunction>
+struct CheckFunctionInvoker {
+  size_t& index;
+
+  template <typename T>
+  constexpr bool operator()() {
+    if constexpr (checkFunction.template operator()<T>()) {
+      return true;
+    } else {
+      ++index;
+      return false;
+    }
+  }
+};
+}  // namespace detail
+
 /*
 @brief Returns the index of the first given type, that passes the given check.
 
@@ -130,14 +148,7 @@ template <auto checkFunction, typename... Args>
 constexpr size_t getIndexOfFirstTypeToPassCheck() {
   size_t index = 0;
 
-  auto l = [&index]<typename T>() {
-    if constexpr (checkFunction.template operator()<T>()) {
-      return true;
-    } else {
-      ++index;
-      return false;
-    }
-  };
+  detail::CheckFunctionInvoker<checkFunction> l{index};
 
   ((l.template operator()<Args>()) || ...);
 

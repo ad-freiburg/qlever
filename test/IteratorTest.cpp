@@ -80,10 +80,15 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
   testIterator(d, begin, end);
 }
 
-TEST(Iterator, makeForwardingIterator) {
-  auto forwardFirstElement = []<typename T>(T&& vector) {
+struct ForwardFirstElement {
+  template <typename T>
+  auto operator()(T&& vector) const {
     return *ad_utility::makeForwardingIterator<T>(vector.begin());
-  };
+  }
+};
+
+TEST(Iterator, makeForwardingIterator) {
+  ForwardFirstElement forwardFirstElement;
 
   std::vector<std::string> vector{"hello"};
   auto vector2 = vector;
