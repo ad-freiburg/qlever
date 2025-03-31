@@ -302,7 +302,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
                                                 NUM_THREADS);
 
-  // Set the distance for the `WITHIN_DIST` join type.
+  // Set the distance for the `WITHIN_DIST` join type. This has to be set to
+  // a value < 0 to disable the `WITHIN_DIST` calculation in `libspatialjoin`.
   double withinDist = -1;
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     withinDist = maxDist.value_or(0);
@@ -349,7 +350,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     return cfg;
   }();
 
-  sj::Sweeper sweeper(sweeperCfg, ".", "", "spatialjoin");
+  sj::Sweeper sweeper(sweeperCfg, ".", "",
+                      qec_->getIndex().getKbName() + ".spatialjoin");
 
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
