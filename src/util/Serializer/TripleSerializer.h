@@ -17,8 +17,8 @@
 #include "global/Id.h"
 #include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeString.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeString.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 
