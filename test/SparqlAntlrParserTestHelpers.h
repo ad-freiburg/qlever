@@ -4,7 +4,8 @@
 //   2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //   2022 Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H
+#define QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H
 
 #include <gmock/gmock.h>
 
@@ -1032,14 +1033,12 @@ auto inline GraphRefIri = [](const string& iri) {
       TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
 
-inline auto Quad = [](const TripleComponent& s, const TripleComponent& p,
-                      const TripleComponent& o,
-                      const SparqlTripleSimpleWithGraph::Graph& g) {
-  return testing::AllOf(
-      AD_FIELD(SparqlTripleSimpleWithGraph, s_, testing::Eq(s)),
-      AD_FIELD(SparqlTripleSimpleWithGraph, p_, testing::Eq(p)),
-      AD_FIELD(SparqlTripleSimpleWithGraph, o_, testing::Eq(o)),
-      AD_FIELD(SparqlTripleSimpleWithGraph, g_, testing::Eq(g)));
+inline auto Quads = [](const ad_utility::sparql_types::Triples& freeTriples,
+                       const std::vector<Quads::GraphBlock>& graphs)
+    -> Matcher<const ::Quads&> {
+  return AllOf(
+      AD_FIELD(Quads, freeTriples_, testing::ElementsAreArray(freeTriples)),
+      AD_FIELD(Quads, graphTriples_, testing::ElementsAreArray(graphs)));
 };
 
 // Some helper matchers for testing SparqlExpressions
@@ -1184,3 +1183,5 @@ inline auto ExistsFilter =
 };
 
 }  // namespace matchers
+
+#endif  // QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H

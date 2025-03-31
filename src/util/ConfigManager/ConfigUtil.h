@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (June of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGUTIL_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGUTIL_H
 
 #include <string_view>
 
@@ -13,3 +14,5 @@ grammar.
 */
 bool isNameInShortHand(std::string_view str);
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGUTIL_H

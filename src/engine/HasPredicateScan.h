@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
+#define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
 
 #include <memory>
 #include <string>
@@ -115,3 +117,5 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

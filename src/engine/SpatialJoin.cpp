@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoin.h"
 
@@ -84,6 +85,8 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
+    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
+      return std::nullopt;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return config.maxResults_;
@@ -129,6 +132,14 @@ string SpatialJoin::getCacheKeyImpl() const {
       os << "maxResults: " << maxResults.value() << "\n";
     }
 
+    // Uses libspatialjoin?
+    auto algo = getAlgorithm();
+    if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      auto joinType = getJoinType();
+      os << "libspatialjoin on: "
+         << (int)joinType.value_or(SpatialJoinType::INTERSECTS) << "\n";
+    }
+
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
@@ -163,6 +174,9 @@ string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
+    } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
+      return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
+                          config.joinType_);
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -222,6 +236,22 @@ size_t SpatialJoin::getCostEstimate() {
 
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
       return n * m;
+    } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      // We take the cost estimate to be `4 * (n + m)`, where `n` and `m` are
+      // the size of the left and right table, respectively. Reasoning:
+      //
+      // Let `N = n + m` be the number of the union of the two sets of objects.
+      // We first sort these objects in time `O(N log n)`, and then iterate
+      // over these objects, keeping track of the active boxes. This can be done
+      // in time `O(N log M)`, where `M` is the maximum number of active boxes
+      // at any time. For a full self-join on the complete OSM data, `M` is at
+      // most 10'000, so for all practical purposes we can consider `log M` to
+      // be a constant of 4.
+      //
+      // The actual cost of comparing the candidate cannot be meaningfully
+      // estimated here, as we know nothing about the invidiual geometries.
+      auto numObjects = n + m;
+      return numObjects * 4;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
@@ -383,7 +413,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults()};
+                                   getMaxDist(),      getMaxResults(),
+                                   config_.joinType_};
 }
 
 // ____________________________________________________________________________
@@ -397,6 +428,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return algorithms.LibspatialjoinAlgorithm();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");

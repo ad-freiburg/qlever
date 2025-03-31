@@ -1,8 +1,10 @@
 // Copyright 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Authors: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
+#define QLEVER_SRC_PARSER_SPATIALQUERY_H
 
 #include "parser/GraphPattern.h"
 #include "parser/MagicServiceQuery.h"
@@ -46,6 +48,10 @@ struct SpatialQuery : MagicServiceQuery {
   // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;
 
+  // Optional join type for libspatialjoin. If it is not given, INTERSECT
+  // is used implicitly.
+  std::optional<SpatialJoinType> joinType_;
+
   // Helper: if the spatial query was constructed from a special triple
   // <nearest-neighbors:...> for backward compatibility, we need to bypass the
   // check for the case of a nearest neighbors search with the right child not
@@ -72,3 +78,5 @@ struct SpatialQuery : MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_SPATIALQUERY_H

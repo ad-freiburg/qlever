@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_WEBSOCKET_WEBSOCKETSESSION_H
+#define QLEVER_SRC_UTIL_HTTP_WEBSOCKET_WEBSOCKETSESSION_H
 
 #include <boost/beast/websocket.hpp>
 
@@ -69,3 +70,5 @@ class WebSocketSession {
   getErrorResponseIfPathIsInvalid(const http::request<http::string_body>&);
 };
 };  // namespace ad_utility::websocket
+
+#endif  // QLEVER_SRC_UTIL_HTTP_WEBSOCKET_WEBSOCKETSESSION_H

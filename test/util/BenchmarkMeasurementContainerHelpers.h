@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (November of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H
+#define QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H
 
 #include <cstddef>
 #include <sstream>
@@ -40,3 +41,5 @@ static void doForTypeInResultTableEntryType(Function function) {
         }
       });
 }
+
+#endif  // QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H

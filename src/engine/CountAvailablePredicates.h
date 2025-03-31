@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
+#define QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
 
 #include <memory>
 #include <string>
@@ -103,3 +105,5 @@ class CountAvailablePredicates : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H

@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
+#define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
 #include <limits>
 #include <memory>
@@ -195,3 +196,5 @@ struct GraphPatternOperation
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H

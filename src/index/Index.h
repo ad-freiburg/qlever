@@ -2,7 +2,9 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_INDEX_H
+#define QLEVER_SRC_INDEX_INDEX_H
 
 #include <optional>
 #include <string>
@@ -92,7 +94,8 @@ class Index {
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file
   // handles.
-  void createFromOnDiskIndex(const std::string& onDiskBase);
+  void createFromOnDiskIndex(const std::string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
@@ -214,9 +217,8 @@ class Index {
                                              float b, float k);
 
   const std::string& getTextName() const;
-
   const std::string& getKbName() const;
-
+  const std::string& getOnDiskBase() const;
   const std::string& getIndexId() const;
 
   NumNormalAndInternal numTriples() const;
@@ -281,3 +283,5 @@ class Index {
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
 };
+
+#endif  // QLEVER_SRC_INDEX_INDEX_H

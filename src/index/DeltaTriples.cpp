@@ -6,10 +6,12 @@
 
 #include "index/DeltaTriples.h"
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
+#include "util/Serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
@@ -218,13 +220,14 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 // _____________________________________________________________________________
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
-    const std::function<ReturnType(DeltaTriples&)>& function) {
+    const std::function<ReturnType(DeltaTriples&)>& function,
+    bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
   return deltaTriples_.withWriteLock(
-      [this, &function](DeltaTriples& deltaTriples) {
+      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
         auto updateSnapshot = [this, &deltaTriples] {
           auto newSnapshot = deltaTriples.getSnapshot();
           currentLocatedTriplesSnapshot_.withWriteLock(
@@ -232,24 +235,33 @@ ReturnType DeltaTriplesManager::modify(
                 currentSnapshot = std::move(newSnapshot);
               });
         };
+        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
+                                       writeToDiskAfterRequest]() {
+          if (writeToDiskAfterRequest) {
+            deltaTriples.writeToDisk();
+          }
+          updateSnapshot();
+        };
 
         if constexpr (std::is_void_v<ReturnType>) {
           function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
         } else {
           ReturnType returnValue = function(deltaTriples);
-          updateSnapshot();
+          writeAndUpdateSnapshot();
           return returnValue;
         }
       });
 }
 // Explicit instantions
 template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&);
+    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&);
+    const std::function<nlohmann::json(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&);
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
+    bool writeToDiskAfterRequest);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
@@ -266,4 +278,74 @@ void DeltaTriples::setOriginalMetadata(
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::writeToDisk() const {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  auto toRange = [](const TriplesToHandlesMap& map) {
+    return ad_utility::SizedJoinView{
+        map | ql::views::keys |
+        ql::views::transform(
+            [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+              return triple.ids_;
+            })};
+  };
+  std::filesystem::path tempPath = filenameForPersisting_.value();
+  tempPath += ".tmp";
+  ad_utility::serializeIds(
+      tempPath, localVocab_,
+      std::array{toRange(triplesDeleted_), toRange(triplesInserted_)});
+  std::filesystem::rename(tempPath, filenameForPersisting_.value());
+}
+
+// _____________________________________________________________________________
+void DeltaTriples::readFromDisk() {
+  if (!filenameForPersisting_.has_value()) {
+    return;
+  }
+  AD_CONTRACT_CHECK(localVocab_.empty());
+  auto [vocab, idRanges] = ad_utility::deserializeIds(
+      filenameForPersisting_.value(), index_.getBlankNodeManager());
+  if (idRanges.empty()) {
+    return;
+  }
+  AD_CORRECTNESS_CHECK(idRanges.size() == 2);
+  auto toTriples = [](const std::vector<Id>& ids) {
+    Triples triples;
+    static_assert(std::tuple_size_v<
+                      decltype(std::declval<Triples::value_type>().payload_)> ==
+                  0);
+    constexpr size_t cols = Triples::value_type::NumCols;
+    AD_CORRECTNESS_CHECK(ids.size() % cols == 0);
+    triples.reserve(ids.size() / cols);
+    for (size_t i = 0; i < ids.size(); i += cols) {
+      triples.emplace_back(
+          std::array{ids[i], ids[i + 1], ids[i + 2], ids[i + 3]});
+    }
+    return triples;
+  };
+  auto cancellationHandle =
+      std::make_shared<CancellationHandle::element_type>();
+  insertTriples(cancellationHandle, toTriples(idRanges.at(1)));
+  deleteTriples(cancellationHandle, toTriples(idRanges.at(0)));
+  AD_LOG_INFO << "Done, #inserted triples = " << idRanges.at(1).size()
+              << ", #deleted triples = " << idRanges.at(0).size() << std::endl;
+}
+// _____________________________________________________________________________
+void DeltaTriples::setPersists(std::optional<std::string> filename) {
+  filenameForPersisting_ = std::move(filename);
+}
+
+// _____________________________________________________________________________
+void DeltaTriplesManager::setFilenameForPersistentUpdatesAndReadFromDisk(
+    std::string filename) {
+  modify<void>(
+      [&filename](DeltaTriples& deltaTriples) {
+        deltaTriples.setPersists(std::move(filename));
+        deltaTriples.readFromDisk();
+      },
+      false);
 }
