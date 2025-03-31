@@ -538,6 +538,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
     deltaTriples.setPersists(tmpFile);
+    deltaTriples.readFromDisk();
 
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
@@ -557,6 +558,7 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
   {
     DeltaTriples deltaTriples{testQec->getIndex()};
     deltaTriples.setPersists(tmpFile);
+    deltaTriples.readFromDisk();
 
     EXPECT_EQ(deltaTriples.numDeleted(), 1);
     EXPECT_EQ(deltaTriples.numInserted(), 1);
