@@ -949,7 +949,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
   }
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
-        ".update-triples");
+        onDiskBase + ".update-triples");
   }
 }
 

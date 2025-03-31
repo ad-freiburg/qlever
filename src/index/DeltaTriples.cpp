@@ -306,8 +306,6 @@ void DeltaTriples::readFromDisk() {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
-  AD_LOG_INFO << "Reading and processing persisted updates from "
-              << filenameForPersisting_.value() << " ..." << std::endl;
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
       filenameForPersisting_.value(), index_.getBlankNodeManager());

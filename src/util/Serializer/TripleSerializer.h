@@ -151,6 +151,10 @@ CPP_template(typename Range)(
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
     const std::filesystem::path& path, BlankNodeManager* blankNodeManager) {
+  // This is a minor TOCTOU issue, the file might be gone after this check and
+  // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
+  // handle this as a special exception type of our own `File` class, which
+  // doesn't exist yet.
   if (!std::filesystem::exists(path)) {
     return {};
   }
@@ -165,6 +169,8 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
           err.what())};
     }
   }();
+  AD_LOG_INFO << "Reading and processing persisted updates from " << path
+              << " ..." << std::endl;
   detail::readHeader(serializer);
   auto [vocab, mapping] = detail::deserializeLocalVocab(serializer);
   std::vector<std::vector<Id>> idVectors;
