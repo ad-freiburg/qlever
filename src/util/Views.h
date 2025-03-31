@@ -371,6 +371,22 @@ CPP_template(typename Range, typename ElementType)(
   }
 }
 
+// Helper struct to keep size information while joining a range.
+template <typename Range>
+requires requires { std::tuple_size_v<ql::ranges::range_value_t<Range>>; }
+class SizedJoinView : public ql::ranges::join_view<Range> {
+  using Base = ql::ranges::join_view<Range>;
+
+ public:
+  using Base::Base;
+  constexpr std::size_t size() const {
+    return ql::ranges::size(this->base()) *
+           std::tuple_size_v<ql::ranges::range_value_t<Range>>;
+  }
+};
+
+CPP_template(typename R)(requires ql::ranges::viewable_range<R>)
+    SizedJoinView(R&&) -> SizedJoinView<R>;
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.

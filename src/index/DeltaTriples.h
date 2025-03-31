@@ -73,6 +73,7 @@ class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
+  FRIEND_TEST(DeltaTriplesTest, storeAndRestoreData);
 
  public:
   using Triples = std::vector<IdTriple<0>>;
@@ -89,6 +90,9 @@ class DeltaTriples {
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
   LocalVocab localVocab_;
+
+  // See the documentation of `setPersist()` below.
+  std::optional<std::string> filenameForPersisting_;
 
   // Assert that the Permutation Enum values have the expected int values.
   // This is used to store and lookup items that exist for permutation in an
@@ -122,7 +126,7 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {};
+  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
@@ -160,6 +164,17 @@ class DeltaTriples {
 
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
+
+  // If the `filename` is set, then `writeToDisk()` will write these
+  // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
+  // `writeToDisk` will be a nullop.
+  void setPersists(std::optional<std::string> filename);
+
+  // Write the delta triples to disk to persist them between restarts.
+  void writeToDisk() const;
+
+  // Read the delta triples from disk to restore them after a restart.
+  void readFromDisk();
 
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this
@@ -209,6 +224,8 @@ class DeltaTriples {
   // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
   // which stores these iterators.
   void eraseTripleInAllPermutations(LocatedTripleHandles& handles);
+
+  friend class DeltaTriplesManager;
 };
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding
@@ -231,7 +248,10 @@ class DeltaTriplesManager {
   // snapshot before or after a modification, but never one of an ongoing
   // modification.
   template <typename ReturnType>
-  ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function);
+  ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
+                    bool writeToDiskAfterRequest = true);
+
+  void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.
