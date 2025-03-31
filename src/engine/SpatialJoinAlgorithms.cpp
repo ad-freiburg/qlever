@@ -350,8 +350,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     return cfg;
   }();
 
-  sj::Sweeper sweeper(sweeperCfg, ".", "", "spatialjoin");
-
+  std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
