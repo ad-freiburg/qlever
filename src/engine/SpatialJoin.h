@@ -18,7 +18,6 @@
 
 // The supported spatial join types (geometry predicates).
 enum class SpatialJoinType {
-  NONE,
   INTERSECTS,
   CONTAINS,
   COVERS,
@@ -82,7 +81,7 @@ struct SpatialJoinConfiguration {
   // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 
-  SpatialJoinType joinType_ = SpatialJoinType::INTERSECTS;
+  std::optional<SpatialJoinType> joinType_ = std::nullopt;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -175,8 +174,10 @@ class SpatialJoin : public Operation {
   // retrieve the currently selected algorithm
   SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
 
-  // retrieve the currently selected SJ jointype
-  SpatialJoinType getJoinType() const { return config_.joinType_; }
+  // retrieve the currently selected spatial join type
+  std::optional<SpatialJoinType> getJoinType() const {
+    return config_.joinType_;
+  }
 
   // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {

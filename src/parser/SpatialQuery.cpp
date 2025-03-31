@@ -172,9 +172,9 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "`<payload>`");
   }
 
-  // Default join type
-  SpatialJoinType joinType = SpatialJoinType::NONE;
+  std::optional<SpatialJoinType> joinType = std::nullopt;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    // Default join type if `libspatialjoin` is selected as algorithm
     joinType = SpatialJoinType::INTERSECTS;
     if (joinType_.has_value()) {
       joinType = joinType_.value();
@@ -192,7 +192,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Task specification
   SpatialJoinTask task;
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
-    task = SpatialJoinConfig{joinType, maxDist_};
+    task = SpatialJoinConfig{joinType.value(), maxDist_};
   } else if (maxResults_.has_value()) {
     task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
   } else {
