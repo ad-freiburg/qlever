@@ -24,20 +24,27 @@ bool isAllowedChar(char c) {
 // Escape a string for use as a blank node label.
 std::string escapeStringForBlankNode(std::string_view input) {
   std::string output;
+  output.reserve(input.size());
   for (char c : input) {
     if (isAllowedChar(c)) {
       output += c;
     } else {
       // Since we don't allow the '.' char in our `isAllowedChar` check, we can
       // safely use it to denote escape sequences.
-      output += ".";
-      output += std::to_string(c);
+      absl::StrAppend(&output, ".", static_cast<int>(c));
     }
   }
   return output;
 }
 
-// SparqlExpression representing the term "BNODE()".
+// SparqlExpression representing the term "BNODE()" and "BNODE(?x)". Currently
+// this is implemented by creating special IRIs with a specific prefix and
+// encoding the blank node within. This prefix is then stripped when converting
+// back to a string.
+// TODO<RobinTF> Using a counter during value generation assumes that
+// the row index won't change after the value is generated. This is
+// not guaranteed and could lead to inconsistencies, but fixing this
+// behaviour would require a larger refactoring.
 class BlankNodeExpression : public SparqlExpression {
   std::optional<Ptr> label_;
   // Counter that is incremented for each blank node created to ensure its
@@ -76,9 +83,14 @@ class BlankNodeExpression : public SparqlExpression {
     return result;
   }
 
-  // __________________________________________________________________________
-  ExpressionResult evaluateImpl(EvaluationContext* context,
-                                auto getNextLabel) const {
+  // Perform the actual evaluation of the expression. This creates a blank node
+  // based on the result of `getNextLabel`.
+  CPP_template_2(typename Printable, typename Func)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          Func, std::optional<Printable>>
+          CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
+      ExpressionResult
+      evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
     std::string_view blankNodePrefix = "un";
 
     VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
@@ -96,18 +108,14 @@ class BlankNodeExpression : public SparqlExpression {
           if (label.has_value()) {
             auto uniqueIri = absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX,
                                           "_:", blankNodePrefix, label.value(),
-                                          "_", counter_.load(), ">");
+                                          "_", counter_++, ">");
             result.push_back(LiteralOrIri{
                 ad_utility::triple_component::Iri::fromStringRepresentation(
                     std::move(uniqueIri))});
           } else {
             result.push_back(Id::makeUndefined());
+            ++counter_;
           }
-          // TODO<RobinTF> Using a counter during value generation assumes that
-          // the row index won't change after the value is generated. This is
-          // not guaranteed and could lead to inconsistencies, but fixing this
-          // behaviour would require a larger refactoring.
-          ++counter_;
         },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
@@ -130,14 +138,16 @@ class BlankNodeExpression : public SparqlExpression {
               return Id::makeUndefined();
             }
             auto escapedValue = escapeStringForBlankNode(value.value());
-            return evaluateImpl(
-                context, [&escapedValue]() -> std::optional<std::string_view> {
+            return evaluateImpl<std::string_view>(
+                context,
+                [escapedValue = std::optional<std::string_view>{escapedValue}]()
+                    -> const std::optional<std::string_view>& {
                   return escapedValue;
                 });
           } else {
             auto generator = detail::makeGenerator(AD_FWD(element),
                                                    context->size(), context);
-            return evaluateImpl(
+            return evaluateImpl<std::string>(
                 context,
                 [it = generator.begin(), &generator,
                  context]() mutable -> std::optional<std::string> {
