@@ -46,8 +46,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "joinType") {
     if (!object.isIri()) {
-      // This 'if' is redundant with `extractParameterName`, but we want to
-      // throw a more precise error description
+      // This case is already covered in `extractParameterName` below, but we
+      // want to throw a more precise error description
       throw SpatialSearchException(
           "The parameter `<joinType>` needs an IRI that selects the algorithm "
           "to employ. Currently supported are `<intersects>`, `<covers>`, "
@@ -80,8 +80,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
-      // This 'if' is redundant with extractParameterName, but we want to throw
-      // a more precise error description
+      // This case is already covered in `extractParameterName` below, but we
+      // want to throw a more precise error description
       throw SpatialSearchException(
           "The parameter `<algorithm>` needs an IRI that selects the algorithm "
           "to employ. Currently supported are `<baseline>`, `<s2>`, "

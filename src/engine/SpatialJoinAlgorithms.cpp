@@ -369,8 +369,9 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
   }
 
-  // Flush the geometries and add the time for parsing and processing the
-  // geometries to the runtime information.
+  // Flush the geometry caches and the sweepline event list cache to disk and
+  // add the time for parsing and processing the geometries to the runtime
+  // information.
   sweeper.flush();
   spatialJoin_.value()->runtimeInfo().addDetail("time for reading geometries",
                                                 tParse.msecs().count());
