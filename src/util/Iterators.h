@@ -273,12 +273,12 @@ class InputRangeFromGet {
   using Storage = std::optional<ValueType>;
   Storage storage_ = std::nullopt;
 
-//  private:
+  //  private:
   // The single virtual function which has to be overloaded. `std::nullopt`
   // means that there will be no more values.
   virtual Storage get() = 0;
 
-//  public:
+  //  public:
   virtual ~InputRangeFromGet() = default;
   InputRangeFromGet() = default;
   InputRangeFromGet(InputRangeFromGet&&) = default;
@@ -333,6 +333,20 @@ class InputRangeFromGet {
     return Iterator{this};
   }
   Sentinel end() const { return {}; };
+};
+
+// A simple helper to define an `InputRangeFromGet` where the `get()` function
+// is a simple callable.
+CPP_template(typename T, typename F)(
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        F, std::optional<T>>) struct InputRangeFromGetCallable
+    : public InputRangeFromGet<T> {
+ private:
+  F function_;
+
+ public:
+  std::optional<T> get() override { return function_(); }
+  InputRangeFromGetCallable(F f) : function_{std::move(f)} {}
 };
 
 // This class takes an arbitrary input range, and turns it into a class that
