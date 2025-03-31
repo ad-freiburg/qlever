@@ -127,7 +127,7 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 CPP_template_def(int WIDTH, typename Table)(
     requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      const LocalVocab& localVocab,
+                      [[maybe_unused]] const LocalVocab& localVocab,
                       std::vector<ColumnIndex> sortedBy) const {
   LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);

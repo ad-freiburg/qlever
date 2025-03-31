@@ -2453,7 +2453,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
         std::make_unique<VariableExpression>(visit(ctx->var())));
   } else if (functionName == "bnode") {
     if (ctx->NIL()) {
-      return makeUniqueBlankNodeExpression(_blankNodeCounter++);
+      return makeUniqueBlankNodeExpression();
     } else {
       return createUnary(&makeBlankNodeExpression);
     }

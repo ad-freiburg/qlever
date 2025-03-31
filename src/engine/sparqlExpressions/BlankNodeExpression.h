@@ -14,7 +14,7 @@ SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child);
 
 // Create a `SparqlExpression` representing the term `BNODE()`. You need to make
 // sure that the passed label is unique across all other calls to `BNODE()`.
-SparqlExpression::Ptr makeUniqueBlankNodeExpression(size_t label);
+SparqlExpression::Ptr makeUniqueBlankNodeExpression();
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_BLANKNODEEXPRESSION_H_

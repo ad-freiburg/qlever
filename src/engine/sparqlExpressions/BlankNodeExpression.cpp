@@ -39,7 +39,7 @@ std::string escapeStringForBlankNode(std::string_view input) {
 
 // SparqlExpression representing the term "BNODE()".
 class BlankNodeExpression : public SparqlExpression {
-  std::variant<size_t, Ptr> label_;
+  std::optional<Ptr> label_;
   // Counter that is incremented for each blank node created to ensure its
   // uniqueness.
   mutable std::atomic_uint64_t counter_ = 0;
@@ -51,16 +51,35 @@ class BlankNodeExpression : public SparqlExpression {
 
  public:
   // ___________________________________________________________________________
-  explicit BlankNodeExpression(std::variant<size_t, Ptr> label)
-      : label_{std::move(label)} {}
+  explicit BlankNodeExpression(Ptr label) : label_{std::move(label)} {}
+
+  // Constructor for the case of no arguments.
+  BlankNodeExpression() = default;
   BlankNodeExpression(const BlankNodeExpression&) = delete;
   BlankNodeExpression& operator=(const BlankNodeExpression&) = delete;
+
+  // Evaluate function for the case where no argument is given and each row gets
+  // a new unique blank node index.
+  ExpressionResult evaluateWithoutArguments(EvaluationContext* context) const {
+    VectorWithMemoryLimit<Id> result{context->_allocator};
+    const size_t numElements = context->size();
+    result.reserve(numElements);
+
+    ad_utility::chunkedForLoop<1000>(
+        0, numElements,
+        [&result, context](size_t) {
+          result.push_back(
+              Id::makeFromBlankNodeIndex(context->_localVocab.getBlankNodeIndex(
+                  context->_qec.getIndex().getBlankNodeManager())));
+        },
+        [context]() { context->cancellationHandle_->throwIfCancelled(); });
+    return result;
+  }
 
   // __________________________________________________________________________
   ExpressionResult evaluateImpl(EvaluationContext* context,
                                 auto getNextLabel) const {
-    std::string_view blankNodePrefix =
-        std::holds_alternative<size_t>(label_) ? "bn" : "un";
+    std::string_view blankNodePrefix = "un";
 
     VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
     const size_t numElements = context->size();
@@ -96,12 +115,10 @@ class BlankNodeExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    if (std::holds_alternative<size_t>(label_)) {
-      return evaluateImpl(context, [this]() -> std::optional<size_t> {
-        return std::get<size_t>(label_);
-      });
+    if (!label_.has_value()) {
+      return evaluateWithoutArguments(context);
     }
-    auto childResult = std::get<Ptr>(label_)->evaluate(context);
+    auto childResult = label_.value()->evaluate(context);
     return std::visit(
         [this, context]<typename T>(T&& element) -> ExpressionResult {
           if constexpr (isConstantResult<T>) {
@@ -140,18 +157,17 @@ class BlankNodeExpression : public SparqlExpression {
 
   // ___________________________________________________________________________
   std::string getCacheKey(const VariableToColumnMap& map) const override {
-    if (std::holds_alternative<size_t>(label_)) {
-      return absl::StrCat("#BlankNode#", std::get<size_t>(label_), "_",
-                          cacheBreaker_++);
+    if (!label_.has_value()) {
+      return absl::StrCat("#BlankNode#", "_", cacheBreaker_++);
     }
-    return absl::StrCat("#BlankNode#", std::get<Ptr>(label_)->getCacheKey(map),
-                        "_", cacheBreaker_++);
+    return absl::StrCat("#BlankNode#", label_.value()->getCacheKey(map), "_",
+                        cacheBreaker_++);
   }
 
  private:
   std::span<Ptr> childrenImpl() override {
-    if (std::holds_alternative<Ptr>(label_)) {
-      return {&std::get<Ptr>(label_), 1};
+    if (label_.has_value()) {
+      return {&label_.value(), 1};
     }
     return {};
   }
@@ -161,7 +177,7 @@ class BlankNodeExpression : public SparqlExpression {
 SparqlExpression::Ptr makeBlankNodeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<detail::BlankNodeExpression>(std::move(child));
 }
-SparqlExpression::Ptr makeUniqueBlankNodeExpression(size_t label) {
-  return std::make_unique<detail::BlankNodeExpression>(label);
+SparqlExpression::Ptr makeUniqueBlankNodeExpression() {
+  return std::make_unique<detail::BlankNodeExpression>();
 }
 }  // namespace sparqlExpression

@@ -1101,83 +1101,49 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
   // `VALUES` clause in the test query like in the test cases above.
   kg = "<s> <p> <o>";
   objectQuery =
-      "SELECT (BNODE(\"1\") AS ?a) (BNODE(?x) AS ?b) (BNODE() AS ?c) (BNODE() "
-      "AS ?d) WHERE { VALUES (?x) { (1) (2) } }";
-  expectedXml = makeXMLHeader({"a", "b", "c", "d"}) +
+      "SELECT (BNODE(\"1\") AS ?a) (BNODE(?x) AS ?b) WHERE { VALUES (?x) { (1) "
+      "(2) } }";
+  expectedXml = makeXMLHeader({"a", "b"}) +
                 R"(
   <result>
     <binding name="a"><bnode>un1_0</bnode></binding>
     <binding name="b"><bnode>un1_0</bnode></binding>
-    <binding name="c"><bnode>bn0_0</bnode></binding>
-    <binding name="d"><bnode>bn1_0</bnode></binding>
   </result>
   <result>
     <binding name="a"><bnode>un1_1</bnode></binding>
     <binding name="b"><bnode>un2_1</bnode></binding>
-    <binding name="c"><bnode>bn0_1</bnode></binding>
-    <binding name="d"><bnode>bn1_1</bnode></binding>
   </result>)" + xmlTrailer;
   testCaseBlankNode = TestCaseSelectQuery{
       kg, objectQuery, 2,
       // TSV
-      "?a\t?b\t?c\t?d\n"
-      "_:un1_0\t_:un1_0\t_:bn0_0\t_:bn1_0\n"
-      "_:un1_1\t_:un2_1\t_:bn0_1\t_:bn1_1\n",
+      "?a\t?b\n"
+      "_:un1_0\t_:un1_0\n"
+      "_:un1_1\t_:un2_1\n",
       // CSV
-      "a,b,c,d\n"
-      "_:un1_0,_:un1_0,_:bn0_0,_:bn1_0\n"
-      "_:un1_1,_:un2_1,_:bn0_1,_:bn1_1\n",
+      "a,b\n"
+      "_:un1_0,_:un1_0\n"
+      "_:un1_1,_:un2_1\n",
       []() {
         nlohmann::json j;
-        j.push_back(
-            std::vector{"_:un1_0"s, "_:un1_0"s, "_:bn0_0"s, "_:bn1_0"s});
-        j.push_back(
-            std::vector{"_:un1_1"s, "_:un2_1"s, "_:bn0_1"s, "_:bn1_1"s});
+        j.push_back(std::vector{"_:un1_0"s, "_:un1_0"s});
+        j.push_back(std::vector{"_:un1_1"s, "_:un2_1"s});
         return j;
       }(),
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("a");
         j["head"]["vars"].push_back("b");
-        j["head"]["vars"].push_back("c");
-        j["head"]["vars"].push_back("d");
         auto& bindings = j["results"]["bindings"];
         bindings.emplace_back();
         bindings.back()["a"] = makeJSONBinding(std::nullopt, "bnode", "un1_0");
         bindings.back()["b"] = makeJSONBinding(std::nullopt, "bnode", "un1_0");
-        bindings.back()["c"] = makeJSONBinding(std::nullopt, "bnode", "bn0_0");
-        bindings.back()["d"] = makeJSONBinding(std::nullopt, "bnode", "bn1_0");
         bindings.emplace_back();
         bindings.back()["a"] = makeJSONBinding(std::nullopt, "bnode", "un1_1");
         bindings.back()["b"] = makeJSONBinding(std::nullopt, "bnode", "un2_1");
-        bindings.back()["c"] = makeJSONBinding(std::nullopt, "bnode", "bn0_1");
-        bindings.back()["d"] = makeJSONBinding(std::nullopt, "bnode", "bn1_1");
         return j;
       }(),
       expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
-
-  TestCaseConstructQuery testCaseConstruct{
-      kg,
-      "CONSTRUCT { ?x ?y [] } WHERE { VALUES (?x) { (1) (2) } "
-      "BIND(BNODE() AS ?y) }",
-      2, 2,
-      // TSV
-      "1\t_:bn1_0\t_:g0_0\n"
-      "2\t_:bn1_1\t_:g1_0\n",
-      // CSV
-      "1,_:bn1_0,_:g0_0\n"
-      "2,_:bn1_1,_:g1_0\n",
-      // Turtle
-      "1 _:bn1_0 _:g0_0 .\n"
-      "2 _:bn1_1 _:g1_0 .\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{"1"s, "_:bn1_0"s, "_:g0_0"s});
-        j.push_back(std::vector{"2"s, "_:bn1_1"s, "_:g1_0"s});
-        return j;
-      }()};
-  runConstructQueryTestCase(testCaseConstruct);
 }
 
 // ____________________________________________________________________________

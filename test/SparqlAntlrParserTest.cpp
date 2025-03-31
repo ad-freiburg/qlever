@@ -1722,7 +1722,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("encode_for_uri(?x)",
                     matchUnary(&makeEncodeForUriExpression));
 
-  const auto& blankNodeExpression = makeUniqueBlankNodeExpression(0);
+  const auto& blankNodeExpression = makeUniqueBlankNodeExpression();
   const auto& reference = *blankNodeExpression;
   expectBuiltInCall(
       "bnode()", testing::Pointee(::testing::ResultOf(

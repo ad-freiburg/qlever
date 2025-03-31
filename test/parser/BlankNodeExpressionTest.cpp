@@ -97,8 +97,8 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, uniqueCacheKey) {
-  auto expression0 = makeUniqueBlankNodeExpression(0);
-  auto expression1 = makeUniqueBlankNodeExpression(0);
+  auto expression0 = makeUniqueBlankNodeExpression();
+  auto expression1 = makeUniqueBlankNodeExpression();
   EXPECT_EQ(expression0->getCacheKey({}), expression1->getCacheKey({}));
   EXPECT_NE(expression1->getCacheKey({}), expression1->getCacheKey({}));
 
@@ -114,7 +114,7 @@ TEST(BlankNodeExpression, uniqueCacheKey) {
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, correctChildren) {
-  auto expression0 = makeUniqueBlankNodeExpression(0);
+  auto expression0 = makeUniqueBlankNodeExpression();
   EXPECT_TRUE(expression0->children().empty());
   auto expression1 =
       makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
@@ -125,33 +125,27 @@ TEST(BlankNodeExpression, correctChildren) {
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, uniqueValuesAcrossInstances) {
   TestContext context;
-  auto expression0 = makeUniqueBlankNodeExpression(0);
-  auto expression1 = makeUniqueBlankNodeExpression(1);
+  auto expression0 = makeUniqueBlankNodeExpression();
+  auto expression1 = makeUniqueBlankNodeExpression();
   auto result0 = expression0->evaluate(&context.context);
   auto result1 = expression1->evaluate(&context.context);
-  ASSERT_TRUE(
-      std::holds_alternative<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result0));
-  ASSERT_TRUE(
-      std::holds_alternative<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result1));
+  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result0));
+  ASSERT_TRUE(std::holds_alternative<VectorWithMemoryLimit<Id>>(result1));
   // Check that both results are distinct.
-  EXPECT_THAT(
-      std::get<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result0),
-      ::testing::Each(::testing::ResultOf(
-          [&result1](const auto& elem) {
-            return ad_utility::contains(
-                std::get<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result1),
-                elem);
-          },
-          ::testing::IsFalse())));
-  EXPECT_THAT(
-      std::get<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result1),
-      ::testing::Each(::testing::ResultOf(
-          [&result0](const auto& elem) {
-            return ad_utility::contains(
-                std::get<VectorWithMemoryLimit<IdOrLiteralOrIri>>(result0),
-                elem);
-          },
-          ::testing::IsFalse())));
+  EXPECT_THAT(std::get<VectorWithMemoryLimit<Id>>(result0),
+              ::testing::Each(::testing::ResultOf(
+                  [&result1](const auto& elem) {
+                    return ad_utility::contains(
+                        std::get<VectorWithMemoryLimit<Id>>(result1), elem);
+                  },
+                  ::testing::IsFalse())));
+  EXPECT_THAT(std::get<VectorWithMemoryLimit<Id>>(result1),
+              ::testing::Each(::testing::ResultOf(
+                  [&result0](const auto& elem) {
+                    return ad_utility::contains(
+                        std::get<VectorWithMemoryLimit<Id>>(result0), elem);
+                  },
+                  ::testing::IsFalse())));
 }
 
 // _____________________________________________________________________________
