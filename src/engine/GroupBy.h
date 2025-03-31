@@ -3,7 +3,8 @@
 // Authors: Florian Kramer [2018]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_GROUPBY_H
+#define QLEVER_SRC_ENGINE_GROUPBY_H
 
 #include <gtest/gtest_prod.h>
 
@@ -595,3 +596,5 @@ template <typename A>
 concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
 }
+
+#endif  // QLEVER_SRC_ENGINE_GROUPBY_H

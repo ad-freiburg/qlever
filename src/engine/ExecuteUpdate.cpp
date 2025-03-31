@@ -54,25 +54,24 @@ ExecuteUpdate::transformTriplesTemplate(
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
-  auto transformGraph =
-      [&vocab, &localVocab, &defaultGraphIri,
-       &variableColumns](SparqlTripleSimpleWithGraph::Graph graph) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{
-                [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
-                  return defaultGraphIri;
-                },
-                [&vocab, &localVocab](const Iri& iri) -> IdOrVariableIndex {
-                  ad_utility::triple_component::Iri i =
-                      ad_utility::triple_component::Iri::fromIriref(iri.iri());
-                  return TripleComponent(i).toValueId(vocab, localVocab);
-                },
-                [&variableColumns](const Variable& var) -> IdOrVariableIndex {
-                  AD_CORRECTNESS_CHECK(variableColumns.contains(var));
-                  return variableColumns.at(var).columnIndex_;
-                }},
-            graph);
-      };
+  auto transformGraph = [&vocab, &localVocab, &defaultGraphIri,
+                         &variableColumns](
+                            SparqlTripleSimpleWithGraph::Graph graph) {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
+              return defaultGraphIri;
+            },
+            [&vocab, &localVocab](const ad_utility::triple_component::Iri& iri)
+                -> IdOrVariableIndex {
+              return TripleComponent(iri).toValueId(vocab, localVocab);
+            },
+            [&variableColumns](const Variable& var) -> IdOrVariableIndex {
+              AD_CORRECTNESS_CHECK(variableColumns.contains(var));
+              return variableColumns.at(var).columnIndex_;
+            }},
+        graph);
+  };
   auto transformSparqlTripleSimple =
       [&transformSparqlTripleComponent,
        &transformGraph](SparqlTripleSimpleWithGraph triple) {

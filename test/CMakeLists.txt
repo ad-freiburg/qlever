@@ -33,7 +33,7 @@ endfunction()
 # required e.g. if several tests cases write to the same file.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
             TRUE)
 endfunction()
 
@@ -41,7 +41,7 @@ if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
+    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
             TRUE)
 else ()
     message(STATUS "The tests are split over multiple binaries")
@@ -453,10 +453,14 @@ addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
+addLinkAndDiscoverTest(ValueGetterTest engine)
+
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
 addLinkAndDiscoverTest(SPARQLProtocolTest engine)
 
 addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+addLinkAndDiscoverTest(LruCacheTest)
 
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)

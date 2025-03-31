@@ -4,7 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_VALUES_H
+#define QLEVER_SRC_ENGINE_VALUES_H
 
 #include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
@@ -65,3 +66,5 @@ class Values : public Operation {
   template <size_t I>
   void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };
+
+#endif  // QLEVER_SRC_ENGINE_VALUES_H

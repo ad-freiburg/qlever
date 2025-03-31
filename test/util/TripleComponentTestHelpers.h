@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
+#define QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H
 
 #include "parser/TripleComponent.h"
 
@@ -38,3 +39,5 @@ constexpr auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
 }  // namespace ad_utility::testing
+
+#endif  // QLEVER_TEST_UTIL_TRIPLECOMPONENTTESTHELPERS_H

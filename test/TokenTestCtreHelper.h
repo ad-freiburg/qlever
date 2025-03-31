@@ -3,7 +3,8 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#pragma once
+#ifndef QLEVER_TEST_TOKENTESTCTREHELPER_H
+#define QLEVER_TEST_TOKENTESTCTREHELPER_H
 
 #include <string_view>
 
@@ -22,3 +23,5 @@ class TokenTestCtreHelper {
   static bool matchStringLiteralLongSingleQuoteString(std::string_view s);
   static bool matchIriref(std::string_view s);
 };
+
+#endif  // QLEVER_TEST_TOKENTESTCTREHELPER_H

@@ -3,7 +3,8 @@
 //  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLTRIPLE_H
+#define QLEVER_SRC_PARSER_SPARQLTRIPLE_H
 
 #include <utility>
 #include <vector>
@@ -56,7 +57,7 @@ class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
 
 class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
-  using Graph = std::variant<std::monostate, Iri, Variable>;
+  using Graph = std::variant<std::monostate, TripleComponent::Iri, Variable>;
 
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
                               TripleComponent o, Graph g,
@@ -105,3 +106,5 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
     return {triple.s_, p, triple.o_};
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

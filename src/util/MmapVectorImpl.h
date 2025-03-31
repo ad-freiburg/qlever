@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
+#ifndef QLEVER_SRC_UTIL_MMAPVECTOR_IMPL_H
+#define QLEVER_SRC_UTIL_MMAPVECTOR_IMPL_H
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -11,7 +14,7 @@
 
 #include <utility>
 
-#include "../util/Log.h"
+#include "util/MmapVector.h"
 
 namespace ad_utility {
 // definition of static constants
@@ -363,3 +366,5 @@ void MmapVectorView<T>::close() {
 }
 
 }  // namespace ad_utility
+
+#endif  // header guard

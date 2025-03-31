@@ -2,7 +2,9 @@
 // Structures.
 // Author: Björn Buchhold <buchholb>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_FILE_H
+#define QLEVER_SRC_UTIL_FILE_H
+
 #include <absl/strings/str_cat.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -234,3 +236,5 @@ std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_FILE_H

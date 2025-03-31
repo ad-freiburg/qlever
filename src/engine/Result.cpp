@@ -63,6 +63,96 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
+
+struct RunOnNewChunkComputedGenerator
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+      original_;
+  std::function<void(const Result::IdTableVocabPair&,
+                     std::chrono::microseconds)>
+      onNewChunk_;
+  std::function<void(bool)> onGeneratorFinished_;
+  ad_utility::timer::Timer timer_;
+  bool cleanup_ = true;
+
+  // template<typename ViewT, typename LambdaT>
+  // static
+  // std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+  // makeInputRange(ViewT view, LambdaT transform) {
+  //     return std::make_unique<ad_utility::CachingTransformInputRange<ViewT,
+  //     LambdaT>>(std::move(view), std::move(transform));
+  // }
+
+  RunOnNewChunkComputedGenerator(Result::LazyResult&& original, auto onNewChunk,
+                                 auto onGeneratorFinished)
+      : original_(new ad_utility::CachingTransformInputRange(
+            std::move(original),
+            [](Result::IdTableVocabPair& pair) { return std::move(pair); })),
+        onNewChunk_(std::move(onNewChunk)),
+        onGeneratorFinished_(std::move(onGeneratorFinished)),
+        timer_(ad_utility::timer::Timer::Stopped) {}
+
+  RunOnNewChunkComputedGenerator(
+      std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+          original,
+      auto onNewChunk, auto onGeneratorFinished)
+      : original_(std::move(original)),
+        onNewChunk_(std::move(onNewChunk)),
+        onGeneratorFinished_(std::move(onGeneratorFinished)),
+        timer_(ad_utility::timer::Timer::Stopped) {}
+
+  ~RunOnNewChunkComputedGenerator() { finish(); }
+
+  RunOnNewChunkComputedGenerator(const RunOnNewChunkComputedGenerator&) =
+      delete;
+  RunOnNewChunkComputedGenerator& operator=(
+      const RunOnNewChunkComputedGenerator&) = delete;
+  RunOnNewChunkComputedGenerator(RunOnNewChunkComputedGenerator&& other)
+      : RunOnNewChunkComputedGenerator(std::move(other.original_),
+                                       std::move(other.onNewChunk_),
+                                       std::move(other.onGeneratorFinished_)) {
+    other.cleanup_ = false;
+  }
+  RunOnNewChunkComputedGenerator& operator=(
+      RunOnNewChunkComputedGenerator&& other) {
+    if (this != &other) {
+      ad_utility::InputRangeFromGet<Result::IdTableVocabPair>::operator=(
+          std::move(other));
+      this->original_ = std::move(other.original_);
+      this->onNewChunk_ = std::move(other.onNewChunk_);
+      this->onGeneratorFinished_ = std::move(other.onGeneratorFinished_);
+      this->timer_ =
+          ad_utility::timer::Timer(ad_utility::timer::Timer::Stopped);
+      other.cleanup_ = false;
+    }
+    return *this;
+  }
+
+  std::optional<Result::IdTableVocabPair> get() {
+    try {
+      timer_.start();
+      auto opt_res = original_->get();
+      if (!opt_res.has_value()) {
+        finish();
+        return std::nullopt;
+      }
+      Result::IdTableVocabPair& pair = opt_res.value();
+      onNewChunk_(pair, timer_.value());
+      return std::optional{std::move(pair)};
+    } catch (...) {
+      cleanup_ = false;
+      onGeneratorFinished_(true);
+      throw;
+    }
+  }
+
+  void finish() {
+    if (cleanup_) {
+      onGeneratorFinished_(false);
+      cleanup_ = false;
+    }
+  }
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -145,8 +235,6 @@ void Result::applyLimitOffset(
                   limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    using IdTableLoopControl =
-        ad_utility::loopControl::LoopControl<Result::IdTableVocabPair>;
     ad_utility::CachingContinuableTransformInputRange generator{
         std::move(idTables()),
         [limitOffset = limitOffset,
@@ -231,27 +319,10 @@ void Result::runOnNewChunkComputed(
         onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator = [](LazyResult original, auto onNewChunk,
-                      auto onGeneratorFinished) -> Generator {
-    // Call this within destructor to make sure it is also called when an
-    // operation stops iterating before reaching the end.
-    absl::Cleanup cleanup{
-        [&onGeneratorFinished]() { onGeneratorFinished(false); }};
-    try {
-      ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
-      for (IdTableVocabPair& pair : original) {
-        onNewChunk(pair, timer.value());
-        co_yield pair;
-        timer.start();
-      }
-    } catch (...) {
-      std::move(cleanup).Cancel();
-      onGeneratorFinished(true);
-      throw;
-    }
-  }(std::move(idTables()), std::move(onNewChunk),
-                                                std::move(onGeneratorFinished));
-  data_.emplace<GenContainer>(std::move(generator));
+  RunOnNewChunkComputedGenerator generator{std::move(idTables()),
+                                           std::move(onNewChunk),
+                                           std::move(onGeneratorFinished)};
+  data_.emplace<GenContainer>(LazyResult(std::move(generator)));
 }
 
 // _____________________________________________________________________________
@@ -291,8 +362,7 @@ void Result::cacheDuringConsumption(
             if (aggregate.has_value()) {
               auto& value = aggregate.value();
               value.idTable_.insertAtEnd(newTablePair.idTable_);
-              value.localVocab_.mergeWith(
-                  std::span{&newTablePair.localVocab_, 1});
+              value.localVocab_.mergeWith(newTablePair.localVocab_);
             } else {
               aggregate.emplace(newTablePair.idTable_.clone(),
                                 newTablePair.localVocab_.clone());

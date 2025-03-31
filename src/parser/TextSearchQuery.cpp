@@ -102,7 +102,7 @@ void TextSearchQuery::checkOneContainsWordOrEntity(
   if (configVarToConfigs_[subject.getVariable()].isWordSearch_.has_value()) {
     throw TextSearchException(
         "Each text search config should have exactly one occurrence of either "
-        "<contains-word> or <contains-entity>.");
+        "<word> or <entity>.");
   }
 }
 
@@ -136,7 +136,7 @@ void TextSearchQuery::predStringContainsWord(
   std::string_view literal = asStringViewUnsafe(objectLiteral.getContent());
   if (literal.empty()) {
     throw TextSearchException(
-        "The predicate <contains-word> shouldn't have an empty literal as "
+        "The predicate <word> shouldn't have an empty literal as "
         "object.");
   }
   configVarToConfigs_[subjectVar].word_ = literal;
@@ -156,7 +156,7 @@ void TextSearchQuery::predStringContainsEntity(const Variable& subjectVar,
         object.getIri().toStringRepresentation();
   } else {
     throw TextSearchException(absl::StrCat(
-        "The predicate <contains-entity> needs a variable as subject and an "
+        "The predicate <entity> needs a variable as subject and an "
         "IRI, literal or variable as object. The object given was: ",
         object.toString()));
   }
@@ -167,7 +167,8 @@ void TextSearchQuery::predStringBindMatch(const Variable& subjectVar,
                                           const Variable& objectVar) {
   if (configVarToConfigs_[subjectVar].matchVar_.has_value()) {
     throw TextSearchException(absl::StrCat(
-        "Each text search config should only contain at most one <bind-match>. "
+        "Each text search config should only contain at most one "
+        "<prefix-match>. "
         "The second match variable given was: ",
         objectVar.name(), ". The config variable was: ", subjectVar.name()));
   }
@@ -179,7 +180,7 @@ void TextSearchQuery::predStringBindScore(const Variable& subjectVar,
                                           const Variable& objectVar) {
   if (configVarToConfigs_[subjectVar].scoreVar_.has_value()) {
     throw TextSearchException(absl::StrCat(
-        "Each text search config should only contain at most one <bind-score>. "
+        "Each text search config should only contain at most one <score>. "
         "The second match variable given was: ",
         objectVar.name(), ". The config variable was: ", subjectVar.name()));
   }
@@ -194,23 +195,23 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
   const TripleComponent& object = simpleTriple.o_;
 
   auto predString = extractParameterName(predicate, TEXT_SEARCH_IRI);
-  if (predString == "text-search") {
-    checkSubjectAndObjectAreVariables("text-search", subject, object);
+  if (predString == "contains") {
+    checkSubjectAndObjectAreVariables("contains", subject, object);
     predStringTextSearch(subject.getVariable(), object.getVariable());
-  } else if (predString == "contains-word") {
-    checkSubjectIsVariable("contains-word", subject);
+  } else if (predString == "word") {
+    checkSubjectIsVariable("word", subject);
     checkOneContainsWordOrEntity(subject);
-    checkObjectIsLiteral("contains-word", object);
+    checkObjectIsLiteral("word", object);
     predStringContainsWord(subject.getVariable(), object.getLiteral());
-  } else if (predString == "contains-entity") {
-    checkSubjectIsVariable("contains-entity", subject);
+  } else if (predString == "entity") {
+    checkSubjectIsVariable("entity", subject);
     checkOneContainsWordOrEntity(subject);
     predStringContainsEntity(subject.getVariable(), object);
-  } else if (predString == "bind-match") {
-    checkSubjectAndObjectAreVariables("bind-match", subject, object);
+  } else if (predString == "prefix-match") {
+    checkSubjectAndObjectAreVariables("prefix-match", subject, object);
     predStringBindMatch(subject.getVariable(), object.getVariable());
-  } else if (predString == "bind-score") {
-    checkSubjectAndObjectAreVariables("bind-score", subject, object);
+  } else if (predString == "score") {
+    checkSubjectAndObjectAreVariables("score", subject, object);
     predStringBindScore(subject.getVariable(), object.getVariable());
   }
 }
@@ -229,7 +230,7 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
     if (!conf.isWordSearch_.has_value()) {
       throw TextSearchException(absl::StrCat(
           "Text search service needs configs with exactly one occurrence of "
-          "either <contains-word> or <contains-entity>. The config variable "
+          "either <word> or <entity>. The config variable "
           "was: ",
           var.name()));
     }
@@ -238,23 +239,23 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
       throw TextSearchException(absl::StrCat(
           "Text search service needs a text variable that is linked to one or "
           "multiple text search config variables with the predicate "
-          "<text-search>. \n"
+          "<contains>. \n"
           "The config variable can then be used with the predicates: "
-          "<contains-word>, <contains-entity>, <bind-match>, <bind-score>. \n"
-          "<contains-word>: This predicate needs a literal as object which has "
+          "<word>, <entity>, <prefix-match>, <score>. \n"
+          "<word>: This predicate needs a literal as object which has "
           "one word with optionally a * at the end. This word or prefix is "
           "then used to search the text index. \n"
-          "<contains-entity>: This predicate needs a variable, IRI or literal "
+          "<entity>: This predicate needs a variable, IRI or literal "
           "as object. If a variable is given this variable can be used outside "
           "of this service. If an IRI or literal is given the entity is fixed. "
           "The entity given is then used to search the text index. \n"
           "A config should contain exactly one occurrence of either "
-          "<contains-word> or <contains-entity>. \n"
-          "<bind-match>: This predicate should only be used in a text search "
+          "<word> or <entity>. \n"
+          "<prefix-match>: This predicate should only be used in a text search "
           "config with a word that is a prefix. The object should be a "
           "variable. That variable specifies the variable for the prefix "
           "match.\n"
-          "<bind-score>: The object of this predicate should be a variable. "
+          "<score>: The object of this predicate should be a variable. "
           "That variable specifies the column name for the column containing "
           "the scores of the respective word or entity search. \n",
           "The config variable was: ", var.name()));

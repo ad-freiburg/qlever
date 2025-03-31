@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ITERATORS_H
+#define QLEVER_SRC_UTIL_ITERATORS_H
 
 #include <cstdint>
 #include <iterator>
@@ -272,12 +273,12 @@ class InputRangeFromGet {
   using Storage = std::optional<ValueType>;
   Storage storage_ = std::nullopt;
 
- private:
+//  private:
   // The single virtual function which has to be overloaded. `std::nullopt`
   // means that there will be no more values.
   virtual Storage get() = 0;
 
- public:
+//  public:
   virtual ~InputRangeFromGet() = default;
   InputRangeFromGet() = default;
   InputRangeFromGet(InputRangeFromGet&&) = default;
@@ -421,3 +422,5 @@ ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
   return t;
 }
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_ITERATORS_H

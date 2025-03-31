@@ -1,7 +1,9 @@
 // Copyright 2022, University of Freiburg,
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_H
+#define QLEVER_SRC_PARSER_SPARQLPARSER_H
 
 #include <string>
 
@@ -13,8 +15,13 @@
 // message is given.
 class SparqlParser {
  public:
-  static ParsedQuery parseQuery(std::string query);
-  // A convenience function for parsing the query and setting the datasets.
-  static ParsedQuery parseQuery(std::string operation,
-                                const std::vector<DatasetClause>& datasets);
+  // `datasets` are fixed datasets as per the SPARQL protocol. These cannot be
+  // overwritten from inside the query (using `FROM`) or update (using `USING`).
+  // Passing no datasets means that the datasets are set normally from the
+  // query or update.
+  static ParsedQuery parseQuery(
+      std::string queryOrUpdate,
+      const std::vector<DatasetClause>& datasets = {});
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_H

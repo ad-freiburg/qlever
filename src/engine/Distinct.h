@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_DISTINCT_H
+#define QLEVER_SRC_ENGINE_DISTINCT_H
 
 #include <vector>
 
@@ -93,3 +95,5 @@ class Distinct : public Operation {
   FRIEND_TEST(Distinct, distinctWithEmptyInput);
   FRIEND_TEST(Distinct, testChunkEdgeCases);
 };
+
+#endif  // QLEVER_SRC_ENGINE_DISTINCT_H

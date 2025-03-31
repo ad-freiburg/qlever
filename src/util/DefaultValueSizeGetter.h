@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (August of 2023,
 // schlegea@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
+#define QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
 
 #include <string>
 #include <type_traits>
@@ -44,3 +46,5 @@ CPP_template(typename StringType)(
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_DEFAULTVALUESIZEGETTER_H
