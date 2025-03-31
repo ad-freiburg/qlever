@@ -32,7 +32,7 @@ TextScoringMetric getTextScoringMetricFromString(
   if (textScoringMetricString == "explicit") {
     return EXPLICIT;
   }
-  AD_LOG_WARN << R"(Faulty text scoring metric given: ")"
-              << textScoringMetricString << R"(". Defaulting to "explicit")";
-  return EXPLICIT;
+  throw std::runtime_error(
+      absl::StrCat(R"(Faulty text scoring metric given: ")",
+                   textScoringMetricString, R"(".)"));
 }

@@ -7,7 +7,8 @@
 #include "index/Index.h"
 
 // ____________________________________________________________________________
-void logWordNotFound(const string& word, size_t& wordNotFoundErrorMsgCount) {
+static void logWordNotFound(const string& word,
+                            size_t& wordNotFoundErrorMsgCount) {
   if (wordNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "The following word was found in the docsfile but not in "
                  "the wordsfile: "
