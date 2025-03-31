@@ -66,17 +66,36 @@ void assertSortOrderIsRespected(const IdTable& idTable,
 
 struct RunOnNewChunkComputedGenerator
     : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
-  Result::LazyResult original_;
+  std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+      original_;
   std::function<void(const Result::IdTableVocabPair&,
                      std::chrono::microseconds)>
       onNewChunk_;
   std::function<void(bool)> onGeneratorFinished_;
   ad_utility::timer::Timer timer_;
-  std::optional<Result::LazyResult::iterator> originalNext_;
   bool cleanup_ = true;
 
-  RunOnNewChunkComputedGenerator(Result::LazyResult original, auto onNewChunk,
+  // template<typename ViewT, typename LambdaT>
+  // static
+  // std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+  // makeInputRange(ViewT view, LambdaT transform) {
+  //     return std::make_unique<ad_utility::CachingTransformInputRange<ViewT,
+  //     LambdaT>>(std::move(view), std::move(transform));
+  // }
+
+  RunOnNewChunkComputedGenerator(Result::LazyResult&& original, auto onNewChunk,
                                  auto onGeneratorFinished)
+      : original_(new ad_utility::CachingTransformInputRange(
+            std::move(original),
+            [](Result::IdTableVocabPair& pair) { return std::move(pair); })),
+        onNewChunk_(std::move(onNewChunk)),
+        onGeneratorFinished_(std::move(onGeneratorFinished)),
+        timer_(ad_utility::timer::Timer::Started) {}
+
+  RunOnNewChunkComputedGenerator(
+      std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
+          original,
+      auto onNewChunk, auto onGeneratorFinished)
       : original_(std::move(original)),
         onNewChunk_(std::move(onNewChunk)),
         onGeneratorFinished_(std::move(onGeneratorFinished)),
@@ -111,16 +130,12 @@ struct RunOnNewChunkComputedGenerator
 
   std::optional<Result::IdTableVocabPair> get() {
     try {
-      if (!originalNext_.has_value()) {
-        originalNext_ = original_.begin();
-      } else if (originalNext_.value() != original_.end()) {
-        originalNext_.value()++;
-      }
-      if (originalNext_.value() == original_.end()) {
+      auto opt_res = original_->get();
+      if (!opt_res.has_value()) {
         finish();
         return std::nullopt;
       }
-      Result::IdTableVocabPair& pair = *(originalNext_.value());
+      Result::IdTableVocabPair& pair = opt_res.value();
       onNewChunk_(pair, timer_.value());
       timer_.start();
       return std::optional{std::move(pair)};

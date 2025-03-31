@@ -273,12 +273,12 @@ class InputRangeFromGet {
   using Storage = std::optional<ValueType>;
   Storage storage_ = std::nullopt;
 
- private:
+//  private:
   // The single virtual function which has to be overloaded. `std::nullopt`
   // means that there will be no more values.
   virtual Storage get() = 0;
 
- public:
+//  public:
   virtual ~InputRangeFromGet() = default;
   InputRangeFromGet() = default;
   InputRangeFromGet(InputRangeFromGet&&) = default;
