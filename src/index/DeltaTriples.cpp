@@ -337,9 +337,6 @@ void DeltaTriples::readFromDisk() {
 // _____________________________________________________________________________
 void DeltaTriples::setPersists(std::optional<std::string> filename) {
   filenameForPersisting_ = std::move(filename);
-  if (filenameForPersisting_) {
-    readFromDisk();
-  }
 }
 
 // _____________________________________________________________________________
