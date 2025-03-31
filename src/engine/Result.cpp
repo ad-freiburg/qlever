@@ -90,7 +90,7 @@ struct RunOnNewChunkComputedGenerator
             [](Result::IdTableVocabPair& pair) { return std::move(pair); })),
         onNewChunk_(std::move(onNewChunk)),
         onGeneratorFinished_(std::move(onGeneratorFinished)),
-        timer_(ad_utility::timer::Timer::Started) {}
+        timer_(ad_utility::timer::Timer::Stopped) {}
 
   RunOnNewChunkComputedGenerator(
       std::unique_ptr<ad_utility::InputRangeFromGet<Result::IdTableVocabPair>>
@@ -99,7 +99,7 @@ struct RunOnNewChunkComputedGenerator
       : original_(std::move(original)),
         onNewChunk_(std::move(onNewChunk)),
         onGeneratorFinished_(std::move(onGeneratorFinished)),
-        timer_(ad_utility::timer::Timer::Started) {}
+        timer_(ad_utility::timer::Timer::Stopped) {}
 
   ~RunOnNewChunkComputedGenerator() { finish(); }
 
@@ -122,7 +122,7 @@ struct RunOnNewChunkComputedGenerator
       this->onNewChunk_ = std::move(other.onNewChunk_);
       this->onGeneratorFinished_ = std::move(other.onGeneratorFinished_);
       this->timer_ =
-          ad_utility::timer::Timer(ad_utility::timer::Timer::Started);
+          ad_utility::timer::Timer(ad_utility::timer::Timer::Stopped);
       other.cleanup_ = false;
     }
     return *this;
@@ -130,6 +130,7 @@ struct RunOnNewChunkComputedGenerator
 
   std::optional<Result::IdTableVocabPair> get() {
     try {
+      timer_.start();
       auto opt_res = original_->get();
       if (!opt_res.has_value()) {
         finish();
@@ -137,7 +138,6 @@ struct RunOnNewChunkComputedGenerator
       }
       Result::IdTableVocabPair& pair = opt_res.value();
       onNewChunk_(pair, timer_.value());
-      timer_.start();
       return std::optional{std::move(pair)};
     } catch (...) {
       cleanup_ = false;
