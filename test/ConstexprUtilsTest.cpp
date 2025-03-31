@@ -173,15 +173,11 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
-/*
-@brief Create a lambda, that adds the string representation of a (supported)
-type to a given vector.
+struct PushToVector {
+  std::vector<std::string>* typeToStringVector;
 
-@returns A lambda, that takes an explicit template type parameter and adds the
-string representation at the end of `*typeToStringVector`.
-*/
-auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
-  return [typeToStringVector]<typename T>() {
+  template <typename T>
+  void operator()() const {
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {
@@ -191,7 +187,18 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
     } else {
       AD_FAIL();
     }
-  };
+  }
+};
+
+/*
+@brief Create a lambda, that adds the string representation of a (supported)
+type to a given vector.
+
+@returns A lambda, that takes an explicit template type parameter and adds the
+string representation at the end of `*typeToStringVector`.
+*/
+auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
+  return PushToVector{typeToStringVector};
 }
 
 /*
@@ -224,11 +231,17 @@ void testConstExprForEachNormalCall(
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
 
+struct TestConstExprForEachNormalCallForEachTypeInParameterPack {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInParameterPack<Ts...>(func);
+  }
+};
+
 TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   // Normal call.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInParameterPack<Ts...>(func);
-  });
+  testConstExprForEachNormalCall(
+      TestConstExprForEachNormalCallForEachTypeInParameterPack{});
 
   // No types given should end in nothing happening.
   std::vector<std::string> typeToStringVector{};
@@ -237,14 +250,26 @@ TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
+struct TestConstExprForEachNormalCallForEachTypeInVariantTemplateType {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInTemplateType<std::variant<Ts...>>(func);
+  }
+};
+
+struct TestConstExprForEachNormalCallForEachTypeInTupleTemplateType {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
+  }
+};
+
 TEST(ConstexprUtils, forEachTypeInTemplateType) {
   // Normal call with `std::variant`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::variant<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(
+      TestConstExprForEachNormalCallForEachTypeInVariantTemplateType{});
 
   // Normal call with `std::tuple`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(
+      TestConstExprForEachNormalCallForEachTypeInTupleTemplateType{});
 }

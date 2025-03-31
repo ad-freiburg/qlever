@@ -35,56 +35,115 @@ constexpr void callLambdaWithAllVariationsOfType(const auto& lambda) {
   lambda.template operator()<const decayedT&&>();
 }
 
+template <typename Tup>
+struct TestSimiliarToAnyTypeIn {
+  struct CheckSimilar {
+    template <typename T>
+    void operator()() const {
+      static_assert(SimilarToAnyTypeIn<T, Tup>);
+    }
+  };
+
+  template <typename TupType>
+  void operator()() const {
+    callLambdaWithAllVariationsOfType<TupType>(CheckSimilar{});
+  }
+};
+
+template <typename Tup>
+struct TestNotSimiliarToAnyTypeIn {
+  struct CheckNotSimilar {
+    template <typename T>
+    void operator()() const {
+      static_assert(!SimilarToAnyTypeIn<T, Tup>);
+    }
+  };
+
+  template <typename WrongType>
+  void operator()() const {
+    callLambdaWithAllVariationsOfType<WrongType>(CheckNotSimilar{});
+  }
+};
+
 TEST(TypeTraits, SimiliarToAnyTypeIn) {
   using tup = std::tuple<int, char>;
   using nested = std::tuple<tup>;
 
   // All the test, were the concept is supposed to return true.
-  forEachTypeInTemplateType<tup>([]<typename TupType>() {
-    callLambdaWithAllVariationsOfType<TupType>(
-        []<typename T>() { static_assert(SimilarToAnyTypeIn<T, tup>); });
-  });
+  forEachTypeInTemplateType<tup>(TestSimiliarToAnyTypeIn<tup>{});
   static_assert(SimilarToAnyTypeIn<tup, nested>);
 
   // All the test, were the concept is supposed to return false.
   forEachTypeInParameterPack<unsigned int, float, bool, size_t, unsigned char>(
-      []<typename WrongType>() {
-        callLambdaWithAllVariationsOfType<WrongType>(
-            []<typename T>() { static_assert(!SimilarToAnyTypeIn<T, tup>); });
-      });
+      TestNotSimiliarToAnyTypeIn<tup>{});
   static_assert(!SimilarToAnyTypeIn<tup, char>);
   static_assert(!SimilarToAnyTypeIn<int, int>);
   ASSERT_TRUE(true);
 }
+
+template <typename Tup>
+struct TestSameType {
+  template <typename TupType>
+  void operator()() const {
+    static_assert(SameAsAnyTypeIn<TupType, Tup>);
+  }
+};
+
+template <typename Tup>
+struct TestNotSameType {
+  struct CheckNotSame {
+    template <typename T>
+    void operator()() const {
+      static_assert(!SameAsAnyTypeIn<T, Tup>);
+    }
+  };
+
+  template <typename WrongType>
+  void operator()() const {
+    callLambdaWithAllVariationsOfType<WrongType>(CheckNotSame{});
+  }
+};
+
+// Unsuccessful comparison, where the underlying type is contained, but not
+// with those qualifiers.
+template <typename Tup>
+struct TestNotIncludedWithThoseQualifiers {
+  struct CheckCorrectType {
+    template <typename CorrectType>
+    struct CheckType {
+      template <typename T>
+      void operator()() const {
+        if constexpr (!std::same_as<CorrectType, T>) {
+          static_assert(!SameAsAnyTypeIn<T, Tup>);
+        }
+      }
+    };
+
+    template <typename CorrectType>
+    void operator()() const {
+      callLambdaWithAllVariationsOfType<CorrectType>(CheckType<CorrectType>{});
+    }
+  };
+
+  template <typename TemplatedType>
+  void operator()() const {
+    forEachTypeInTemplateType<TemplatedType>(CheckCorrectType{});
+  }
+};
 
 TEST(TypeTraits, SameAsAnyTypeIn) {
   using tup = std::tuple<int, const char, bool&, const float&>;
   using nested = std::tuple<tup>;
 
   // Successful comparison.
-  forEachTypeInTemplateType<tup>(
-      []<typename TupType>() { static_assert(SameAsAnyTypeIn<TupType, tup>); });
+  forEachTypeInTemplateType<tup>(TestSameType<tup>{});
   static_assert(SameAsAnyTypeIn<tup, nested>);
 
   // Unsuccessful comparison, where the underlying type is wrong.
   forEachTypeInParameterPack<tup, size_t, double, unsigned char>(
-      []<typename WrongType>() {
-        callLambdaWithAllVariationsOfType<WrongType>([]<typename T>() {
-          static_assert(!SameAsAnyTypeIn<WrongType, tup>);
-        });
-      });
+      TestNotSameType<tup>{});
 
-  // Unsuccessful comparison, where the underlying type is contained, but not
-  // with those qualifiers.
-  auto testNotIncludedWithThoseQualifiers = []<typename TemplatedType>() {
-    forEachTypeInTemplateType<TemplatedType>([]<typename CorrectType>() {
-      callLambdaWithAllVariationsOfType<CorrectType>([]<typename T>() {
-        if constexpr (!std::same_as<CorrectType, T>) {
-          static_assert(!SameAsAnyTypeIn<T, tup>);
-        }
-      });
-    });
-  };
+  TestNotIncludedWithThoseQualifiers<tup> testNotIncludedWithThoseQualifiers;
   testNotIncludedWithThoseQualifiers.template operator()<tup>();
   testNotIncludedWithThoseQualifiers.template operator()<nested>();
 
@@ -168,45 +227,203 @@ TEST(TypeTraits, TupleCat) {
   ASSERT_TRUE(true);
 }
 
+struct BothInvocableWithExactReturnType {
+  template <typename Fn, typename Ret, typename... Args>
+  constexpr bool operator()() const {
+    return InvocableWithExactReturnType<Fn, Ret, Args...> &&
+           RegularInvocableWithExactReturnType<Fn, Ret, Args...>;
+  }
+};
+
+struct BothInvocableWithSimilarReturnType {
+  template <typename Fn, typename Ret, typename... Args>
+  constexpr bool operator()() const {
+    return InvocableWithSimilarReturnType<Fn, Ret, Args...> &&
+           RegularInvocableWithSimilarReturnType<Fn, Ret, Args...>;
+  }
+};
+
+/*
+Call the given template function with every type in the parameter type list
+`Type, Type&, const Type&, Type&&, const Type&&` as template parameter.
+*/
+struct CallWithEveryVariantOfType {
+  template <typename Type>
+  constexpr void operator()(auto func) const {
+    using pureT = std::decay_t<Type>;
+    passListOfTypesToLambda<pureT, pureT&, const pureT&, pureT&&,
+                            const pureT&&>(std::move(func));
+  }
+};
+
+/*
+Call the given template function with every type combination in the cartesian
+product of the parameter type list `Type, Type&, const Type&, Type&&, const
+Type&&`, as template parameter.
+*/
+struct CallWithCartesianProductOfEveryVariantOfType {
+  template <typename Type>
+  constexpr void operator()(auto func) const {
+    using pureT = std::decay_t<Type>;
+    passCartesianPorductToLambda<decltype(func), pureT, pureT&, const pureT&,
+                                 pureT&&, const pureT&&>(std::move(func));
+  }
+};
+
+struct CheckNotInvocableWithIntParameter {
+  template <typename ParameterType>
+  constexpr void operator()() const {
+    static_assert(BothInvocableWithExactReturnType{}.template
+                  operator()<std::negate<int>, int, ParameterType>());
+    static_assert(BothInvocableWithSimilarReturnType{}.template
+                  operator()<std::negate<int>, int, ParameterType>());
+  }
+};
+
+struct CheckInvocableWithBoolReturnType {
+  template <typename FirstParameterType, typename SecondParameterType>
+  constexpr void operator()() const {
+    static_assert(
+        BothInvocableWithExactReturnType{}
+            .template operator()<std::equal_to<int>, bool, FirstParameterType,
+                                 SecondParameterType>());
+    static_assert(
+        BothInvocableWithSimilarReturnType{}
+            .template operator()<std::equal_to<int>, bool, FirstParameterType,
+                                 SecondParameterType>());
+  }
+};
+
+template <typename SingleParameter>
+struct CheckInvocableWithIntParameter {
+  template <typename ReturnType>
+  constexpr void operator()() const {
+    if constexpr (std::same_as<ReturnType, int>) {
+      static_assert(BothInvocableWithExactReturnType{}.template
+                    operator()<SingleParameter, ReturnType, int&>());
+    }
+    static_assert(BothInvocableWithSimilarReturnType{}.template
+                  operator()<SingleParameter, ReturnType, int&>());
+  }
+};
+
+template <typename DoubleParameter>
+struct CheckInvocableWithBoolParameter {
+  template <typename ReturnType>
+  constexpr void operator()() const {
+    if constexpr (std::same_as<ReturnType, bool>) {
+      static_assert(BothInvocableWithExactReturnType{}.template
+                    operator()<DoubleParameter, ReturnType, bool&, bool&>());
+    }
+    static_assert(BothInvocableWithSimilarReturnType{}.template
+                  operator()<DoubleParameter, ReturnType, bool&, bool&>());
+  }
+};
+
+template <typename SingleParameter>
+struct CheckNotInvocableWithIntReturnType {
+  template <typename ParameterType>
+  constexpr void operator()() const {
+    if constexpr (!std::same_as<ParameterType, int&>) {
+      static_assert(!BothInvocableWithExactReturnType{}.template
+                     operator()<SingleParameter, int, ParameterType>());
+      static_assert(!BothInvocableWithSimilarReturnType{}.template
+                     operator()<SingleParameter, int, ParameterType>());
+    }
+  }
+};
+
+template <typename DoubleParameter>
+struct CheckNotInvocableWithBoolReturnType {
+  template <typename FirstParameterType, typename SecondParameterType>
+  constexpr void operator()() const {
+    if constexpr (!std::same_as<FirstParameterType, bool&> ||
+                  !std::same_as<SecondParameterType, bool&>) {
+      static_assert(
+          !BothInvocableWithExactReturnType{}
+               .template operator()<DoubleParameter, bool, FirstParameterType,
+                                    SecondParameterType>());
+      static_assert(
+          !BothInvocableWithSimilarReturnType{}
+               .template operator()<DoubleParameter, bool, FirstParameterType,
+                                    SecondParameterType>());
+    }
+  }
+};
+
+template <typename SingleParameter>
+struct CheckReturnTypeNotSameAsInt {
+  template <typename ReturnType>
+  constexpr void operator()() const {
+    if constexpr (!std::same_as<ReturnType, int>) {
+      static_assert(!BothInvocableWithExactReturnType{}.template
+                     operator()<SingleParameter, ReturnType, int&>());
+    }
+  }
+};
+
+template <typename DoubleParameter>
+struct CheckReturnTypeNotSameAsBool {
+  template <typename ReturnType>
+  constexpr void operator()() const {
+    if constexpr (!std::same_as<ReturnType, bool>) {
+      static_assert(!BothInvocableWithExactReturnType{}.template
+                     operator()<DoubleParameter, ReturnType, bool&, bool&>());
+    }
+  }
+};
+
+template <typename SingleParameter>
+struct CheckBothNotInvocableWithIntReturnAndParameterType {
+  template <typename ReturnType, typename ParameterType>
+  constexpr void operator()() const {
+    if constexpr (!std::same_as<ReturnType, int> &&
+                  !std::same_as<ParameterType, int&>) {
+      static_assert(!BothInvocableWithExactReturnType{}.template
+                     operator()<SingleParameter, ReturnType, ParameterType>());
+    }
+  }
+};
+
+template <typename DoubleParameter>
+struct CheckNotInvocableWithBoolReturnAndParameterType {
+  template <typename FirstParameterType, typename SecondParameterType>
+  struct DoCheck {
+    template <typename ReturnType>
+    constexpr void operator()() {
+      if constexpr ((!std::same_as<FirstParameterType, bool&> ||
+                     !std::same_as<SecondParameterType,
+                                   bool&>)&&!std::same_as<ReturnType, bool>) {
+        static_assert(!BothInvocableWithExactReturnType{}
+                           .template operator()<DoubleParameter, ReturnType,
+                                                FirstParameterType,
+                                                SecondParameterType>());
+      }
+    }
+  };
+
+  template <typename FirstParameterType, typename SecondParameterType>
+  constexpr void operator()() const {
+    // For the return type.
+    CallWithEveryVariantOfType{}.template operator()<bool>(
+        DoCheck<FirstParameterType, SecondParameterType>{});
+  }
+};
+
 // There is a lot of overlap between the concepts.
 TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   /*
   Currently, `std::invocable` and `std::regular_invocable` are the same.
   Therefore, having separate tests would be an unnecessary code increase.
   */
-  constexpr auto bothInvocableWithExactReturnType =
-      []<typename Fn, typename Ret, typename... Args>() {
-        return InvocableWithExactReturnType<Fn, Ret, Args...> &&
-               RegularInvocableWithExactReturnType<Fn, Ret, Args...>;
-      };
-  constexpr auto bothInvocableWithSimilarReturnType =
-      []<typename Fn, typename Ret, typename... Args>() {
-        return InvocableWithSimilarReturnType<Fn, Ret, Args...> &&
-               RegularInvocableWithSimilarReturnType<Fn, Ret, Args...>;
-      };
+  constexpr BothInvocableWithExactReturnType bothInvocableWithExactReturnType;
+  constexpr BothInvocableWithSimilarReturnType
+      bothInvocableWithSimilarReturnType;
 
-  /*
-  Call the given template function with every type in the parameter type list
-  `Type, Type&, const Type&, Type&&, const Type&&` as template parameter.
-  */
-  constexpr auto callWithEveryVariantOfType = []<typename Type>(auto func) {
-    using pureT = std::decay_t<Type>;
-    passListOfTypesToLambda<pureT, pureT&, const pureT&, pureT&&,
-                            const pureT&&>(std::move(func));
-  };
+  constexpr CallWithEveryVariantOfType callWithEveryVariantOfType;
 
-  /*
-  Call the given template function with every type combination in the cartesian
-  product of the parameter type list `Type, Type&, const Type&, Type&&, const
-  Type&&`, as template parameter.
-  */
-  constexpr auto callWithCartesianProductOfEveryVariantOfType =
-      []<typename Type>(auto func) {
-        using pureT = std::decay_t<Type>;
-        passCartesianPorductToLambda<decltype(func), pureT, pureT&,
-                                     const pureT&, pureT&&, const pureT&&>(
-            std::move(func));
-      };
+  constexpr CallWithCartesianProductOfEveryVariantOfType
+      callWithCartesianProductOfEveryVariantOfType;
 
   // Invocable types for checking.
   auto singleParameterLambda = [](int&) -> int { return 4; };
@@ -222,24 +439,9 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   of `int`. `int`, `const int`, `const int&`, etc.
   */
   callWithEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType,
-       &bothInvocableWithSimilarReturnType]<typename ParameterType>() {
-        static_assert(bothInvocableWithExactReturnType.template
-                      operator()<std::negate<int>, int, ParameterType>());
-        static_assert(bothInvocableWithSimilarReturnType.template
-                      operator()<std::negate<int>, int, ParameterType>());
-      });
+      CheckNotInvocableWithIntParameter{});
   callWithCartesianProductOfEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType,
-       &bothInvocableWithSimilarReturnType]<typename FirstParameterType,
-                                            typename SecondParameterType>() {
-        static_assert(bothInvocableWithExactReturnType.template
-                      operator()<std::equal_to<int>, bool, FirstParameterType,
-                                 SecondParameterType>());
-        static_assert(bothInvocableWithSimilarReturnType.template
-                      operator()<std::equal_to<int>, bool, FirstParameterType,
-                                 SecondParameterType>());
-      });
+      CheckInvocableWithBoolReturnType{});
 
   // Not an invocable.
   static_assert(!bothInvocableWithExactReturnType
@@ -249,26 +451,9 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
 
   // Valid function.
   callWithEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType,
-       &bothInvocableWithSimilarReturnType]<typename ReturnType>() {
-        if constexpr (std::same_as<ReturnType, int>) {
-          static_assert(bothInvocableWithExactReturnType.template
-                        operator()<SingleParameter, ReturnType, int&>());
-        }
-        static_assert(bothInvocableWithSimilarReturnType.template
-                      operator()<SingleParameter, ReturnType, int&>());
-      });
+      CheckInvocableWithIntParameter<SingleParameter>{});
   callWithEveryVariantOfType.template operator()<bool>(
-      [&bothInvocableWithSimilarReturnType,
-       &bothInvocableWithExactReturnType]<typename ReturnType>() {
-        if constexpr (std::same_as<ReturnType, bool>) {
-          static_assert(
-              bothInvocableWithExactReturnType.template
-              operator()<DoubleParameter, ReturnType, bool&, bool&>());
-        }
-        static_assert(bothInvocableWithSimilarReturnType.template
-                      operator()<DoubleParameter, ReturnType, bool&, bool&>());
-      });
+      CheckInvocableWithBoolParameter<DoubleParameter>{});
 
   // The number of parameter types is wrong.
   static_assert(!bothInvocableWithExactReturnType
@@ -284,76 +469,22 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
 
   // The parameter types  are wrong, but the return type is correct.
   callWithEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType,
-       &bothInvocableWithSimilarReturnType]<typename ParameterType>() {
-        if constexpr (!std::same_as<ParameterType, int&>) {
-          static_assert(!bothInvocableWithExactReturnType.template
-                         operator()<SingleParameter, int, ParameterType>());
-          static_assert(!bothInvocableWithSimilarReturnType.template
-                         operator()<SingleParameter, int, ParameterType>());
-        }
-      });
+      CheckNotInvocableWithIntReturnType<SingleParameter>{});
   callWithCartesianProductOfEveryVariantOfType.template operator()<bool>(
-      [&bothInvocableWithExactReturnType,
-       &bothInvocableWithSimilarReturnType]<typename FirstParameterType,
-                                            typename SecondParameterType>() {
-        if constexpr (!std::same_as<FirstParameterType, bool&> ||
-                      !std::same_as<SecondParameterType, bool&>) {
-          static_assert(!bothInvocableWithExactReturnType.template
-                         operator()<DoubleParameter, bool, FirstParameterType,
-                                    SecondParameterType>());
-          static_assert(!bothInvocableWithSimilarReturnType.template
-                         operator()<DoubleParameter, bool, FirstParameterType,
-                                    SecondParameterType>());
-        }
-      });
+      CheckNotInvocableWithBoolReturnType<DoubleParameter>{});
 
   // Parameter types are correct, but return type is wrong.
   callWithEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType]<typename ReturnType>() {
-        if constexpr (!std::same_as<ReturnType, int>) {
-          static_assert(!bothInvocableWithExactReturnType.template
-                         operator()<SingleParameter, ReturnType, int&>());
-        }
-      });
+      CheckReturnTypeNotSameAsInt<SingleParameter>{});
   callWithEveryVariantOfType.template operator()<bool>(
-      [&bothInvocableWithExactReturnType]<typename ReturnType>() {
-        if constexpr (!std::same_as<ReturnType, bool>) {
-          static_assert(
-              !bothInvocableWithExactReturnType.template
-               operator()<DoubleParameter, ReturnType, bool&, bool&>());
-        }
-      });
+      CheckReturnTypeNotSameAsBool<DoubleParameter>{});
 
   // Both the parameter types and the return type is wrong.
   // TODO Is there a cleaner way of iterating multiple parameter packs?
   callWithCartesianProductOfEveryVariantOfType.template operator()<int>(
-      [&bothInvocableWithExactReturnType]<typename ReturnType,
-                                          typename ParameterType>() {
-        if constexpr (!std::same_as<ReturnType, int> &&
-                      !std::same_as<ParameterType, int&>) {
-          static_assert(
-              !bothInvocableWithExactReturnType.template
-               operator()<SingleParameter, ReturnType, ParameterType>());
-        }
-      });
+      CheckBothNotInvocableWithIntReturnAndParameterType<SingleParameter>{});
   callWithCartesianProductOfEveryVariantOfType.template operator()<bool>(
-      [&bothInvocableWithExactReturnType,
-       &callWithEveryVariantOfType]<typename FirstParameterType,
-                                    typename SecondParameterType>() {
-        // For the return type.
-        callWithEveryVariantOfType.template operator()<bool>(
-            [&bothInvocableWithExactReturnType]<typename ReturnType>() {
-              if constexpr ((!std::same_as<FirstParameterType, bool&> ||
-                             !std::same_as<SecondParameterType, bool&>)&&!std::
-                                same_as<ReturnType, bool>) {
-                static_assert(
-                    !bothInvocableWithExactReturnType.template
-                     operator()<DoubleParameter, ReturnType, FirstParameterType,
-                                SecondParameterType>());
-              }
-            });
-      });
+      CheckNotInvocableWithBoolReturnAndParameterType<DoubleParameter>{});
 }
 
 TEST(TypeTraits, Rvalue) {

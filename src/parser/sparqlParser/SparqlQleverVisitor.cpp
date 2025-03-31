@@ -59,7 +59,22 @@ using Parser = SparqlAutomaticParser;
 namespace {
 constexpr std::string_view a =
     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-}
+
+struct MakeExpressionPtr {
+  bool distinct;
+  ExpressionPtr childExpression;
+  std::string descriptor;
+
+  template <typename ExpressionType, typename... Args>
+  ExpressionPtr operator()(Args&&... additionalArgs) {
+    ExpressionPtr result{std::make_unique<ExpressionType>(
+        distinct, std::move(childExpression),
+        std::forward<Args>(additionalArgs)...)};
+    result->descriptor() = descriptor;
+    return result;
+  }
+};
+}  // namespace
 
 // _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
@@ -2097,24 +2112,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
-  auto make = [&]<typename Expr>() {
-    return createExpression<Expr>(std::move(children[0]),
-                                  std::move(children[1]));
-  };
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return make.operator()<EqualExpression>();
+    return createExpression<EqualExpression>(std::move(children[0]),
+                                             std::move(children[1]));
   } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
+    return createExpression<NotEqualExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
+    return createExpression<LessThanExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
+    return createExpression<GreaterThanExpression>(std::move(children[0]),
+                                                   std::move(children[1]));
   } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
+    return createExpression<LessEqualExpression>(std::move(children[0]),
+                                                 std::move(children[1]));
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return make.operator()<GreaterEqualExpression>();
+    return createExpression<GreaterEqualExpression>(std::move(children[0]),
+                                                    std::move(children[1]));
   }
 }
 
@@ -2586,13 +2603,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     AD_CORRECTNESS_CHECK(functionName == "count");
     return makeCountStarExpression(distinct);
   }
-  auto childExpression = visit(ctx->expression());
-  auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
-    ExpressionPtr result{std::make_unique<ExpressionType>(
-        distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
-    result->descriptor() = ctx->getText();
-    return result;
-  };
+  auto makePtr =
+      MakeExpressionPtr{distinct, visit(ctx->expression()), ctx->getText()};
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();

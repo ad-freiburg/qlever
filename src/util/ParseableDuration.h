@@ -26,6 +26,15 @@ class ParseableDuration {
  private:
   DurationType duration_{};
 
+  struct ToDuration {
+    template <typename OriginalDuration>
+    DurationType operator()(const auto& match) const {
+      auto amount = match.template get<1>()
+                        .template to_number<typename OriginalDuration::rep>();
+      return duration_cast<DurationType>(OriginalDuration{amount});
+    }
+  };
+
   template <typename Other>
   friend class ParseableDuration;
 
@@ -76,26 +85,22 @@ class ParseableDuration {
     if (auto m = ctre::match<R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)">(arg)) {
       auto unit = m.template get<2>().to_view();
 
-      auto toDuration = [&m]<typename OriginalDuration>() {
-        auto amount = m.template get<1>()
-                          .template to_number<typename OriginalDuration::rep>();
-        return duration_cast<DurationType>(OriginalDuration{amount});
-      };
+      ToDuration toDuration;
 
       if (unit == "ns") {
-        return toDuration.template operator()<nanoseconds>();
+        return toDuration.template operator()<nanoseconds>(m);
       } else if (unit == "us") {
-        return toDuration.template operator()<microseconds>();
+        return toDuration.template operator()<microseconds>(m);
       } else if (unit == "ms") {
-        return toDuration.template operator()<milliseconds>();
+        return toDuration.template operator()<milliseconds>(m);
       } else if (unit == "s") {
-        return toDuration.template operator()<seconds>();
+        return toDuration.template operator()<seconds>(m);
       } else if (unit == "min") {
-        return toDuration.template operator()<minutes>();
+        return toDuration.template operator()<minutes>(m);
       } else {
         // Verify unit was checked exhaustively
         AD_CORRECTNESS_CHECK(unit == "h");
-        return toDuration.template operator()<hours>();
+        return toDuration.template operator()<hours>(m);
       }
     }
     throw std::runtime_error{absl::StrCat(

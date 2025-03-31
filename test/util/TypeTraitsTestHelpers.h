@@ -6,6 +6,19 @@
 #ifndef QLEVER_TEST_UTIL_TYPETRAITSTESTHELPERS_H
 #define QLEVER_TEST_UTIL_TYPETRAITSTESTHELPERS_H
 
+namespace detail {
+// Helper for the `passCartesianPorductToLambda` function (see below).
+template <typename Func, typename... Parameter>
+struct FunctionCaller {
+  Func& func;
+
+  template <typename T>
+  void operator()() const {
+    (func.template operator()<T, Parameter>(), ...);
+  }
+};
+}  // namespace detail
+
 /*
 @brief Call the given template function with the cartesian product of the
 parameter type list with itself, as template parameters. For example: If given
@@ -16,11 +29,9 @@ parameter type list with itself, as template parameters. For example: If given
 #include <concepts>
 template <typename Func, typename... Parameter>
 constexpr void passCartesianPorductToLambda(Func func) {
-  (
-      [&func]<typename T>() {
-        (func.template operator()<T, Parameter>(), ...);
-      }.template operator()<Parameter>(),
-      ...);
+  (detail::FunctionCaller<Func, Parameter...>{func}
+       .template operator()<Parameter>(),
+   ...);
 }
 
 /*

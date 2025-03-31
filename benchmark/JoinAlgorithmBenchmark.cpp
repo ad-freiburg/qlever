@@ -389,6 +389,23 @@ template <typename... Ts>
 concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
+// Is something a growth function?
+struct IsGrowthFunction {
+  template <typename T>
+  constexpr bool operator()() const {
+    /*
+    We have to cheat a bit, because being a function is not something that
+    can easily be checked for to my knowledge. Instead, we simply check if
+    it's one of the limited variations of growth function that we allow.
+    */
+    if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
 /*
 @brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
@@ -1185,20 +1202,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       const T5& biggerTableNumColumns,
       const T6& smallerTableJoinColumnSampleSizeRatio,
       const T7& biggerTableJoinColumnSampleSizeRatio) const {
-    // Is something a growth function?
-    constexpr auto isGrowthFunction = []<typename T>() {
-      /*
-      We have to cheat a bit, because being a function is not something, that
-      can easily be checked for to my knowledge. Instead, we simply check, if
-      it's one of the limited variation of growth function, that we allow.
-      */
-      if constexpr (growthFunction<T, size_t> || growthFunction<T, float>) {
-        return true;
-      } else {
-        return false;
-      }
-    };
-
+    constexpr IsGrowthFunction isGrowthFunction;
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
         [&isGrowthFunction](auto&... args) -> auto& {

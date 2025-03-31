@@ -335,16 +335,9 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
   runWithBothQueueTypes(std::bind_front(runTest, false));
 }
 
-// ________________________________________________________________
-TEST(ThreadSafeQueue, queueManager) {
-  enum class TestType {
-    producerThrows,
-    consumerThrows,
-    normalExecution,
-    consumerFinishesEarly,
-    bothThrowImmediately
-  };
-  auto runTest = []<typename Queue>(TestType testType, Queue&& queue) {
+struct RunQueueManagerTest {
+  template <typename TestType, typename Queue>
+  void operator()(TestType testType, Queue&&) const {
     std::atomic<size_t> numPushed = 0;
     auto task =
         [&numPushed,
@@ -363,6 +356,7 @@ TEST(ThreadSafeQueue, queueManager) {
         return std::nullopt;
       }
     };
+
     std::vector<size_t> result;
     size_t numPopped = 0;
     try {
@@ -411,11 +405,25 @@ TEST(ThreadSafeQueue, queueManager) {
     }
     // The probably most important test of all is that the destructors which are
     // run at the following closing brace never lead to a deadlock.
+  }
+};
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, queueManager) {
+  enum class TestType {
+    producerThrows,
+    consumerThrows,
+    normalExecution,
+    consumerFinishesEarly,
+    bothThrowImmediately
   };
   using enum TestType;
-  runWithBothQueueTypes(std::bind_front(runTest, consumerThrows));
-  runWithBothQueueTypes(std::bind_front(runTest, producerThrows));
-  runWithBothQueueTypes(std::bind_front(runTest, consumerFinishesEarly));
-  runWithBothQueueTypes(std::bind_front(runTest, normalExecution));
-  runWithBothQueueTypes(std::bind_front(runTest, bothThrowImmediately));
+  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
+  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, consumerFinishesEarly));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, normalExecution));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, bothThrowImmediately));
 }

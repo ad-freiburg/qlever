@@ -240,6 +240,15 @@ class ConfigOption {
     }
   }
 
+  /*
+  @brief Return the string representation/name of the type.
+  */
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) static std::string
+      availableTypesToString() {
+    return availableTypesToString(T{});
+  }
+
  private:
   // Needed for testing.
   FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
@@ -253,15 +262,6 @@ class ConfigOption {
   held alternative in the given `value`.
   */
   static std::string availableTypesToString(const AvailableTypes& value);
-
-  /*
-  @brief Return the string representation/name of the type.
-  */
-  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
-                           T, AvailableTypes>) static std::string
-      availableTypesToString() {
-    return availableTypesToString(T{});
-  }
 
   /*
   @brief Return string representation of values, whose type is in

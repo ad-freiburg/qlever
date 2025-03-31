@@ -81,23 +81,37 @@ static void compareToColumn(
   }
 }
 
-/*
-@brief Test the general exception cases for a function of
-`ResultTableColumnOperations`, that takes two input columns.
+template <typename F>
+struct TestGeneralExceptionTestTwoInputColumns {
+  const F& callTransform;
 
-@param callTransform Lambda, that transforms the call arguments into arguments
-for the function, that you want to test. Must have the signature `ResultTable*
-,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
-ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
-ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
-*/
-static void generalExceptionTestTwoInputColumns(
-    const auto& callTransform,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
-  // For generating better messages, when failing a test.
-  auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
+  struct SetTableEntry {
+    size_t row;
+    ResultTable& table;
 
-  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
+    template <typename T2>
+    void operator()() {
+      table.setEntry(row++, 0, createDummyValueEntryType<T2>());
+    }
+  };
+
+  template <typename T>
+  struct CheckIsSimilar {
+    ResultTable& table;
+    const F& callTransform;
+
+    template <typename WrongType>
+    void operator()() const {
+      if constexpr (!ad_utility::isSimilar<WrongType, T>) {
+        ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<WrongType>{2},
+                                       ColumnNumWithType<WrongType>{1},
+                                       ColumnNumWithType<WrongType>{0}));
+      }
+    }
+  };
+
+  template <typename T>
+  void operator()() const {
     // A call with a `ResultTable`, who has no rows, is valid.
     auto table{createTestTable(0, 3, ColumnNumWithType<T>{0},
                                ColumnNumWithType<T>{1})};
@@ -115,9 +129,7 @@ static void generalExceptionTestTwoInputColumns(
     // Exception tests.
     // A column contains more than 1 type.
     table = createTestTable(std::variant_size_v<ResultTable::EntryType> - 1, 3);
-    doForTypeInResultTableEntryType([row = 0, &table]<typename T2>() mutable {
-      table.setEntry(row++, 0, createDummyValueEntryType<T2>());
-    });
+    doForTypeInResultTableEntryType(SetTableEntry{0, table});
     ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
                                    ColumnNumWithType<T>{0},
                                    ColumnNumWithType<T>{2}));
@@ -125,14 +137,7 @@ static void generalExceptionTestTwoInputColumns(
     // Wrong input column type.
     table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
                             ColumnNumWithType<T>{1});
-    doForTypeInResultTableEntryType([&table,
-                                     &callTransform]<typename WrongType>() {
-      if constexpr (!ad_utility::isSimilar<WrongType, T>) {
-        ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<WrongType>{2},
-                                       ColumnNumWithType<WrongType>{1},
-                                       ColumnNumWithType<WrongType>{0}));
-      }
-    });
+    doForTypeInResultTableEntryType(CheckIsSimilar<T>{table, callTransform});
 
     // Column is outside boundaries.
     table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
@@ -153,8 +158,53 @@ static void generalExceptionTestTwoInputColumns(
     ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
                                    ColumnNumWithType<T>{0},
                                    ColumnNumWithType<T>{0}));
-  });
+  }
+};
+
+/*
+@brief Test the general exception cases for a function of
+`ResultTableColumnOperations`, that takes two input columns.
+
+@param callTransform Lambda, that transforms the call arguments into arguments
+for the function, that you want to test. Must have the signature `ResultTable*
+,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
+ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
+ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
+*/
+static void generalExceptionTestTwoInputColumns(
+    const auto& callTransform,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
+
+  doForTypeInResultTableEntryType(
+      TestGeneralExceptionTestTwoInputColumns{callTransform});
 }
+
+template <typename F>
+struct TestGeneralExceptionTestUnlimitedInputColumns {
+  const F& callTransform;
+
+  template <typename T>
+  void operator()() const {
+    // Column is outside boundaries.
+    ResultTable table{createTestTable(
+        NUM_ROWS, 4, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+        ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3})};
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{10}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{10},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{20}, ColumnNumWithType<T>{3}));
+    ASSERT_ANY_THROW(
+        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
+                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{30}));
+  }
+};
 
 /*
 @brief Test the general exception cases for a function of
@@ -176,34 +226,17 @@ static void generalExceptionTestUnlimitedInputColumns(
   // We can pass a lot to `generalExceptionTestTwoInputColumns`.
   generalExceptionTestTwoInputColumns(callTransform);
 
-  doForTypeInResultTableEntryType([&callTransform]<typename T>() {
-    // Column is outside boundaries.
-    ResultTable table{createTestTable(
-        NUM_ROWS, 4, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
-        ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3})};
-    ASSERT_ANY_THROW(
-        callTransform(&table, ColumnNumWithType<T>{10}, ColumnNumWithType<T>{1},
-                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(
-        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{10},
-                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(
-        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
-                      ColumnNumWithType<T>{20}, ColumnNumWithType<T>{3}));
-    ASSERT_ANY_THROW(
-        callTransform(&table, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
-                      ColumnNumWithType<T>{2}, ColumnNumWithType<T>{30}));
-  });
+  doForTypeInResultTableEntryType(
+      TestGeneralExceptionTestUnlimitedInputColumns{callTransform});
 }
 
-TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
-  // How many rows should the test table have?
-  constexpr size_t NUM_ROWS = 10;
+template <typename F>
+struct TestGenerateColumnWithColumnInput {
+  const size_t NUM_ROWS;
+  const F& columnCopyLambda;
 
-  // A lambda, that copies on column into another.
-  auto columnCopyLambda = [](const auto& d) { return d; };
-
-  doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda]<typename T>() {
+  template <typename T>
+  void operator()() const {
     // Single parameter operators.
     // Two columns. Transcribe column 0 into column 1.
     ResultTable table{createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0})};
@@ -239,7 +272,18 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
       // We need more cases!
       AD_FAIL();
     };
-  });
+  }
+};
+
+TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
+  // How many rows should the test table have?
+  constexpr size_t NUM_ROWS = 10;
+
+  // A lambda, that copies on column into another.
+  auto columnCopyLambda = [](const auto& d) { return d; };
+
+  doForTypeInResultTableEntryType(
+      TestGenerateColumnWithColumnInput{NUM_ROWS, columnCopyLambda});
 
   // Exception tests.
   generalExceptionTestUnlimitedInputColumns([](ResultTable* table,
@@ -252,9 +296,9 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   });
 }
 
-TEST(ResultTableColumnOperations, SumUpColumns) {
-  // Normal tests.
-  doForTypeInResultTableEntryType([]<typename T>() {
+struct TestSumUpColumns {
+  template <typename T>
+  void operator()() const {
     // We only do tests on types, that support addition.
     if constexpr (SupportsAddition<T>) {
       // Minimal amount of columns.
@@ -290,7 +334,12 @@ TEST(ResultTableColumnOperations, SumUpColumns) {
                                        createDummyValueEntryType<T>()),
           table, ColumnNumWithType<T>{9});
     }
-  });
+  }
+};
+
+TEST(ResultTableColumnOperations, SumUpColumns) {
+  // Normal tests.
+  doForTypeInResultTableEntryType(TestSumUpColumns{});
 
   // Exception tests.
   generalExceptionTestUnlimitedInputColumns([](ResultTable* table,

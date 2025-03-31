@@ -136,6 +136,19 @@ SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
+namespace detail {
+template <auto function>
+struct VariadicExpressionFactory {
+  template <typename... Exps>
+  auto operator()(std::unique_ptr<Exps>... children) const {
+    CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
+    std::vector<SparqlExpression::Ptr> vec;
+    (..., (vec.push_back(std::move(children))));
+    return std::invoke(function, std::move(vec));
+  }
+};
+}  // namespace detail
+
 // For a `function` that takes `std::vector<SparqlExpression::Ptr>` (size only
 // known at runtime), create a lambda that takes the `Ptr`s directly as a
 // variable number of arguments (as a variadic template, number of arguments
@@ -147,13 +160,8 @@ CPP_template(auto function)(
     requires std::is_invocable_r_v<
         SparqlExpression::Ptr, decltype(function),
         std::vector<
-            SparqlExpression::Ptr>>) constexpr auto variadicExpressionFactory =
-    []<typename... Exps>(std::unique_ptr<Exps>... children) {
-      CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
-      std::vector<SparqlExpression::Ptr> vec;
-      (..., (vec.push_back(std::move(children))));
-      return std::invoke(function, std::move(vec));
-    };
+            SparqlExpression::Ptr> >) constexpr auto variadicExpressionFactory =
+    detail::VariadicExpressionFactory<function>{};
 
 SparqlExpression::Ptr makeCoalesceExpression(
     std::vector<SparqlExpression::Ptr> children);

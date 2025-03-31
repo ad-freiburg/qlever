@@ -14,13 +14,16 @@ using namespace ad_utility::memory_literals;
 
 // Join a range of ranges into a single vector, e.g. `array<generator<size_t>>
 // -> vector<size_t>`.
-auto join = []<typename Range>(Range&& range) {
-  std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Range>>>
-      result;
-  auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
-  ql::ranges::copy(view, std::back_inserter(result));
-  return result;
-};
+struct Join {
+  template <typename Range>
+  auto operator()(Range&& range) const {
+    std::vector<ql::ranges::range_value_t<ql::ranges::range_value_t<Range>>>
+        result;
+    auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
+    ql::ranges::copy(view, std::back_inserter(result));
+    return result;
+  }
+} join;
 
 // Run a test for a parallel multiway merge with random inputs. The input to the
 // merge are `numVecs` many `vector<size_t>` objects, each of which consists of

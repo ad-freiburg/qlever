@@ -26,6 +26,67 @@
 #include "util/json.h"
 
 namespace ad_utility::ConfigManagerImpl {
+
+namespace {
+/*
+Manually checks if the json represents one of the possibilities of
+`AvailableTypes`.
+*/
+struct IsValueTypeSubType {
+  template <typename T>
+  constexpr bool operator()(const nlohmann::json& j,
+                            const auto& isValueTypeSubType) const {
+    if constexpr (std::is_same_v<T, bool>) {
+      return j.is_boolean();
+    } else if constexpr (std::is_same_v<T, std::string>) {
+      return j.is_string();
+    } else if constexpr (std::is_same_v<T, int>) {
+      return j.is_number_integer();
+    } else if constexpr (std::is_same_v<T, size_t>) {
+      return j.is_number_unsigned();
+    } else if constexpr (std::is_same_v<T, float>) {
+      return j.is_number_float();
+    } else {
+      // Only the vector type remains.
+      static_assert(ad_utility::isVector<T>);
+
+      /*
+      The recursive call needs to be a little more complicated, because the
+      `std::vector<bool>` doesn't actually contain booleans, but bits. This
+      causes the check to always fail for `std::vector<bool>`, if we don't pass
+      the type explicitly, because the bit type is not something, that this
+      function allows.
+      */
+      return j.is_array() && [&j,
+                              &isValueTypeSubType](const std::vector<auto>& v) {
+        using InnerType = typename std::decay_t<decltype(v)>::value_type;
+        return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+          return isValueTypeSubType.template operator()<InnerType>(
+              entry, AD_FWD(isValueTypeSubType));
+        });
+      }(T{});
+    }
+  }
+};
+
+struct SubTypeChecker {
+  const std::string& identifier_;
+  const ConfigOption* const configOption;
+  const IsValueTypeSubType& isValueTypeSubType;
+  const nlohmann::json& json;
+
+  template <typename AlternativeType>
+  constexpr void operator()() const {
+    if (isValueTypeSubType.template operator()<AlternativeType>(
+            json, isValueTypeSubType)) {
+      throw ConfigOptionSetWrongJsonTypeException(
+          identifier_, configOption->getActualValueTypeAsString(),
+          configOption->availableTypesToString<AlternativeType>());
+    }
+  }
+};
+}  // namespace
+
 // ____________________________________________________________________________
 std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
   auto toStringVisitor = [](const auto& t) -> std::string {
@@ -69,44 +130,8 @@ bool ConfigOption::wasSet() const {
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
-  // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
-  /*
-  Manually checks, if the json represents one of the possibilities of
-  `AvailableTypes`.
-  */
-  auto isValueTypeSubType = []<typename T>(const nlohmann::json& j,
-                                           auto& isValueTypeSubType) -> bool {
-    if constexpr (std::is_same_v<T, bool>) {
-      return j.is_boolean();
-    } else if constexpr (std::is_same_v<T, std::string>) {
-      return j.is_string();
-    } else if constexpr (std::is_same_v<T, int>) {
-      return j.is_number_integer();
-    } else if constexpr (std::is_same_v<T, size_t>) {
-      return j.is_number_unsigned();
-    } else if constexpr (std::is_same_v<T, float>) {
-      return j.is_number_float();
-    } else {
-      // Only the vector type remains.
-      static_assert(ad_utility::isVector<T>);
-
-      /*
-      The recursiv call needs to be a little more complicated, because the
-      `std::vector<bool>` doesn't actually contain booleans, but bits. This
-      causes the check to always fail for `std::vector<bool>`, if we don't pass
-      the type explicitly, because the bit type is not something, that this
-      function allows.
-      */
-      return j.is_array() && [&j,
-                              &isValueTypeSubType](const std::vector<auto>& v) {
-        using InnerType = typename std::decay_t<decltype(v)>::value_type;
-        return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
-          return isValueTypeSubType.template operator()<InnerType>(
-              entry, AD_FWD(isValueTypeSubType));
-        });
-      }(T{});
-    }
-  };
+  IsValueTypeSubType isValueTypeSubType;
+  SubTypeChecker subTypeChecker{identifier_, this, isValueTypeSubType, json};
 
   /*
   Check: Does the json, that we got, actually represent the type of value, this
@@ -121,15 +146,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
           data_)) {
     // Does the json represent one of the types in our `AvailableTypes`? If yes,
     // we can create a better exception message.
-    forEachTypeInTemplateType<AvailableTypes>(
-        [&isValueTypeSubType, &json, this]<typename AlternativeType>() {
-          if (isValueTypeSubType.template operator()<AlternativeType>(
-                  json, isValueTypeSubType)) {
-            throw ConfigOptionSetWrongJsonTypeException(
-                identifier_, getActualValueTypeAsString(),
-                availableTypesToString<AlternativeType>());
-          }
-        });
+    forEachTypeInTemplateType<AvailableTypes>(subTypeChecker);
 
     throw ConfigOptionSetWrongJsonTypeException(
         identifier_, getActualValueTypeAsString(), "unknown");
