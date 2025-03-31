@@ -350,8 +350,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     return cfg;
   }();
 
-  sj::Sweeper sweeper(sweeperCfg, ".", "",
-                      qec_->getIndex().getKbName() + ".spatialjoin");
+  sj::Sweeper sweeper(sweeperCfg, ".", "", "spatialjoin");
 
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
