@@ -72,8 +72,12 @@ class SparqlQleverVisitor {
 
   // The `FROM` and `FROM NAMED` clauses of the query that is currently
   // being parsed. Those are inherited by certain constructs, which are
-  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`).
+  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`). If
+  // `datasetsAreFixed_` is set then datasets are set outside the operation
+  // itself and cannot be overwritten in the operation through `FROM` and `FROM
+  // NAMED`.
   ParsedQuery::DatasetClauses activeDatasetClauses_;
+  bool datasetsAreFixed_ = false;
 
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
@@ -112,23 +116,27 @@ class SparqlQleverVisitor {
 
  public:
   SparqlQleverVisitor() = default;
+  // If `datasetOverride` contains datasets, then the datasets in
+  // the operation itself are ignored. This is used for the datasets from the
+  // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
       PrefixMap prefixMap,
+      std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : prefixMap_{std::move(prefixMap)},
-        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
+    if (datasetOverride.has_value()) {
+      activeDatasetClauses_ = std::move(*datasetOverride);
+      datasetsAreFixed_ = true;
+    }
+  }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
     isInsideConstructTriples_ = true;
-  }
-
-  void setActiveDatasetClausesForTesting(
-      ParsedQuery::DatasetClauses datasetClauses) {
-    activeDatasetClauses_ = std::move(datasetClauses);
   }
 
   // ___________________________________________________________________________
@@ -633,6 +641,12 @@ class SparqlQleverVisitor {
   // planner.
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
+
+  // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
+  // `datasetsAreFixed_` controls whether the datasets can be modified from
+  // inside the query or update. Then returns the currently active datasets.
+  const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
+      const std::vector<DatasetClause>& clauses);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
