@@ -179,8 +179,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   Run a normal test case of creating a configuration option, checking it and
   setting it. With or without a default value.
   */
-  auto testCaseWithDefault = [&setAndTest, &otherGettersDontWork](
-                                 const ConversionTestCase<auto>& toSetTo) {
+  auto testCaseWithDefault = [&setAndTest,
+                              &otherGettersDontWork](const auto& toSetTo) {
     using Type = std::decay_t<decltype(toSetTo.value)>;
 
     // Every configuration option keeps updating an external variable with
@@ -210,8 +210,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
   };
 
-  auto testCaseWithoutDefault = [&otherGettersDontWork, &setAndTest](
-                                    const ConversionTestCase<auto>& toSetTo) {
+  auto testCaseWithoutDefault = [&otherGettersDontWork,
+                                 &setAndTest](const auto& toSetTo) {
     using Type = std::decay_t<decltype(toSetTo.value)>;
 
     // Every configuration option keeps updating an external variable with
@@ -349,11 +349,9 @@ struct CheckConfigOptionSetValue {
     void operator()() const {
       if constexpr (!std::is_same_v<Type, CurrentType> &&
                     !(std::is_same_v<Type, int> &&
-                      std::is_same_v<
-                          CurrentType,
-                          size_t>)&&!(std::is_same_v<Type, std::vector<int>> &&
-                                      std::is_same_v<CurrentType,
-                                                     std::vector<size_t>>)) {
+                      std::is_same_v<CurrentType, size_t>) &&
+                    !(std::is_same_v<Type, std::vector<int>> &&
+                      std::is_same_v<CurrentType, std::vector<size_t>>)) {
         ASSERT_THROW(
             option.setValueWithJson(
                 getConversionTestCase<CurrentType>().jsonRepresentation),
