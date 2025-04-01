@@ -151,8 +151,7 @@ void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
 // __________________________________________
 void Literal::replaceContent(const std::string_view& newContent) {
-std:
-  size_t originalContentLength = beginOfSuffix_ - 2;
+  std::size_t originalContentLength = beginOfSuffix_ - 2;
   std::size_t minLength = std::min(originalContentLength, newContent.size());
   ql::ranges::copy(newContent.substr(0, minLength), content_.begin() + 1);
   if (newContent.size() <= originalContentLength) {

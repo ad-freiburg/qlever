@@ -198,15 +198,17 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
+// UCase and LCase
 template <auto toLowerOrToUpper>
 auto upperOrLowerCaseImpl =
     [](std::optional<ad_utility::triple_component::Literal> input)
     -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
-  } else
-    auto& literal = input.value() auto newContent =
-        std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+  }
+  auto& literal = input.value();
+  auto newContent =
+      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
   literal.replaceContent(newContent);
   return LiteralOrIri(std::move(literal));
 };
