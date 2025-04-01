@@ -153,7 +153,8 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
   // Remove all permissions to make read fail
   std::filesystem::permissions(tmpFile, std::filesystem::perms::none);
 
-  if (fopen(tmpFile.c_str(), "r")) {
+  if (FILE* handle = fopen(tmpFile.c_str(), "r")) {
+    fclose(handle);
     // This can happen in docker environments.
     GTEST_SKIP_("File permissions are not set to none");
   }
