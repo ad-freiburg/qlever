@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 #define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 
+#include "TextScoringEnum.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/Postings.h"
@@ -98,8 +100,15 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
   gapEncodedVector.resize(nofElements);
 }
 
+IdTable readContextListHelper(
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const ContextListMetaData& contextList, bool isWordCl,
+    const ad_utility::File& textIndexFile, TextScoringMetric textScoringMetric);
+
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
+
+/// WRITING PART
 
 // Compress src using zstd and write compressed bytes to file while advancing
 // currentOffset by the nofBytes written
@@ -146,6 +155,8 @@ void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset);
 
+/// READING PART
+
 template <typename T>
 vector<T> readZstdComprList(size_t nofElements, off_t from,
                             size_t nofBytesCompressed,
@@ -156,6 +167,16 @@ vector<T> readZstdComprList(size_t nofElements, off_t from,
   return ZstdWrapper::decompress<T>(compressed.data(), nofBytesCompressed,
                                     nofElements);
 }
+
+IdTable readWordCl(const TextBlockMetaData& tbmd,
+                   const ad_utility::AllocatorWithLimit<Id>& allocator,
+                   const ad_utility::File& textIndexFile,
+                   TextScoringMetric textScoringMetric);
+
+IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
+                         const ad_utility::AllocatorWithLimit<Id>& allocator,
+                         const ad_utility::File& textIndexFile,
+                         TextScoringMetric textScoringMetric);
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its

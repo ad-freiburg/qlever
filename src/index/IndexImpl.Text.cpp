@@ -591,73 +591,6 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 }
 
 // _____________________________________________________________________________
-IdTable IndexImpl::readContextListHelper(
-    const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const ContextListMetaData& contextList, bool isWordCl) const {
-  IdTable idTable{3, allocator};
-  idTable.resize(contextList._nofElements);
-  // Read ContextList
-  textIndexReadWrite::readGapComprList<Id, uint64_t>(
-      idTable.getColumn(0).begin(), contextList._nofElements,
-      contextList._startContextlist, contextList.getByteLengthContextList(),
-      textIndexFile_, [](uint64_t id) {
-        return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
-      });
-
-  // Helper lambda to read wordIndexList
-  auto wordIndexToId = [isWordCl](auto wordIndex) {
-    if (isWordCl) {
-      return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
-    }
-    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
-  };
-
-  // Read wordIndexList
-  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
-      idTable.getColumn(1).begin(), contextList._nofElements,
-      contextList._startWordlist, contextList.getByteLengthWordlist(),
-      textIndexFile_, wordIndexToId);
-
-  // Helper lambdas to read scoreList
-  auto scoreToId = []<typename T>(T score) {
-    if constexpr (std::is_same_v<T, uint16_t>) {
-      return Id::makeFromInt(static_cast<uint64_t>(score));
-    } else {
-      return Id::makeFromDouble(static_cast<double>(score));
-    }
-  };
-
-  // Read scoreList
-  if (textScoringMetric_ == TextScoringMetric::EXPLICIT) {
-    textIndexReadWrite::readFreqComprList<Id, uint16_t>(
-        idTable.getColumn(2).begin(), contextList._nofElements,
-        contextList._startScorelist, contextList.getByteLengthScorelist(),
-        textIndexFile_, scoreToId);
-  } else {
-    auto scores = textIndexReadWrite::readZstdComprList<Score>(
-        contextList._nofElements, contextList._startScorelist,
-        contextList.getByteLengthScorelist(), textIndexFile_);
-    ql::ranges::transform(scores.begin(), scores.end(),
-                          idTable.getColumn(2).begin(), scoreToId);
-  }
-  return idTable;
-}
-
-// _____________________________________________________________________________
-IdTable IndexImpl::readWordCl(
-    const TextBlockMetaData& tbmd,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  return readContextListHelper(allocator, tbmd._cl, true);
-}
-
-// _____________________________________________________________________________
-IdTable IndexImpl::readWordEntityCl(
-    const TextBlockMetaData& tbmd,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  return readContextListHelper(allocator, tbmd._entityCl, false);
-}
-
-// _____________________________________________________________________________
 IdTable IndexImpl::getWordPostingsForTerm(
     const string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
@@ -669,7 +602,8 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
   const auto& tbmd = optionalTbmd.value().tbmd_;
-  idTable = readWordCl(tbmd, allocator);
+  idTable = textIndexReadWrite::readWordCl(tbmd, allocator, textIndexFile_,
+                                           textScoringMetric_);
   if (optionalTbmd.value().hasToBeFiltered_) {
     idTable =
         FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, idTable);
@@ -688,7 +622,8 @@ IdTable IndexImpl::getEntityMentionsForWord(
     return IdTable{allocator};
   }
   const auto& tbmd = optTbmd.value().tbmd_;
-  return readWordEntityCl(tbmd, allocator);
+  return textIndexReadWrite::readWordEntityCl(tbmd, allocator, textIndexFile_,
+                                              textScoringMetric_);
 }
 
 // _____________________________________________________________________________

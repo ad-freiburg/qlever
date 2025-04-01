@@ -387,17 +387,6 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  IdTable readContextListHelper(
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const ContextListMetaData& contextList, bool isWordCl) const;
-
-  IdTable readWordCl(const TextBlockMetaData& tbmd,
-                     const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  IdTable readWordEntityCl(
-      const TextBlockMetaData& tbmd,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
       return "";
