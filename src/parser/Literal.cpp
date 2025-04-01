@@ -166,7 +166,6 @@ void Literal::replaceContent(std::string_view newContent) {
 
 // __________________________________________
 void Literal::append(const Literal& other) {
-  // TODO: Tests für diese Methode
   const auto& otherContent = asStringViewUnsafe(other.getContent());
   content_.insert(beginOfSuffix_ - 1, otherContent);
   beginOfSuffix_ += other.getContent().size();

@@ -202,8 +202,8 @@ struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
     return s;
   }
 };
- 
- // Value getter for `isBlank`.
+
+// Value getter for `isBlank`.
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
@@ -215,7 +215,7 @@ struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   }
 };
 
- // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
+// Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
