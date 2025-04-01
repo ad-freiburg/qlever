@@ -238,6 +238,8 @@ ReturnType DeltaTriplesManager::modify(
         auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
                                        writeToDiskAfterRequest]() {
           if (writeToDiskAfterRequest) {
+            // TODO<RobinTF> Find a good way to track the time it takes to write
+            // this and store it into the corresponding metadata object.
             deltaTriples.writeToDisk();
           }
           updateSnapshot();
