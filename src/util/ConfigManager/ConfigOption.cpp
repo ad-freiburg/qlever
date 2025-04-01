@@ -57,9 +57,8 @@ struct IsValueTypeSubType {
       the type explicitly, because the bit type is not something, that this
       function allows.
       */
-      return j.is_array() && [&j,
-                              &isValueTypeSubType](const std::vector<auto>& v) {
-        using InnerType = typename std::decay_t<decltype(v)>::value_type;
+      return j.is_array() && [&j, &isValueTypeSubType](const auto& v) {
+        using InnerType = typename T::value_type;
         return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
           return isValueTypeSubType.template operator()<InnerType>(
               entry, AD_FWD(isValueTypeSubType));
@@ -153,7 +152,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   }
 
   std::visit(
-      [&json, this](const Data<auto>& d) {
+      [&json, this](const auto& d) {
         setValue(json.get<typename std::decay_t<decltype(d)>::Type>());
       },
       data_);
@@ -281,7 +280,7 @@ ConfigOption::operator std::string() const {
 // ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
   return std::visit(
-      [](const Data<auto>& d) {
+      [](const auto& d) {
         return availableTypesToString<
             typename std::decay_t<decltype(d)>::Type>();
       },

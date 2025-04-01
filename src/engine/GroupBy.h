@@ -352,9 +352,9 @@ class GroupBy : public Operation {
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;
-          auto addIf = [this, &aggregate](TI<auto> ti,
+          auto addIf = [this, &aggregate](auto ti,
                                           HashMapAggregateType target) {
-            using T = decltype(ti)::type;
+            using T = typename decltype(ti)::type;
             if (aggregate.aggregateType_.type_ == target)
               aggregationData_.emplace_back(
                   sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
