@@ -150,17 +150,17 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
 void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
 // __________________________________________
-void Literal::replaceContent(const std::string& newContent) {
-  std::size_t minLength = std::min(beginOfSuffix_ - 2, newContent.size());
-  for (std::size_t i = 0; i < minLength; ++i) {
-    content_[i + 1] = newContent[i];
-  }
-  if (newContent.size() <= beginOfSuffix_ - 2) {
+void Literal::replaceContent(const std::string_view& newContent) {
+std:
+  size_t originalContentLength = beginOfSuffix_ - 2;
+  std::size_t minLength = std::min(originalContentLength, newContent.size());
+  ql::ranges::copy(newContent.substr(0, minLength), content_.begin() + 1);
+  if (newContent.size() <= originalContentLength) {
     content_.erase(newContent.size() + 1,
-                   beginOfSuffix_ - 2 - newContent.size());
+                   originalContentLength - newContent.size());
   } else {
     content_.insert(beginOfSuffix_ - 1,
-                    newContent.substr((beginOfSuffix_ - 2)));
+                    newContent.substr(originalContentLength));
   }
   beginOfSuffix_ = newContent.size() + 2;
 }

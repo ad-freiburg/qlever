@@ -204,12 +204,11 @@ auto upperOrLowerCaseImpl =
     -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
-  } else {
-    auto newContent = std::invoke(
-        toLowerOrToUpper, asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContent(newContent);
-    return LiteralOrIri(std::move(input.value()));
-  }
+  } else
+    auto& literal = input.value() auto newContent =
+        std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+  literal.replaceContent(newContent);
+  return LiteralOrIri(std::move(literal));
 };
 auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
 auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;

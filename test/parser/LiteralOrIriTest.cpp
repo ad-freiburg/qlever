@@ -344,8 +344,8 @@ TEST(LiteralTest, removeDatatypeOrLanguageTag) {
 TEST(LiteralTest, replaceContent) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello!", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  literal.getLiteral().replaceContent("Hello!");
-  EXPECT_THAT("Hello!", asStringViewUnsafe(literal.getContent()));
+  literal.getLiteral().replaceContent("Thüss!");
+  EXPECT_THAT("Thüss!", asStringViewUnsafe(literal.getContent()));
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
               asStringViewUnsafe(literal.getDatatype()));
   literal.getLiteral().replaceContent("Hi!");
