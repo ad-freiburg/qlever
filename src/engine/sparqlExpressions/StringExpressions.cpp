@@ -372,34 +372,37 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](ad_utility::triple_component::Literal literal,
-       std::string_view pattern) {
-      // Required by the SPARQL standard.
-      if (pattern.empty()) {
-        return LiteralOrIri{literal};
-      }
-      auto pos = asStringViewUnsafe(literal.getContent()).find(pattern);
-      if (pos >= literal.getContent().size()) {
-        return toLiteral("");
-      }
-      if constexpr (isStrAfter) {
-        literal.setSubstr(pos + pattern.size(),
-                          literal.getContent().size() - pos - pattern.size());
-      } else {
-        // STRBEFORE
-        literal.setSubstr(0, pos);
-      }
-      return LiteralOrIri{literal};
-    };
+    [](std::optional<ad_utility::triple_component::Literal> literal,
+       std::string_view pattern) -> IdOrLiteralOrIri {
+  // Required by the SPARQL standard.
+  if (!literal.has_value()) {
+    return Id::makeUndefined();
+  }
+  if (pattern.empty()) {
+    return LiteralOrIri(std::move(literal.value()));
+  }
+  auto literalContent = literal.value().getContent();
+  auto pos = asStringViewUnsafe(literalContent).find(pattern);
+  if (pos >= literalContent.size()) {
+    return toLiteral("");
+  }
+  if constexpr (isStrAfter) {
+    literal.value().setSubstr(pos + pattern.size(),
+                              literalContent.size() - pos - pattern.size());
+  } else {
+    // STRBEFORE
+    literal.value().setSubstr(0, pos);
+  }
+  return LiteralOrIri(std::move(literal.value()));
+};
+
 auto strAfter = strAfterOrBeforeImpl<true>;
 using StrAfterExpression =
-    LiteralExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
-                          LiteralValueGetter>;
+    LiteralExpressionImpl<2, decltype(strAfter), StringValueGetter>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    LiteralExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
-                          LiteralValueGetter>;
+    LiteralExpressionImpl<2, decltype(strBefore), StringValueGetter>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
