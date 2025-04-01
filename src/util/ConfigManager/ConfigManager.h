@@ -337,8 +337,8 @@ class ConfigManager {
                                                              ValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
-        [](ConstConfigOptionProxy<auto> opt) {
-          using T = decltype(opt)::value_type;
+        [](auto opt) {
+          using T = typename decltype(opt)::value_type;
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
         transformValidatorIntoExceptionValidator<ValidatorFunc,
@@ -377,8 +377,8 @@ class ConfigManager {
                                                                       ExceptionValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
-        [](ConstConfigOptionProxy<auto> opt) {
-          using T = decltype(opt)::value_type;
+        [](auto opt) {
+          using T = typename decltype(opt)::value_type;
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
         exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
@@ -410,8 +410,7 @@ class ConfigManager {
                    ValidatorFunc,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {
     addValidatorImpl(
-        "addOptionValidator",
-        [](ConstConfigOptionProxy<auto> opt) { return opt.getConfigOption(); },
+        "addOptionValidator", [](auto opt) { return opt.getConfigOption(); },
         transformValidatorIntoExceptionValidator<
             ValidatorFunc,
             decltype(configOptionsToBeChecked.getConfigOption())...>(
@@ -445,8 +444,7 @@ class ConfigManager {
                    ExceptionValidatorT,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {
     addValidatorImpl(
-        "addOptionValidator",
-        [](ConstConfigOptionProxy<auto> opt) { return opt.getConfigOption(); },
+        "addOptionValidator", [](auto opt) { return opt.getConfigOption(); },
         exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
         configOptionsToBeChecked...);
   }
@@ -664,17 +662,16 @@ class ConfigManager {
       std::string exceptionValidatorDescriptor,
       ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
-    auto checkIfContainOption =
-        [this, &addValidatorFunctionName](ConstConfigOptionProxy<auto> opt) {
-          if (!containsOption(opt.getConfigOption())) {
-            throw std::runtime_error(absl::StrCat(
-                "Error while adding validator with ", addValidatorFunctionName,
-                ": The given configuration "
-                "option '",
-                opt.getConfigOption().getIdentifier(),
-                "' is not contained in the configuration manager."));
-          }
-        };
+    auto checkIfContainOption = [this, &addValidatorFunctionName](auto opt) {
+      if (!containsOption(opt.getConfigOption())) {
+        throw std::runtime_error(absl::StrCat(
+            "Error while adding validator with ", addValidatorFunctionName,
+            ": The given configuration "
+            "option '",
+            opt.getConfigOption().getIdentifier(),
+            "' is not contained in the configuration manager."));
+      }
+    };
     (checkIfContainOption(configOptionsToBeChecked), ...);
 
     validators_.emplace_back(std::move(exceptionValidatorFunction),
