@@ -372,7 +372,7 @@ using MergeRegexPatternAndFlagsExpression =
 
 [[maybe_unused]] auto replaceImpl =
     [](std::optional<ad_utility::triple_component::Literal> s,
-       const std::unique_ptr<re2::RE2>& pattern,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!s.getLiteral().has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
