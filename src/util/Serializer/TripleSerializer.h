@@ -100,9 +100,8 @@ CPP_template(typename Serializer)(
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range, typename Serializer)(
-    requires ql::ranges::sized_range<Range>) void serializeIds(Serializer&
-                                                                   serializer,
-                                                               Range&& range) {
+    requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
+                                                         Range&& range) {
   ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
       vectorSerializer{std::move(serializer)};
   for (const Id& value : range) {

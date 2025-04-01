@@ -286,12 +286,12 @@ void DeltaTriples::writeToDisk() const {
     return;
   }
   auto toRange = [](const TriplesToHandlesMap& map) {
-    return ad_utility::SizedJoinView{
-        map | ql::views::keys |
-        ql::views::transform(
-            [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
-              return triple.ids_;
-            })};
+    return map | ql::views::keys |
+           ql::views::transform(
+               [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+                 return triple.ids_;
+               }) |
+           ql::views::join;
   };
   std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";
