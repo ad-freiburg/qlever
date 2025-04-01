@@ -273,12 +273,12 @@ class InputRangeFromGet {
   using Storage = std::optional<ValueType>;
   Storage storage_ = std::nullopt;
 
-  //  private:
+ private:
   // The single virtual function which has to be overloaded. `std::nullopt`
   // means that there will be no more values.
   virtual Storage get() = 0;
 
-  //  public:
+ public:
   virtual ~InputRangeFromGet() = default;
   InputRangeFromGet() = default;
   InputRangeFromGet(InputRangeFromGet&&) = default;
@@ -346,8 +346,15 @@ CPP_template(typename T, typename F)(
 
  public:
   std::optional<T> get() override { return function_(); }
-  InputRangeFromGetCallable(F f) : function_{std::move(f)} {}
+  explicit InputRangeFromGetCallable(F f) : function_{std::move(f)} {}
 };
+
+// Deduction guide to be able to simply call the constructor with any callable
+// `f` that returns `optional<Something>`.
+template <typename F>
+InputRangeFromGetCallable(F f)
+    -> InputRangeFromGetCallable<typename std::invoke_result_t<F>::value_type,
+                                 F>;
 
 // This class takes an arbitrary input range, and turns it into a class that
 // inherits from `InputRangeFromGet` (see above). While this adds a layer of

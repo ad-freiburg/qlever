@@ -42,6 +42,7 @@ class Result {
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
+
   // A commonly used LoopControl type for CachingContinuableTransformInputRange
   // generators
   using IdTableLoopControl =
@@ -55,8 +56,10 @@ class Result {
         std::make_unique<std::atomic_bool>(false);
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
-    explicit GenContainer(Generator generator)
-        : generator_{Generator{std::move(generator)}} {}
+    CPP_template(typename Range)(
+        requires std::is_constructible_v<
+            LazyResult, Range>) explicit GenContainer(Range range)
+        : generator_{LazyResult{std::move(range)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;

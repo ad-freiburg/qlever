@@ -93,7 +93,7 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{LazyResult{ad_utility::CachingTransformInputRange(
+    : data_{GenContainer{ad_utility::CachingTransformInputRange(
           std::move(idTables),
           [sortedBy, previousId = std::optional<IdTable::row_type>{}](
               Result::IdTableVocabPair& pair) mutable {
@@ -107,7 +107,7 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
             }
             assertSortOrderIsRespected(idTable, sortedBy);
             return std::move(pair);
-          })}}},
+          })}},
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
@@ -171,7 +171,7 @@ void Result::applyLimitOffset(
             return IdTableLoopControl::makeContinue();
           }
         }};
-    data_.emplace<GenContainer>(LazyResult(std::move(generator)));
+    data_.emplace<GenContainer>(std::move(generator));
   }
 }
 
@@ -191,7 +191,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
                             elementCount <= limit.value());
           return std::move(pair);
         }};
-    data_.emplace<GenContainer>(LazyResult(std::move(generator)));
+    data_.emplace<GenContainer>(std::move(generator));
   }
 }
 
@@ -219,7 +219,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
           AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
           return std::move(pair);
         }};
-    data_.emplace<GenContainer>(LazyResult(std::move(generator)));
+    data_.emplace<GenContainer>(std::move(generator));
   }
 }
 
@@ -259,9 +259,8 @@ void Result::runOnNewChunkComputed(
       throw;
     }
   };
-  ad_utility::InputRangeFromGetCallable<IdTableVocabPair, decltype(get)>
-      generator{std::move(get)};
-  data_.emplace<GenContainer>(LazyResult(std::move(generator)));
+  data_.emplace<GenContainer>(
+      ad_utility::InputRangeFromGetCallable{std::move(get)});
 }
 
 // _____________________________________________________________________________
