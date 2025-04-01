@@ -100,7 +100,8 @@ class Index {
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
   void buildTextIndexFile(
-      std::optional<std::pair<std::string, std::string>> wordsAndDocsFile,
+      const std::optional<std::pair<std::string, std::string>>&
+          wordsAndDocsFile,
       bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
