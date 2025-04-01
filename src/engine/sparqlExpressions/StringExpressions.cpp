@@ -377,7 +377,7 @@ using MergeRegexPatternAndFlagsExpression =
   if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = asStringViewUnsafe(s.value().getContent());
+  std::string in(asStringViewUnsafe((s.value().getContent())));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
