@@ -1,10 +1,14 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMS_H
+
+#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
@@ -86,6 +90,7 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
+  Result LibspatialjoinAlgorithm();
 
   // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
@@ -189,12 +194,23 @@ class SpatialJoinAlgorithms {
   // this helper function converts a GeoPoint into a boost geometry Point
   size_t convertGeoPointToPoint(GeoPoint point);
 
-  // this helper function calculates the query box. The query box, is the box,
-  // which contains the area, where all possible candidates of the max distance
-  // query must be contained in. It returns a vector, because if the box crosses
-  // the poles or the -180/180 longitude line, then it is disjoint in the
-  // cartesian coordinates. The boxes themselves are disjoint to each other.
+  // This helper function calculates the query box. The query box is a box
+  // that is guaranteed to contain all possible candidates of a `WITHIN_DIST`
+  // query. It returns a `std::vector` because if the box crosses the poles or
+  // the -180/180 longitude line, we have to cut them into multiple boxes.
+  // If there is more than one box, the boxes are disjoint.
   std::vector<Box> getQueryBox(const std::optional<RtreeEntry>& entry) const;
+
+  // This helper functions parses WKT geometries from the given `column` in
+  // `idTable` and adds them to `sweeper` (which will be used to perform the
+  // spatial join). The Boolean `leftOrRightSide` specifies whether these
+  // geometries are from the left or right side of the spatial join. The parsing
+  // is multithreaded, using up to `numThreads` threads.
+  util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
+                                        const IdTable* idTable,
+                                        ColumnIndex column,
+                                        sj::Sweeper& sweeper,
+                                        size_t numThreads) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;

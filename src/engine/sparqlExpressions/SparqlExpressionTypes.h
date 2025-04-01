@@ -57,7 +57,7 @@ class VectorWithMemoryLimit
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
   VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc){};
+      : Base(init, alloc) {}
 
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
@@ -169,7 +169,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
+  LocalVocab& _localVocab;
 
   // If the expression is part of a GROUP BY then this member has to be set to
   // the variables by which the input is grouped. These variables will then be
@@ -205,7 +205,7 @@ struct EvaluationContext {
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab,
+                    LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
 

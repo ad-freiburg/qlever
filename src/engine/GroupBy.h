@@ -99,7 +99,7 @@ class GroupBy : public Operation {
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
-      const LocalVocab& localVocab, const IdTable& idTable) const;
+      LocalVocab& localVocab, const IdTable& idTable) const;
 
   Result computeResult(bool requestLaziness) override;
 

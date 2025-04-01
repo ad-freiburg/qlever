@@ -24,6 +24,8 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   deltaTriples.insertTriples(cancellationHandle,
                              std::move(toInsert.idTriples_));
   metadata.insertionTime_ = timer.msecs();
+  // TODO add timing information to metadata
+  deltaTriples.writeToDisk();
   return metadata;
 }
 

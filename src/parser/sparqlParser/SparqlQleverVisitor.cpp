@@ -7,11 +7,12 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
 #include <absl/strings/str_split.h>
+#include <absl/time/time.h>
 
 #include <string>
 #include <vector>
 
-#include "absl/time/time.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -2450,6 +2451,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
+  } else if (functionName == "bnode") {
+    if (ctx->NIL()) {
+      return makeUniqueBlankNodeExpression();
+    } else {
+      return createUnary(&makeBlankNodeExpression);
+    }
   } else {
     reportError(
         ctx,

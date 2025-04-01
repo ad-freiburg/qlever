@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
 #define QLEVER_SRC_ENGINE_SPATIALJOIN_H
@@ -15,6 +16,18 @@
 #include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
+// The supported spatial join types (geometry predicates).
+enum class SpatialJoinType {
+  INTERSECTS,
+  CONTAINS,
+  COVERS,
+  CROSSES,
+  TOUCHES,
+  EQUALS,
+  OVERLAPS,
+  WITHIN_DIST
+};
+
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
@@ -26,11 +39,24 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
+// Spatial join using one of the join types above. The maximal distance is
+// relevant only for the `WITHIN_DIST` join type.
+struct SpatialJoinConfig {
+  SpatialJoinType joinType_;
+  std::optional<size_t> maxDist_ = std::nullopt;
+};
+
 // Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+using SpatialJoinTask =
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
+enum class SpatialJoinAlgorithm {
+  BASELINE,
+  S2_GEOMETRY,
+  BOUNDING_BOX,
+  LIBSPATIALJOIN
+};
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
@@ -52,9 +78,10 @@ struct SpatialJoinConfiguration {
   // You may use PayloadAllVariables to select all columns of the right table.
   PayloadVariables payloadVariables_ = PayloadVariables::all();
 
-  // Choice of algorithm. Both algorithms have equal results, but different
-  // runtime characteristics.
+  // Choice of algorithm.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
+
+  std::optional<SpatialJoinType> joinType_ = std::nullopt;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -69,6 +96,7 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
+  std::optional<SpatialJoinType> joinType_;
 };
 
 // The spatial join operation without a limit on the maximum number of results
@@ -145,6 +173,11 @@ class SpatialJoin : public Operation {
 
   // retrieve the currently selected algorithm
   SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
+
+  // retrieve the currently selected spatial join type
+  std::optional<SpatialJoinType> getJoinType() const {
+    return config_.joinType_;
+  }
 
   // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {

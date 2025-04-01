@@ -94,12 +94,14 @@ class Index {
   // constructed using the `createFromFile` method which is typically called via
   // `IndexBuilderMain`. Read necessary metadata into memory and open file
   // handles.
-  void createFromOnDiskIndex(const std::string& onDiskBase);
+  void createFromOnDiskIndex(const std::string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
   void buildTextIndexFile(
-      std::optional<std::pair<std::string, std::string>> wordsAndDocsFile,
+      const std::optional<std::pair<std::string, std::string>>&
+          wordsAndDocsFile,
       bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
@@ -215,9 +217,8 @@ class Index {
                                              float b, float k);
 
   const std::string& getTextName() const;
-
   const std::string& getKbName() const;
-
+  const std::string& getOnDiskBase() const;
   const std::string& getIndexId() const;
 
   NumNormalAndInternal numTriples() const;
