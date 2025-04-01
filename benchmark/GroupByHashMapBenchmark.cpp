@@ -110,8 +110,8 @@ auto determineTypeString = [](ValueIdType type) {
     AD_THROW("ValueIdType not found.");
 };
 
-auto determineAggregateString = [](TI<auto> ti) {
-  using T = decltype(ti)::type;
+auto determineAggregateString = [](auto ti) {
+  using T = typename decltype(ti)::type;
   if constexpr (std::same_as<T, MinExpression>)
     return "MIN";
   else if constexpr (std::same_as<T, MaxExpression>)
@@ -244,8 +244,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     using namespace sparqlExpression;
 
-    auto createExpression = [](TI<auto> ti) {
-      using A = decltype(ti)::type;
+    auto createExpression = [](auto ti) {
+      using A = typename decltype(ti)::type;
 
       if constexpr (std::same_as<A, GroupConcatExpression>)
         return std::make_unique<T>(false,
@@ -282,8 +282,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     using namespace sparqlExpression;
 
-    auto createExpression1 = [](TI<auto> ti) {
-      using A = decltype(ti)::type;
+    auto createExpression1 = [](auto ti) {
+      using A = typename decltype(ti)::type;
 
       if constexpr (std::same_as<A, GroupConcatExpression>)
         return std::make_unique<T1>(
@@ -293,8 +293,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
                                     makeVariableExpression(Variable{"?b"}));
     };
 
-    auto createExpression2 = [](TI<auto> ti) {
-      using A = decltype(ti)::type;
+    auto createExpression2 = [](auto ti) {
+      using A = typename decltype(ti)::type;
 
       if constexpr (std::same_as<A, GroupConcatExpression>)
         return std::make_unique<T2>(

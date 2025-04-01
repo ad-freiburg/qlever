@@ -459,16 +459,16 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
   // General exception tests.
   generalExceptionTestTwoInputColumns(
       [](ResultTable* table, const auto& columnToPutResultIn,
-         const ColumnNumWithType<auto>& firstInputColumns,
-         const ColumnNumWithType<auto>& secondInputColumns) {
+         const auto& firstInputColumns, const auto& secondInputColumns) {
         /*
         Unlike the other functions, `` only works with measured execution times.
         So, whenever the inputs are not for type `float`, we pass the
         responsibility to a trivial function.
         */
-        using FirstType = std::decay_t<decltype(firstInputColumns)>::ColumnType;
+        using FirstType =
+            typename std::decay_t<decltype(firstInputColumns)>::ColumnType;
         using SecondType =
-            std::decay_t<decltype(secondInputColumns)>::ColumnType;
+            typename std::decay_t<decltype(secondInputColumns)>::ColumnType;
         if constexpr (std::same_as<FirstType, float> &&
                       std::same_as<SecondType, float>) {
           calculateSpeedupOfColumn(table, columnToPutResultIn,

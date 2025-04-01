@@ -1878,23 +1878,22 @@ void doValidatorExceptionTest(
 }
 
 TEST(ConfigManagerTest, AddNonExceptionValidatorException) {
-  doValidatorExceptionTest(
-      [](ConfigManager& m, ConstConfigOptionProxy<auto>... validatorArguments) {
-        m.addValidator(
-            [](const std::decay_t<
-                decltype(validatorArguments)>::value_type&...) { return true; },
-            "", "", validatorArguments...);
-      });
+  doValidatorExceptionTest([](ConfigManager& m, auto... validatorArguments) {
+    m.addValidator(
+        [](const typename std::decay_t<
+            decltype(validatorArguments)>::value_type&...) { return true; },
+        "", "", validatorArguments...);
+  });
 }
 
 TEST(ConfigManagerTest, AddExceptionValidatorException) {
-  doValidatorExceptionTest(
-      [](ConfigManager& m, ConstConfigOptionProxy<auto>... validatorArguments) {
-        m.addValidator(
-            [](const std::decay_t<decltype(validatorArguments)>::value_type&...)
-                -> std::optional<ErrorMessage> { return {std::nullopt}; },
-            "", validatorArguments...);
-      });
+  doValidatorExceptionTest([](ConfigManager& m, auto... validatorArguments) {
+    m.addValidator(
+        [](const typename std::decay_t<
+            decltype(validatorArguments)>::value_type&...)
+            -> std::optional<ErrorMessage> { return {std::nullopt}; },
+        "", validatorArguments...);
+  });
 }
 
 /*
@@ -2031,19 +2030,18 @@ void doAddOptionValidatorTest(
 }
 
 TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
-  doAddOptionValidatorTest(
-      [](auto validatorFunction, std::string validatorExceptionMessage,
-         ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
-        m.addOptionValidator(validatorFunction, validatorExceptionMessage, "",
-                             args...);
-      });
+  doAddOptionValidatorTest([](auto validatorFunction,
+                              std::string validatorExceptionMessage,
+                              ConfigManager& m, auto... args) {
+    m.addOptionValidator(validatorFunction, validatorExceptionMessage, "",
+                         args...);
+  });
 }
 
 TEST(ConfigManagerTest, AddOptionExceptionValidator) {
   doAddOptionValidatorTest([](auto validatorFunction,
                               std::string validatorExceptionMessage,
-                              ConfigManager& m,
-                              ConstConfigOptionProxy<auto>... args) {
+                              ConfigManager& m, auto... args) {
     m.addOptionValidator(
         transformValidatorIntoExceptionValidator<
             decltype(validatorFunction), decltype(args.getConfigOption())...>(
@@ -2147,22 +2145,20 @@ void doAddOptionValidatorExceptionTest(
 }
 
 TEST(ConfigManagerTest, AddOptionNoExceptionValidatorException) {
-  doAddOptionValidatorExceptionTest(
-      [](ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
-        m.addOptionValidator(
-            [](const decltype(args.getConfigOption())&...) { return true; }, "",
-            "", args...);
-      });
+  doAddOptionValidatorExceptionTest([](ConfigManager& m, auto... args) {
+    m.addOptionValidator(
+        [](const decltype(args.getConfigOption())&...) { return true; }, "", "",
+        args...);
+  });
 }
 
 TEST(ConfigManagerTest, AddOptionExceptionValidatorException) {
-  doAddOptionValidatorExceptionTest(
-      [](ConfigManager& m, ConstConfigOptionProxy<auto>... args) {
-        m.addOptionValidator(
-            [](const decltype(args.getConfigOption())&...)
-                -> std::optional<ErrorMessage> { return {std::nullopt}; },
-            "", args...);
-      });
+  doAddOptionValidatorExceptionTest([](ConfigManager& m, auto... args) {
+    m.addOptionValidator(
+        [](const decltype(args.getConfigOption())&...)
+            -> std::optional<ErrorMessage> { return {std::nullopt}; },
+        "", args...);
+  });
 }
 
 TEST(ConfigManagerTest, ContainsOption) {
@@ -2484,9 +2480,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   // `ConfigurationDocValidatorAssignment`.
   auto addPairVector =
       [](ConfigManager::ConfigurationDocValidatorAssignment* assignment,
-         const std::vector<
-             std::pair<auto, std::vector<ConfigOptionValidatorManager>>>&
-             pairVector) {
+         const auto& pairVector) {
         // Simply insert all the entries.
         ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
           const auto& [key, validatorVector] = pair;
@@ -2506,9 +2500,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
   */
   auto testPairVector =
       [](const ConfigManager::ConfigurationDocValidatorAssignment& assignment,
-         const std::vector<
-             std::pair<auto, std::vector<ConfigOptionValidatorManager>>>&
-             pairVector,
+         const auto& pairVector,
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         // For generating better messages, when failing a test.
