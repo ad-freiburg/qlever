@@ -349,9 +349,11 @@ struct CheckConfigOptionSetValue {
     void operator()() const {
       if constexpr (!std::is_same_v<Type, CurrentType> &&
                     !(std::is_same_v<Type, int> &&
-                      std::is_same_v<CurrentType, size_t>) &&
-                    !(std::is_same_v<Type, std::vector<int>> &&
-                      std::is_same_v<CurrentType, std::vector<size_t>>)) {
+                      std::is_same_v<
+                          CurrentType,
+                          size_t>)&&!(std::is_same_v<Type, std::vector<int>> &&
+                                      std::is_same_v<CurrentType,
+                                                     std::vector<size_t>>)) {
         ASSERT_THROW(
             option.setValueWithJson(
                 getConversionTestCase<CurrentType>().jsonRepresentation),
