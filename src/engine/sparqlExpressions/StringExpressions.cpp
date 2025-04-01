@@ -374,10 +374,10 @@ using MergeRegexPatternAndFlagsExpression =
     [](std::optional<ad_utility::triple_component::Literal> s,
        const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!s.getLiteral().has_value() || !pattern || !replacement.has_value()) {
+  if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = s.value().getLiteral().value();
+  auto& in = s.value();
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
