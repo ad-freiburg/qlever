@@ -377,7 +377,7 @@ using MergeRegexPatternAndFlagsExpression =
   if (!s.getLiteral().has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = s.getLiteral().value();
+  auto& in = s.value().getLiteral().value();
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
