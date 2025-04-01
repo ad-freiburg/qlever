@@ -149,4 +149,33 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
 // __________________________________________
 void Literal::removeDatatypeOrLanguageTag() { content_.erase(beginOfSuffix_); }
 
+// __________________________________________
+void Literal::replaceContent(std::string_view newContent) {
+  std::size_t originalContentLength = beginOfSuffix_ - 2;
+  std::size_t minLength = std::min(originalContentLength, newContent.size());
+  ql::ranges::copy(newContent.substr(0, minLength), content_.begin() + 1);
+  if (newContent.size() <= originalContentLength) {
+    content_.erase(newContent.size() + 1,
+                   originalContentLength - newContent.size());
+  } else {
+    content_.insert(beginOfSuffix_ - 1,
+                    newContent.substr(originalContentLength));
+  }
+  beginOfSuffix_ = newContent.size() + 2;
+}
+
+// __________________________________________
+void Literal::append(const Literal& other) {
+  // TODO: Tests für diese Methode
+  const auto& otherContent = asStringViewUnsafe(other.getContent());
+  content_.insert(beginOfSuffix_ - 1, otherContent);
+  beginOfSuffix_ += other.getContent().size();
+  if (!((other.hasLanguageTag() && hasLanguageTag() &&
+         getLanguageTag() == other.getLanguageTag()) ||
+        (other.hasDatatype() && hasDatatype() &&
+         getDatatype() == other.getDatatype()))) {
+    removeDatatypeOrLanguageTag();
+  }
+}
+
 }  // namespace ad_utility::triple_component

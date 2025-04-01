@@ -99,7 +99,19 @@ class Literal {
   // Throws if either 'start' or 'start' + 'length' is out of bounds.
   void setSubstr(std::size_t start, std::size_t length);
 
+  // Replace the content of the Literal object with newContent.
+  // It truncates or extends the content based on the length of newContent
+  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  void replaceContent(std::string_view newContent);
+
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
+
+  // Append the content of another Literal to this one. If the other Literal has
+  // the same language tag or datatype, the resulting Literal will have the same
+  // language tag or datatype. Otherwise, the resulting Literal will have no
+  // language tag or datatype. This is used in the `CONCAT` function in
+  // StringExpressions.cpp.
+  void append(const Literal& other);
 };
 }  // namespace ad_utility::triple_component
