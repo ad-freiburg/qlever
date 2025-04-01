@@ -77,16 +77,6 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-std::vector<Variable> Bind::containedVariables() const {
-  std::vector<Variable> output;
-  for (const auto* ptr : _expression.containedVariables()) {
-    output.push_back(*ptr);
-  }
-  output.push_back(_target);
-  return output;
-}
-
-// ____________________________________________________________________________
 [[nodiscard]] string Bind::getDescriptor() const {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
