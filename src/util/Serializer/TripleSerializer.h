@@ -70,10 +70,10 @@ CPP_template(typename Serializer)(
   AD_CONTRACT_CHECK(vocab.numSets() == 1);
   const auto& words = vocab.primaryWordSet();
   serializer << words.size();
-  for (const auto& localVocabEntry : words) {
+  ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
     serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
     serializer << localVocabEntry.toStringRepresentation();
-  }
+  });
 }
 
 // Deserialize the local vocabulary from the input stream.
