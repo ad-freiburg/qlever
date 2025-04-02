@@ -15,11 +15,9 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/Conversions.h"
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(

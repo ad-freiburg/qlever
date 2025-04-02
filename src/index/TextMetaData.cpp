@@ -5,7 +5,7 @@
 #include "./TextMetaData.h"
 
 #include "../global/Constants.h"
-#include "../util/ReadableNumberFact.h"
+#include "../util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
