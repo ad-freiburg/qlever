@@ -22,8 +22,8 @@
 // meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
-  WrongFormatException(std::string msg) : msg_(std::move(msg)) {}
-  const char* what() const throw() { return msg_.c_str(); }
+  explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
+  const char* what() const noexcept override { return msg_.c_str(); }
 
  private:
   std::string msg_;

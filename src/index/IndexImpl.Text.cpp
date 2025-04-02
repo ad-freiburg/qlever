@@ -202,12 +202,10 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     currentContextId++;
     currentOffset += static_cast<off_t>(lineView.size());
   }
-  offsets.push_back(currentOffset);
-
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    off_t cur = offsets[i];
-    ofs.write(reinterpret_cast<const char*>(&cur), sizeof(cur));
-  }
+  ofs.write(reinterpret_cast<const char*>(offsets.data()),
+            sizeof(off_t) * offsets.size());
+  ofs.write(reinterpret_cast<const char*>(&currentOffset),
+            sizeof(currentOffset));
   LOG(INFO) << "DocsDB done.\n";
 }
 

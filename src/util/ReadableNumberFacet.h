@@ -25,9 +25,9 @@ namespace ad_utility {
 // using RIIA as ReadableNumberFacet rnf(1);
 class ReadableNumberFacet : public std::numpunct<char> {
  public:
-  explicit ReadableNumberFacet(size_t refs = 0) : std::numpunct<char>(refs) {}
+  using std::numpunct<char>::numpunct;
 
-  ~ReadableNumberFacet() override {}
+  ~ReadableNumberFacet() override = default;
 
   char do_thousands_sep() const override { return ','; }
 

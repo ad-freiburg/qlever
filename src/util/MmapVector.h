@@ -20,7 +20,7 @@
 namespace ad_utility {
 // _________________________________________________________________________
 class UninitializedArrayException : public std::exception {
-  const char* what() const throw() override {
+  const char* what() const noexcept override {
     return "Tried to access a DiskBasedArray which was closed or "
            "uninitialized\n";
   }
@@ -28,7 +28,7 @@ class UninitializedArrayException : public std::exception {
 
 // _________________________________________________________________________
 class InvalidFileException : public std::exception {
-  const char* what() const throw() override {
+  const char* what() const noexcept override {
     return "Error reading meta data of  Mmap file: Maybe magic number is "
            "missing or there is a version mismatch\n";
   }
@@ -46,7 +46,7 @@ class TruncateException : public std::exception {
   }
 
   // ______________________________________________________________________________________________________
-  const char* what() const throw() override { return _msg.c_str(); }
+  const char* what() const noexcept override { return _msg.c_str(); }
 
   std::string _msg;
 };
