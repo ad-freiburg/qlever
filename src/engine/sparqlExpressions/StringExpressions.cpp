@@ -150,20 +150,25 @@ using StrlenExpression =
 };
 using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
-// UCASE
-[[maybe_unused]] auto uppercaseImpl =
+// UCase and LCase
+template <auto toLowerOrToUpper>
+auto upperOrLowerCaseImpl =
     [](std::optional<ad_utility::triple_component::Literal> input)
     -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
-  } else {
-    auto new_content =
-        ad_utility::utf8ToUpper(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
-    return LiteralOrIri(std::move(input.value()));
   }
+  auto& literal = input.value();
+  auto newContent =
+      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+  literal.replaceContent(newContent);
+  return LiteralOrIri(std::move(literal));
 };
+auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
+auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
+
 using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
+using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -193,7 +198,6 @@ class SubstrImpl {
   IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
       NumericValue start, NumericValue length) const {
-
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
