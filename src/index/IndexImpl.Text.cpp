@@ -18,6 +18,7 @@
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
+#include "util/MmapVector.h"
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
@@ -178,8 +179,8 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
   std::ifstream docsFile{docsFileName};
   std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
-  // we write the offsets to and stxxl:vector first;
-  stxxl::vector<off_t> offsets;
+  // we write the offsets to and `ad_utility::MmapVector` first;
+  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   string line;
