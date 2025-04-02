@@ -198,24 +198,27 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
-template <auto toLowerOrToUpper>
-auto upperOrLowerCaseImpl =
-    [](std::optional<ad_utility::triple_component::Literal> input)
-    -> IdOrLiteralOrIri {
+// LCASE
+[[maybe_unused]] auto lowercaseImpl =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto newContent = std::invoke(
-        toLowerOrToUpper, asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContent(newContent);
-    return LiteralOrIri(std::move(input.value()));
+    return toLiteral(ad_utility::utf8ToLower(input.value()));
   }
 };
-auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
-auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
+using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
 
-using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
-using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
+// UCASE
+[[maybe_unused]] auto uppercaseImpl =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return toLiteral(ad_utility::utf8ToUpper(input.value()));
+  }
+};
+using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -374,16 +377,20 @@ template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
     [](std::optional<ad_utility::triple_component::Literal> literal,
        std::optional<std::string> optPattern) -> IdOrLiteralOrIri {
-  if (!optPattern.has_value()) {
+  if (!optPattern.has_value() || !literal.has_value()) {
     return Id::makeUndefined();
   }
   const auto& pattern = optPattern.value();
-  // Required by the SPARQL standard.
-  if (!literal.has_value()) {
-    return Id::makeUndefined();
-  }
+  // TODO: function checkArgumentCompatible: Wenn pattern einen languagetag hat
+  // UND das Literal NICHT den gleichen Languagetag, dann werfe Fehler.
+  //  Required by the SPARQL standard.
   if (pattern.empty()) {
-    return LiteralOrIri(std::move(literal.value()));
+    if (isStrAfter) {
+      return LiteralOrIri(std::move(literal.value()));
+    } else {
+      literal.value().setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal.value()));
+    }
   }
   auto literalContent = literal.value().getContent();
   auto pos = asStringViewUnsafe(literalContent).find(pattern);

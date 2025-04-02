@@ -747,10 +747,30 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({"", "", "Hällo", "", "o", "", "", "lo"}),
       S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
       S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrAfter(
+      IdOrLiteralOrIriVec{
+          lit("bc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("c", "@en"), lit(""), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{lit("a"), lit(""), lit("ab"), lit("z"), lit("")});
   checkStrBefore(
-      S({"", "", "Hällo", "", "Hä", "", "", "Hä"}),
+      S({"", "", "", "", "Hä", "", "", "Hä"}),
       S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
       S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrBefore(
+      IdOrLiteralOrIriVec{
+          lit("a", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit(""), lit("", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{lit("bc"), lit(""), lit("bc"), lit("z"), lit("")});
 }
 
 // ______________________________________________________________________________
