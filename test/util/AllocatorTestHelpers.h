@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
+#define QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H
 
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
@@ -17,3 +18,5 @@ inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
   return a;
 }
 }  // namespace ad_utility::testing
+
+#endif  // QLEVER_TEST_UTIL_ALLOCATORTESTHELPERS_H

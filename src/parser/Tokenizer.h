@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_TOKENIZER_H
+#define QLEVER_SRC_PARSER_TOKENIZER_H
 
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
@@ -361,3 +363,5 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
+
+#endif  // QLEVER_SRC_PARSER_TOKENIZER_H

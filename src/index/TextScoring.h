@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTSCORING_H
+#define QLEVER_SRC_INDEX_TEXTSCORING_H
 
 #include "index/Index.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -13,17 +14,19 @@ class ScoreData {
  public:
   ScoreData() = default;
 
-  ScoreData(LocaleManager localeManager) : localeManager_(localeManager){};
+  explicit ScoreData(LocaleManager localeManager)
+      : localeManager_(std::move(localeManager)){};
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
-      : scoringMetric_(scoringMetric), localeManager_(localeManager){};
+      : scoringMetric_(std::move(scoringMetric)),
+        localeManager_(std::move(localeManager)){};
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
-            std::pair<float, float> bAndKParam)
-      : scoringMetric_(scoringMetric),
+            const std::pair<float, float>& bAndKParam)
+      : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
         k_(bAndKParam.second),
-        localeManager_(localeManager){};
+        localeManager_(std::move(localeManager)){};
 
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
@@ -69,7 +72,11 @@ class ScoreData {
       const Index::TextVocab& textVocab, size_t& wordNotFoundErrorMsgCount);
 
   void calculateAVDL() {
-    averageDocumentLength_ =
-        nofDocuments_ ? (totalDocumentLength_ / nofDocuments_) : 0;
+    averageDocumentLength_ = nofDocuments_
+                                 ? (static_cast<float>(totalDocumentLength_) /
+                                    static_cast<float>(nofDocuments_))
+                                 : 0;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_TEXTSCORING_H

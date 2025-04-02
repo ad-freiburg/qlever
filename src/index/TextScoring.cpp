@@ -7,6 +7,28 @@
 #include "index/Index.h"
 
 // ____________________________________________________________________________
+static void logWordNotFound(const string& word,
+                            size_t& wordNotFoundErrorMsgCount) {
+  if (wordNotFoundErrorMsgCount < 20) {
+    LOG(WARN) << "The following word was found in the docsfile but not in "
+                 "the wordsfile: "
+              << word << '\n';
+    ++wordNotFoundErrorMsgCount;
+    if (wordNotFoundErrorMsgCount == 1) {
+      LOG(WARN) << "Note that this might be intentional if for example stop "
+                   "words from the documents where omitted in the wordsfile to "
+                   "make the text index more efficient and effective. \n";
+    } else if (wordNotFoundErrorMsgCount == 20) {
+      LOG(WARN) << "There are more words not in the KB during score "
+                   "calculation..."
+                << " suppressing further warnings...\n";
+    }
+  } else {
+    wordNotFoundErrorMsgCount++;
+  }
+}
+
+// ____________________________________________________________________________
 void ScoreData::calculateScoreData(const string& docsFileName,
                                    bool addWordsFromLiterals,
                                    const Index::TextVocab& textVocab,
@@ -22,7 +44,7 @@ void ScoreData::calculateScoreData(const string& docsFileName,
   DocsFileParser docsFileParser(docsFileName, textVocab.getLocaleManager());
 
   // Parse the docsfile first if it exists
-  for (auto& line : docsFileParser) {
+  for (const DocsFileLine& line : docsFileParser) {
     // Set docId
     docId = line.docId_;
     // Parse docText for invertedIndex
@@ -71,24 +93,7 @@ void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
   for (const auto& word : tokenizeAndNormalizeText(text, localeManager_)) {
     // Check if word exists and retrieve wordId
     if (!textVocab.getId(word, &wvi)) {
-      if (wordNotFoundErrorMsgCount < 20) {
-        LOG(WARN) << "The following word was found in the docsfile but not in "
-                     "the wordsfile: "
-                  << word << '\n';
-        ++wordNotFoundErrorMsgCount;
-        if (wordNotFoundErrorMsgCount == 1) {
-          LOG(WARN)
-              << "Note that this might be intentional if for example stop "
-                 "words from the documents where omitted in the wordsfile to "
-                 "make the text index more efficient and effective. \n";
-        } else if (wordNotFoundErrorMsgCount == 20) {
-          LOG(WARN) << "There are more words not in the KB during score "
-                       "calculation..."
-                    << " suppressing further warnings...\n";
-        }
-      } else {
-        wordNotFoundErrorMsgCount++;
-      }
+      logWordNotFound(word, wordNotFoundErrorMsgCount);
       continue;
     }
     WordIndex currentWordId = wvi.get();
@@ -116,7 +121,7 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   calculateAVDL();
   InnerMap& innerMap = it->second;
   size_t df = innerMap.size();
-  float idf = std::log2f(nofDocuments_ / df);
+  float idf = std::log2f(static_cast<float>(nofDocuments_) / df);
 
   // Retrieve the matching docId for contextId. Since contextId are continuous
   // or at least increased in smaller steps than the docIds but the
@@ -149,7 +154,7 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   TermFrequency tf = ret1->second;
 
   if (scoringMetric_ == TextScoringMetric::TFIDF) {
-    return tf * idf;
+    return static_cast<float>(tf) * idf;
   }
 
   auto ret2 = docLengthMap_.find(docId);
@@ -160,7 +165,9 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
       contextId.get(), " The calculated docId was: ", docId.get(),
       " This hints on faulty input data for wordsfile.tsv and or docsfile.tsv");
   size_t dl = ret2->second;
-  float alpha = (1 - b_ + b_ * (dl / averageDocumentLength_));
-  float tf_star = (tf * (k_ + 1)) / (k_ * alpha + tf);
-  return tf_star * idf;
+  float alpha =
+      (1 - b_ + b_ * (static_cast<float>(dl) / averageDocumentLength_));
+  float tfStar = (static_cast<float>(tf) * (k_ + 1)) /
+                 (k_ * alpha + static_cast<float>(tf));
+  return tfStar * idf;
 }

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_DESCRIBE_H
+#define QLEVER_SRC_ENGINE_DESCRIBE_H
 
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
@@ -77,3 +78,5 @@ class Describe : public Operation {
   // IRIs that match `?y` in the WHERE clause, with all duplicates removed.
   IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_DESCRIBE_H

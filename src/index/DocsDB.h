@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_DOCSDB_H
+#define QLEVER_SRC_INDEX_DOCSDB_H
 
 #include <string>
 #include <utility>
@@ -23,3 +25,5 @@ class DocsDB {
   off_t _startOfOffsets;
   size_t _size = 0;
 };
+
+#endif  // QLEVER_SRC_INDEX_DOCSDB_H
