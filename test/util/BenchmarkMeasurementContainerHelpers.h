@@ -50,7 +50,7 @@ arguments. Should be passed per deduction.
 template <typename Function>
 static void doForTypeInResultTableEntryType(Function function) {
   ad_utility::forEachTypeInTemplateType<ad_benchmark::ResultTable::EntryType>(
-      detail::FunctionCaller{function});
+      detail::FunctionCaller<decltype(function)>{function});
 }
 
 #endif  // QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H

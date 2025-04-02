@@ -1302,7 +1302,8 @@ struct DoTestNoValidatorInSubManager {
 
     for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
       // Add a new validator
-      AddValidatorToConfigManager{addValidatorFunction}
+      AddValidatorToConfigManager<decltype(addValidatorFunction)>{
+          addValidatorFunction}
           .template operator()<Ts...>(i, m, validatorArguments.second...);
 
       // Test all the added validators.
@@ -1352,7 +1353,8 @@ struct DoTestAlwaysValidatorInSubManager {
     // manager goes correctly.
     for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
       // Add a new validator
-      AddValidatorToConfigManager{addValidatorFunction}
+      AddValidatorToConfigManager<decltype(addValidatorFunction)>{
+          addValidatorFunction}
           .template operator()<Ts...>(i, subM, validatorArguments.second...);
 
       // Test all the added validators.
@@ -1363,7 +1365,8 @@ struct DoTestAlwaysValidatorInSubManager {
     // Now, we add additional validators to the top manager.
     for (size_t i = NUMBER_OF_VALIDATORS; i < NUMBER_OF_VALIDATORS * 2; i++) {
       // Add a new validator
-      AddValidatorToConfigManager{addValidatorFunction}
+      AddValidatorToConfigManager<decltype(addValidatorFunction)>{
+          addValidatorFunction}
           .template operator()<Ts...>(i, m, validatorArguments.second...);
 
       // Test all the added validators.
@@ -1632,19 +1635,26 @@ void doValidatorTest(
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorTest")};
 
+  DoTestNoValidatorInSubManager<decltype(addValidatorFunction)>
+      noValidatorInSubManager{addValidatorFunction};
+  DoTestAlwaysValidatorInSubManager<decltype(addValidatorFunction)>
+      alwaysValidatorInSubManager{addValidatorFunction};
+  AddValidatorToConfigManager<decltype(addValidatorFunction)>
+      addValidatorToConfigManager{addValidatorFunction};
+
   CallGivenLambdaWithAllCombinationsOfTypes{}.template operator()<1>(
-      DoSingleParameterTests{
-          DoTestNoValidatorInSubManager{addValidatorFunction},
-          DoTestAlwaysValidatorInSubManager{addValidatorFunction}});
+      DoSingleParameterTests<decltype(noValidatorInSubManager),
+                             decltype(alwaysValidatorInSubManager)>{
+          noValidatorInSubManager, alwaysValidatorInSubManager});
 
   CallGivenLambdaWithAllCombinationsOfTypes{}.template operator()<2>(
-      DoDoubleParameterTests{
-          DoTestNoValidatorInSubManager{addValidatorFunction},
-          DoTestAlwaysValidatorInSubManager{addValidatorFunction}});
+      DoDoubleParameterTests<decltype(noValidatorInSubManager),
+                             decltype(alwaysValidatorInSubManager)>{
+          noValidatorInSubManager, alwaysValidatorInSubManager});
 
   CallGivenLambdaWithAllCombinationsOfTypes{}.template operator()<2>(
-      DoDifferentParameterTests{
-          AddValidatorToConfigManager{addValidatorFunction}});
+      DoDifferentParameterTests<decltype(addValidatorToConfigManager)>{
+          addValidatorToConfigManager});
 
   // Quick test, if the exception message generated for failed validators
   // include up to date information about all used configuration options.
@@ -1873,7 +1883,8 @@ void doValidatorExceptionTest(
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
 
-  doForTypeInConfigOptionValueType(DoValidatorParameterNotInConfigManagerTest{
+  doForTypeInConfigOptionValueType(DoValidatorParameterNotInConfigManagerTest<
+                                   decltype(addAlwaysValidValidatorFunction)>{
       addAlwaysValidValidatorFunction});
 }
 
@@ -2087,8 +2098,8 @@ void doAddOptionValidatorExceptionTest(
   // Variable for the configuration options.
   int var;
 
-  CheckAddOptionValidatorBehavior checkAddOptionValidatorBehavior{
-      addAlwaysValidValidatorFunction};
+  CheckAddOptionValidatorBehavior<decltype(addAlwaysValidValidatorFunction)>
+      checkAddOptionValidatorBehavior{addAlwaysValidValidatorFunction};
 
   // An outside configuration option.
   ConfigOption outsideOption("outside", "", &var);
@@ -2707,7 +2718,8 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
       [&addDefaultValidator](ConfigManager* configManager) {
         // Add the example configuration options by calling `addOption` with all
         // valid argument combinations.
-        doForTypeInConfigOptionValueType(AddOptionsAndValidatorToConfigManager{
+        doForTypeInConfigOptionValueType(AddOptionsAndValidatorToConfigManager<
+                                         decltype(addDefaultValidator)>{
             addDefaultValidator, configManager});
       };
 

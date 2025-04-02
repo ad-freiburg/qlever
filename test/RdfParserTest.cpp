@@ -488,7 +488,8 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
   };
 
   auto testTripleObjects =
-      TestTripleObjectsNumericLiteralErrorBehavior{parseAllTriples};
+      TestTripleObjectsNumericLiteralErrorBehavior<decltype(parseAllTriples)>{
+          parseAllTriples};
 
   auto runCommonTests = [&assertParsingFails, &testTripleObjects,
                          &parseAllTriples](const auto& p) {

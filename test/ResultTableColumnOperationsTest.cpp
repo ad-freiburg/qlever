@@ -178,7 +178,8 @@ static void generalExceptionTestTwoInputColumns(
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
 
   doForTypeInResultTableEntryType(
-      TestGeneralExceptionTestTwoInputColumns{callTransform});
+      TestGeneralExceptionTestTwoInputColumns<decltype(callTransform)>{
+          callTransform});
 }
 
 template <typename F>
@@ -227,7 +228,8 @@ static void generalExceptionTestUnlimitedInputColumns(
   generalExceptionTestTwoInputColumns(callTransform);
 
   doForTypeInResultTableEntryType(
-      TestGeneralExceptionTestUnlimitedInputColumns{callTransform});
+      TestGeneralExceptionTestUnlimitedInputColumns<decltype(callTransform)>{
+          callTransform});
 }
 
 template <typename F>
@@ -283,7 +285,8 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   auto columnCopyLambda = [](const auto& d) { return d; };
 
   doForTypeInResultTableEntryType(
-      TestGenerateColumnWithColumnInput{NUM_ROWS, columnCopyLambda});
+      TestGenerateColumnWithColumnInput<decltype(columnCopyLambda)>{
+          NUM_ROWS, columnCopyLambda});
 
   // Exception tests.
   generalExceptionTestUnlimitedInputColumns([](ResultTable* table,
