@@ -1,6 +1,7 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_JOINALGORITHMS_H
 #define QLEVER_SRC_UTIL_JOINALGORITHMS_JOINALGORITHMS_H
@@ -976,31 +977,29 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
   // Main implementation for `findUndefValues`.
   template <bool left, typename T>
-  cppcoro::generator<T> findUndefValuesHelper(const auto& fullBlockLeft,
-                                              const auto& fullBlockRight,
-                                              T& begL, T& begR,
-                                              const auto& undefBlocks) {
-    for (const auto& undefBlock : undefBlocks) {
-      // Select proper input table from the stored undef blocks
-      if constexpr (left) {
-        begL = undefBlock.fullBlock().begin();
-        compatibleRowAction_.setInput(undefBlock.fullBlock(),
-                                      fullBlockRight.get());
-      } else {
-        begR = undefBlock.fullBlock().begin();
-        compatibleRowAction_.setInput(fullBlockLeft.get(),
-                                      undefBlock.fullBlock());
-      }
-      const auto& subrange = undefBlock.subrange();
-      // Yield all iterators to the elements within the stored undef blocks.
-      for (auto subIt = subrange.begin(); subIt < subrange.end(); ++subIt) {
-        co_yield subIt;
-      }
-    }
+  auto findUndefValuesHelper(const auto& fullBlockLeft,
+                             const auto& fullBlockRight, T& begL, T& begR,
+                             const auto& undefBlocks) {
+    // TODO: How to reset the input?
     // Reset back to original input
-    compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
-    // No need for further iteration because we know we won't encounter any new
-    // undefined values at this point.
+    // compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    return undefBlocks |
+           ql::views::transform([&fullBlockLeft, &fullBlockRight, &begL, &begR,
+                                 this](const auto& undefBlock) {
+             // Select proper input table from the stored undef blocks
+             if constexpr (left) {
+               begL = undefBlock.fullBlock().begin();
+               compatibleRowAction_.setInput(undefBlock.fullBlock(),
+                                             fullBlockRight.get());
+             } else {
+               begR = undefBlock.fullBlock().begin();
+               compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                             undefBlock.fullBlock());
+             }
+             return undefBlock.subrange();
+           }) |
+           ql::views::join |
+           ql::views::transform([](const auto& subIt) { return subIt; });
   }
 
   // Create a generator that yields iterators to all undefined values that
