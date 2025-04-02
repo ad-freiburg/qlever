@@ -194,7 +194,7 @@ class LocalVocab {
   };
 
   // Return a holder for all the words stored by this `LocalVocab`. You can
-  // safely keep writing to this `LocalVocab` after aquiring the holder.
+  // safely keep writing to this `LocalVocab` after acquiring the holder.
   Holder getHolder() const;
 
  private:
