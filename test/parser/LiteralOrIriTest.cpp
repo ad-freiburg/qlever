@@ -341,20 +341,6 @@ TEST(LiteralTest, removeDatatypeOrLanguageTag) {
 }
 
 // _______________________________________________________________________
-TEST(LiteralTest, replaceContentWithSameLength) {
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World!",
-      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
-  literal.getLiteral().replaceContentWithSameLength("HELLO WORLD!");
-  EXPECT_THAT("HELLO WORLD!", asStringViewUnsafe(literal.getContent()));
-  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
-              asStringViewUnsafe(literal.getDatatype()));
-
-  EXPECT_THROW(literal.getLiteral().replaceContentWithSameLength("HELLO!"),
-               ad_utility::Exception);
-}
-
-// _______________________________________________________________________
 TEST(LiteralTest, replaceContent) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello!", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
