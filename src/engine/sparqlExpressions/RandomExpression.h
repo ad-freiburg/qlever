@@ -3,7 +3,8 @@
 //  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //           Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RANDOMEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RANDOMEXPRESSION_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
@@ -52,3 +53,5 @@ class RandomExpression : public SparqlExpression {
 };
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RANDOMEXPRESSION_H

@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
+#define QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
 
 #include <concepts>
 #include <ranges>
@@ -256,3 +257,5 @@ constexpr void forEachTypeInTemplateType(const auto& lambda) {
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONSTEXPRUTILS_H

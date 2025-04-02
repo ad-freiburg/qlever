@@ -4,6 +4,10 @@
 
 #ifndef QLEVER_TUPLEHELPERS_H
 #define QLEVER_TUPLEHELPERS_H
+
+#include <cstddef>
+#include <memory>
+#include <tuple>
 #include <utility>
 
 namespace ad_tuple_helpers {

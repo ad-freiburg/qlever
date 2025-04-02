@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (October of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_VALIDATORHELPERS_H
+#define QLEVER_TEST_UTIL_VALIDATORHELPERS_H
 
 #include <cstddef>
 #include <sstream>
@@ -65,3 +66,5 @@ auto generateDummyNonExceptionValidatorFunction(size_t variant) {
     return (compare(args, dummyValuesToCompareTo) || ...);
   };
 };
+
+#endif  // QLEVER_TEST_UTIL_VALIDATORHELPERS_H

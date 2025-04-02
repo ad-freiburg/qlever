@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CRYPTOGRAPHICHASHUTILS_H
+#define QLEVER_SRC_UTIL_CRYPTOGRAPHICHASHUTILS_H
 
 #include <absl/strings/str_join.h>
 #include <openssl/evp.h>
@@ -56,3 +57,5 @@ constexpr auto hashSha384 = hashImpl<&EVP_sha384, SHA384_DIGEST_LENGTH>;
 constexpr auto hashSha512 = hashImpl<&EVP_sha512, SHA512_DIGEST_LENGTH>;
 
 }  //  namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CRYPTOGRAPHICHASHUTILS_H
