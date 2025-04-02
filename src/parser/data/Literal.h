@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_LITERAL_H
+#define QLEVER_SRC_PARSER_DATA_LITERAL_H
 
 #include <sstream>
 #include <string>
@@ -59,3 +60,5 @@ class Literal {
 
   bool operator==(const Literal& other) const = default;
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_LITERAL_H

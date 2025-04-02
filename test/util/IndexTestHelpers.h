@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
+#define QLEVER_TEST_UTIL_INDEXTESTHELPERS_H
 
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
@@ -54,7 +55,8 @@ Index makeTestIndex(
         contentsOfWordsFileAndDocsfile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
+    qlever::Filetype indexType = qlever::Filetype::Turtle);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -72,7 +74,8 @@ QueryExecutionContext* getQec(
         contentsOfWordsFileAndDocsfile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
+    qlever::Filetype indexType = qlever::Filetype::Turtle);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the
@@ -80,3 +83,5 @@ QueryExecutionContext* getQec(
 std::function<Id(const std::string&)> makeGetId(const Index& index);
 
 }  // namespace ad_utility::testing
+
+#endif  // QLEVER_TEST_UTIL_INDEXTESTHELPERS_H

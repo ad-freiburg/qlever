@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (September of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H
 
 #include <atomic>
 #include <concepts>
@@ -243,3 +244,5 @@ class ConfigOptionValidatorManager {
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_VALIDATOR_H

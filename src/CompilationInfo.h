@@ -5,7 +5,9 @@
 // Several constants. The values of these constants reside in the
 // File `CompilationInfo.cpp` which is created and linked by CMake.
 
-#pragma once
+#ifndef QLEVER_SRC_COMPILATIONINFO_H
+#define QLEVER_SRC_COMPILATIONINFO_H
+
 #include <atomic>
 #include <string_view>
 
@@ -35,3 +37,5 @@ inline ad_utility::Synchronized<std::string_view>
 // variables that don't require linking. For details see above.
 void copyVersionInfo();
 }  // namespace qlever::version
+
+#endif  // QLEVER_SRC_COMPILATIONINFO_H

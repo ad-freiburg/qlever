@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
+#define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
@@ -102,12 +103,13 @@ namespace textIndexReadWrite {
 
 // Compress src using zstd and write compressed bytes to file while advancing
 // currentOffset by the nofBytes written
-void zstdCompressAndWrite(const void* src, size_t numBytes,
-                          ad_utility::File& out, off_t& currentOffset);
+template <typename T>
+void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+                      off_t& currentOffset);
 
 /**
  * @brief Writes posting to given file. It splits the vector of postings into
- *        the lists for each respetive tuple element of postings.
+ *        the lists for each respective tuple element of postings.
  *        The TextRecordIndex list gets gap encoded and then simple8b encoded
  *        before being written to file. The WordIndex and Score lists get
  *        frequency encoded and then simple8b encoded before being written to
@@ -375,3 +377,5 @@ class GapEncode {
 template <typename View>
 GapEncode(View&& view)
     -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
+
+#endif  // QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H

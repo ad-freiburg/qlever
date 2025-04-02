@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H
+#define QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H
 
 #include "GroupKey.h"
 #include "LimitOffsetClause.h"
@@ -11,8 +12,10 @@
 #include "Variable.h"
 
 struct SolutionModifiers {
-  vector<GroupKey> groupByVariables_;
-  vector<SparqlFilter> havingClauses_;
+  std::vector<GroupKey> groupByVariables_;
+  std::vector<SparqlFilter> havingClauses_;
   OrderClause orderBy_;
   LimitOffsetClause limitOffset_{};
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_SOLUTIONMODIFIERS_H

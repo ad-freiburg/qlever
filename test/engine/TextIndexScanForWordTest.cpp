@@ -5,6 +5,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <boost/iostreams/filter/zlib.hpp>
+
 #include "../WordsAndDocsFileLineCreator.h"
 #include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"
@@ -84,6 +86,23 @@ std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
 
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};
+
+TEST(TextIndexScanForWord, TextScoringMetric) {
+  using enum TextScoringMetric;
+  ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
+  ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
+  ASSERT_EQ(getTextScoringMetricAsString(BM25), "bm25");
+  ASSERT_EQ(getTextScoringMetricAsString(static_cast<TextScoringMetric>(999)),
+            "explicit");
+
+  ASSERT_EQ(getTextScoringMetricFromString("explicit"), EXPLICIT);
+  ASSERT_EQ(getTextScoringMetricFromString("tf-idf"), TFIDF);
+  ASSERT_EQ(getTextScoringMetricFromString("bm25"), BM25);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      getTextScoringMetricFromString("fail"),
+      ::testing::StrEq(R"(Faulty text scoring metric given: "fail".)"),
+      std::runtime_error);
+}
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQec(kg, true, true, true, 16_B, true, true,

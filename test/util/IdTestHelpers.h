@@ -2,7 +2,8 @@
 //  //              Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_IDTESTHELPERS_H
+#define QLEVER_TEST_UTIL_IDTESTHELPERS_H
 
 #include "engine/LocalVocab.h"
 #include "global/Id.h"
@@ -45,3 +46,5 @@ inline auto WordVocabId = [](const auto& t) {
   return Id::makeFromWordVocabIndex(WordVocabIndex ::make(t));
 };
 }  // namespace ad_utility::testing
+
+#endif  // QLEVER_TEST_UTIL_IDTESTHELPERS_H
