@@ -1720,7 +1720,6 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
       "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> .";
-
   auto qec = ad_utility::testing::getQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   using enum Datatype;
