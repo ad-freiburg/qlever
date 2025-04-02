@@ -187,9 +187,12 @@ class Vocabulary {
 
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set,
-                     const std::string& filename);
+                     const std::string& filename,
+                     const std::optional<std::string>& geoFileName);
 
   static bool stringIsLiteral(std::string_view s);
+
+  static bool stringIsGeoLiteral(std::string_view s);
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {

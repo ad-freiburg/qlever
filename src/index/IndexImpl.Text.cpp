@@ -270,7 +270,8 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
       distinctWords.insert(line.word_);
     }
   }
-  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
+  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary",
+                           std::nullopt);
   return numLines;
 }
 

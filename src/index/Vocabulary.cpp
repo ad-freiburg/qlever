@@ -8,6 +8,7 @@
 
 #include <iostream>
 
+#include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
@@ -78,16 +79,39 @@ void Vocabulary<S, C, I>::readFromFile(
 // _____________________________________________________________________________
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
-    const ad_utility::HashSet<std::string>& set, const std::string& filename) {
+    const ad_utility::HashSet<std::string>& set, const std::string& fileName,
+    const std::optional<std::string>& geoFileName) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  // TODO<ullingerc>
   vocabulary_.close();
-  std::vector<std::string> words(set.begin(), set.end());
+  geoVocabulary_.close();
+
+  // Split words depending on whether they should be stored in the normal or
+  // geometry vocabulary
+  std::vector<std::string> words;
+  std::vector<std::string> geoWords;
+  for (const auto& word : set) {
+    if (stringIsGeoLiteral(word)) {
+      AD_CONTRACT_CHECK(geoFileName.has_value());
+      geoWords.push_back(word);
+    } else {
+      words.push_back(word);
+    }
+  }
+
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
-  std::sort(begin(words), end(words), totalComparison);
-  vocabulary_.build(words, filename);
+  auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
+                                       std::vector<std::string>& words,
+                                       const std::string& fileName) {
+    std::sort(begin(words), end(words), totalComparison);
+    vocab.build(words, fileName);
+  };
+  buildSingle(vocabulary_, words, fileName);
+  if (geoFileName.has_value()) {
+    buildSingle(geoVocabulary_, geoWords, geoFileName.value());
+  }
+
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
@@ -95,6 +119,13 @@ void Vocabulary<S, C, I>::createFromSet(
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
   return s.starts_with('"');
+}
+
+// _____________________________________________________________________________
+template <class S, class C, class I>
+bool Vocabulary<S, C, I>::stringIsGeoLiteral(std::string_view s) {
+  return stringIsLiteral(s) &&
+         s.ends_with("\"^^<" + std::string(GEO_WKT_LITERAL) + ">");
 }
 
 // _____________________________________________________________________________
@@ -259,7 +290,7 @@ template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   // need the TOTAL level because we want the unique word.
   auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
-  if (wordAndIndex.isEnd()) {
+  if (wordAndIndex.isEnd() || wordAndIndex.word() != word) {
     // Not found in regular vocabulary: test if it is in the geometry vocabulary
     wordAndIndex = geoVocabulary_.lower_bound(word, SortLevel::TOTAL);
     if (wordAndIndex.isEnd()) {
@@ -267,12 +298,14 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     } else {
       // Index with special marker bit for geometry word
       idx->get() = wordAndIndex.index() | geoVocabMarker;
+      return wordAndIndex.word() == word;
     }
   } else {
     // Normal index for normal word
     idx->get() = wordAndIndex.index();
+    return true;
   }
-  return wordAndIndex.word() == word;
+  return false;
 }
 
 // ___________________________________________________________________________
