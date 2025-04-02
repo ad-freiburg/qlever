@@ -373,7 +373,11 @@ using ContainsExpression =
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
     [](std::optional<ad_utility::triple_component::Literal> literal,
-       std::string_view pattern) -> IdOrLiteralOrIri {
+       std::optional<std::string> optPattern) -> IdOrLiteralOrIri {
+  if (!optPattern.has_value()) {
+    return Id::makeUndefined();
+  }
+  const auto& pattern = optPattern.value();
   // Required by the SPARQL standard.
   if (!literal.has_value()) {
     return Id::makeUndefined();
