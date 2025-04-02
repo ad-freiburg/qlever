@@ -26,7 +26,7 @@ using LocatedTriplesPerBlockAllPermutations =
 // that correctly respects these delta triples, hence the name.
 struct LocatedTriplesSnapshot {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
-  LocalVocab localVocab_;
+  LocalVocab::Holder localVocabHolder_;
   // A unique index for this snapshot that is used in the query cache.
   size_t index_;
   // Get `TripleWithPosition` objects for given permutation.

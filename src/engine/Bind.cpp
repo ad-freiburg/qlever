@@ -149,6 +149,8 @@ Result Bind::computeResult(bool requestLaziness) {
       [](auto applyBind,
          std::shared_ptr<const Result> result) -> Result::Generator {
     for (auto& [idTable, localVocab] : result->idTables()) {
+      // Introduce a fresh primary word set
+      localVocab = localVocab.clone();
       IdTable resultTable = applyBind(std::move(idTable), &localVocab);
       co_yield {std::move(resultTable), std::move(localVocab)};
     }
