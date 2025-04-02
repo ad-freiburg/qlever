@@ -103,7 +103,7 @@ void IndexImpl::processWordCaseDuringInvertedListProcessing(
 
 // _____________________________________________________________________________
 void IndexImpl::logEntityNotFound(const string& word,
-                                  size_t& entityNotFoundErrorMsgCount) const {
+                                  size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "Entity from text not in KB: " << word << '\n';
     if (++entityNotFoundErrorMsgCount == 20) {
