@@ -16,6 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "global/Constants.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -150,7 +151,7 @@ void IndexImpl::buildTextIndexFile(
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX, std::nullopt);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
                 bAndKParamForTextScoring_};
@@ -219,7 +220,7 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
-  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
+  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary", std::nullopt);
 
   // Initialize the text index.
   std::string textIndexFileName = onDiskBase_ + ".text.index";

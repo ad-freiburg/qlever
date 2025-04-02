@@ -69,8 +69,9 @@ class VocabularyInMemory
   struct WordWriter {
     typename Words::Writer writer_;
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
-    void operator()(std::string_view str) {
+    uint64_t operator()(std::string_view str) {
       writer_.push(str.data(), str.size());
+      return writer_._offsets.size() - 1;  // Is this the correct counter?
     }
 
     void finish() { writer_.finish(); }

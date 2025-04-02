@@ -11,6 +11,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/json.h"
 
@@ -37,21 +38,31 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 }
 
 // _____________________________________________________________________________
+
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
-  vocabulary_.close();
-  vocabulary_.open(fileName);
-  if constexpr (isCompressed_) {
-    const auto& internalExternalVocab =
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-    LOG(INFO) << "Done, number of words: "
-              << internalExternalVocab.internalVocab().size() << std::endl;
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << internalExternalVocab.externalVocab().size() << std::endl;
-  } else {
-    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
+void Vocabulary<S, C, I>::readFromFile(
+    const string& fileName, const std::optional<string>& geoFileName) {
+  auto readSingle = [](VocabularyWithUnicodeComparator& vocab,
+                       const string& fileName) {
+    LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
+              << std::endl;
+    vocab.close();
+    vocab.open(fileName);
+    if constexpr (isCompressed_) {
+      const auto& internalExternalVocab =
+          vocab.getUnderlyingVocabulary().getUnderlyingVocabulary();
+      LOG(INFO) << "Done, number of words: "
+                << internalExternalVocab.internalVocab().size() << std::endl;
+      LOG(INFO) << "Number of words in external vocabulary: "
+                << internalExternalVocab.externalVocab().size() << std::endl;
+    } else {
+      LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
+    }
+  };
+
+  readSingle(vocabulary_, fileName);
+  if (geoFileName.has_value()) {
+    readSingle(geoVocabulary_, geoFileName.value());
   }
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
@@ -69,6 +80,7 @@ template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
+  // TODO<ullingerc>
   vocabulary_.close();
   std::vector<std::string> words(set.begin(), set.end());
   auto totalComparison = [this](const auto& a, const auto& b) {
@@ -216,6 +228,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
+  // TODO geometry
   auto wordAndIndex = vocabulary_.upper_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -225,6 +238,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
+  // TODO geometry
   auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -246,9 +260,18 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   // need the TOTAL level because we want the unique word.
   auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
   if (wordAndIndex.isEnd()) {
-    return false;
+    // Not found in regular vocabulary: test if it is in the geometry vocabulary
+    wordAndIndex = geoVocabulary_.lower_bound(word, SortLevel::TOTAL);
+    if (wordAndIndex.isEnd()) {
+      return false;
+    } else {
+      // Index with special marker bit for geometry word
+      idx->get() = wordAndIndex.index() | geoVocabMarker;
+    }
+  } else {
+    // Normal index for normal word
+    idx->get() = wordAndIndex.index();
   }
-  idx->get() = wordAndIndex.index();
   return wordAndIndex.word() == word;
 }
 
@@ -256,6 +279,7 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
     -> Vocabulary<S, C, I>::PrefixRanges {
+  // TODO problem with geometry
   auto rangeInternal = vocabulary_.prefix_range(prefix);
   std::pair<I, I> indexRangeInternal{
       I::make(rangeInternal.first.value_or(size())),
@@ -267,8 +291,17 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::operator[](IndexType idx) const
     -> AccessReturnType_t<S> {
-  AD_CONTRACT_CHECK(idx.get() < size());
-  return vocabulary_[idx.get()];
+  // Check marker bit to determine which vocabulary to use
+  if (idx.get() & geoVocabMarker) {
+    // The requested word is stored in the geometry vocabulary
+    uint64_t unmarkedIdx = idx.get() & geoVocabMarkerInvert;
+    AD_CONTRACT_CHECK(unmarkedIdx < geoVocabulary_.size());
+    return geoVocabulary_[unmarkedIdx];
+  } else {
+    // The requested word is stored in the vocabulary for normal words
+    AD_CONTRACT_CHECK(idx.get() < vocabulary_.size());
+    return vocabulary_[idx.get()];
+  }
 }
 
 // Explicit template instantiations

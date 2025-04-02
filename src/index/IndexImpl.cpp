@@ -18,6 +18,7 @@
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
+#include "global/Constants.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
@@ -562,9 +563,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    auto geoWordCallback =
+        vocab_.makeGeoWordWriter(onDiskBase_ + GEO_VOCAB_SUFFIX);
     wordCallback.readableName() = "internal vocabulary";
+    geoWordCallback.readableName() = "internal geometry vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numFiles, sortPred, wordCallback,  // geoWordCallback,
         memoryLimitIndexBuilding());
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
@@ -870,7 +874,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
                                       bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX,
+                      onDiskBase_ + GEO_VOCAB_SUFFIX);
   globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "

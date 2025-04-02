@@ -115,6 +115,12 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
+  // The 5th highest bit of the vocabulary index is used as a marker to
+  // determine whether the word is stored in the normal vocabulary or the
+  // geometry vocabulary.
+  static constexpr uint64_t geoVocabMarker = static_cast<uint64_t>(1) << 59;
+  static constexpr uint64_t geoVocabMarkerInvert = ~geoVocabMarker;
+
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
                          CompressedVocabulary<VocabularyInternalExternal>,
@@ -122,7 +128,10 @@ class Vocabulary {
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
+  // The vocabulary is split into an underlying vocabulary for normal literals
+  // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
+  VocabularyWithUnicodeComparator geoVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -142,8 +151,10 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  //! Read the vocabulary from files containing words and geometries
+  //! respectively.
+  void readFromFile(const string& fileName,
+                    const std::optional<string>& geoFileName);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -153,7 +164,9 @@ class Vocabulary {
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const { return vocabulary_.size(); }
+  [[nodiscard]] size_t size() const {
+    return vocabulary_.size() + geoVocabulary_.size();
+  }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -180,6 +193,7 @@ class Vocabulary {
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
+    // TODO<ullingerc> Do we need geo stuff here?
     return prefixRangesLiterals_.contain(index);
   }
 
@@ -233,13 +247,16 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
-  // Get a writer for the vocab that has an `operator()` method to
+  // Get a writer for each underlying vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
-  UnderlyingVocabulary::WordWriter makeWordWriter(
-      const std::string& filename) const {
+  using WW = UnderlyingVocabulary::WordWriter;
+  WW makeWordWriter(const std::string& filename) const {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
+  }
+  WW makeGeoWordWriter(const std::string& filename) const {
+    return geoVocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
   }
 };
 
