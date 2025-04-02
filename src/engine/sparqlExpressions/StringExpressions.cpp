@@ -142,9 +142,9 @@ using StrlenExpression =
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto new_content =
+    auto newContent =
         ad_utility::utf8ToLower(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
+    input.value().replaceContentWithSameLength(newContent);
     return LiteralOrIri(std::move(input.value()));
   }
 };
@@ -377,7 +377,7 @@ using MergeRegexPatternAndFlagsExpression =
   if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  std::string in(asStringViewUnsafe((s.value().getContent())));
+  std::string in(asStringViewUnsafe(s.value().getContent()));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
