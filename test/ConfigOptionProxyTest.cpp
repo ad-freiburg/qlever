@@ -140,7 +140,8 @@ TEST(ConfigOptionProxy, ConversionToConfigOption) {
   // A function variant of `std::identity`, where you can give the type.
   auto identity = [](auto t) -> decltype(t) { return t; };
 
-  doForTypeInConfigOptionValueType(CheckConfigOptionConversion{identity});
+  doForTypeInConfigOptionValueType(
+      CheckConfigOptionConversion<decltype(identity)>{identity});
 }
 
 }  // namespace ad_utility

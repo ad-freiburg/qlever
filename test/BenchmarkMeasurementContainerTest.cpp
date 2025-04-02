@@ -127,8 +127,10 @@ static void checkResultTableRow(const ResultTable& table,
   auto check = [&table, &rowNumber, &column,
                 &assertEqual](const auto& wantedContent) mutable {
     // `getEntry` should ONLY work with `T`
-    doForTypeInResultTableEntryType(CheckTableEntryType{
-        table, rowNumber, column, wantedContent, assertEqual});
+    doForTypeInResultTableEntryType(
+        CheckTableEntryType<std::decay_t<decltype(wantedContent)>,
+                            std::decay_t<decltype(assertEqual)>>{
+            table, rowNumber, column, wantedContent, assertEqual});
     column++;
   };
   ((check(wantedContent)), ...);
@@ -267,13 +269,15 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.addMeasurement(0, 1, createWaitLambda(10ms));
 
   // Check, if it works with custom entries.
-  doForTypeInResultTableEntryType(CustomEntryChecker{table, checkNeverSet});
+  doForTypeInResultTableEntryType(
+      CustomEntryChecker<decltype(checkNeverSet)>{table, checkNeverSet});
 
   // For keeping track of the new row names.
   std::vector<std::string> addRowRowNames(rowNames);
   // Testing `addRow`.
-  doForTypeInResultTableEntryType(AddRowTester{table, checkNeverSet, checkForm,
-                                               columnNames, addRowRowNames});
+  doForTypeInResultTableEntryType(
+      AddRowTester<decltype(checkNeverSet), decltype(checkForm)>{
+          table, checkNeverSet, checkForm, columnNames, addRowRowNames});
 
   // Just a simple existence test for printing.
   const auto tableAsString = static_cast<std::string>(table);

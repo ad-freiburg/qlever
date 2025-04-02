@@ -57,7 +57,7 @@ struct IsValueTypeSubType {
       the type explicitly, because the bit type is not something, that this
       function allows.
       */
-      return j.is_array() && [&j, &isValueTypeSubType](const auto& v) {
+      return j.is_array() && [&j, &isValueTypeSubType](const auto&) {
         using InnerType = typename T::value_type;
         return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
           return isValueTypeSubType.template operator()<InnerType>(
