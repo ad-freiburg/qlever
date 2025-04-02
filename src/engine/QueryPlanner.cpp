@@ -311,21 +311,8 @@ vector<SubtreePlan> QueryPlanner::getDistinctRow(
         }
       }
     }
-    const std::vector<ColumnIndex>& resultSortedOn =
-        parent._qet->getRootOperation()->getResultSortedOn();
-    // check if the current result is sorted on all columns of the distinct
-    // with the order of the sorting
-    bool isSorted = resultSortedOn.size() >= keepIndices.size();
-    for (size_t i = 0; isSorted && i < keepIndices.size(); i++) {
-      isSorted = isSorted && resultSortedOn[i] == keepIndices[i];
-    }
-    if (isSorted) {
-      distinctPlan._qet =
-          makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
-    } else {
-      auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices);
-      distinctPlan._qet = makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-    }
+    distinctPlan._qet =
+        makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
     added.push_back(distinctPlan);
   }
   return added;

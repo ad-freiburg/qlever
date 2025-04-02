@@ -150,7 +150,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     }
 
     if (yieldOnce) {
-      mergedVocab.mergeWith(std::span{&localVocab, 1});
+      mergedVocab.mergeWith(localVocab);
     } else {
       timer.stop();
       runtimeInfo().addDetail("IdTable fill time", timer.msecs());

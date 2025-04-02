@@ -7,10 +7,19 @@
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
+template <typename T>
+void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+                      off_t& currentOffset) {
+  auto compressed = ZstdWrapper::compress(src.data(), src.size() * sizeof(T));
+  out.write(compressed.data(), compressed.size());
+  currentOffset += compressed.size();
+}
+
+// ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset) {
+                                  off_t& currentOffset, bool scoreIsInt) {
   ContextListMetaData meta;
   meta._nofElements = postings.size();
   if (meta._nofElements == 0) {
@@ -29,10 +38,6 @@ ContextListMetaData writePostings(ad_utility::File& out,
       postings | ql::views::transform([](const Posting& posting) {
         return std::get<1>(posting);
       }));
-  FrequencyEncode scoreEncoder(postings |
-                               ql::views::transform([](const Posting& posting) {
-                                 return std::get<2>(posting);
-                               }));
 
   meta._startContextlist = currentOffset;
   textRecordEncoder.writeToFile(out, currentOffset);
@@ -43,7 +48,20 @@ ContextListMetaData writePostings(ad_utility::File& out,
   }
 
   meta._startScorelist = currentOffset;
-  scoreEncoder.writeToFile(out, currentOffset);
+  if (scoreIsInt) {
+    FrequencyEncode scoreEncoder(
+        postings | ql::views::transform([](const Posting& posting) {
+          return static_cast<uint16_t>(std::get<2>(posting));
+        }));
+    scoreEncoder.writeToFile(out, currentOffset);
+  } else {
+    std::vector<float> scores;
+    scores.reserve(postings.size());
+    ql::ranges::transform(
+        postings, std::back_inserter(scores),
+        [](const auto& posting) { return std::get<2>(posting); });
+    compressAndWrite<float>(scores, out, currentOffset);
+  }
 
   meta._lastByte = currentOffset - 1;
 

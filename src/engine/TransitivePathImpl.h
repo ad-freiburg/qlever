@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
 #include <utility>
 
@@ -236,7 +237,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(std::span{&edgesVocab, 1});
+      mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
         Set connectedNodes = findConnectedNodes(edges, startNode, target);
@@ -323,3 +324,5 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H

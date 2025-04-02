@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_GEOPOINT_H
+#define QLEVER_SRC_PARSER_GEOPOINT_H
 
 #include <absl/strings/str_cat.h>
 
@@ -92,3 +93,5 @@ class GeoPoint {
 
   bool operator==(const GeoPoint& other) const = default;
 };
+
+#endif  // QLEVER_SRC_PARSER_GEOPOINT_H

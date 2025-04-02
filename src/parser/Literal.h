@@ -2,7 +2,8 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_LITERAL_H
+#define QLEVER_SRC_PARSER_LITERAL_H
 
 #include <optional>
 #include <variant>
@@ -92,5 +93,16 @@ class Literal {
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Erase everything but the substring in the range ['start', 'start'+'length')
+  // from the inner content. Note that the start position does not count the
+  // leading quotes, so the first character after the quote has index 0.
+  // Throws if either 'start' or 'start' + 'length' is out of bounds.
+  void setSubstr(std::size_t start, std::size_t length);
+
+  // Remove the datatype suffix from the Literal.
+  void removeDatatypeOrLanguageTag();
 };
 }  // namespace ad_utility::triple_component
+
+#endif  // QLEVER_SRC_PARSER_LITERAL_H
