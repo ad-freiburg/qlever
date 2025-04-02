@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
 
 #include <charconv>
 #include <cstdlib>
@@ -168,3 +169,5 @@ constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

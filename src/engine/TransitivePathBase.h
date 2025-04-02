@@ -3,7 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
 #include <functional>
 #include <memory>
@@ -313,3 +314,5 @@ class TransitivePathBase : public Operation {
     return {};
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H

@@ -4,7 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
+#define QLEVER_SRC_GLOBAL_CONSTANTS_H
 
 #include <chrono>
 #include <stdexcept>
@@ -72,6 +73,9 @@ constexpr inline std::string_view DEFAULT_GRAPH_IRI =
     makeQleverInternalIriConst<"default-graph">();
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
     makeQleverInternalIriConst<"internal-graph">();
+constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
+    ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
+                                "blank-node/">();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
@@ -260,3 +264,5 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // Operation string is echoed. This operation string is truncated to ensure
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+#endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

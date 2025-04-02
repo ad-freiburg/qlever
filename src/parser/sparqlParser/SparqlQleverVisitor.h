@@ -4,7 +4,8 @@
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
+#define QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
 
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
@@ -15,6 +16,7 @@
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
+#include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
 
@@ -27,6 +29,7 @@ class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using VarOrIri = ad_utility::sparql_types::VarOrIri;
   using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
       ad_utility::sparql_types::PathObjectPairsAndTriples;
@@ -72,8 +75,12 @@ class SparqlQleverVisitor {
 
   // The `FROM` and `FROM NAMED` clauses of the query that is currently
   // being parsed. Those are inherited by certain constructs, which are
-  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`).
+  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`). If
+  // `datasetsAreFixed_` is set then datasets are set outside the operation
+  // itself and cannot be overwritten in the operation through `FROM` and `FROM
+  // NAMED`.
   ParsedQuery::DatasetClauses activeDatasetClauses_;
+  bool datasetsAreFixed_ = false;
 
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
@@ -112,23 +119,27 @@ class SparqlQleverVisitor {
 
  public:
   SparqlQleverVisitor() = default;
+  // If `datasetOverride` contains datasets, then the datasets in
+  // the operation itself are ignored. This is used for the datasets from the
+  // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
       PrefixMap prefixMap,
+      std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : prefixMap_{std::move(prefixMap)},
-        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
+    if (datasetOverride.has_value()) {
+      activeDatasetClauses_ = std::move(*datasetOverride);
+      datasetsAreFixed_ = true;
+    }
+  }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
     isInsideConstructTriples_ = true;
-  }
-
-  void setActiveDatasetClausesForTesting(
-      ParsedQuery::DatasetClauses datasetClauses) {
-    activeDatasetClauses_ = std::move(datasetClauses);
   }
 
   // ___________________________________________________________________________
@@ -230,9 +241,9 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
+  Quads visit(Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::InsertClauseContext* ctx);
+  Quads visit(Parser::InsertClauseContext* ctx);
 
   GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
@@ -240,19 +251,13 @@ class SparqlQleverVisitor {
 
   GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadPatternContext* ctx);
+  Quads visit(Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
+  Quads visit(Parser::QuadDataContext* ctx);
 
-  // Parse the triples and set the graph for all of them.
-  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx,
-      const SparqlTripleSimpleWithGraph::Graph& graph);
+  Quads visit(Parser::QuadsContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
-
-  vector<SparqlTripleSimpleWithGraph> visit(
-      Parser::QuadsNotTriplesContext* ctx);
+  Quads::GraphBlock visit(Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
 
@@ -407,7 +412,7 @@ class SparqlQleverVisitor {
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  GraphTerm visit(Parser::VarOrIriContext* ctx);
+  VarOrIri visit(Parser::VarOrIriContext* ctx);
 
   static Variable visit(Parser::VarContext* ctx);
 
@@ -616,9 +621,6 @@ class SparqlQleverVisitor {
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
 
-  // Constructs a TripleComponent from a GraphTerm.
-  static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
-
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of
   // the corresponding `RuntimeParameter`).
@@ -634,5 +636,13 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
+  // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
+  // `datasetsAreFixed_` controls whether the datasets can be modified from
+  // inside the query or update. Then returns the currently active datasets.
+  const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
+      const std::vector<DatasetClause>& clauses);
+
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

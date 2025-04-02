@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_BACKPORTS_ALGORITHM_H
+#define QLEVER_SRC_BACKPORTS_ALGORITHM_H
 
 #include <algorithm>
 #include <functional>
@@ -48,3 +49,5 @@ using namespace std::views;
 }  // namespace views
 
 }  // namespace ql
+
+#endif  // QLEVER_SRC_BACKPORTS_ALGORITHM_H

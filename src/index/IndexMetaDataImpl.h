@@ -3,7 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
+#define QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
 
 #include "index/IndexMetaData.h"
 #include "index/MetaDataHandler.h"
@@ -110,3 +111,5 @@ void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
     totalElements_ += block.numRows_;
   }
 }
+
+#endif  // QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H

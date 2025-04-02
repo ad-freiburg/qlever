@@ -24,8 +24,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
-    const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const LocalVocab& localVocab,
+    const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
 #include <iterator>
 #include <memory>
@@ -87,3 +88,5 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
     return {&alternativelySortedSubtree_, 1};
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H

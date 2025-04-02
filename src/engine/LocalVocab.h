@@ -3,7 +3,8 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_LOCALVOCAB_H
+#define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
@@ -164,6 +165,8 @@ class LocalVocab {
   // for testing.
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
+  const Set& primaryWordSet() const { return *primaryWordSet_; }
+
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
       ad_utility::BlankNodeManager* blankNodeManager);
@@ -175,10 +178,11 @@ class LocalVocab {
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
-  const Set& primaryWordSet() const { return *primaryWordSet_; }
 
   // Common implementation for the two methods `getIndexAndAddIfNotContained`
   // and `getIndexOrNullopt` above.
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
+
+#endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

@@ -1099,6 +1099,51 @@ TEST(ExportQueryExecutionTrees, BlankNode) {
   // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
   // never be part of the local vocabulary. For this reason we don't need a
   // `VALUES` clause in the test query like in the test cases above.
+  kg = "<s> <p> <o>";
+  objectQuery =
+      "SELECT (BNODE(\"1\") AS ?a) (BNODE(?x) AS ?b) WHERE { VALUES (?x) { (1) "
+      "(2) } }";
+  expectedXml = makeXMLHeader({"a", "b"}) +
+                R"(
+  <result>
+    <binding name="a"><bnode>un1_0</bnode></binding>
+    <binding name="b"><bnode>un1_0</bnode></binding>
+  </result>
+  <result>
+    <binding name="a"><bnode>un1_1</bnode></binding>
+    <binding name="b"><bnode>un2_1</bnode></binding>
+  </result>)" + xmlTrailer;
+  testCaseBlankNode = TestCaseSelectQuery{
+      kg, objectQuery, 2,
+      // TSV
+      "?a\t?b\n"
+      "_:un1_0\t_:un1_0\n"
+      "_:un1_1\t_:un2_1\n",
+      // CSV
+      "a,b\n"
+      "_:un1_0,_:un1_0\n"
+      "_:un1_1,_:un2_1\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"_:un1_0"s, "_:un1_0"s});
+        j.push_back(std::vector{"_:un1_1"s, "_:un2_1"s});
+        return j;
+      }(),
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("a");
+        j["head"]["vars"].push_back("b");
+        auto& bindings = j["results"]["bindings"];
+        bindings.emplace_back();
+        bindings.back()["a"] = makeJSONBinding(std::nullopt, "bnode", "un1_0");
+        bindings.back()["b"] = makeJSONBinding(std::nullopt, "bnode", "un1_0");
+        bindings.emplace_back();
+        bindings.back()["a"] = makeJSONBinding(std::nullopt, "bnode", "un1_1");
+        bindings.back()["b"] = makeJSONBinding(std::nullopt, "bnode", "un2_1");
+        return j;
+      }(),
+      expectedXml};
+  runSelectQueryTestCase(testCaseBlankNode);
 }
 
 // ____________________________________________________________________________
@@ -1784,4 +1829,17 @@ TEST(ExportQueryExecutionTrees, ReplaceAnglesByQuotes) {
   input = "<s";
   EXPECT_THROW(ExportQueryExecutionTrees::replaceAnglesByQuotes(input),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
+  using ad_utility::triple_component::Iri;
+  std::string_view input = "_:test";
+  EXPECT_THAT(ExportQueryExecutionTrees::blankNodeIriToString(
+                  Iri::fromStringRepresentation(absl::StrCat(
+                      QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, input, ">"))),
+              ::testing::Optional(::testing::Eq(input)));
+  EXPECT_EQ(ExportQueryExecutionTrees::blankNodeIriToString(
+                Iri::fromStringRepresentation("<some_iri>")),
+            std::nullopt);
 }
