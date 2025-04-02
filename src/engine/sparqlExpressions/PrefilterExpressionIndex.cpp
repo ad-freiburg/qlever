@@ -4,6 +4,8 @@
 
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
+#include <absl/functional/bind_front.h>
+
 #include "global/ValueIdComparators.h"
 #include "util/ConstexprMap.h"
 #include "util/OverloadCallOperator.h"
@@ -126,7 +128,7 @@ static std::vector<BlockMetadata> getRelevantBlocks(
   std::vector<BlockMetadata> relevantBlocks;
   relevantBlocks.reserve(std::transform_reduce(
       relevantBlockRanges.begin(), relevantBlockRanges.end(), 0ULL, std::plus{},
-      [](const BlockSubrange& range) { return range.size(); }));
+      std::mem_fn(&BlockSubrange::size)));
   ql::ranges::copy(relevantBlockRanges | ql::views::join,
                    std::back_inserter(relevantBlocks));
   return relevantBlocks;
@@ -139,7 +141,9 @@ namespace detail {
 // `BlockSubrange`s.
 static void mergeBlockRangeWithRanges(BlockSubranges& blockRanges,
                                       const BlockSubrange& blockRange) {
-  if (blockRange.empty()) return;
+  if (blockRange.empty()) {
+    return;
+  }
   if (blockRanges.empty()) {
     blockRanges.push_back(blockRange);
     return;
@@ -191,8 +195,9 @@ static BlockSubrange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
   // std::distance(idRangeBegin, idIt).
   auto blockOffsetBegin = std::distance(idRangeBegin, beginIdIt) / 2;
   auto blockOffsetEnd = (std::distance(idRangeBegin, endIdIt) + 1) / 2;
-  return {blockRangeBegin + blockOffsetBegin,
-          std::min(blockRange.end(), blockRangeBegin + blockOffsetEnd)};
+  AD_CORRECTNESS_CHECK(static_cast<size_t>(blockOffsetEnd) <=
+                       blockRange.size());
+  return {blockRangeBegin + blockOffsetBegin, blockRangeBegin + blockOffsetEnd};
 }
 
 //______________________________________________________________________________
@@ -207,14 +212,16 @@ BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
   BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   auto addRange =
-      std::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
+      absl::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
   auto previousEndIt = idRange.begin();
-  ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
-    const auto& [beginIdIt, endIdIt] = idItPair;
-    addRange(mapValueIdItPairToBlockRange(idRangeBegin, previousEndIt,
-                                          beginIdIt, blockRange));
-    previousEndIt = endIdIt;
-  });
+  ql::ranges::for_each(
+      relevantIdRanges, [&addRange, &idRangeBegin, &blockRange,
+                         &previousEndIt](const ValueIdItPair& idItPair) {
+        const auto& [beginIdIt, endIdIt] = idItPair;
+        addRange(mapValueIdItPairToBlockRange(idRangeBegin, previousEndIt,
+                                              beginIdIt, blockRange));
+        previousEndIt = endIdIt;
+      });
   addRange(mapValueIdItPairToBlockRange(idRangeBegin, previousEndIt,
                                         idRange.end(), blockRange));
   return blockRanges;
@@ -226,18 +233,22 @@ BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
 BlockSubranges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
     const ValueIdSubrange& idRange, BlockSpan blockRange) {
-  if (relevantIdRanges.empty()) return {};
+  if (relevantIdRanges.empty()) {
+    return {};
+  }
   auto idRangeBegin = idRange.begin();
   // Vector containing the `BlockRange` mapped iterators.
   BlockSubranges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   auto addRange =
-      std::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
-  ql::ranges::for_each(relevantIdRanges, [&](const ValueIdItPair& idItPair) {
-    const auto& [beginIdIt, endIdIt] = idItPair;
-    addRange(mapValueIdItPairToBlockRange(idRangeBegin, beginIdIt, endIdIt,
-                                          blockRange));
-  });
+      absl::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
+  ql::ranges::for_each(
+      relevantIdRanges,
+      [&addRange, &idRangeBegin, &blockRange](const ValueIdItPair& idItPair) {
+        const auto& [beginIdIt, endIdIt] = idItPair;
+        addRange(mapValueIdItPairToBlockRange(idRangeBegin, beginIdIt, endIdIt,
+                                              blockRange));
+      });
   return blockRanges;
 }
 
@@ -276,17 +287,21 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
   BlockSubranges mergedRanges;
   mergedRanges.reserve(r1.size() + r2.size());
   auto addRange =
-      std::bind_front(mergeBlockRangeWithRanges, std::ref(mergedRanges));
+      absl::bind_front(mergeBlockRangeWithRanges, std::ref(mergedRanges));
   auto idx1 = r1.begin();
   auto idx2 = r2.begin();
   while (idx1 != r1.end() && idx2 != r2.end()) {
     auto& [idx1Begin, idx1End] = *idx1;
     auto& [idx2Begin, idx2End] = *idx2;
     if (idx1End < idx2Begin) {
-      if constexpr (GetUnion) addRange(*idx1);
+      if constexpr (GetUnion) {
+        addRange(*idx1);
+      }
       idx1++;
     } else if (idx2End < idx1Begin) {
-      if constexpr (GetUnion) addRange(*idx2);
+      if constexpr (GetUnion) {
+        addRange(*idx2);
+      }
       idx2++;
     } else {
       // Handle overlapping ranges.
@@ -304,7 +319,9 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
       }
     }
   }
-  if constexpr (!GetUnion) return mergedRanges;
+  if constexpr (!GetUnion) {
+    return mergedRanges;
+  }
   ql::ranges::for_each(idx1, r1.end(), addRange);
   ql::ranges::for_each(idx2, r2.end(), addRange);
   return mergedRanges;
@@ -318,7 +335,9 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
 // contain bounding `ValueId`s with different underlying datatypes.
 static BlockSubranges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockSpan blockRange) {
-  if (idRange.empty()) return {};
+  if (idRange.empty()) {
+    return {};
+  }
   std::vector<ValueIdItPair> mixedDatatypeRanges;
   // Ensure that `idRange` holds access to even number of ValueIds.
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
@@ -328,7 +347,7 @@ static BlockSubranges getRangesMixedDatatypeBlocks(
   };
   ql::ranges::for_each(idRange | ranges::views::chunk(2) |
                            ranges::views::filter(checkDifferentDtype),
-                       [&](const auto& idPair) {
+                       [&mixedDatatypeRanges](const auto& idPair) {
                          auto firstId = idPair.begin();
                          mixedDatatypeRanges.emplace_back(firstId,
                                                           std::next(firstId));
@@ -905,8 +924,6 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
                     "values over expression YEAR. Please provide an integer "
                     "value as reference year."));
               }
-              throw std::runtime_error(
-                  "Reference value IdOrLocalVocabEntry contains unknown type.");
             },
             referenceValue);
       };
