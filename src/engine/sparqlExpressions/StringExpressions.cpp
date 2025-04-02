@@ -310,33 +310,37 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string_view text, std::string_view pattern) {
-      // Required by the SPARQL standard.
-      if (pattern.empty()) {
-        return toLiteral(text);
-      }
-      auto pos = text.find(pattern);
-      if (pos >= text.size()) {
-        return toLiteral("");
-      }
-      if constexpr (isStrAfter) {
-        return toLiteral(text.substr(pos + pattern.size()));
-      } else {
-        // STRBEFORE
-        return toLiteral(text.substr(0, pos));
-      }
-    };
+    [](std::optional<ad_utility::triple_component::Literal> literal,
+       std::string_view pattern) -> IdOrLiteralOrIri {
+  // Required by the SPARQL standard.
+  if (!literal.has_value()) {
+    return Id::makeUndefined();
+  }
+  if (pattern.empty()) {
+    return LiteralOrIri(std::move(literal.value()));
+  }
+  auto literalContent = literal.value().getContent();
+  auto pos = asStringViewUnsafe(literalContent).find(pattern);
+  if (pos >= literalContent.size()) {
+    return toLiteral("");
+  }
+  if constexpr (isStrAfter) {
+    literal.value().setSubstr(pos + pattern.size(),
+                              literalContent.size() - pos - pattern.size());
+  } else {
+    // STRBEFORE
+    literal.value().setSubstr(0, pos);
+  }
+  return LiteralOrIri(std::move(literal.value()));
+};
 
 auto strAfter = strAfterOrBeforeImpl<true>;
-
 using StrAfterExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strAfter), StringValueGetter>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strBefore), StringValueGetter>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
