@@ -711,7 +711,7 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
           lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
-  checkLcase(
+  checkUcase(
       IdOrLiteralOrIriVec{
           lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("One", "@en"), U, I(12)},
