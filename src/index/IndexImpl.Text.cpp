@@ -176,7 +176,7 @@ void IndexImpl::buildTextIndexFile(
 void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);
+  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
   // we write the offsets to and stxxl:vector first;
   stxxl::vector<off_t> offsets;
@@ -203,14 +203,10 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
   }
   offsets.push_back(currentOffset);
 
-  ofs.close();
-  // Now append the tmp file to the docsDB file.
-  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
   for (size_t i = 0; i < offsets.size(); ++i) {
     off_t cur = offsets[i];
-    out.write(&cur, sizeof(cur));
+    ofs.write(reinterpret_cast<const char*>(&cur), sizeof(cur));
   }
-  out.close();
   LOG(INFO) << "DocsDB done.\n";
 }
 
