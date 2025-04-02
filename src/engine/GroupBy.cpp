@@ -283,7 +283,7 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
 
 // _____________________________________________________________________________
 sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
-    const LocalVocab& localVocab, const IdTable& idTable) const {
+    LocalVocab& localVocab, const IdTable& idTable) const {
   sparqlExpression::EvaluationContext evaluationContext{
       *getExecutionContext(),
       _subtree->getVariableColumns(),

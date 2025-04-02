@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_VIEWS_H
+#define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
 #include <span>
@@ -102,7 +103,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
  public:
   OwningView() = default;
 
-  constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
+  constexpr OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
       : underlyingRange_(std::move(underlyingRange)) {}
 
@@ -199,9 +200,13 @@ constexpr auto allView(Range&& range) {
   } else if constexpr (detail::can_ref_view<Range>) {
     return ql::ranges::ref_view{AD_FWD(range)};
   } else {
-    return ad_utility::OwningView{AD_FWD(range)};
+    // return std::ranges::owning_view{AD_FWD(range)};
+    return ad_utility::OwningView<std::remove_reference_t<Range>>{
+        AD_FWD(range)};
   }
 }
+template <typename Range>
+using all_t = decltype(allView(std::declval<Range>()));
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -366,6 +371,22 @@ CPP_template(typename Range, typename ElementType)(
   }
 }
 
+// Helper struct to keep size information while joining a range.
+template <typename Range>
+requires requires { std::tuple_size_v<ql::ranges::range_value_t<Range>>; }
+class SizedJoinView : public ql::ranges::join_view<Range> {
+  using Base = ql::ranges::join_view<Range>;
+
+ public:
+  using Base::Base;
+  constexpr std::size_t size() const {
+    return ql::ranges::size(this->base()) *
+           std::tuple_size_v<ql::ranges::range_value_t<Range>>;
+  }
+};
+
+CPP_template(typename R)(requires ql::ranges::viewable_range<R>)
+    SizedJoinView(R&&) -> SizedJoinView<R>;
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.
@@ -380,3 +401,5 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
 #endif
+
+#endif  // QLEVER_SRC_UTIL_VIEWS_H

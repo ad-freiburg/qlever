@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_INDEXMETADATA_H
+#define QLEVER_SRC_INDEX_INDEXMETADATA_H
 
 #include <stdio.h>
 
@@ -232,3 +233,5 @@ using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
 using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
 #include "./IndexMetaDataImpl.h"
+
+#endif  // QLEVER_SRC_INDEX_INDEXMETADATA_H

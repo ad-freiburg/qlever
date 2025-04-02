@@ -3,7 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_OPERATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_H
 
 #include <gtest/gtest_prod.h>
 
@@ -464,3 +465,5 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };
+
+#endif  // QLEVER_SRC_ENGINE_OPERATION_H

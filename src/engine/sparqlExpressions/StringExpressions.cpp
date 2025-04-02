@@ -6,6 +6,7 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 
 namespace sparqlExpression {
@@ -65,70 +66,6 @@ class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
   bool isStrExpression() const override { return true; }
 };
-
-// Template for an expression that works on string literals. The arguments are
-// the same as those to `NaryExpression` with the difference that the value
-// getter is deduced automatically. If the child of the expression is the
-// `STR()` expression, then the `StringValueGetter` will be used (which also
-// returns string values for IRIs, numeric literals, etc.), otherwise the
-// `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
-template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
-          typename Function, typename... AdditionalNonStringValueGetters>
-class StringExpressionImplImpl : public SparqlExpression {
- private:
-  using ExpressionWithStr = NARY<
-      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
-                                          AdditionalNonStringValueGetters...>>;
-
-  SparqlExpression::Ptr impl_;
-
- public:
-  CPP_template(typename... C)(
-      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...) CPP_and(
-          sizeof...(C) + 1 ==
-          N)) explicit StringExpressionImplImpl(SparqlExpression::Ptr child,
-                                                C... children) {
-    AD_CORRECTNESS_CHECK(child != nullptr);
-    if (child->isStrExpression()) {
-      auto childrenOfStr = std::move(*child).moveChildrenOut();
-      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
-      impl_ = std::make_unique<ExpressionWithStr>(
-          std::move(childrenOfStr.at(0)), std::move(children)...);
-    } else {
-      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
-                                                     std::move(children)...);
-    }
-  }
-
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    return impl_->evaluate(context);
-  }
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return impl_->getCacheKey(varColMap);
-  }
-
- private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return impl_->children();
-  }
-};
-
-// Impl class for expressions that work on plain strings.
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-using StringExpressionImpl =
-    StringExpressionImplImpl<StringValueGetter, LiteralFromIdGetter, N,
-                             Function, AdditionalNonStringValueGetters...>;
-
-// Impl class for expressions that work on literals with datatypes and language
-// tags.
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-using LiteralExpressionImpl =
-    StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
-                             LiteralValueGetterWithoutStrFunction, N, Function,
-                             AdditionalNonStringValueGetters...>;
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
@@ -409,7 +346,7 @@ using StrBeforeExpression =
   if (!flags.has_value() || !regex.has_value()) {
     return Id::makeUndefined();
   }
-  auto firstInvalidFlag = flags.value().find_first_not_of("imsu");
+  auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
   if (firstInvalidFlag != std::string::npos) {
     return Id::makeUndefined();
   }
@@ -423,11 +360,10 @@ using StrBeforeExpression =
 };
 
 using MergeRegexPatternAndFlagsExpression =
-    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), StringValueGetter>;
+    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input,
-       const std::unique_ptr<re2::RE2>& pattern,
+    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!input.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
@@ -439,7 +375,7 @@ using MergeRegexPatternAndFlagsExpression =
     return Id::makeUndefined();
   }
   const auto& repl = replacement.value();
-  re2::RE2::GlobalReplace(&in, pat, repl);
+  RE2::GlobalReplace(&in, pat, repl);
   return toLiteral(in);
 };
 

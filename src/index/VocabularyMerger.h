@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
+#define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
 #include <string>
 #include <utility>
@@ -293,3 +295,5 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }  // namespace ad_utility::vocabulary_merger
 
 #include "VocabularyMergerImpl.h"
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYMERGER_H
