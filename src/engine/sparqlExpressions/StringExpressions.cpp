@@ -389,7 +389,9 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using StringVec = VectorWithMemoryLimit<std::string>;
+    using LiteralVec =
+        VectorWithMemoryLimit<ad_utility::triple_component::Literal>;
+    using Literal = ad_utility::triple_component::Literal;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -402,36 +404,41 @@ class ConcatExpression : public detail::VariadicExpression {
     // We store the (intermediate) result either as single string or a vector.
     // If the result is a string, then all the previously evaluated children
     // were constants (see above).
-    std::variant<std::string, StringVec> result{std::string{""}};
+    std::variant<Literal, LiteralVec> result =
+        Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
     auto visitSingleExpressionResult = CPP_template_lambda(
         &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
                                            std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
-        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
-        if (std::holds_alternative<std::string>(result)) {
+        auto literalFromConstant =
+            sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(s,
+                                                                          ctx)
+                .value_or(ad_utility::triple_component::Literal::
+                              literalWithNormalizedContent(
+                                  asNormalizedStringViewUnsafe("")));
+        if (std::holds_alternative<Literal>(result)) {
           // All previous children were constants, and the current child also is
           // a constant.
-          std::get<std::string>(result).append(strFromConstant);
+          std::get<Literal>(result).append(literalFromConstant);
         } else {
           // One of the previous children was not a constant, so we already
           // store a vector.
-          auto& resultAsVector = std::get<StringVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
-            target.append(strFromConstant);
+          auto& resultAsVector = std::get<LiteralVec>(result);
+          ql::ranges::for_each(resultAsVector, [&](auto& target) {
+            target.append(literalFromConstant);
           });
         }
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
 
-        if (std::holds_alternative<std::string>(result)) {
+        if (std::holds_alternative<Literal>(result)) {
           // All previous children were constants, but now we have a
           // non-constant child, so we have to expand the `result` from a single
           // string to a vector.
-          std::string constantResultSoFar =
-              std::move(std::get<std::string>(result));
-          result.emplace<StringVec>(ctx->_allocator);
-          auto& resultAsVec = std::get<StringVec>(result);
+          auto constantResultSoFar = std::move(std::get<Literal>(result));
+          result.emplace<LiteralVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<LiteralVec>(result);
           resultAsVec.reserve(ctx->size());
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
                       constantResultSoFar);
@@ -439,13 +446,15 @@ class ConcatExpression : public detail::VariadicExpression {
 
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
-        auto& resultAsVec = std::get<StringVec>(result);
+        auto& resultAsVec = std::get<LiteralVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
-          if (auto str = StringValueGetter{}(std::move(el), ctx);
-              str.has_value()) {
-            resultAsVec[i].append(str.value());
+          if (auto literal =
+                  sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(
+                      std::move(el), ctx);
+              literal.has_value()) {
+            resultAsVec[i].append(literal.value());
           }
           ctx->cancellationHandle_->throwIfCancelled();
           ++i;
@@ -460,14 +469,17 @@ class ConcatExpression : public detail::VariadicExpression {
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    if (std::holds_alternative<std::string>(result)) {
-      return IdOrLiteralOrIri{toLiteral(std::get<std::string>(result))};
+    if (std::holds_alternative<Literal>(result)) {
+      return IdOrLiteralOrIri(LiteralOrIri{std::get<Literal>(result)});
     } else {
-      auto& stringVec = std::get<StringVec>(result);
+      auto& literalVec = std::get<LiteralVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
-      resultAsVec.reserve(stringVec.size());
-      ql::ranges::copy(stringVec | ql::views::transform(toLiteral),
-                       std::back_inserter(resultAsVec));
+      resultAsVec.reserve(literalVec.size());
+      ql::ranges::copy(
+          literalVec | ql::views::transform([](const Literal& literal) {
+            return IdOrLiteralOrIri(LiteralOrIri(literal));
+          }),
+          std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }

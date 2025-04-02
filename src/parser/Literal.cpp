@@ -163,4 +163,18 @@ void Literal::replaceContent(std::string_view newContent) {
   }
   beginOfSuffix_ = newContent.size() + 2;
 }
+
+// __________________________________________
+void Literal::append(const Literal& other) {
+  const auto& otherContent = asStringViewUnsafe(other.getContent());
+  content_.insert(beginOfSuffix_ - 1, otherContent);
+  beginOfSuffix_ += other.getContent().size();
+  if (!((other.hasLanguageTag() && hasLanguageTag() &&
+         getLanguageTag() == other.getLanguageTag()) ||
+        (other.hasDatatype() && hasDatatype() &&
+         getDatatype() == other.getDatatype()))) {
+    removeDatatypeOrLanguageTag();
+  }
+}
+
 }  // namespace ad_utility::triple_component
