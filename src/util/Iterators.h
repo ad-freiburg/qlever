@@ -335,6 +335,27 @@ class InputRangeFromGet {
   Sentinel end() const { return {}; };
 };
 
+// A simple helper to define an `InputRangeFromGet` where the `get()` function
+// is a simple callable.
+CPP_template(typename T, typename F)(
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        F, std::optional<T>>) struct InputRangeFromGetCallable
+    : public InputRangeFromGet<T> {
+ private:
+  F function_;
+
+ public:
+  std::optional<T> get() override { return function_(); }
+  explicit InputRangeFromGetCallable(F f) : function_{std::move(f)} {}
+};
+
+// Deduction guide to be able to simply call the constructor with any callable
+// `f` that returns `optional<Something>`.
+template <typename F>
+InputRangeFromGetCallable(F f)
+    -> InputRangeFromGetCallable<typename std::invoke_result_t<F>::value_type,
+                                 F>;
+
 // This class takes an arbitrary input range, and turns it into a class that
 // inherits from `InputRangeFromGet` (see above). While this adds a layer of
 // indirection, it makes type erasure between input ranges with the same value

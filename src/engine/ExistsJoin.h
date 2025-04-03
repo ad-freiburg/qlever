@@ -79,7 +79,7 @@ class ExistsJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
