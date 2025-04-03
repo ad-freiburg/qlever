@@ -194,6 +194,8 @@ class Vocabulary {
 
   static bool stringIsGeoLiteral(std::string_view s);
 
+  static uint64_t makeGeoVocabIndex(uint64_t vocabIndex);
+
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
     // TODO<ullingerc> Do we need geo stuff here?

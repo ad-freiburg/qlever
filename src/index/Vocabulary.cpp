@@ -130,6 +130,12 @@ bool Vocabulary<S, C, I>::stringIsGeoLiteral(std::string_view s) {
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
+uint64_t Vocabulary<S, C, I>::makeGeoVocabIndex(uint64_t vocabIndex) {
+  return vocabIndex | geoVocabMarker;
+}
+
+// _____________________________________________________________________________
+template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.

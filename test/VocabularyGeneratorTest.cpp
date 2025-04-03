@@ -155,13 +155,22 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
   std::vector<std::pair<std::string, bool>> mergeResult;
+  std::vector<std::pair<std::string, bool>> geoMergeResult;
   {
     auto internalVocabularyAction =
         [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
           mergeResult.emplace_back(word, isExternal);
+          return mergeResult.size() - 1;
+        };
+    auto internalgeoVocabularyAction =
+        [&geoMergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
+          geoMergeResult.emplace_back(word, isExternal);
+          return geoMergeResult.size() - 1;
         };
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, 1_GB);
+                          internalVocabularyAction, internalgeoVocabularyAction,
+                          1_GB);
+    // TODO<ullingerc> acutally test geoMergeResult...
   }
 
   EXPECT_THAT(mergeResult,
