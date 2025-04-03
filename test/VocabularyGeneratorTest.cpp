@@ -10,6 +10,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "util/Algorithm.h"
 
@@ -48,6 +49,7 @@ class MergeVocabularyTest : public ::testing::Test {
   // vocabulary".
   using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
   ExpectedVocabulary expectedMergedVocabulary_;
+  ExpectedVocabulary expectedMergedGeoVocabulary_;
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
@@ -79,12 +81,21 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},     {"\"bla\"", true, 2},
-        {"\"gorilla\"", false, 3}, {"\"monkey\"", false, 4},
-        {"_:blank", false, 0},     {"_:blunk", false, 1}};
+        {"\"ape\"", false, 0},
+        {"\"bla\"", true, 2},
+        {"\"gorilla\"", false, 3},
+        {"\"LINESTRING(1 2, 3 "
+         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+         true, 0},
+        {"\"monkey\"", false, 4},
+        {"_:blank", false, 0},
+        {"_:blunk", false, 1}};
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
         {"\"monkey\"", true, 4},
+        {"\"POLYGON((1 2, 3 "
+         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+         true, 1},
         {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
     };
@@ -94,6 +105,13 @@ class MergeVocabularyTest : public ::testing::Test {
     expectedMergedVocabulary_ = ExpectedVocabulary{
         {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
         {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
+    expectedMergedGeoVocabulary_ = ExpectedVocabulary{
+        {"\"LINESTRING(1 2, 3 "
+         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+         true},
+        {"\"POLYGON((1 2, 3 "
+         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+         true}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
@@ -114,6 +132,9 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
+                if (RdfsVocabulary::stringIsGeoLiteral(w.iriOrLiteral())) {
+                  globalId = RdfsVocabulary::makeGeoVocabIndex(globalId);
+                }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }
             }
@@ -170,11 +191,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, internalgeoVocabularyAction,
                           1_GB);
-    // TODO<ullingerc> actually test geoMergeResult...
   }
 
   EXPECT_THAT(mergeResult,
               ::testing::ElementsAreArray(expectedMergedVocabulary_));
+  EXPECT_THAT(geoMergeResult,
+              ::testing::ElementsAreArray(expectedMergedGeoVocabulary_));
 
   // No language tags in text file
   ASSERT_EQ(res.langTaggedPredicates().begin(), Id::makeUndefined());
