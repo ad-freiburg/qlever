@@ -77,10 +77,15 @@ Union::Union(QueryExecutionContext* qec,
 
 string Union::getCacheKeyImpl() const {
   std::ostringstream os;
+  os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
-  os << "UNION\n";
+  os << "} UNION {\n";
   os << _subtrees[1]->getCacheKey() << "\n";
-  os << "sort order: ";
+  os << "} column origins: ";
+  for (auto [left, right] : _columnOrigins) {
+    os << '(' << left << ", " << right << ") ";
+  }
+  os << " sort order: ";
   for (size_t i : targetOrder_) {
     os << i << " ";
   }
