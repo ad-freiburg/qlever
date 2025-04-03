@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/TripleComponent.h"
 

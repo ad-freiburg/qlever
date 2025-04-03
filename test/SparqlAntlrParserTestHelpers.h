@@ -3,6 +3,8 @@
 // Authors:
 //   2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 //   2022 Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H
 #define QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H

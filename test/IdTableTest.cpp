@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors : 2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //           2022-     Johannes Kalmbach(kalmbach@cs.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

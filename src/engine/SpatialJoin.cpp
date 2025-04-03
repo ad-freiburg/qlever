@@ -3,6 +3,8 @@
 // Authors: Jonathan Zeller github@Jonathan24680
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //          Patrick Brosi <brosi@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/SpatialJoin.h"
 

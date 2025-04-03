@@ -1,6 +1,8 @@
 // Copyright 2011, University of Freiburg, Chair of Algorithms and Data
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
