@@ -17,11 +17,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       std::optional<std::variant<Iri, std::string>> descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -135,25 +138,27 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
-// UCase and LCase
-template <auto toLowerOrToUpper>
-auto upperOrLowerCaseImpl =
-    [](std::optional<ad_utility::triple_component::Literal> input)
-    -> IdOrLiteralOrIri {
+// LCASE
+[[maybe_unused]] auto lowercaseImpl =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
+  } else {
+    return toLiteral(ad_utility::utf8ToLower(input.value()));
   }
-  auto& literal = input.value();
-  auto newContent =
-      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
-  literal.replaceContent(newContent);
-  return LiteralOrIri(std::move(literal));
 };
-auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
-auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
+using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
 
-using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
-using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
+// UCASE
+[[maybe_unused]] auto uppercaseImpl =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return toLiteral(ad_utility::utf8ToUpper(input.value()));
+  }
+};
+using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -375,6 +380,15 @@ using MergeRegexPatternAndFlagsExpression =
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
+  if (s.value().hasDatatype()) {
+    Iri datatype = Iri::fromIrirefWithoutBrackets(
+        std::string{asStringViewUnsafe(s.value().getDatatype())});
+    return toLiteral(in, datatype);
+  } else if (s.value().hasLanguageTag()) {
+    std::string languageTag =
+        "@" + std::string{asStringViewUnsafe(s.value().getLanguageTag())};
+    return toLiteral(in, languageTag);
+  }
   return toLiteral(in);
 };
 
