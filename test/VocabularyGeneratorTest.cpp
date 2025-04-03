@@ -170,7 +170,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, internalgeoVocabularyAction,
                           1_GB);
-    // TODO<ullingerc> acutally test geoMergeResult...
+    // TODO<ullingerc> actually test geoMergeResult...
   }
 
   EXPECT_THAT(mergeResult,
