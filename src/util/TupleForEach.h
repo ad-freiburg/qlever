@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TUPLEFOREACH_H
 #define QLEVER_TUPLEFOREACH_H

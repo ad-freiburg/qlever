@@ -1,6 +1,8 @@
 // Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/PayloadVariables.h"
 

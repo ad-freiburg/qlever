@@ -1,6 +1,8 @@
 // Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <engine/ParsedRequestBuilder.h>
 #include <gmock/gmock.h>

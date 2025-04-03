@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2024      Fabian Krause (fabian.krause@students.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
