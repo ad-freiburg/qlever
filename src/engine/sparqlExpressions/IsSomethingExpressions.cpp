@@ -34,6 +34,8 @@ using isBlankExpression =
     NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::BlankNodeIndex>>>;
 using isGeoPointExpression =
     NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
+using isGeoLiteralExpression =
+    NARY<1, FV<std::identity, IsGeoLiteralValueGetter>>;
 
 // The expression for `bound` is slightly different as `IsValidValueGetter`
 // returns a `bool` and not an `Id`.
@@ -56,6 +58,9 @@ SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr arg) {
 }
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isGeoPointExpression>(std::move(arg));
+}
+SparqlExpression::Ptr makeIsGeoLiteralExpression(SparqlExpression::Ptr arg) {
+  return std::make_unique<detail::isGeoLiteralExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::boundExpression>(std::move(arg));

@@ -198,8 +198,10 @@ class Vocabulary {
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
-    // TODO<ullingerc> Do we need geo stuff here?
     return prefixRangesLiterals_.contain(index);
+  }
+  bool isGeoLiteral(IndexT index) const {
+    return static_cast<bool>(index.get() & geoVocabMarker);
   }
 
   bool shouldBeExternalized(std::string_view word) const;

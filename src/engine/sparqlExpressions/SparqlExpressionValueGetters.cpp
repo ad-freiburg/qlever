@@ -191,6 +191,8 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetter<
+    &Index::Vocab::isGeoLiteral, skipLiteralOrIriCheck>;
 
 // _____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
