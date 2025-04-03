@@ -1726,10 +1726,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:intersects ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b  . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::INTERSECTS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1741,10 +1740,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:covers ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::COVERS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1756,10 +1754,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:contains ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::CONTAINS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1771,10 +1768,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:touches ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::TOUCHES, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1786,10 +1782,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:crosses ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::CROSSES, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1801,10 +1796,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:overlaps ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::OVERLAPS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -1816,10 +1810,9 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:equals ;"
       "spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 100 . "
+      "spatialSearch:right ?b  . "
       "{ ?a <p> ?b } }}",
-      h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+      h::SpatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
                      SpatialJoinType::EQUALS, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
@@ -2423,6 +2416,59 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <intersects> ;"
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "The algorithm `<libspatialjoin>` supports the "
+          "`<maxDistance>` option only if `<joinType>` is set to "
+          "`<within-dist>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:numNearestNeighbors 5 ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ;"
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "The algorithm `<libspatialjoin>` does not support the option "
+          "`<numNearestNeighbors>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:numNearestNeighbors 5 ;"
+                "spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:joinType <within-dist> ;"
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "The selected algorithm does not support the `<joinType>` option"));
 }
 
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
