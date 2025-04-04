@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -489,19 +491,19 @@ TEST(VectorIncrementalSerializer, Serialize) {
                                    "kartoffelsalat"};
   std::string filename = "vectorIncrementalTest.tmp";
 
-  auto testIncrementalSerialization =
-      [filename]<typename T>(const T& inputVector) {
-        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
-            writer{filename};
-        for (const auto& element : inputVector) {
-          writer.push(element);
-        }
-        writer.finish();
-        FileReadSerializer reader{filename};
-        T vectorRead;
-        reader >> vectorRead;
-        ASSERT_EQ(inputVector, vectorRead);
-      };
+  auto testIncrementalSerialization = [filename](const auto& inputVector) {
+    using T = std::decay_t<decltype(inputVector)>;
+    VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+        writer{filename};
+    for (const auto& element : inputVector) {
+      writer.push(element);
+    }
+    writer.finish();
+    FileReadSerializer reader{filename};
+    T vectorRead;
+    reader >> vectorRead;
+    ASSERT_EQ(inputVector, vectorRead);
+  };
   testIncrementalSerialization(ints);
   testIncrementalSerialization(strings);
   ad_utility::deleteFile(filename);
@@ -513,30 +515,30 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
                                    "kartoffelsalat"};
   std::string filename = "vectorIncrementalTest.tmp";
 
-  auto testIncrementalSerialization =
-      [filename]<typename T>(const T& inputVector) {
-        FileWriteSerializer writeSerializer{filename};
-        double d = 42.42;
-        writeSerializer << d;
-        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
-            writer{std::move(writeSerializer)};
-        for (const auto& element : inputVector) {
-          writer.push(element);
-        }
-        writeSerializer = FileWriteSerializer{std::move(writer).serializer()};
-        d = -13.123;
-        writeSerializer << d;
-        writeSerializer.close();
-        FileReadSerializer reader{filename};
-        double doubleRead;
-        reader >> doubleRead;
-        ASSERT_FLOAT_EQ(doubleRead, 42.42);
-        T vectorRead;
-        reader >> vectorRead;
-        ASSERT_EQ(inputVector, vectorRead);
-        reader >> doubleRead;
-        ASSERT_FLOAT_EQ(doubleRead, -13.123);
-      };
+  auto testIncrementalSerialization = [filename](const auto& inputVector) {
+    using T = std::decay_t<decltype(inputVector)>;
+    FileWriteSerializer writeSerializer{filename};
+    double d = 42.42;
+    writeSerializer << d;
+    VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+        writer{std::move(writeSerializer)};
+    for (const auto& element : inputVector) {
+      writer.push(element);
+    }
+    writeSerializer = FileWriteSerializer{std::move(writer).serializer()};
+    d = -13.123;
+    writeSerializer << d;
+    writeSerializer.close();
+    FileReadSerializer reader{filename};
+    double doubleRead;
+    reader >> doubleRead;
+    ASSERT_FLOAT_EQ(doubleRead, 42.42);
+    T vectorRead;
+    reader >> vectorRead;
+    ASSERT_EQ(inputVector, vectorRead);
+    reader >> doubleRead;
+    ASSERT_FLOAT_EQ(doubleRead, -13.123);
+  };
   testIncrementalSerialization(ints);
   testIncrementalSerialization(strings);
   ad_utility::deleteFile(filename);

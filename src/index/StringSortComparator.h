@@ -1,6 +1,8 @@
 //  Copyright 2019, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_STRINGSORTCOMPARATOR_H
 #define QLEVER_STRINGSORTCOMPARATOR_H
@@ -795,9 +797,10 @@ class TripleComponentComparator {
       // For the non-owning sort key we allocate all the strings using the
       // `allocator`
       AD_CONTRACT_CHECK(allocator != nullptr);
-      auto add =
-          [allocator]<typename Char>(
-              std::basic_string_view<Char> s) -> std::basic_string_view<Char> {
+      auto add = [allocator](auto s) -> decltype(s) {
+        static_assert(
+            ad_utility::isInstantiation<decltype(s), std::basic_string_view>);
+        using Char = typename decltype(s)::value_type;
         auto alloc =
             std::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());

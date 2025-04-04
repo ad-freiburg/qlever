@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 //                 Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
 #define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEARRAYORTUPLE_H
@@ -24,11 +26,18 @@ CPP_template(typename T, typename U)(
 // A helper function to figure out whether all types contained in a tuple are
 // trivially seraizliable.
 namespace detail {
+struct IsTriviallySerializable {
+  bool& result;
+  template <typename U>
+  constexpr void operator()() const {
+    result = result && TriviallySerializable<U>;
+  };
+};
+
 template <typename T>
 consteval bool tupleTriviallySerializableImpl() {
   bool result = true;
-  ad_utility::forEachTypeInTemplateType<T>(
-      [&result]<typename U>() { result = result && TriviallySerializable<U>; });
+  ad_utility::forEachTypeInTemplateType<T>(IsTriviallySerializable{result});
   return result;
 }
 template <typename T>

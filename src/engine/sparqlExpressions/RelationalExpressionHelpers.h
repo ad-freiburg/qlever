@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONHELPERS_H
@@ -164,10 +166,12 @@ template <valueIdComparators::Comparison Comp,
           valueIdComparators::ComparisonForIncompatibleTypes
               comparisonForIncompatibleTypes>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(const T& a, const U& b,
-                               const EvaluationContext* ctx)
+    [](const auto& a, const auto& b, const EvaluationContext* ctx)
     -> CPP_ret(valueIdComparators::ComparisonResult)(
-        requires StoresStringOrId<T>&& StoresStringOrId<T>) {
+        requires StoresStringOrId<std::decay_t<decltype(a)>>&&
+            StoresStringOrId<std::decay_t<decltype(a)>>) {
+  using T = std::decay_t<decltype(a)>;
+  using U = std::decay_t<decltype(b)>;
   if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));

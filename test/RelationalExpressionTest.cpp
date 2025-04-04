@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <limits>
 #include <string>
@@ -90,7 +92,8 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 
 // Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
 // `VectorWithMemoryLimit` of any of those types.
-auto liftToValueId = []<typename T>(const T& t) {
+auto liftToValueId = [](const auto& t) {
+  using T = std::decay_t<decltype(t)>;
   if constexpr (SingleExpressionResult<T>) {
     if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
       return t.clone();
@@ -912,9 +915,11 @@ TEST(RelationalExpression, FilterEstimates) {
   };
   // Implementation for testing the size estimates of different relational
   // expressions.
-  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
-                                  ad_utility::source_location l =
-                                      source_location::current()) {
+  auto testImpl = [&](auto ti, size_t expectedSize,
+                      ad_utility::source_location l =
+                          source_location::current()) {
+    using T = typename decltype(ti)::type;
+
     auto tr = generateLocationTrace(l);
 
     auto first = makeVar("?x");

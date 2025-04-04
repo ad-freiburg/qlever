@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGMANAGER_H
 #define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGMANAGER_H
@@ -337,7 +339,8 @@ class ConfigManager {
                                                              ValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
-        []<typename T>(ConstConfigOptionProxy<T> opt) {
+        [](auto opt) {
+          using T = typename decltype(opt)::value_type;
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
         transformValidatorIntoExceptionValidator<ValidatorFunc,
@@ -376,7 +379,8 @@ class ConfigManager {
                                                                       ExceptionValidatorParameterTypes>... configOptionsToBeChecked) {
     addValidatorImpl(
         "addValidator",
-        []<typename T>(ConstConfigOptionProxy<T> opt) {
+        [](auto opt) {
+          using T = typename decltype(opt)::value_type;
           return opt.getConfigOption().template getValue<std::decay_t<T>>();
         },
         exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
@@ -408,10 +412,7 @@ class ConfigManager {
                    ValidatorFunc,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {
     addValidatorImpl(
-        "addOptionValidator",
-        []<typename T>(ConstConfigOptionProxy<T> opt) {
-          return opt.getConfigOption();
-        },
+        "addOptionValidator", [](auto opt) { return opt.getConfigOption(); },
         transformValidatorIntoExceptionValidator<
             ValidatorFunc,
             decltype(configOptionsToBeChecked.getConfigOption())...>(
@@ -445,10 +446,7 @@ class ConfigManager {
                    ExceptionValidatorT,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {
     addValidatorImpl(
-        "addOptionValidator",
-        []<typename T>(ConstConfigOptionProxy<T> opt) {
-          return opt.getConfigOption();
-        },
+        "addOptionValidator", [](auto opt) { return opt.getConfigOption(); },
         exceptionValidatorFunction, std::move(exceptionValidatorDescriptor),
         configOptionsToBeChecked...);
   }
@@ -666,8 +664,7 @@ class ConfigManager {
       std::string exceptionValidatorDescriptor,
       ExceptionValidatorParameter... configOptionsToBeChecked) {
     // Check, if we contain all the configuration options, that were given us.
-    auto checkIfContainOption = [this, &addValidatorFunctionName]<typename T>(
-                                    ConstConfigOptionProxy<T> opt) {
+    auto checkIfContainOption = [this, &addValidatorFunctionName](auto opt) {
       if (!containsOption(opt.getConfigOption())) {
         throw std::runtime_error(absl::StrCat(
             "Error while adding validator with ", addValidatorFunctionName,

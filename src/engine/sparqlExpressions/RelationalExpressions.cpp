@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "RelationalExpressions.h"
 
@@ -194,7 +196,9 @@ CPP_template(Comparison Comp, typename S1, typename S2)(
   auto itB = generatorB.begin();
 
   for (size_t i = 0; i < resultSize; ++i) {
-    auto impl = [&]<typename X, typename Y>(const X& x, const Y& y) {
+    auto impl = [&](const auto& x, const auto& y) {
+      using X = std::decay_t<decltype(x)>;
+      using Y = std::decay_t<decltype(y)>;
       if constexpr (AreIncomparable<X, Y>) {
         result.push_back(Id::makeUndefined());
       } else {

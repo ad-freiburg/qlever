@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/TripleComponent.h"
 
@@ -15,7 +17,8 @@
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
   std::visit(
-      [&stream]<typename T>(const T& value) -> void {
+      [&stream](const auto& value) -> void {
+        using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, Variable>) {
           stream << value.name();
         } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
@@ -49,7 +52,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 
 // ____________________________________________________________________________
 std::optional<Id> TripleComponent::toValueIdIfNotString() const {
-  auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
+  auto visitor = [](const auto& value) -> std::optional<Id> {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, Iri> ||
                   std::is_same_v<T, Literal>) {
       return std::nullopt;

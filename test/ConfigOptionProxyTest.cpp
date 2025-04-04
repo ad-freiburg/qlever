@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (August of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -15,6 +17,34 @@
 
 namespace ad_utility {
 
+// Test construction for a given type.
+template <template <typename> typename ProxyType, typename OptionType>
+struct DoTest {
+  template <typename T>
+  struct TestWrongType {
+    OptionType& opt;
+
+    template <typename WrongT>
+    void operator()() const {
+      if constexpr (!std::is_same_v<T, WrongT>) {
+        ASSERT_ANY_THROW(ProxyType<WrongT> someProxy(opt));
+      }
+    }
+  };
+
+  template <typename T>
+  void operator()() const {
+    // Does the normal constructor work?
+    T varForConfigOption;
+    auto opt = OptionType("testOption", "", &varForConfigOption);
+    ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
+    static_assert(std::same_as<T, typename ProxyType<T>::value_type>);
+
+    // Is there an exception, if we give a config option of the wrong type?
+    doForTypeInConfigOptionValueType(TestWrongType<T>{opt});
+  }
+};
+
 /*
 @brief Test, if the constructor for `ConfigOption` works as wanted.
 
@@ -25,29 +55,24 @@ namespace ad_utility {
 CPP_template(template <typename> typename ProxyType, typename OptionType)(
     requires SameAsAny<OptionType, ConfigOption,
                        const ConfigOption>) void basicConstructorTest() {
-  // Test construction for a given type.
-  auto doTest = []<typename T>() {
-    // Does the normal constructor work?
-    T varForConfigOption;
-    OptionType opt("testOption", "", &varForConfigOption);
-    ASSERT_EQ(&opt, &ProxyType<T>(opt).getConfigOption());
-    static_assert(std::same_as<T, typename ProxyType<T>::value_type>);
-
-    // Is there an exception, if we give a config option of the wrong type?
-    doForTypeInConfigOptionValueType([&opt]<typename WrongT>() {
-      if constexpr (!std::is_same_v<T, WrongT>) {
-        ASSERT_ANY_THROW(ProxyType<WrongT> someProxy(opt));
-      }
-    });
-  };
-
   // Do the test for all possible types.
-  doForTypeInConfigOptionValueType(doTest);
+  doForTypeInConfigOptionValueType(DoTest<ProxyType, OptionType>{});
 }
 
 TEST(ConfigOptionProxy, NonConstConfigOptionProxyConstructor) {
   basicConstructorTest<ConfigOptionProxy, ConfigOption>();
 }
+
+struct ConstructNonConstConfigOptionProxy {
+  template <typename T>
+  void operator()() const {
+    T varForConfigOption;
+    ConfigOption opt("testOption", "", &varForConfigOption);
+    ConfigOptionProxy<T> nonConstProxy(opt);
+    ConstConfigOptionProxy<T> constProxy(nonConstProxy);
+    ASSERT_EQ(&nonConstProxy.getConfigOption(), &constProxy.getConfigOption());
+  }
+};
 
 TEST(ConfigOptionProxy, ConstConfigOptionProxyConstructor) {
   basicConstructorTest<ConstConfigOptionProxy, ConfigOption>();
@@ -56,18 +81,12 @@ TEST(ConfigOptionProxy, ConstConfigOptionProxyConstructor) {
   basicConstructorTest<ConstConfigOptionProxy, const ConfigOption>();
 
   // Does construction with a `NonConstConfigOptionProxy` work?
-  doForTypeInConfigOptionValueType([]<typename T>() {
-    T varForConfigOption;
-    ConfigOption opt("testOption", "", &varForConfigOption);
-    ConfigOptionProxy<T> nonConstProxy(opt);
-    ConstConfigOptionProxy<T> constProxy(nonConstProxy);
-    ASSERT_EQ(&nonConstProxy.getConfigOption(), &constProxy.getConfigOption());
-  });
+  doForTypeInConfigOptionValueType(ConstructNonConstConfigOptionProxy{});
 }
 
-TEST(ConfigOptionProxy, GetConfigOption) {
-  // Simple test, if the returned `ConfigOption` are(n't) const.
-  doForTypeInConfigOptionValueType([]<typename T>() {
+struct CheckConfigOptionConstness {
+  template <typename T>
+  void operator()() const {
     T varForConfigOption;
     ConfigOption opt("testOption", "", &varForConfigOption);
     ConfigOptionProxy<T> nonConstProxy(opt);
@@ -77,14 +96,20 @@ TEST(ConfigOptionProxy, GetConfigOption) {
     static_assert(
         std::is_const_v<
             std::remove_reference_t<decltype(constProxy.getConfigOption())>>);
-  });
+  }
+};
+
+TEST(ConfigOptionProxy, GetConfigOption) {
+  // Simple test, if the returned `ConfigOption` are(n't) const.
+  doForTypeInConfigOptionValueType(CheckConfigOptionConstness{});
 }
 
-TEST(ConfigOptionProxy, ConversionToConfigOption) {
-  // A function variant of `std::identity`, where you can give the type.
-  auto identity = []<typename Type>(Type t) -> Type { return t; };
+template <typename F>
+struct CheckConfigOptionConversion {
+  F& identity;
 
-  doForTypeInConfigOptionValueType([&identity]<typename T>() {
+  template <typename T>
+  void operator()() const {
     T varForConfigOption;
     ConfigOption opt("testOption", "", &varForConfigOption);
     ConfigOptionProxy<T> nonConstProxy(opt);
@@ -110,7 +135,15 @@ TEST(ConfigOptionProxy, ConversionToConfigOption) {
     ASSERT_NE(&opt, &opt2);
     const ConfigOption& opt3 = static_cast<ConfigOption>(constProxy);
     ASSERT_NE(&opt, &opt3);
-  });
+  }
+};
+
+TEST(ConfigOptionProxy, ConversionToConfigOption) {
+  // A function variant of `std::identity`, where you can give the type.
+  auto identity = [](auto t) -> decltype(t) { return t; };
+
+  doForTypeInConfigOptionValueType(
+      CheckConfigOptionConversion<decltype(identity)>{identity});
 }
 
 }  // namespace ad_utility

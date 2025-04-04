@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -11,6 +13,39 @@
 #include "util/Random.h"
 
 using namespace ad_utility;
+
+namespace {
+template <typename StringLike>
+void testStringLike() {
+  StringLike s{"hal"};
+  {
+    std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
+    ASSERT_TRUE(ql::ranges::all_of(
+        substrings, [&s](const auto& el) { return contains(s, el); }));
+    std::vector<std::string> noSubstrings{"x", "hl",
+                                          "hel"};  // codespell-ignore
+    ASSERT_TRUE(ql::ranges::none_of(
+        noSubstrings, [&s](const auto& el) { return contains(s, el); }));
+  }
+  {
+    std::vector<std::string_view> substrings{"h", "a", "l", "ha", "al", "hal"};
+    ASSERT_TRUE(ql::ranges::all_of(
+        substrings, [&s](const auto& el) { return contains(s, el); }));
+    std::vector<std::string_view> noSubstrings{"x", "hl",
+                                               "hel"};  // codespell-ignore
+    ASSERT_TRUE(ql::ranges::none_of(
+        noSubstrings, [&s](const auto& el) { return contains(s, el); }));
+  }
+
+  std::vector<char> subchars{'h', 'a', 'l'};
+  ASSERT_TRUE(ql::ranges::all_of(
+      subchars, [&s](const auto& el) { return contains(s, el); }));
+
+  std::vector<char> noSubchars{'i', 'b', 'm'};
+  ASSERT_TRUE(ql::ranges::none_of(
+      noSubchars, [&s](const auto& el) { return contains(s, el); }));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(Algorithm, Contains) {
@@ -25,38 +60,8 @@ TEST(Algorithm, Contains) {
       },
       [&v](const auto& el) { return contains(v, el); }));
 
-  auto testStringLike = []<typename StringLike>() {
-    StringLike s{"hal"};
-    {
-      std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
-      ASSERT_TRUE(ql::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string> noSubstrings{"x", "hl",
-                                            "hel"};  // codespell-ignore
-      ASSERT_TRUE(ql::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
-    {
-      std::vector<std::string_view> substrings{"h",  "a",  "l",
-                                               "ha", "al", "hal"};
-      ASSERT_TRUE(ql::ranges::all_of(
-          substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string_view> noSubstrings{"x", "hl",
-                                                 "hel"};  // codespell-ignore
-      ASSERT_TRUE(ql::ranges::none_of(
-          noSubstrings, [&s](const auto& el) { return contains(s, el); }));
-    }
-
-    std::vector<char> subchars{'h', 'a', 'l'};
-    ASSERT_TRUE(ql::ranges::all_of(
-        subchars, [&s](const auto& el) { return contains(s, el); }));
-
-    std::vector<char> noSubchars{'i', 'b', 'm'};
-    ASSERT_TRUE(ql::ranges::none_of(
-        noSubchars, [&s](const auto& el) { return contains(s, el); }));
-  };
-  testStringLike.template operator()<std::string>();
-  testStringLike.template operator()<std::string_view>();
+  testStringLike<std::string>();
+  testStringLike<std::string_view>();
 }
 
 // _____________________________________________________________________________

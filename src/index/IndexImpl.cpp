@@ -3,6 +3,8 @@
 // Authors:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./IndexImpl.h"
 
@@ -105,7 +107,8 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) -> const Id& {
+  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+    using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
@@ -1117,10 +1120,11 @@ void IndexImpl::readConfiguration() {
         configurationJson_["languages-internal"]);
   }
 
-  auto loadDataMember = [this]<typename Target>(
-                            std::string_view key, Target& target,
-                            std::optional<std::type_identity_t<Target>>
-                                defaultValue = std::nullopt) {
+  auto loadDataMember = [this](std::string_view key, auto& target,
+                               std::optional<std::type_identity_t<
+                                   std::decay_t<decltype(target)>>>
+                                   defaultValue = std::nullopt) {
+    using Target = std::decay_t<decltype(target)>;
     auto it = configurationJson_.find(key);
     if (it == configurationJson_.end()) {
       if (defaultValue.has_value()) {

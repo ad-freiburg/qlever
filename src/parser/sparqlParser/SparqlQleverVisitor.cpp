@@ -3,6 +3,8 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
@@ -59,7 +61,22 @@ using Parser = SparqlAutomaticParser;
 namespace {
 constexpr std::string_view a =
     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-}
+
+struct MakeExpressionPtr {
+  bool distinct;
+  ExpressionPtr childExpression;
+  std::string descriptor;
+
+  template <typename ExpressionType, typename... Args>
+  ExpressionPtr operator()(Args&&... additionalArgs) {
+    ExpressionPtr result{std::make_unique<ExpressionType>(
+        distinct, std::move(childExpression),
+        std::forward<Args>(additionalArgs)...)};
+    result->descriptor() = descriptor;
+    return result;
+  }
+};
+}  // namespace
 
 // _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
@@ -320,7 +337,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
-  auto toTripleComponent = []<typename T>(const T& item) {
+  auto toTripleComponent = [](const auto& item) {
+    using T = std::decay_t<decltype(item)>;
     namespace tc = ad_utility::triple_component;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
@@ -335,7 +353,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+    using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return PropertyPath::fromVariable(item);
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
@@ -2095,24 +2114,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
-  auto make = [&]<typename Expr>() {
-    return createExpression<Expr>(std::move(children[0]),
-                                  std::move(children[1]));
-  };
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return make.operator()<EqualExpression>();
+    return createExpression<EqualExpression>(std::move(children[0]),
+                                             std::move(children[1]));
   } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
+    return createExpression<NotEqualExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
+    return createExpression<LessThanExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
+    return createExpression<GreaterThanExpression>(std::move(children[0]),
+                                                   std::move(children[1]));
   } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
+    return createExpression<LessEqualExpression>(std::move(children[0]),
+                                                 std::move(children[1]));
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return make.operator()<GreaterEqualExpression>();
+    return createExpression<GreaterEqualExpression>(std::move(children[0]),
+                                                    std::move(children[1]));
   }
 }
 
@@ -2584,13 +2605,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     AD_CORRECTNESS_CHECK(functionName == "count");
     return makeCountStarExpression(distinct);
   }
-  auto childExpression = visit(ctx->expression());
-  auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
-    ExpressionPtr result{std::make_unique<ExpressionType>(
-        distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
-    result->descriptor() = ctx->getText();
-    return result;
-  };
+  auto makePtr =
+      MakeExpressionPtr{distinct, visit(ctx->expression()), ctx->getText()};
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();
