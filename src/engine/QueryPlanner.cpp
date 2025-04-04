@@ -1640,8 +1640,8 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
           right,
           std::nullopt,
           PayloadVariables::all(),
-          SpatialJoinAlgorithm::S2_GEOMETRY,
-          std::nullopt};
+          SpatialJoinAlgorithm::LIBSPATIALJOIN,
+          SpatialJoinType::WITHIN_DIST};
       auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
                                                std::nullopt);
       plan._idsOfIncludedFilters |= 1ull << i;
