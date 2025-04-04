@@ -71,6 +71,7 @@ class Literal {
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
+
   NormalizedStringView getDatatype() const;
 
   // For documentation, see documentation of function
@@ -99,6 +100,11 @@ class Literal {
   // leading quotes, so the first character after the quote has index 0.
   // Throws if either 'start' or 'start' + 'length' is out of bounds.
   void setSubstr(std::size_t start, std::size_t length);
+
+  // Replace the content of the Literal object with newContent.
+  // It truncates or extends the content based on the length of newContent
+  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  void replaceContent(std::string_view newContent);
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
