@@ -3,7 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
 
 #include <memory>
 
@@ -67,3 +68,5 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
                                const TransitivePathSide& startSide,
                                const TransitivePathSide& targetSide) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H

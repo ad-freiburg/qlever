@@ -163,5 +163,4 @@ void Literal::replaceContent(std::string_view newContent) {
   }
   beginOfSuffix_ = newContent.size() + 2;
 }
-
 }  // namespace ad_utility::triple_component

@@ -7,29 +7,32 @@
 // ____________________________________________________________________________
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
   switch (textScoringMetric) {
-    case TextScoringMetric::EXPLICIT:
+    using enum TextScoringMetric;
+    case EXPLICIT:
       return "explicit";
-      break;
-    case TextScoringMetric::TFIDF:
+    case TFIDF:
       return "tf-idf";
-      break;
-    case TextScoringMetric::BM25:
+    case BM25:
       return "bm25";
-      break;
     default:
-      return "count";
-      break;
+      return "explicit";
   }
 }
 
 // ____________________________________________________________________________
 TextScoringMetric getTextScoringMetricFromString(
-    std::string textScoringMetricString) {
+    const std::string& textScoringMetricString) {
+  using enum TextScoringMetric;
   if (textScoringMetricString == "tf-idf") {
-    return TextScoringMetric::TFIDF;
-  } else if (textScoringMetricString == "bm25") {
-    return TextScoringMetric::BM25;
-  } else {
-    return TextScoringMetric::EXPLICIT;
+    return TFIDF;
   }
+  if (textScoringMetricString == "bm25") {
+    return BM25;
+  }
+  if (textScoringMetricString == "explicit") {
+    return EXPLICIT;
+  }
+  throw std::runtime_error(
+      absl::StrCat(R"(Faulty text scoring metric given: ")",
+                   textScoringMetricString, R"(".)"));
 }

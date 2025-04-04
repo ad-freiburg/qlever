@@ -1,4 +1,5 @@
-#pragma once
+#ifndef QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
+#define QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 
 #include <cstdlib>
 
@@ -321,7 +322,7 @@ inline std::string createMixedDataset() {
 }
 
 // a mixed dataset, which contains points and areas. One of them is the geometry
-// of germeny, where the distance from the midpoint to the borders can not be
+// of germany, where the distance from the midpoint to the borders can not be
 // ignored or approximated as zero
 inline std::string createTrueDistanceDataset() {
   std::string kg;
@@ -347,6 +348,23 @@ inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
+                                  false, true, std::nullopt, 10_kB);
+  return qec;
+}
+
+// Create `QueryExecutionContext` with a dataset that contains an additional
+// area without `<name>` predicate (so that our `libspatialjoin` test has two
+// sides of different size), as well as an object with an invalid geometry.
+inline QueryExecutionContext* buildNonSelfJoinDataset() {
+  std::string kg = createTrueDistanceDataset();
+  kg += absl::StrCat(
+      "<nodeAreaAdded> <hasGeometry> <geometryAreaAdded> .\n",
+      "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
+      "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
+      "<geometryInvalidAdded> <asWKT> 42 .\n");
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
@@ -426,9 +444,12 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
+                                   std::nullopt,
                                    std::nullopt};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }
 
 }  // namespace SpatialJoinTestHelpers
+
+#endif  // QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H

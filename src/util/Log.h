@@ -4,7 +4,8 @@
 //          Johannes Kalmbach <bast@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_LOG_H
+#define QLEVER_SRC_UTIL_LOG_H
 
 #include <absl/strings/str_format.h>
 #include <absl/time/clock.h>
@@ -139,3 +140,5 @@ class Log {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_LOG_H

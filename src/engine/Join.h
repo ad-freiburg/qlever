@@ -4,7 +4,8 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_JOIN_H
+#define QLEVER_SRC_ENGINE_JOIN_H
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
@@ -217,3 +218,5 @@ class Join : public Operation {
   ad_utility::AddCombinedRowToIdTable makeRowAdder(
       std::function<void(IdTable&, LocalVocab&)> callback) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_JOIN_H

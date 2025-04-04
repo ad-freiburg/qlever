@@ -3,7 +3,8 @@
 // Authors: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
+#define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
 #include <gmock/gmock.h>
 
@@ -162,3 +163,5 @@ class CopyShield {
     return os;
   }
 };
+
+#endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

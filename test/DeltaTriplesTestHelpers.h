@@ -10,7 +10,8 @@
 #include "index/LocatedTriples.h"
 #include "util/GTestHelpers.h"
 
-#pragma once
+#ifndef QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
+#define QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
 
 namespace deltaTriplesTestHelpers {
 
@@ -52,3 +53,5 @@ inline auto NumTriples =
 };
 
 }  // namespace deltaTriplesTestHelpers
+
+#endif  // QLEVER_TEST_DELTATRIPLESTESTHELPERS_H
