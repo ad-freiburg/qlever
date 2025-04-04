@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_split.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -44,13 +45,17 @@
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "global/ValueId.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/data/Variable.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -1585,6 +1590,69 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
+
+  // If we have FILTER statements that can also be answered by a SpatialJoin,
+  // replace them with a spatial join.
+
+  // Helper for GeoSPARQL filter & cartesian product optimization
+  auto seedImplicitSpatialJoin = [&initialPlans, &filters, this]() {
+    // Check if the filter expression is suitable for the optimization
+    for (size_t i = 0; i < filters.size(); i++) {
+      auto& filterExpression = filters[i];
+      sparqlExpression::SparqlExpression* filterExp =
+          filterExpression.expression_.getPimpl();
+      auto leExp =
+          dynamic_cast<sparqlExpression::LessEqualExpression*>(filterExp);
+      if (leExp == nullptr) {
+        continue;
+      }
+
+      auto children = leExp->children();
+      // Left child must be distance function
+      auto leftChild = children[0].get();
+
+      // Right child must be constant
+      auto rightChild = children[1].get();
+      auto literalExp =
+          dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
+              rightChild);
+      if (literalExp == nullptr) {
+        continue;
+      }
+      ValueId constant = literalExp->value();
+      int64_t maxDist = 0;
+      if (constant.getDatatype() == Datatype::Double) {
+        maxDist = static_cast<int64_t>(round(constant.getDouble() * 1000));
+      } else if (constant.getDatatype() == Datatype::Int) {
+        maxDist = constant.getInt() * 1000;
+      } else {
+        continue;
+      }
+
+      auto distExprVars = getDistExpressionVariables(leftChild);
+      if (!distExprVars.has_value()) {
+        continue;
+      }
+      auto [left, right] = distExprVars.value();
+      SpatialJoinConfiguration sjConfig{
+          MaxDistanceConfig{static_cast<size_t>(maxDist)},
+          left,
+          right,
+          std::nullopt,
+          PayloadVariables::all(),
+          SpatialJoinAlgorithm::S2_GEOMETRY,
+          std::nullopt};
+      auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
+                                               std::nullopt);
+      plan._idsOfIncludedFilters |= 1ull << i;
+      // TODO<ullingerc> Remove this very bad workaround for assertion in
+      // findUniqueNodeIds.
+      plan._idsOfIncludedNodes = 1ull << 63;
+      initialPlans.push_back(std::move(plan));
+    }
+  };
+  seedImplicitSpatialJoin();
+
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
