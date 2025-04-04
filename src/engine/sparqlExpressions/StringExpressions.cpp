@@ -17,11 +17,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       const std::optional<std::variant<Iri, std::string>> descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -360,13 +363,29 @@ using StrBeforeExpression =
 using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
+// Helper function to transfer language tag to a new literal
+IdOrLiteralOrIri processLiteral(
+    const std::string& in, const ad_utility::triple_component::Literal& s) {
+  if (s.hasDatatype()) {
+    Iri datatype =
+        Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(s.getDatatype()));
+    return toLiteral(in, datatype);
+  } else if (s.hasLanguageTag()) {
+    std::string languageTag =
+        "@" + std::string{asStringViewUnsafe(s.getLanguageTag())};
+    return toLiteral(in, languageTag);
+  }
+  return toLiteral(in);
+}
+
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
+    [](std::optional<ad_utility::triple_component::Literal> s,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  std::string in(asStringViewUnsafe(s.value().getContent()));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
@@ -374,12 +393,12 @@ using MergeRegexPatternAndFlagsExpression =
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
-  return toLiteral(in);
+  return processLiteral(in, s.value());
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
