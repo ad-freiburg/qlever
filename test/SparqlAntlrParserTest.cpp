@@ -1870,8 +1870,9 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
   expectFunctionCall(
-      absl::StrCat(geof, "distance>(?a, ?b)"),
-      matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
+      absl::StrCat(geof, "metricDistance>(?a, ?b)"),
+      matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
+
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
                      matchUnary(&makeLogExpression));
   expectFunctionCall(absl::StrCat(math, "exp>(?x)"),
@@ -1909,7 +1910,8 @@ TEST(SparqlParser, FunctionCall) {
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 

@@ -9,6 +9,7 @@
 
 #include "../src/util/GeoSparqlHelpers.h"
 #include "parser/GeoPoint.h"
+#include "parser/Iri.h"
 
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktLatitude;
@@ -81,4 +82,16 @@ TEST(GeoSparqlHelpers, WktDist) {
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(
+                  eiffeltower, frCathedral,
+                  ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+                      "http://qudt.org/vocab/unit/KiloM")),
+              421.098, 0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(
+                  eiffeltower, frCathedral,
+                  ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+                      "http://qudt.org/vocab/unit/M")),
+              421098, 1);
+  ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
+              421098, 1);
 }
