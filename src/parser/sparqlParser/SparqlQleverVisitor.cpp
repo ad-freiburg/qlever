@@ -3,10 +3,11 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
-#include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 
 #include <string>
@@ -36,7 +37,6 @@
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/Variable.h"
-#include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
@@ -59,7 +59,22 @@ using Parser = SparqlAutomaticParser;
 namespace {
 constexpr std::string_view a =
     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-}
+
+struct MakeExpressionPtr {
+  bool distinct;
+  ExpressionPtr childExpression;
+  std::string descriptor;
+
+  template <typename ExpressionType, typename... Args>
+  ExpressionPtr operator()(Args&&... additionalArgs) {
+    ExpressionPtr result{std::make_unique<ExpressionType>(
+        distinct, std::move(childExpression),
+        std::forward<Args>(additionalArgs)...)};
+    result->descriptor() = descriptor;
+    return result;
+  }
+};
+}  // namespace
 
 // _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
@@ -225,19 +240,15 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
+template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
-                                       auto objectList) {
+                                       List objectList) {
   PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
     tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
-}
-
-// ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
-  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -320,7 +331,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
-  auto toTripleComponent = []<typename T>(const T& item) {
+  auto toTripleComponent = [](const auto& item) {
+    using T = std::decay_t<decltype(item)>;
     namespace tc = ad_utility::triple_component;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
@@ -335,7 +347,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+    using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return PropertyPath::fromVariable(item);
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
@@ -1445,24 +1458,6 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-void Visitor::warnOrThrowIfUnboundVariables(
-    auto* ctx, const SparqlExpressionPimpl& expression,
-    std::string_view clauseName) {
-  for (const auto& var : expression.containedVariables()) {
-    if (!ad_utility::contains(visibleVariables_, *var)) {
-      auto message = absl::StrCat(
-          "The variable ", var->name(), " was used in the expression of a ",
-          clauseName, " clause but was not previously bound in the query");
-      if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
-        reportError(ctx, message);
-      } else {
-        parsedQuery_.addWarning(std::move(message));
-      }
-    }
-  }
-}
-
-// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
@@ -1607,49 +1602,6 @@ ObjectsAndTriples Visitor::visit(Parser::ObjectListContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
-}
-
-// ____________________________________________________________________________________
-void Visitor::setMatchingWordAndScoreVisibleIfPresent(
-    // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
-    // <entity>` is contained in the query, then the variable
-    // `?ql_textscore_var` is implicitly created and visible in the query body.
-    // Similarly, if a triple `?var ql:contains-word "words"` is contained in
-    // the query, then the variable `ql_matchingword_var` is implicitly created
-    // and visible in the query body.
-    auto* ctx, const TripleWithPropertyPath& triple) {
-  const auto& [subject, predicate, object] = triple;
-
-  auto* var = std::get_if<Variable>(&subject);
-  auto* propertyPath = std::get_if<PropertyPath>(&predicate);
-
-  if (!var || !propertyPath) {
-    return;
-  }
-
-  if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-    string name = object.toSparql();
-    if (!((name.starts_with('"') && name.ends_with('"')) ||
-          (name.starts_with('\'') && name.ends_with('\'')))) {
-      reportError(ctx,
-                  "ql:contains-word has to be followed by a string in quotes");
-    }
-    for (std::string_view s : std::vector<std::string>(
-             absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-      addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
-      if (!s.ends_with('*')) {
-        continue;
-      }
-      addVisibleVariable(var->getMatchingWordVariable(
-          ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
-    }
-  } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-    if (const auto* entVar = std::get_if<Variable>(&object)) {
-      addVisibleVariable(var->getEntityScoreVariable(*entVar));
-    } else {
-      addVisibleVariable(var->getEntityScoreVariable(object.toSparql()));
-    }
-  }
 }
 
 // ___________________________________________________________________________
@@ -2095,24 +2047,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
-  auto make = [&]<typename Expr>() {
-    return createExpression<Expr>(std::move(children[0]),
-                                  std::move(children[1]));
-  };
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return make.operator()<EqualExpression>();
+    return createExpression<EqualExpression>(std::move(children[0]),
+                                             std::move(children[1]));
   } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
+    return createExpression<NotEqualExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
+    return createExpression<LessThanExpression>(std::move(children[0]),
+                                                std::move(children[1]));
   } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
+    return createExpression<GreaterThanExpression>(std::move(children[0]),
+                                                   std::move(children[1]));
   } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
+    return createExpression<LessEqualExpression>(std::move(children[0]),
+                                                 std::move(children[1]));
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return make.operator()<GreaterEqualExpression>();
+    return createExpression<GreaterEqualExpression>(std::move(children[0]),
+                                                    std::move(children[1]));
   }
 }
 
@@ -2584,13 +2538,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     AD_CORRECTNESS_CHECK(functionName == "count");
     return makeCountStarExpression(distinct);
   }
-  auto childExpression = visit(ctx->expression());
-  auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
-    ExpressionPtr result{std::make_unique<ExpressionType>(
-        distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
-    result->descriptor() = ctx->getText();
-    return result;
-  };
+  auto makePtr =
+      MakeExpressionPtr{distinct, visit(ctx->expression()), ctx->getText()};
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();

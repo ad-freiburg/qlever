@@ -1,5 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Several helper types needed for the SparqlExpression module
 
@@ -121,9 +123,10 @@ CPP_template(typename ResultT)(
     requires ad_utility::SimilarTo<ResultT,
                                    ExpressionResult>) inline ExpressionResult
     copyExpressionResult(ResultT&& result) {
-  auto copyIfCopyable =
-      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
-                                     requires SingleExpressionResult<R>) {
+  auto copyIfCopyable = [](const auto& x)
+      -> CPP_ret(ExpressionResult)(
+          requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
+    using R = std::decay_t<decltype(x)>;
     if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
@@ -232,7 +235,8 @@ CPP_template(typename T, typename LocalVocabT)(
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
-        [&localVocab]<typename R>(R&& el) mutable {
+        [&localVocab](auto&& el) mutable {
+          using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));

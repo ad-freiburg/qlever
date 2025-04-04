@@ -1,6 +1,8 @@
 // Copyright 2011, University of Freiburg, Chair of Algorithms and Data
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
@@ -130,9 +132,9 @@ TEST(StringUtilsTest, listToString) {
   // doesn't know it's own size and can only be iterated once.
 
   // Returns the content of a given vector, element by element.
-  auto goThroughVectorGenerator =
-      []<typename T>(const std::vector<T>& vec) -> cppcoro::generator<T> {
-    for (T entry : vec) {
+  auto goThroughVectorGenerator = [](const auto& vec)
+      -> cppcoro::generator<typename std::decay_t<decltype(vec)>::value_type> {
+    for (auto entry : vec) {
       co_yield entry;
     }
   };

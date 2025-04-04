@@ -1,6 +1,8 @@
 //  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
@@ -912,7 +914,8 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   const auto retrieveValueIdOrThrowErr =
       [](const IdOrLocalVocabEntry& referenceValue) {
         return std::visit(
-            []<typename T>(const T& value) -> ValueId {
+            [](const auto& value) -> ValueId {
+              using T = std::decay_t<decltype(value)>;
               if constexpr (ad_utility::isSimilar<T, ValueId>) {
                 return value;
               } else {

@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_DATE_H
 #define QLEVER_DATE_H
@@ -22,7 +24,8 @@ class DateOutOfRangeException : public std::exception {
   std::string message_;
 
  public:
-  DateOutOfRangeException(std::string_view name, const auto& value)
+  template <typename T>
+  DateOutOfRangeException(std::string_view name, const T& value)
       : message_(absl::StrCat(name, " ", value,
                               " is out of range for a DateTime")) {}
   [[nodiscard]] const char* what() const noexcept override {
@@ -40,8 +43,9 @@ class DateParseException : public std::runtime_error {
 namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
-constexpr void checkBoundsIncludingMax(const auto& element, const auto& min,
-                                       const auto& max, std::string_view name) {
+template <typename T>
+constexpr void checkBoundsIncludingMax(const T& element, const T& min,
+                                       const T& max, std::string_view name) {
   if (element < min || element > max) {
     throw DateOutOfRangeException{name, element};
   }
@@ -49,8 +53,9 @@ constexpr void checkBoundsIncludingMax(const auto& element, const auto& min,
 
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
-constexpr void checkBoundsExcludingMax(const auto& element, const auto& min,
-                                       const auto& max, std::string_view name) {
+template <typename T>
+constexpr void checkBoundsExcludingMax(const T& element, const T& min,
+                                       const T& max, std::string_view name) {
   if (element < min || element >= max) {
     throw DateOutOfRangeException{name, element};
   }
@@ -282,7 +287,8 @@ class Date {
   }
 
   constexpr void setTimeZone(TimeZone timeZone) {
-    auto getTimeZone = []<typename T>(const T& value) -> int {
+    auto getTimeZone = [](const auto& value) -> int {
+      using T = std::decay_t<decltype(value)>;
       if constexpr (std::is_same_v<T, NoTimeZone>) {
         return 0;
       } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
@@ -308,7 +314,8 @@ class Date {
   std::string formatTimeZone() const;
 
   // Get the correct `TimeZone` from a regex match for the `timeZoneRegex`.
-  static TimeZone parseTimeZone(const auto& match);
+  template <typename T>
+  static TimeZone parseTimeZone(const T& match);
 
   // Convert to a string (without quotes) that represents the stored date, and a
   // pointer to the IRI of the corresponding datatype (currently always

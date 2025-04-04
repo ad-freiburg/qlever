@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -11,12 +13,12 @@
 namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
-[[maybe_unused]] auto ifImpl =
-    []<typename T, typename U>(EffectiveBooleanValueGetter::Result condition,
-                               T&& i, U&& e)
+[[maybe_unused]] auto ifImpl = [](EffectiveBooleanValueGetter::Result condition,
+                                  auto&& i, auto&& e)
     -> CPP_ret(IdOrLiteralOrIri)(
-        requires SingleExpressionResult<T>&& SingleExpressionResult<U>&&
-            std::is_rvalue_reference_v<T&&>&& std::is_rvalue_reference_v<U&&>) {
+        requires SingleExpressionResult<decltype(i)>&& SingleExpressionResult<
+            decltype(e)>&& std::is_rvalue_reference_v<decltype(i)&&>&&
+            std::is_rvalue_reference_v<decltype(e)&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {

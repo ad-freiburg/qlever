@@ -1,6 +1,8 @@
 //   Copyright 2024, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "LazyGroupBy.h"
 
@@ -86,15 +88,4 @@ void LazyGroupBy::processBlock(
         },
         aggregateInfo, std::move(expressionResult));
   }
-}
-
-// _____________________________________________________________________________
-void LazyGroupBy::visitAggregate(
-    const auto& visitor,
-    const GroupBy::HashMapAggregateInformation& aggregateInfo,
-    auto&&... additionalVariants) {
-  std::visit(visitor,
-             aggregationData_.getAggregationDataVariant(
-                 aggregateInfo.aggregateDataIndex_),
-             AD_FWD(additionalVariants)...);
 }

@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -53,7 +55,8 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 // `allowEmpty` is true, then an empty vector will also be accepted. If this
 // condition is violated, throw an exception. This is used to validate the
 // parameters for file types and default graphs.
-static void checkNumParameterValues(const auto& values, size_t numFiles,
+template <typename T>
+static void checkNumParameterValues(const T& values, size_t numFiles,
                                     bool allowEmpty,
                                     std::string_view parameterName) {
   if (allowEmpty && values.empty()) {
@@ -126,8 +129,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
 // Get the parameter value at the given index. If the vector is empty, return
 // the given `defaultValue`. If the vector has exactly one element, return that
 // element, no matter what the index is.
-template <typename T>
-T getParameterValue(size_t idx, const auto& values, const T& defaultValue) {
+template <typename T, typename TsList>
+T getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
   if (values.empty()) {
     return defaultValue;
   }
@@ -175,8 +178,8 @@ int main(int argc, char** argv) {
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
-  auto add = [&boostOptions]<typename... Args>(Args&&... args) {
-    boostOptions.add_options()(std::forward<Args>(args)...);
+  auto add = [&boostOptions](auto&&... args) {
+    boostOptions.add_options()(std::forward<decltype(args)>(args)...);
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&baseName)->required(),

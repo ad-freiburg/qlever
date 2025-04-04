@@ -1,6 +1,8 @@
 // Copyright 2018 - 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_PARSER_RDFPARSER_H
 #define QLEVER_SRC_PARSER_RDFPARSER_H
@@ -702,11 +704,73 @@ class RdfParallelParser : public Parser {
   // interacts with the functions next to it.
   void finishTripleCollectorIfLastBatch();
   // Parse the single `batch` and push the result to the `triplesCollector_`.
-  void parseBatch(size_t parsePosition, auto batch);
+  template <typename Batch>
+  void parseBatch(size_t parsePosition, Batch batch) {
+    try {
+      RdfStringParser<Parser> parser{defaultGraphIri_};
+      parser.prefixMap_ = this->prefixMap_;
+      parser.setPositionOffset(parsePosition);
+      parser.setInputStream(std::move(batch));
+      // TODO: raise error message if a prefix parsing fails;
+      std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
+
+      tripleCollector_.push([triples = std::move(triples), this]() mutable {
+        triples_ = std::move(triples);
+      });
+      finishTripleCollectorIfLastBatch();
+    } catch (std::exception& e) {
+      tripleCollector_.pushException(std::current_exception());
+      parallelParser_.finish();
+    }
+  }
+
   // Read all the batches from the file and feed them to the parallel parser
   // threads. The argument is the first batch which might have been leftover
   // from the initialization phase where the prefixes are parsed.
-  void feedBatchesToParser(auto remainingBatchFromInitialization);
+  template <typename Batch>
+  void feedBatchesToParser(Batch remainingBatchFromInitialization) {
+    using namespace std::chrono_literals;
+    bool first = true;
+    size_t parsePosition = 0;
+    auto cleanup =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this] {
+          // Wait until everything has been parsed and then also finish the
+          // triple collector.
+          parallelParser_.push([this] { finishTripleCollectorIfLastBatch(); });
+          parallelParser_.finish();
+        });
+    decltype(remainingBatchFromInitialization) inputBatch;
+    try {
+      while (true) {
+        if (first) {
+          inputBatch = std::move(remainingBatchFromInitialization);
+          first = false;
+        } else {
+          auto nextOptional = fileBuffer_->getNextBlock();
+          if (!nextOptional) {
+            return;
+          }
+          inputBatch = std::move(nextOptional.value());
+        }
+        auto batchSize = inputBatch.size();
+        auto parseThisBatch = [this, parsePosition,
+                               batch = std::move(inputBatch)]() mutable {
+          return parseBatch(parsePosition, std::move(batch));
+        };
+        parsePosition += batchSize;
+        numBatchesTotal_.fetch_add(1);
+        if (sleepTimeForTesting_ > 0ms) {
+          std::this_thread::sleep_for(sleepTimeForTesting_);
+        }
+        bool stillActive = parallelParser_.push(parseThisBatch);
+        if (!stillActive) {
+          return;
+        }
+      }
+    } catch (std::exception& e) {
+      tripleCollector_.pushException(std::current_exception());
+    }
+  }
 
   using Parser::isParserExhausted_;
   using Parser::tok_;

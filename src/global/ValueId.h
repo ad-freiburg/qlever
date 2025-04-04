@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_GLOBAL_VALUEID_H
 #define QLEVER_SRC_GLOBAL_VALUEID_H
@@ -411,7 +413,8 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr]<typename T>(T&& value) {
+    auto visitor = [&ostr](auto&& value) {
+      using T = decltype(value);
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         // already handled above
         AD_FAIL();

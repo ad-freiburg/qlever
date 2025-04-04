@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (September of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -19,6 +21,70 @@
 #include "util/ValidatorHelpers.h"
 
 namespace ad_utility {
+
+namespace {
+
+// Helper function, that check, if a given validator behaves as
+// wanted, before and after being transformed into an exception validator.
+template <typename ValidatorFunc, typename... ParameterTypes>
+auto checkValidator(
+    // ValidatorFunction<ParameterTypes...> auto func,
+    ValidatorFunc func, const std::tuple<ParameterTypes...>& validValues,
+    const std::tuple<ParameterTypes...>& nonValidValues,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "checkValidator")};
+
+  ASSERT_TRUE(std::apply(func, validValues));
+  ASSERT_FALSE(std::apply(func, nonValidValues));
+
+  // Transform and check.
+  auto transformedFunc =
+      transformValidatorIntoExceptionValidator<ValidatorFunc,
+                                               ParameterTypes...>(func, "test");
+  static_assert(
+      ExceptionValidatorFunction<decltype(transformedFunc), ParameterTypes...>);
+  ASSERT_STREQ(std::apply(transformedFunc, nonValidValues)
+                   .value_or(ErrorMessage{""})
+                   .getMessage()
+                   .c_str(),
+               "test");
+  ASSERT_FALSE(std::apply(transformedFunc, validValues).has_value());
+}
+
+}  // namespace
+
+struct
+    ValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeRightTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(
+        !ValidatorFunction<decltype([](FirstParameter, SecondParameter) {
+                             return true;
+                           }),
+                           int, int>);
+  }
+};
+
+struct
+    ValidatorConcept_ValidParameterButFunctionParameterRightAndReturnTypeWrongTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(!ValidatorFunction<
+                  decltype([](FirstParameter n, SecondParameter) { return n; }),
+                  int, int>);
+  }
+};
+
+struct
+    ValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(!ValidatorFunction<
+                  decltype([](FirstParameter n, SecondParameter) { return n; }),
+                  int, int>);
+  }
+};
 
 TEST(ValidatorConceptTest, ValidatorConcept) {
   // Lambda function types for easier test creation.
@@ -64,13 +130,7 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
       !ValidatorFunction<decltype([](const int&&) { return true; }), int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ValidatorFunction<decltype([](FirstParameter, SecondParameter) {
-                                 return true;
-                               }),
-                               int, int>);
-      };
+      ValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeRightTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper),
       int&, int&&, const int&&>(
@@ -84,13 +144,7 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
       !ValidatorFunction<decltype([](const int& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
-                                 return n;
-                               }),
-                               int, int>);
-      };
+      ValidatorConcept_ValidParameterButFunctionParameterRightAndReturnTypeWrongTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
       int, const int, const int&>(
@@ -103,18 +157,44 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
       !ValidatorFunction<decltype([](const int&& n) { return n; }), int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
-                                 return n;
-                               }),
-                               int, int>);
-      };
+      ValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
       int&, int&&, const int&&>(
       validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper);
 }
+
+struct
+    ExceptionValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeRightTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(!ExceptionValidatorFunction<
+                  decltype([](FirstParameter, SecondParameter) {
+                    return std::optional<ErrorMessage>{};
+                  }),
+                  int, int>);
+  }
+};
+
+struct
+    ExceptionValidatorConcept_ValidParameterButFunctionParameterRightAndReturnTypeWrongTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(!ExceptionValidatorFunction<
+                  decltype([](FirstParameter n, SecondParameter) { return n; }),
+                  int, int>);
+  }
+};
+
+struct
+    ExceptionValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper {
+  template <typename FirstParameter, typename SecondParameter>
+  void operator()() const {
+    static_assert(!ValidatorFunction<
+                  decltype([](FirstParameter n, SecondParameter) { return n; }),
+                  int, int>);
+  }
+};
 
 TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
   // Lambda function types for easier test creation.
@@ -177,13 +257,7 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
                                   int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(!ExceptionValidatorFunction<
-                      decltype([](FirstParameter, SecondParameter) {
-                        return std::optional<ErrorMessage>{};
-                      }),
-                      int, int>);
-      };
+      ExceptionValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeRightTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper),
       int&, int&&, const int&&>(
@@ -200,12 +274,7 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
                                   int>);
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ExceptionValidatorFunction<
-                decltype([](FirstParameter n, SecondParameter) { return n; }),
-                int, int>);
-      };
+      ExceptionValidatorConcept_ValidParameterButFunctionParameterRightAndReturnTypeWrongTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper),
       int, const int, const int&>(
@@ -221,13 +290,7 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
                                   int>);
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
-      []<typename FirstParameter, typename SecondParameter>() {
-        static_assert(
-            !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
-                                 return n;
-                               }),
-                               int, int>);
-      };
+      ExceptionValidatorConcept_ValidParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper{};
   passCartesianPorductToLambda<
       decltype(validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper),
       int&, int&&, const int&&>(
@@ -246,8 +309,9 @@ look like this: `void func(std::string errorMessage, std::string descriptor,
 auto translationFunction, std::same_as<ConstConfigOptionProxy<bool>> auto...
 args)`.
 */
+template <typename F>
 void doConstructorTest(
-    auto generateValidatorManager,
+    F generateValidatorManager,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};
@@ -424,36 +488,6 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
 
 // Rather basic test, if things behave as wanted with the helper function.
 TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
-  // Helper function, that check, if a given validator behaves as
-  // wanted, before and after being transformed into an exception validator.
-  auto checkValidator = []<typename ValidatorFunc, typename... ParameterTypes>(
-                            // ValidatorFunction<ParameterTypes...> auto func,
-                            ValidatorFunc func,
-                            const std::tuple<ParameterTypes...>& validValues,
-                            const std::tuple<ParameterTypes...>& nonValidValues,
-                            ad_utility::source_location l =
-                                ad_utility::source_location::current()) {
-    // For generating better messages, when failing a test.
-    auto trace{generateLocationTrace(l, "checkValidator")};
-
-    ASSERT_TRUE(std::apply(func, validValues));
-    ASSERT_FALSE(std::apply(func, nonValidValues));
-
-    // Transform and check.
-    auto transformedFunc =
-        transformValidatorIntoExceptionValidator<ValidatorFunc,
-                                                 ParameterTypes...>(func,
-                                                                    "test");
-    static_assert(ExceptionValidatorFunction<decltype(transformedFunc),
-                                             ParameterTypes...>);
-    ASSERT_STREQ(std::apply(transformedFunc, nonValidValues)
-                     .value_or(ErrorMessage{""})
-                     .getMessage()
-                     .c_str(),
-                 "test");
-    ASSERT_FALSE(std::apply(transformedFunc, validValues).has_value());
-  };
-
   // Test with a few generated validators..
   checkValidator(generateDummyNonExceptionValidatorFunction<bool>(0),
                  std::make_tuple(false), std::make_tuple(true));

@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2024      Fabian Krause (fabian.krause@students.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
@@ -14,9 +16,9 @@
 // For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.
 static constexpr auto valueAdder = []() {
-  auto numericValueAdder = []<typename T>(T value, double& sum,
-                                          [[maybe_unused]] const bool& error)
-      -> CPP_ret(void)(requires std::is_arithmetic_v<T>) {
+  auto numericValueAdder = [](auto value, double& sum,
+                              [[maybe_unused]] const bool& error)
+      -> CPP_ret(void)(requires std::is_arithmetic_v<decltype(value)>) {
     sum += static_cast<double>(value);
   };
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
@@ -34,7 +36,8 @@ struct AvgAggregationData {
   int64_t count_ = 0;
 
   // _____________________________________________________________________________
-  void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
+  template <typename T>
+  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
     count_++;
@@ -53,7 +56,8 @@ struct CountAggregationData {
   int64_t count_ = 0;
 
   // _____________________________________________________________________________
-  void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
+  template <typename T>
+  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
     if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
   }
 
@@ -103,7 +107,8 @@ struct SumAggregationData {
   int64_t intSum_ = 0;
 
   // _____________________________________________________________________________
-  void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
+  template <typename T>
+  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
 
     auto doubleValueAdder = [this](double value) {
@@ -137,7 +142,8 @@ struct GroupConcatAggregationData {
   std::string_view separator_;
 
   // _____________________________________________________________________________
-  void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
+  template <typename T>
+  void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
     if (val.has_value()) {
       if (!currentValue_.empty()) currentValue_.append(separator_);
