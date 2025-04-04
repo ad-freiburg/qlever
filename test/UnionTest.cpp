@@ -431,7 +431,7 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
 
   // If the cache key of `unionOperation2` is a suffix of the cache key of
   // `unionOperation1` then it is ambiguous and the bind might as well be
-  // applied to the UNION, it would be ambigous.
+  // applied to the UNION, it would be ambiguous.
   EXPECT_THAT(
       unionOperation1.getCacheKey(),
       ::testing::Not(::testing::EndsWith(unionOperation2.getCacheKey())));
