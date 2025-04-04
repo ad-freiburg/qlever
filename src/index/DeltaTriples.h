@@ -26,7 +26,10 @@ using LocatedTriplesPerBlockAllPermutations =
 // that correctly respects these delta triples, hence the name.
 struct LocatedTriplesSnapshot {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
-  LocalVocab localVocab_;
+  // Make sure to keep the local vocab alive as long as the snapshot is alive.
+  // The `DeltaTriples` class may concurrently add new entries under the hood,
+  // but this is safe because the `LifetimeExtender` prevents access entirely.
+  LocalVocab::LifetimeExtender localVocabLifetimeExtender_;
   // A unique index for this snapshot that is used in the query cache.
   size_t index_;
   // Get `TripleWithPosition` objects for given permutation.

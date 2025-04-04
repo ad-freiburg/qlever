@@ -111,7 +111,7 @@ Result Bind::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;
 
-  auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
+  auto applyBind = [this](IdTable idTable, LocalVocab* localVocab) {
     return computeExpressionBind(localVocab, std::move(idTable),
                                  _bind._expression.getPimpl());
   };
@@ -149,6 +149,10 @@ Result Bind::computeResult(bool requestLaziness) {
       [](auto applyBind,
          std::shared_ptr<const Result> result) -> Result::Generator {
     for (auto& [idTable, localVocab] : result->idTables()) {
+      // The `LocalVocab` disallows inserts if it doesn't own its
+      // `primaryWordSet` exclusively. We clone the local vocab to enforce this
+      // invariant in all cases
+      localVocab = localVocab.clone();
       IdTable resultTable = applyBind(std::move(idTable), &localVocab);
       co_yield {std::move(resultTable), std::move(localVocab)};
     }
