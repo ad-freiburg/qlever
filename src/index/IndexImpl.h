@@ -555,8 +555,8 @@ class IndexImpl {
       ad_utility::HashMap<WordIndex, Score>& wordsInContext,
       ScoreData& scoreData) const;
 
-  void logEntityNotFound(const string& word,
-                         size_t& entityNotFoundErrorMsgCount) const;
+  static void logEntityNotFound(const string& word,
+                                size_t& entityNotFoundErrorMsgCount);
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);

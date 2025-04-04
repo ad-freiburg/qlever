@@ -15,11 +15,10 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/Conversions.h"
+#include "util/MmapVector.h"
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
@@ -105,7 +104,7 @@ void IndexImpl::processWordCaseDuringInvertedListProcessing(
 
 // _____________________________________________________________________________
 void IndexImpl::logEntityNotFound(const string& word,
-                                  size_t& entityNotFoundErrorMsgCount) const {
+                                  size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "Entity from text not in KB: " << word << '\n';
     if (++entityNotFoundErrorMsgCount == 20) {
@@ -178,10 +177,10 @@ void IndexImpl::buildTextIndexFile(
 void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);
+  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
-  // we write the offsets to and stxxl:vector first;
-  stxxl::vector<off_t> offsets;
+  // we write the offsets to and `ad_utility::MmapVector` first;
+  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   string line;
@@ -204,15 +203,8 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     currentOffset += static_cast<off_t>(lineView.size());
   }
   offsets.push_back(currentOffset);
-
-  ofs.close();
-  // Now append the tmp file to the docsDB file.
-  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    off_t cur = offsets[i];
-    out.write(&cur, sizeof(cur));
-  }
-  out.close();
+  ofs.write(reinterpret_cast<const char*>(offsets.data()),
+            sizeof(off_t) * offsets.size());
   LOG(INFO) << "DocsDB done.\n";
 }
 

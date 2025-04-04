@@ -7,7 +7,6 @@
 
 #include <concepts>
 #include <exception>
-#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -18,12 +17,10 @@
 #include "util/Iterators.h"
 #include "util/ResetWhenMoved.h"
 
-using std::string;
-
 namespace ad_utility {
 // _________________________________________________________________________
 class UninitializedArrayException : public std::exception {
-  const char* what() const throw() {
+  const char* what() const noexcept override {
     return "Tried to access a DiskBasedArray which was closed or "
            "uninitialized\n";
   }
@@ -31,7 +28,7 @@ class UninitializedArrayException : public std::exception {
 
 // _________________________________________________________________________
 class InvalidFileException : public std::exception {
-  const char* what() const throw() {
+  const char* what() const noexcept override {
     return "Error reading meta data of  Mmap file: Maybe magic number is "
            "missing or there is a version mismatch\n";
   }
@@ -49,11 +46,8 @@ class TruncateException : public std::exception {
   }
 
   // ______________________________________________________________________________________________________
-  const char* what() const throw() { return _msg.c_str(); }
+  const char* what() const noexcept override { return _msg.c_str(); }
 
-  std::string _filename;
-  size_t _bytesize;
-  int _errno;
   std::string _msg;
 };
 
@@ -165,13 +159,13 @@ class MmapVector {
   // create Array of given size  fill with default value
   // file contents will be overridden if existing!
   // allows read and write access
-  void open(size_t size, const T& defaultValue, string filename,
+  void open(size_t size, const T& defaultValue, std::string filename,
             AccessPattern pattern = AccessPattern::None);
 
   // create uninitialized array of given size at path specified by filename
   // file will be created or overridden!
   // allows read and write access
-  void open(size_t size, string filename,
+  void open(size_t size, std::string filename,
             AccessPattern pattern = AccessPattern::None);
 
   // create from given Iterator range
@@ -179,11 +173,11 @@ class MmapVector {
   // TODO<joka921>: use enable_if or constexpr if or concepts/ranges one they're
   // out
   template <class It>
-  void open(It begin, It end, const string& filename,
+  void open(It begin, It end, const std::string& filename,
             AccessPattern pattern = AccessPattern::None);
 
   // _____________________________________________________________________
-  void open(string filename, CreateTag,
+  void open(std::string filename, CreateTag,
             AccessPattern pattern = AccessPattern::None) {
     open(0, std::move(filename), pattern);
   }
@@ -191,7 +185,7 @@ class MmapVector {
   // open previously created array.
   // File at path filename must be a valid file created previously by this class
   // else the behavior is undefined
-  void open(string filename, ReuseTag,
+  void open(std::string filename, ReuseTag,
             AccessPattern pattern = AccessPattern::None);
 
   // Close the vector, saves all buffered data to the mapped file and closes it.
@@ -331,7 +325,7 @@ class MmapVectorView : private MmapVector<T> {
   MmapVectorView(const MmapVectorView<T>&) = delete;
   MmapVectorView& operator=(const MmapVectorView<T>&) = delete;
 
-  void open(string filename, AccessPattern pattern = AccessPattern::None) {
+  void open(std::string filename, AccessPattern pattern = AccessPattern::None) {
     this->unmap();
     this->_filename = std::move(filename);
     this->_pattern = pattern;
@@ -340,7 +334,7 @@ class MmapVectorView : private MmapVector<T> {
     this->advise(this->_pattern);
   }
 
-  void open(const string& filename, ReuseTag,
+  void open(const std::string& filename, ReuseTag,
             AccessPattern pattern = AccessPattern::None) {
     open(filename, pattern);
   }
@@ -350,7 +344,7 @@ class MmapVectorView : private MmapVector<T> {
   void close();
 
   // destructor
-  ~MmapVectorView() { close(); }
+  ~MmapVectorView() override { close(); }
 
   // _____________________________________________________________
   std::string getFilename() const { return this->_filename; }
@@ -386,7 +380,7 @@ class MmapVectorTmp : public MmapVector<T> {
 
   // If we still own a file, delete it after cleaning up
   // everything else
-  ~MmapVectorTmp() {
+  ~MmapVectorTmp() override {
     // if the filename is not empty, we still own a file
     std::string oldFilename = this->_filename;
     std::string message = absl::StrCat(

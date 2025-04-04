@@ -6,15 +6,10 @@
 #ifndef QLEVER_SRC_INDEX_METADATAHANDLER_H
 #define QLEVER_SRC_INDEX_METADATAHANDLER_H
 
-#include <cassert>
-#include <stxxl/vector>
+#include <string>
 
 #include "global/Id.h"
-#include "index/CompressedRelation.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
-#include "util/Iterators.h"
-#include "util/Log.h"
 #include "util/Serializer/Serializer.h"
 
 // Wrapper class for access to `CompressedRelationMetadata` objects (one per

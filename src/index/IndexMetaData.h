@@ -5,35 +5,25 @@
 #ifndef QLEVER_SRC_INDEX_INDEXMETADATA_H
 #define QLEVER_SRC_INDEX_INDEXMETADATA_H
 
-#include <stdio.h>
-
-#include <array>
 #include <cmath>
 #include <exception>
 #include <limits>
 #include <utility>
-#include <vector>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
-#include "util/HashMap.h"
 #include "util/MmapVector.h"
-#include "util/ReadableNumberFact.h"
 #include "util/Serializer/Serializer.h"
-
-using std::array;
-using std::pair;
-using std::vector;
 
 // An exception is thrown when we want to construct mmap meta data from hmap
 // meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
-  WrongFormatException(std::string msg) : msg_(std::move(msg)) {}
-  const char* what() const throw() { return msg_.c_str(); }
+  explicit WrongFormatException(std::string msg) : msg_{std::move(msg)} {}
+  const char* what() const noexcept override { return msg_.c_str(); }
 
  private:
   std::string msg_;

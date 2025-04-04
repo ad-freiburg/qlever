@@ -258,11 +258,6 @@ addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
-# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
-# makes it impossible to run the test cases for the Index class in parallel.
-# TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
-
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
 addLinkAndDiscoverTest(ForwardTest)

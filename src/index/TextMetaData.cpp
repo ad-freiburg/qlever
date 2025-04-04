@@ -2,10 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./TextMetaData.h"
+#include "index/TextMetaData.h"
 
-#include "../global/Constants.h"
-#include "../util/ReadableNumberFact.h"
+#include "global/Constants.h"
+#include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
