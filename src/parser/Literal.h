@@ -70,6 +70,7 @@ class Literal {
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
+
   NormalizedStringView getDatatype() const;
 
   // For documentation, see documentation of function
@@ -106,12 +107,5 @@ class Literal {
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
-
-  // Append the content of another Literal to this one. If the other Literal has
-  // the same language tag or datatype, the resulting Literal will have the same
-  // language tag or datatype. Otherwise, the resulting Literal will have no
-  // language tag or datatype. This is used in the `CONCAT` function in
-  // StringExpressions.cpp.
-  void append(const Literal& other);
 };
 }  // namespace ad_utility::triple_component

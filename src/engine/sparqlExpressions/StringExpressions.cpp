@@ -16,11 +16,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       std::optional<std::variant<Iri, std::string>> descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -454,9 +457,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using LiteralVec =
-        VectorWithMemoryLimit<ad_utility::triple_component::Literal>;
-    using Literal = ad_utility::triple_component::Literal;
+    using StringVec = VectorWithMemoryLimit<std::string>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -469,11 +470,44 @@ class ConcatExpression : public detail::VariadicExpression {
     // We store the (intermediate) result either as single string or a vector.
     // If the result is a string, then all the previously evaluated children
     // were constants (see above).
-    std::variant<Literal, LiteralVec> result =
-        Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
+
+    std::variant<std::string, StringVec> result{std::string{""}};
+    StringVec dataTypesOrLangTags(ctx->_allocator);
+
+    auto storeDatatypeOrLanguageTag = [&](const auto& literal) {
+      if (literal.hasDatatype()) {
+        dataTypesOrLangTags.push_back(
+            std::string{asStringViewUnsafe(literal.getDatatype())});
+      } else if (literal.hasLanguageTag()) {
+        dataTypesOrLangTags.push_back(
+            std::string{asStringViewUnsafe(literal.getLanguageTag())});
+      } else {
+        dataTypesOrLangTags.push_back("");
+      }
+    };
+
+    auto determineDescriptor =
+        [&]() -> std::optional<std::variant<Iri, std::string>> {
+      if (dataTypesOrLangTags.empty()) {
+        return std::nullopt;
+      }
+      // if all elements are the same and not empty
+      if (std::all_of(dataTypesOrLangTags.begin(), dataTypesOrLangTags.end(),
+                      [&](const std::string& s) {
+                        return s == dataTypesOrLangTags[0];
+                      }) &&
+          !dataTypesOrLangTags[0].empty()) {
+        return dataTypesOrLangTags[0];  // alle languagetags sollen zurückgegebn
+                                        // werden, aber nur der datatype
+                                        // std:string
+      }
+      return std::nullopt;
+    };
+
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
-                                           std::is_rvalue_reference_v<T&&>) {
+        &ctx, &result, &dataTypesOrLangTags, &storeDatatypeOrLanguageTag,
+        &determineDescriptor)(typename T)(T && s)(
+        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant =
             sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(s,
@@ -481,29 +515,33 @@ class ConcatExpression : public detail::VariadicExpression {
                 .value_or(ad_utility::triple_component::Literal::
                               literalWithNormalizedContent(
                                   asNormalizedStringViewUnsafe("")));
-        if (std::holds_alternative<Literal>(result)) {
+        const auto& strFromConstant =
+            asStringViewUnsafe(literalFromConstant.getContent());
+        storeDatatypeOrLanguageTag(literalFromConstant);
+        if (std::holds_alternative<std::string>(result)) {
           // All previous children were constants, and the current child also is
           // a constant.
-          std::get<Literal>(result).append(literalFromConstant);
+          std::get<std::string>(result).append(strFromConstant);
         } else {
           // One of the previous children was not a constant, so we already
           // store a vector.
-          auto& resultAsVector = std::get<LiteralVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](auto& target) {
-            target.append(literalFromConstant);
+          auto& resultAsVector = std::get<StringVec>(result);
+          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
+            target.append(strFromConstant);
           });
         }
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
 
-        if (std::holds_alternative<Literal>(result)) {
+        if (std::holds_alternative<std::string>(result)) {
           // All previous children were constants, but now we have a
           // non-constant child, so we have to expand the `result` from a single
           // string to a vector.
-          auto constantResultSoFar = std::move(std::get<Literal>(result));
-          result.emplace<LiteralVec>(ctx->_allocator);
-          auto& resultAsVec = std::get<LiteralVec>(result);
+          std::string constantResultSoFar =
+              std::move(std::get<std::string>(result));
+          result.emplace<StringVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<StringVec>(result);
           resultAsVec.reserve(ctx->size());
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
                       constantResultSoFar);
@@ -511,7 +549,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
-        auto& resultAsVec = std::get<LiteralVec>(result);
+        auto& resultAsVec = std::get<StringVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
@@ -519,8 +557,11 @@ class ConcatExpression : public detail::VariadicExpression {
                   sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(
                       std::move(el), ctx);
               literal.has_value()) {
-            resultAsVec[i].append(literal.value());
+            const auto& str = asStringViewUnsafe(literal.value().getContent());
+            resultAsVec[i].append(str);
+            storeDatatypeOrLanguageTag(literal.value());
           }
+
           ctx->cancellationHandle_->throwIfCancelled();
           ++i;
         }
@@ -534,15 +575,18 @@ class ConcatExpression : public detail::VariadicExpression {
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    if (std::holds_alternative<Literal>(result)) {
-      return IdOrLiteralOrIri(LiteralOrIri{std::get<Literal>(result)});
+    std::optional<std::variant<Iri, std::string>> descriptor =
+        determineDescriptor();
+    if (std::holds_alternative<std::string>(result)) {
+      return IdOrLiteralOrIri{
+          toLiteral(std::get<std::string>(result), descriptor)};
     } else {
-      auto& literalVec = std::get<LiteralVec>(result);
+      auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
-      resultAsVec.reserve(literalVec.size());
+      resultAsVec.reserve(stringVec.size());
       ql::ranges::copy(
-          literalVec | ql::views::transform([](const Literal& literal) {
-            return IdOrLiteralOrIri(LiteralOrIri(literal));
+          stringVec | ql::views::transform([&](const std::string& str) {
+            return toLiteral(str, descriptor);
           }),
           std::back_inserter(resultAsVec));
       return resultAsVec;
