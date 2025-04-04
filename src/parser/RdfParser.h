@@ -87,6 +87,9 @@ class RdfParserBase {
   // Return a batch of the next 100'000 triples at once. If the parser is
   // exhausted, return `nullopt`.
   virtual std::optional<std::vector<TurtleTriple>> getBatch();
+
+  static constexpr std::string_view parsingFailedEndOfInput =
+      "Parsing failed before end of input, remaining bytes: ";
 };
 
 /**
@@ -425,8 +428,8 @@ CPP_template(typename Parser)(
     this->turtleDoc();
     auto d = this->tok_.view();
     if (!d.empty()) {
-      this->raise(absl::StrCat(
-          "Parsing failed before end of input, remaining bytes: ", d.size()));
+      this->raise(
+          absl::StrCat(RdfParserBase::parsingFailedEndOfInput, d.size()));
     }
     return std::move(this->triples_);
   }
@@ -628,6 +631,7 @@ class RdfParallelParser : public Parser {
   ~RdfParallelParser() override;
 
  private:
+  void injectHelperMessageForMultilineStringLiterals(std::string& message);
   // The documentation for this is in the `.cpp` file, because it closely
   // interacts with the functions next to it.
   void finishTripleCollectorIfLastBatch();
