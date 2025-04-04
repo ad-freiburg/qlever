@@ -82,11 +82,38 @@ size_t ExistsJoin::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-Result ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
-  auto leftRes = left_->getResult();
+Result ExistsJoin::computeResult(bool requestLaziness) {
+  bool noJoinNecessary = joinColumns_.empty();
+  auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
+  if (noJoinNecessary) {
+    // For non-lazy results applying the limit introduces some overhead, but for
+    // lazy results it ensures that we don't have to compute the whole result,
+    // so we consider this a tradeoff worth to make.
+    right_->setLimit({1});
+  }
   auto rightRes = right_->getResult();
-  const auto& left = leftRes->idTable();
   const auto& right = rightRes->idTable();
+
+  if (!leftRes->isFullyMaterialized()) {
+    AD_CORRECTNESS_CHECK(noJoinNecessary);
+    // Forward lazy result, otherwise let the existing code handle the join with
+    // no column.
+    return {Result::LazyResult{
+                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ql::views::transform([exists = !right.empty(),
+                                      leftRes](Result::IdTableVocabPair& pair) {
+                  // Make sure we keep this shared ptr alive until the result is
+                  // completely consumed.
+                  (void)leftRes;
+                  auto& idTable = pair.idTable_;
+                  idTable.addEmptyColumn();
+                  ql::ranges::fill(idTable.getColumn(idTable.numColumns() - 1),
+                                   Id::makeFromBool(exists));
+                  return std::move(pair);
+                })},
+            leftRes->sortedBy()};
+  }
+  const auto& left = leftRes->idTable();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
   // callbacks: one for each matching pair of rows from `left` and `right`, and

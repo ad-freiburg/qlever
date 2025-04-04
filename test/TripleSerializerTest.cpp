@@ -142,4 +142,31 @@ TEST(TripleSerializer, onlySingleWordSetSupportedForLocalVocab) {
   EXPECT_THROW(ad_utility::detail::serializeLocalVocab(serializer, localVocab),
                ad_utility::Exception);
 }
+
+// _____________________________________________________________________________
+TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
+  using namespace ::testing;
+  auto tmpFile = std::filesystem::temp_directory_path() / "fileNoPermissions";
+  // Create empty file
+  std::ofstream{tmpFile}.close();
+  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  // Remove all permissions to make read fail
+  std::filesystem::permissions(tmpFile, std::filesystem::perms::none);
+
+  if (FILE* handle = fopen(tmpFile.c_str(), "r")) {
+    fclose(handle);
+    // This can happen in docker environments.
+    GTEST_SKIP_("File permissions are not set to none");
+  }
+
+  ad_utility::BlankNodeManager bm;
+  LocalVocab localVocab;
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ad_utility::deserializeIds(tmpFile, &bm),
+      AllOf(HasSubstr(tmpFile.generic_string()),
+            HasSubstr("cannot be opened for reading"),
+            HasSubstr("(Permission denied)")),
+      std::runtime_error);
+}
 }  // namespace
