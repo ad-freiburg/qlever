@@ -22,11 +22,56 @@
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
-// _______________________________________________________________
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::clear() {
+  lastParseResult_ = "";
+
+  activeSubject_ = TripleComponent::Iri::fromIriref("<>");
+  activePredicate_ = TripleComponent::Iri::fromIriref("<>");
+  activePrefix_.clear();
+
+  prefixMap_ = prefixMapDefault_;
+
+  tok_.reset(nullptr, 0);
+  triples_.clear();
+  numBlankNodes_ = 0;
+  isParserExhausted_ = false;
+}
+
+// _____________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::statement() {
   tok_.skipWhitespaceAndComments();
   return directive() || (triples() && skip<TurtleTokenId::Dot>());
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raise(std::string_view error_message) const {
+  auto d = tok_.view();
+  std::stringstream errorMessage;
+  errorMessage << "Parse error at byte position " << getParsePosition() << ": "
+               << error_message << '\n';
+  if (!d.empty()) {
+    size_t num_bytes = 500;
+    auto s = std::min(size_t(num_bytes), size_t(d.size()));
+    errorMessage << "The next " << num_bytes << " bytes are:\n"
+                 << std::string_view(d.data(), s) << '\n';
+  }
+  throw ParseException{std::move(errorMessage).str()};
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raiseOrIgnoreTriple(
+    std::string_view errorMessage) {
+  if (invalidLiteralsAreSkipped()) {
+    currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
+  } else {
+    raise(errorMessage);
+  }
 }
 
 // ______________________________________________________________
@@ -565,6 +610,19 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   return parser->lastParseResult_;
 }
 
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
+  AD_CORRECTNESS_CHECK(prefixAndBaseDisabled_);
+  raise(
+      "@prefix or @base directives need to be at the beginning of the file "
+      "when using the parallel parser. Later redundant redefinitions are "
+      "fine. Use '--parse-parallel false' if you can't guarantee this. If "
+      "the reason for this error is that the input is a concatenation of "
+      "Turtle files, each of which has the prefixes at the beginning, you "
+      "should feed the files to QLever separately instead of concatenated");
+}
+
 // ______________________________________________________________________
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
@@ -691,6 +749,46 @@ bool TurtleParser<T>::parseTerminal() {
   return false;
 }
 
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::emitTriple() {
+  if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
+    triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
+                          defaultGraphIri_);
+  }
+  currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+bool TurtleParser<Tokenizer_T>::check(bool result) const {
+  if (result) {
+    return true;
+  } else {
+    raise("A check for a required element failed");
+  }
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+TripleComponent::Iri TurtleParser<Tokenizer_T>::expandPrefix(
+    const std::string& prefix) {
+  if (!prefixMap_.count(prefix)) {
+    raise("Prefix " + prefix +
+          " was not previously defined using a PREFIX or @prefix "
+          "declaration");
+  } else {
+    return prefixMap_[prefix];
+  }
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+std::string TurtleParser<Tokenizer_T>::createAnonNode() {
+  return BlankNode{true, absl::StrCat(blankNodePrefix_, "_", numBlankNodes_++)}
+      .toSparql();
+}
+
 // ________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::blankNodeLabel() {
@@ -704,6 +802,16 @@ bool TurtleParser<T>::blankNodeLabel() {
         BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
   }
   return res;
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+bool TurtleParser<Tokenizer_T>::anon() {
+  if (!parseTerminal<TurtleTokenId::Anon>()) {
+    return false;
+  }
+  lastParseResult_ = createAnonNode();
+  return true;
 }
 
 // __________________________________________________________________________
@@ -1178,6 +1286,24 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       std::array{file.parseInParallel_ ? 1 : 0,
                  file.filetype_ == Index::Filetype::Turtle ? 1 : 0},
       makeRdfParserImpl);
+}
+
+// _____________________________________________________________________________
+std::optional<std::vector<TurtleTriple>> RdfParserBase::getBatch() {
+  std::vector<TurtleTriple> result;
+  result.reserve(100'000);
+  for (size_t i = 0; i < 100'000; ++i) {
+    result.emplace_back();
+    bool success = getLine(result.back());
+    if (!success) {
+      result.resize(result.size() - 1);
+      break;
+    }
+  }
+  if (result.empty()) {
+    return std::nullopt;
+  }
+  return result;
 }
 
 // ______________________________________________________________
