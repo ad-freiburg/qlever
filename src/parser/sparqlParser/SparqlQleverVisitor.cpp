@@ -213,6 +213,9 @@ ExpressionPtr Visitor::processIriFunctionCall(
     if (functionName == "isGeoPoint") {
       return createUnary(&makeIsGeoPointExpression);
     }
+    if (functionName == "isGeoLiteral") {
+      return createUnary(&makeIsGeoLiteralExpression);
+    }
   }
 
   // If none of the above matched, report unknown function.

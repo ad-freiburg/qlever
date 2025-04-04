@@ -19,6 +19,7 @@
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfEscaping.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -32,25 +33,28 @@
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
-template <typename W, typename C>
+template <typename W, typename C, typename CG>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback,
+                     C& internalWordCallback, CG& internalGeoWordCallback,
                      ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
+        requires WordComparator<W>&& WordCallback<C>  // ...
+    ) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse);
+                                internalWordCallback, internalGeoWordCallback,
+                                memoryToUse);
 }
 
 // _________________________________________________________________
-template <typename W, typename C>
+template <typename W, typename C, typename CG>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
                                        size_t numFiles, W comparator,
-                                       C& wordCallback,
+                                       C& wordCallback, CG& geoWordCallback,
                                        ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
+        requires WordComparator<W>&& WordCallback<C>  // ...
+    ) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -107,9 +111,9 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // Wait for the (asynchronous) writing of the last batch of words, and
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
-                        &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
-                                     progressBar);
+                        &geoWordCallback, &lessThan, &progressBar]() {
+        this->writeQueueWordsToIdVec(buffer, wordCallback, geoWordCallback,
+                                     lessThan, progressBar);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(bufferSize_);
@@ -133,7 +137,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
+    writeQueueWordsToIdVec(sortedBuffer, wordCallback, geoWordCallback,
+                           lessThan, progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -144,12 +149,13 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-CPP_template_def(typename C, typename L)(
+CPP_template_def(typename C, typename CG, typename L)(
     requires WordCallback<C> CPP_and
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
-                           C& wordCallback, const L& lessThan,
+                           C& wordCallback, CG& geoWordCallback,
+                           const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
@@ -181,7 +187,17 @@ CPP_template_def(typename C, typename L)(
       if (nextWord.isBlankNode()) {
         lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+        // Decide whether the word we are currently processing needs to go into
+        // the normal or geometry vocabulary.
+        if (RdfsVocabulary::stringIsGeoLiteral(nextWord.iriOrLiteral())) {
+          uint64_t index =
+              geoWordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+          lastTripleComponent_->index_ =
+              RdfsVocabulary::makeGeoVocabIndex(index);
+        } else {
+          lastTripleComponent_->index_ =
+              wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+        }
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {

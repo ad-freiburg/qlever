@@ -29,6 +29,7 @@ namespace ad_utility::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
+// TODO<ullingerc> must return an uint64
 template <typename T>
 CPP_concept WordCallback = ranges::invocable<T, std::string_view, bool>;
 // Concept for a callable that compares to `string_view`s.
@@ -145,11 +146,15 @@ struct VocabularyMetaData {
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
 // appearance.
-template <typename W, typename C>
+template <typename W, typename C, typename CG>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+                     C& wordCallback, CG& geoWordCallback,
+                     ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>);
+        requires WordComparator<W>&& WordCallback<C>  //&& WordCallback<CG>
+        // TODO<ullingerc> Fix template stuff
+        // leads to declared using local type , is used but never defined
+    );
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
@@ -167,23 +172,28 @@ class VocabularyMerger {
   const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 
   // Friend declaration for the publicly available function.
-  template <typename W, typename C>
+  // TODO<ullingerc> Fix template stuff
+  template <typename W, typename C, typename CG>
   friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
                               W comparator, C& wordCallback,
+                              CG& geoWordCallback,
                               ad_utility::MemorySize memoryToUse)
       -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
+          requires WordComparator<W>&& WordCallback<C>  //&& WordCallback<CG>
+      );
   VocabularyMerger() = default;
 
   // _______________________________________________________________
   // The function that performs the actual merge. See the static global
   // `mergeVocabulary` function for details.
-  template <typename W, typename C>
+  // TODO<ullingerc> Fix template stuff
+  template <typename W, typename C, typename CG>
   auto mergeVocabulary(const std::string& basename, size_t numFiles,
-                       W comparator, C& wordCallback,
+                       W comparator, C& wordCallback, CG& geoWordCallback,
                        ad_utility::MemorySize memoryToUse)
       -> CPP_ret(VocabularyMetaData)(
-          requires WordComparator<W>&& WordCallback<C>);
+          requires WordComparator<W>&& WordCallback<C>  //&& WordCallback<C>
+      );
 
   // Helper `struct` for a word from a partial vocabulary.
   struct QueueWord {
@@ -213,13 +223,19 @@ class VocabularyMerger {
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
   // clang-format off
-  CPP_template(typename C, typename L)(
+    CPP_template(typename C,
+     typename CG,
+      typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex,
-          TripleComponentWithIndex>)
+          TripleComponentWithIndex>
+          // WordCallback<C>
+  // TODO<ullingerc> Fix template stuff
+          )
       // clang-format on
       void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
-                                  C& wordCallback, const L& lessThan,
+                                  C& wordCallback, CG& geoWordCallback,
+                                  const L& lessThan,
                                   ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and MmapVectors and reset all internal
