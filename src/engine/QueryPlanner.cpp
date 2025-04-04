@@ -1604,7 +1604,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
       auto leExp =
           dynamic_cast<sparqlExpression::LessEqualExpression*>(filterExp);
       if (leExp == nullptr) {
-        return;
+        continue;
       }
 
       auto children = leExp->children();
@@ -1617,7 +1617,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
           dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
               rightChild);
       if (literalExp == nullptr) {
-        return;
+        continue;
       }
       ValueId constant = literalExp->value();
       int64_t maxDist = 0;
@@ -1626,12 +1626,12 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
       } else if (constant.getDatatype() == Datatype::Int) {
         maxDist = constant.getInt() * 1000;
       } else {
-        return;
+        continue;
       }
 
       auto distExprVars = getDistExpressionVariables(leftChild);
       if (!distExprVars.has_value()) {
-        return;
+        continue;
       }
       auto [left, right] = distExprVars.value();
       SpatialJoinConfiguration sjConfig{
