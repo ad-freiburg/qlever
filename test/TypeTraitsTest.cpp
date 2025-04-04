@@ -250,8 +250,8 @@ Call the given template function with every type in the parameter type list
 `Type, Type&, const Type&, Type&&, const Type&&` as template parameter.
 */
 struct CallWithEveryVariantOfType {
-  template <typename Type>
-  constexpr void operator()(auto func) const {
+  template <typename Type, typename F>
+  constexpr void operator()(F func) const {
     using pureT = std::decay_t<Type>;
     passListOfTypesToLambda<pureT, pureT&, const pureT&, pureT&&,
                             const pureT&&>(std::move(func));

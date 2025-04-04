@@ -351,8 +351,9 @@ void to_json(nlohmann::ordered_json& j, const ResultTable& resultTable) {
 
 // The code for the string insertion operator of a class, that can be casted to
 // string.
+template <typename T>
 static std::ostream& streamInserterOperatorImplementation(std::ostream& os,
-                                                          const auto& obj) {
+                                                          const T& obj) {
   os << static_cast<std::string>(obj);
   return os;
 }

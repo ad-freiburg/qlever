@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_CONCURRENTCACHE_H
 #define QLEVER_CONCURRENTCACHE_H
@@ -63,7 +65,8 @@ constexpr std::string_view toString(CacheStatus status) {
 
 // Given a `cache` and a `key` determine the corresponding `CacheStatus`.
 // Note: `computed` in this case means "not contained in the cache".
-CacheStatus getCacheStatus(const auto& cache, const auto& key) {
+template <typename Cache, typename Key>
+CacheStatus getCacheStatus(const Cache& cache, const Key& key) {
   if (cache.containsPinned(key)) {
     return CacheStatus::cachedPinned;
   } else if (cache.containsNonPinned(key)) {

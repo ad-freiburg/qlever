@@ -210,8 +210,9 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
 parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
+template <typename F>
 void testConstExprForEachNormalCall(
-    const auto& callToForEachWrapper,
+    const F& callToForEachWrapper,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};

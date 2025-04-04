@@ -3,10 +3,13 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
 #define QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
 
+#include <absl/strings/str_split.h>
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
 
@@ -19,6 +22,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "util/StringUtils.h"
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -555,10 +559,13 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
+  template <typename Context>
+  SparqlExpressionPimpl visitExpressionPimpl(Context* ctx) {
+    return {visit(ctx), getOriginalInputForContext(ctx)};
+  }
 
-  template <typename Expr>
-  ExpressionPtr createExpression(auto... children) {
+  template <typename Expr, typename... Children>
+  ExpressionPtr createExpression(Children... children) {
     return std::make_unique<Expr>(
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
@@ -618,15 +625,69 @@ class SparqlQleverVisitor {
   // variables for the matching word and the score that will be created when
   // processing those triples in the query body, s.t. they can be selected as
   // part of the query result.
+  template <typename Context>
   void setMatchingWordAndScoreVisibleIfPresent(
-      auto* ctx, const TripleWithPropertyPath& triple);
+      // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
+      // <entity>` is contained in the query, then the variable
+      // `?ql_textscore_var` is implicitly created and visible in the query
+      // body. Similarly, if a triple `?var ql:contains-word "words"` is
+      // contained in the query, then the variable `ql_matchingword_var` is
+      // implicitly created and visible in the query body.
+      Context* ctx, const TripleWithPropertyPath& triple) {
+    const auto& [subject, predicate, object] = triple;
+
+    auto* var = std::get_if<Variable>(&subject);
+    auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+
+    if (!var || !propertyPath) {
+      return;
+    }
+
+    if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+      string name = object.toSparql();
+      if (!((name.starts_with('"') && name.ends_with('"')) ||
+            (name.starts_with('\'') && name.ends_with('\'')))) {
+        reportError(
+            ctx, "ql:contains-word has to be followed by a string in quotes");
+      }
+      for (std::string_view s : std::vector<std::string>(
+               absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+        addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
+        if (!s.ends_with('*')) {
+          continue;
+        }
+        addVisibleVariable(var->getMatchingWordVariable(
+            ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
+      }
+    } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+      if (const auto* entVar = std::get_if<Variable>(&object)) {
+        addVisibleVariable(var->getEntityScoreVariable(*entVar));
+      } else {
+        addVisibleVariable(var->getEntityScoreVariable(object.toSparql()));
+      }
+    }
+  }
 
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of
   // the corresponding `RuntimeParameter`).
-  void warnOrThrowIfUnboundVariables(auto* ctx,
+  template <typename Context>
+  void warnOrThrowIfUnboundVariables(Context* ctx,
                                      const SparqlExpressionPimpl& expression,
-                                     std::string_view clauseName);
+                                     std::string_view clauseName) {
+    for (const auto& var : expression.containedVariables()) {
+      if (!ad_utility::contains(visibleVariables_, *var)) {
+        auto message = absl::StrCat(
+            "The variable ", var->name(), " was used in the expression of a ",
+            clauseName, " clause but was not previously bound in the query");
+        if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+          reportError(ctx, message);
+        } else {
+          parsedQuery_.addWarning(std::move(message));
+        }
+      }
+    }
+  }
 
   // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
   // just like a WHERE clause. Most of the time this just changes the type and

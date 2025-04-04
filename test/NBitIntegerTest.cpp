@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -185,7 +187,8 @@ auto testNumericNearLimits = []<size_t N>() {
   testBinaryFunctionNearLimits.operator()<N>(testNumeric);
 };
 
-void testAllN(auto function, auto... args) {
+template <typename F, typename... Args>
+void testAllN(F function, Args... args) {
   // Call function<N>(args) for all N in 1..64.
   // Note that the `(std::make_index_sequence...)` is the argument to the
   // unnamed lambda (immediately invoked lambda). Clang format wants the

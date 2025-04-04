@@ -42,8 +42,8 @@ list as template parameter.
 For example: If given `<int, const int>`, then the function will be called as
 `func<int>` and `func<const int>`.
 */
-template <typename... Parameters>
-constexpr void passListOfTypesToLambda(auto func) {
+template <typename... Parameters, typename F>
+constexpr void passListOfTypesToLambda(F&& func) {
   (func.template operator()<Parameters>(), ...);
 }
 

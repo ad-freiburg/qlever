@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_LAMBDAHELPERS_H
 #define QLEVER_LAMBDAHELPERS_H
@@ -29,12 +31,14 @@ struct AssignableLambdaImpl<Lambda, false, false> {
       : _lambda{std::move(lambda)} {}
   AssignableLambdaImpl() = default;
 
-  decltype(auto) operator()(auto&&... args) noexcept(
+  template <typename... Args>
+  decltype(auto) operator()(Args&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 
-  decltype(auto) constexpr operator()(auto&&... args) const
+  template <typename... Args>
+  decltype(auto) constexpr operator()(Args&&... args) const
       noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }

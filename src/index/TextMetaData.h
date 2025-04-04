@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_TEXTMETADATA_H
 #define QLEVER_SRC_INDEX_TEXTMETADATA_H
@@ -78,7 +80,9 @@ class TextBlockMetaData {
   static constexpr size_t sizeOnDisk() {
     return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
   }
-  friend std::true_type allowTrivialSerialization(TextBlockMetaData, auto);
+
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(TextBlockMetaData, T);
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);

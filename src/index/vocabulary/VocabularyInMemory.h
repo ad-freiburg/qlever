@@ -1,6 +1,8 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
@@ -55,7 +57,8 @@ class VocabularyInMemory
   auto operator[](uint64_t i) const { return _words[i]; }
 
   // Conversion function that is used by the Mixin base class.
-  WordAndIndex iteratorToWordAndIndex(auto it) const {
+  template <typename It>
+  WordAndIndex iteratorToWordAndIndex(It it) const {
     if (it == _words.end()) {
       return WordAndIndex::end();
     }

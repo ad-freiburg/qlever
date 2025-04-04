@@ -1918,8 +1918,9 @@ this: `void func(Validator validatorFunction, std::string_view
 validatorExceptionMessage, ConfigManager& m, ConstConfigOptionProxy...)`.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doAddOptionValidatorTest(
-    auto addNonExceptionValidatorFunction,
+    F addNonExceptionValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doAddOptionValidatorTest")};
@@ -2091,8 +2092,9 @@ signature should look like this: `void func(ConfigManager& m,
 ConstConfigOptionProxy... validatorArguments)`.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doAddOptionValidatorExceptionTest(
-    auto addAlwaysValidValidatorFunction,
+    F addAlwaysValidValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};

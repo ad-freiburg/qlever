@@ -57,7 +57,8 @@ constexpr size_t numValues = 200;
 // Run the `test` function with a `ThreadSafeQueue` and an
 // `OrderedThreadSafeQueue`. Both queues have a size of `queueSize` and `size_t`
 // as their value type.
-void runWithBothQueueTypes(const auto& testFunction) {
+template <typename F>
+void runWithBothQueueTypes(const F& testFunction) {
   testFunction(ThreadSafeQueue<size_t>{queueSize});
   testFunction(OrderedThreadSafeQueue<size_t>{queueSize});
 }
