@@ -35,9 +35,9 @@ Manually checks if the json represents one of the possibilities of
 `AvailableTypes`.
 */
 struct IsValueTypeSubType {
-  template <typename T>
+  template <typename T, typename F>
   constexpr bool operator()(const nlohmann::json& j,
-                            const auto& isValueTypeSubType) const {
+                            const F& isValueTypeSubType) const {
     if constexpr (std::is_same_v<T, bool>) {
       return j.is_boolean();
     } else if constexpr (std::is_same_v<T, std::string>) {

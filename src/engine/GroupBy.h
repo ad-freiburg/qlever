@@ -28,6 +28,22 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
+// _____________________________________________________________________________
+namespace groupBy::detail {
+using AggregationData =
+    std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
+                 MaxAggregationData, SumAggregationData,
+                 GroupConcatAggregationData, SampleAggregationData>;
+
+using AggregationDataVectors =
+    ad_utility::LiftedVariant<AggregationData,
+                              sparqlExpression::VectorWithMemoryLimit>;
+
+template <typename A>
+concept VectorOfAggregationData =
+    ad_utility::SameAsAnyTypeIn<A, AggregationDataVectors>;
+}  // namespace groupBy::detail
+
 class GroupBy : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
@@ -163,6 +179,42 @@ class GroupBy : public Operation {
                     LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
+
+  template <typename T>
+  static constexpr auto resizeIfVector(T& val, size_t size) {
+    if constexpr (requires { val.resize(size); }) {
+      val.resize(size);
+    }
+  }
+
+  // Visitor function to extract values from the result of an evaluation of
+  // the child expression of an aggregate, and subsequently processing the
+  // values by calling the `addValue` function of the corresponding aggregate.
+  static constexpr auto makeProcessGroupsVisitor(
+      size_t blockSize,
+      const sparqlExpression::EvaluationContext* evaluationContext,
+      const std::vector<size_t>& hashEntries) {
+    using groupBy::detail::VectorOfAggregationData;
+
+    return CPP_template_lambda(blockSize, evaluationContext, &hashEntries)(
+        typename T, typename A)(T && singleResult, A & aggregationDataVector)(
+        requires sparqlExpression::SingleExpressionResult<T> &&
+        VectorOfAggregationData<A>) {
+      auto generator = sparqlExpression::detail::makeGenerator(
+          std::forward<T>(singleResult), blockSize, evaluationContext);
+
+      auto hashEntryIndex = 0;
+
+      for (const auto& val : generator) {
+        auto vectorOffset = hashEntries[hashEntryIndex];
+        auto& aggregateData = aggregationDataVector.at(vectorOffset);
+
+        aggregateData.addValue(val, evaluationContext);
+
+        ++hashEntryIndex;
+      }
+    };
+  }
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
@@ -319,19 +371,100 @@ class GroupBy : public Operation {
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
-  template <size_t NUM_GROUP_COLUMNS>
+  template <size_t NUM_GROUP_COLUMNS, typename T>
   Result computeGroupByForHashMapOptimization(
-      std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
-      const std::vector<size_t>& columnIndices) const;
+      std::vector<HashMapAliasInformation>& aggregateAliases, T subresults,
+      const std::vector<size_t>& columnIndices) const {
+    AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
+                         NUM_GROUP_COLUMNS == 0);
+    LocalVocab localVocab;
 
-  using AggregationData =
-      std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
-                   MaxAggregationData, SumAggregationData,
-                   GroupConcatAggregationData, SampleAggregationData>;
+    // Initialize the data for the aggregates of the GROUP BY operation.
+    HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
+        getExecutionContext()->getAllocator(), aggregateAliases,
+        columnIndices.size());
 
-  using AggregationDataVectors =
-      ad_utility::LiftedVariant<AggregationData,
-                                sparqlExpression::VectorWithMemoryLimit>;
+    // Process the input blocks (pairs of `IdTable` and `LocalVocab`) one after
+    // the other.
+    ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
+    ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
+    for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
+      const IdTable& inputTable = inputTableRef;
+      const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
+      // Merge the local vocab of each input block.
+      //
+      // NOTE: If the input blocks have very similar or even identical non-empty
+      // local vocabs, no deduplication is performed.
+      localVocab.mergeWith(inputLocalVocab);
+      // Setup the `EvaluationContext` for this input block.
+      sparqlExpression::EvaluationContext evaluationContext(
+          *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+          getExecutionContext()->getAllocator(), localVocab,
+          cancellationHandle_, deadline_);
+      evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+          _groupByVariables.begin(), _groupByVariables.end()};
+      evaluationContext._isPartOfGroupBy = true;
+
+      // Iterate of the rows of this input block. Process (up to)
+      // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
+      for (size_t i = 0; i < inputTable.size();
+           i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
+        checkCancellation();
+
+        evaluationContext._beginIndex = i;
+        evaluationContext._endIndex =
+            std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, inputTable.size());
+
+        auto currentBlockSize = evaluationContext.size();
+
+        // Perform HashMap lookup once for all groups in current block
+        using U = HashMapAggregationData<
+            NUM_GROUP_COLUMNS>::template ArrayOrVector<std::span<const Id>>;
+        U groupValues;
+        resizeIfVector(groupValues, columnIndices.size());
+
+        // TODO<C++23> use views::enumerate
+        size_t j = 0;
+        for (auto& idx : columnIndices) {
+          groupValues[j] = inputTable.getColumn(idx).subspan(
+              evaluationContext._beginIndex, currentBlockSize);
+          ++j;
+        }
+        lookupTimer.cont();
+        auto hashEntries = aggregationData.getHashEntries(groupValues);
+        lookupTimer.stop();
+
+        aggregationTimer.cont();
+        for (auto& aggregateAlias : aggregateAliases) {
+          for (auto& aggregate : aggregateAlias.aggregateInfo_) {
+            sparqlExpression::ExpressionResult expressionResult =
+                GroupBy::evaluateChildExpressionOfAggregateFunction(
+                    aggregate, evaluationContext);
+
+            auto& aggregationDataVariant =
+                aggregationData.getAggregationDataVariant(
+                    aggregate.aggregateDataIndex_);
+
+            std::visit(makeProcessGroupsVisitor(
+                           currentBlockSize, &evaluationContext, hashEntries),
+                       std::move(expressionResult), aggregationDataVariant);
+          }
+        }
+        aggregationTimer.stop();
+      }
+    }
+
+    runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
+    runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
+    IdTable resultTable =
+        createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
+    return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
+  }
+
+  using AggregationData = groupBy::detail::AggregationData;
+
+  using AggregationDataVectors = groupBy::detail::AggregationDataVectors;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -592,12 +725,5 @@ class GroupBy : public Operation {
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
 };
-
-// _____________________________________________________________________________
-namespace groupBy::detail {
-template <typename A>
-concept VectorOfAggregationData =
-    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
-}
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H

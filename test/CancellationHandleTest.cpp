@@ -1,6 +1,8 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
@@ -464,8 +466,9 @@ TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
-consteval bool isMemberFunction([[maybe_unused]] auto funcPtr) {
-  return std::is_member_function_pointer_v<decltype(funcPtr)>;
+template <typename T>
+consteval bool isMemberFunction([[maybe_unused]] T funcPtr) {
+  return std::is_member_function_pointer_v<T>;
 }
 
 // Make sure member functions still exist when no watch dog functionality

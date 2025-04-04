@@ -1,6 +1,8 @@
 //  Copyright 2020, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Common classes / Typedefs that are used during Index Creation
 
@@ -229,11 +231,11 @@ struct LangtagAndTriple {
  * ranges for the individual HashMaps
  * @return A Tuple of lambda functions (see above)
  */
-template <size_t NumThreads>
+template <size_t NumThreads, typename IndexPtr>
 auto getIdMapLambdas(
     std::array<std::optional<ItemMapManager>, NumThreads>* itemArrayPtr,
     size_t maxNumberOfTriples, const TripleComponentComparator* comp,
-    auto* indexPtr, ItemAlloc alloc) {
+    IndexPtr* indexPtr, ItemAlloc alloc) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < NumThreads; ++j) {

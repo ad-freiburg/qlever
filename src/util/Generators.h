@@ -1,6 +1,8 @@
 //   Copyright 2024, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_GENERATORS_H
 #define QLEVER_SRC_UTIL_GENERATORS_H
@@ -53,9 +55,9 @@ CPP_template(typename InputRange, typename AggregatorT,
 // callable that takes a `callback` with signature `void(T)`. The arguments with
 // which this callback is called when running the `functionWithCallback` become
 // the elements that are yielded by the created `generator`.
-template <typename T>
-cppcoro::generator<T> generatorFromActionWithCallback(
-    std::invocable<std::function<void(T)>> auto functionWithCallback) {
+template <typename T, typename F>
+cppcoro::generator<T> generatorFromActionWithCallback(F functionWithCallback)
+    requires std::invocable<F, std::function<void(T)>> {
   std::mutex mutex;
   std::condition_variable cv;
 

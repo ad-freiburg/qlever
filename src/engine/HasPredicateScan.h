@@ -1,6 +1,8 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
 #define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
@@ -96,15 +98,50 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
-                           const CompactVectorOfStrings<Id>& patterns);
+  template <typename T>
+  static void computeFreeS(IdTable* resultTable, Id objectId, T& hasPattern,
+                           const CompactVectorOfStrings<Id>& patterns) {
+    IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
+    // TODO<joka921> This can be a much simpler and cheaper implementation that
+    // does a lazy scan on the specified predicate and then simply performs a
+    // DISTINCT on the result.
+    for (const auto& block : hasPattern) {
+      auto patternColumn = block.getColumn(1);
+      auto subjects = block.getColumn(0);
+      for (size_t i : ad_utility::integerRange(block.numRows())) {
+        const auto& pattern = patterns[patternColumn[i].getInt()];
+        for (const auto& predicate : pattern) {
+          if (predicate == objectId) {
+            result.push_back({subjects[i]});
+            break;
+          }
+        }
+      }
+    }
+    *resultTable = std::move(result).toDynamic();
+  }
 
   void computeFreeO(IdTable* resultTable, Id subjectAsId,
                     const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
+  template <typename T>
+  static void computeFullScan(IdTable* resultTable, T& hasPattern,
                               const CompactVectorOfStrings<Id>& patterns,
-                              size_t resultSize);
+                              size_t resultSize) {
+    IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
+    result.reserve(resultSize);
+    for (const auto& block : hasPattern) {
+      auto patternColumn = block.getColumn(1);
+      auto subjects = block.getColumn(0);
+      for (size_t i : ad_utility::integerRange(block.numRows())) {
+        const auto& pattern = patterns[patternColumn[i].getInt()];
+        for (const auto& predicate : pattern) {
+          result.push_back({subjects[i], predicate});
+        }
+      }
+    }
+    *resultTable = std::move(result).toDynamic();
+  }
 
   template <int WIDTH>
   Result computeSubqueryS(IdTable* result,

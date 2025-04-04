@@ -25,7 +25,8 @@ namespace ad_utility {
 // library should be chosen.
 // TODO<joka921> why can't this be consteval when the result is bound to a
 // `constexpr` variable?
-constexpr auto pow(auto base, int exponent) {
+template <typename T>
+constexpr auto pow(T base, int exponent) {
   if (exponent < 0) {
     throw std::runtime_error{"negative exponent"};
   }
@@ -230,8 +231,8 @@ CPP_template(auto Upper,
 @brief Call the given lambda function with each of the given types `Ts` as
 explicit template parameter, keeping the same order.
 */
-template <typename... Ts>
-constexpr void forEachTypeInParameterPack(const auto& lambda) {
+template <typename... Ts, typename F>
+constexpr void forEachTypeInParameterPack(const F& lambda) {
   (lambda.template operator()<Ts>(), ...);
 }
 
@@ -254,7 +255,8 @@ struct forEachTypeInTemplateTypeImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
-  constexpr void operator()(const auto& lambda) const {
+  template <typename F>
+  constexpr void operator()(const F& lambda) const {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };
@@ -274,8 +276,8 @@ struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
 @brief Call the given lambda function with each type in the given instantiated
 template type as explicit template parameter, keeping the same order.
 */
-template <typename TemplateType>
-constexpr void forEachTypeInTemplateType(const auto& lambda) {
+template <typename TemplateType, typename F>
+constexpr void forEachTypeInTemplateType(const F& lambda) {
   detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
 }
 
