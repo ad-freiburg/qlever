@@ -497,14 +497,14 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   using ad_utility::triple_component::LiteralOrIri;
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
-  LocalVocab::Holder holder{{}};
+  std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;
   LocalVocabIndex encodedTest;
   LocalVocabIndex encodedOther;
   {
     LocalVocab original;
     encodedTest =
         original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
-    holder = original.getHolder();
+    extender = original.getLifetimeExtender();
 
     EXPECT_EQ(original.getIndexOrNullopt(LocalVocabEntry{literal}),
               std::optional{encodedTest});
@@ -517,8 +517,9 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
         original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral});
     EXPECT_EQ(original.size(), 2);
   }
-  // Required to extend the lifetime.
-  (void)holder;
+  // The `extender` keeps the `LocalVocabIndex`es valid even though the
+  // corresponding `LocalVocab` has already been destroyed.
+  (void)extender;
   EXPECT_EQ(*encodedTest, literal);
   EXPECT_EQ(*encodedOther, otherLiteral);
 }

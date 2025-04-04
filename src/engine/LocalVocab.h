@@ -185,17 +185,18 @@ class LocalVocab {
   // This is useful to extend the lifetime of this `LocalVocab` without making
   // this instance read-only by merging and/or cloning.
   class [[nodiscard(
-      "The sole purpose of this object is to extend lifetimes.")]] Holder {
+      "The sole purpose of this object is to extend "
+      "lifetimes.")]] LifetimeExtender {
+    friend LocalVocab;
     std::vector<std::shared_ptr<const Set>> wordSets_;
 
-   public:
-    explicit Holder(std::vector<std::shared_ptr<const Set>> wordSets)
+    explicit LifetimeExtender(std::vector<std::shared_ptr<const Set>> wordSets)
         : wordSets_{std::move(wordSets)} {}
   };
 
-  // Return a holder for all the words stored by this `LocalVocab`. You can
-  // safely keep writing to this `LocalVocab` after acquiring the holder.
-  Holder getHolder() const;
+  // Return a `LifetimeExtender` for all the words stored by this `LocalVocab`.
+  // You can safely keep writing to this `LocalVocab` after acquiring it.
+  LifetimeExtender getLifetimeExtender() const;
 
  private:
   // Accessors for the primary set.

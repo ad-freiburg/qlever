@@ -190,10 +190,8 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   // copies), hence the explicit `clone`.
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
-  // TODO<RobinTF> we can't clone this without violating the constraints of
-  // `LocalVocab`.
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.getHolder(), snapshotIndex)};
+      locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex)};
 }
 
 // ____________________________________________________________________________
