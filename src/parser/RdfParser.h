@@ -151,7 +151,15 @@ class TurtleParser : public RdfParserBase {
   static constexpr const char* baseForRelativeIriKey_ = "@";
   static constexpr const char* baseForAbsoluteIriKey_ = "@@";
 
+  // Helper function to raise an exception in response to BASE or PREFIX
+  // mismatches during parallel parsing.
   [[noreturn]] void raiseDisallowedPrefixOrBaseError() const;
+
+  // Set the prefix or base IRI for the given key. If `prefixAndBaseDisabled_`
+  // is true, throw an error if this would change the mapping, which is illegal
+  // during parallel parsing.
+  void setPrefixOrThrow(const std::string& key,
+                        const ad_utility::triple_component::Iri& prefix);
 
  protected:
   // Data members.

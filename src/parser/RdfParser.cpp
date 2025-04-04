@@ -86,14 +86,8 @@ bool TurtleParser<T>::prefixID() {
   if (skip<TurtleTokenId::TurtlePrefix>()) {
     if (check(pnameNS()) && check(iriref()) &&
         check(skip<TurtleTokenId::Dot>())) {
-      const ad_utility::triple_component::Iri& newPrefix =
-          lastParseResult_.getIri();
-      if (prefixAndBaseDisabled_ && (!prefixMap_.contains(activePrefix_) ||
-                                     prefixMap_[activePrefix_] != newPrefix)) {
-        raiseDisallowedPrefixOrBaseError();
-      }
       // strip  the angled brackes <bla> -> bla
-      prefixMap_[activePrefix_] = newPrefix;
+      setPrefixOrThrow(activePrefix_, lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing @prefix definition failed");
@@ -109,13 +103,8 @@ bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
       const auto& iri = lastParseResult_.getIri();
-      if (prefixAndBaseDisabled_ &&
-          (prefixMap_[baseForRelativeIriKey_] != iri.getBaseIri(false) ||
-           prefixMap_[baseForAbsoluteIriKey_] != iri.getBaseIri(true))) {
-        raiseDisallowedPrefixOrBaseError();
-      }
-      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
+      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
+      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -130,13 +119,7 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      const ad_utility::triple_component::Iri& newPrefix =
-          lastParseResult_.getIri();
-      if (prefixAndBaseDisabled_ && (!prefixMap_.contains(activePrefix_) ||
-                                     prefixMap_[activePrefix_] != newPrefix)) {
-        raiseDisallowedPrefixOrBaseError();
-      }
-      prefixMap_[activePrefix_] = newPrefix;
+      setPrefixOrThrow(activePrefix_, lastParseResult_.getIri());
       return true;
     } else {
       raise("Parsing PREFIX definition failed");
@@ -151,14 +134,9 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      auto iri = lastParseResult_.getIri();
-      if (prefixAndBaseDisabled_ &&
-          (prefixMap_[baseForRelativeIriKey_] != iri.getBaseIri(false) ||
-           prefixMap_[baseForAbsoluteIriKey_] != iri.getBaseIri(true))) {
-        raiseDisallowedPrefixOrBaseError();
-      }
-      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
+      const auto& iri = lastParseResult_.getIri();
+      setPrefixOrThrow(baseForRelativeIriKey_, iri.getBaseIri(false));
+      setPrefixOrThrow(baseForAbsoluteIriKey_, iri.getBaseIri(true));
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -621,6 +599,17 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
       "the reason for this error is that the input is a concatenation of "
       "Turtle files, each of which has the prefixes at the beginning, you "
       "should feed the files to QLever separately instead of concatenated");
+}
+
+// _____________________________________________________________________________
+template <class Tokenizer_T>
+void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
+    const std::string& key, const ad_utility::triple_component::Iri& prefix) {
+  if (prefixAndBaseDisabled_ &&
+      (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
+    raiseDisallowedPrefixOrBaseError();
+  }
+  prefixMap_[key] = prefix;
 }
 
 // ______________________________________________________________________
@@ -1199,6 +1188,9 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
       try {
         return tripleCollector_.pop();
       } catch (const std::exception&) {
+        AD_LOG_ERROR << "Error detected during parallel parsing, waiting for "
+                        "workers to finish ..."
+                     << std::endl;
         // In case of multiple errors in parallel batches, we always report the
         // first error.
         parallelParser_.waitUntilFinished();
