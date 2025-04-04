@@ -168,6 +168,9 @@ SparqlExpression::Ptr makeConcatExpression(
 constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
+std::optional<std::pair<Variable, Variable>> getDistExpressionVariables(
+    SparqlExpression* expr);
+
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

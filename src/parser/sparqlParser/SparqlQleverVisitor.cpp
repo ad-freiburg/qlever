@@ -1469,6 +1469,8 @@ SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
   return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  // TODO<ullingerc> Alternative here: check visited expression and replace it
+  // by spatial already during parsing
 }
 
 // ____________________________________________________________________________________

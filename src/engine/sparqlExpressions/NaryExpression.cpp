@@ -6,6 +6,7 @@
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
@@ -28,6 +29,25 @@ using namespace detail;
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
+}
+
+std::optional<std::pair<Variable, Variable>> getDistExpressionVariables(
+    SparqlExpression* expr) {
+  auto distExpr = dynamic_cast<DistExpression*>(expr);
+  if (distExpr == nullptr) {
+    return std::nullopt;
+  }
+  auto p1 =
+      dynamic_cast<LiteralExpression<Variable>*>(distExpr->children()[0].get());
+  if (p1 == nullptr) {
+    return std::nullopt;
+  }
+  auto p2 =
+      dynamic_cast<LiteralExpression<Variable>*>(distExpr->children()[1].get());
+  if (p2 == nullptr) {
+    return std::nullopt;
+  }
+  return std::pair<Variable, Variable>{p1->value(), p2->value()};
 }
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
