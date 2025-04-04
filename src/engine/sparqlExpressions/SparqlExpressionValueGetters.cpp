@@ -91,10 +91,40 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
+                                              const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, false);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, true);
+}
+
+// ____________________________________________________________________________
 std::optional<std::string> ReplacementStringGetter::operator()(
     Id id, const EvaluationContext* context) const {
   std::optional<std::string> originalString =
-      StringValueGetter::operator()(id, context);
+      LiteralFromIdGetter{}(id, context);
   if (!originalString.has_value()) {
     return originalString;
   }
@@ -164,7 +194,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 
 // _____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
-    ValueId id, const sparqlExpression::EvaluationContext* context) const {
+    ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
           context->_qec.getIndex(), id, context->_localVocab);

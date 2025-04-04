@@ -16,6 +16,8 @@
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -350,10 +352,68 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-ad_utility::triple_component::LiteralOrIri
-ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteralForEncodedValue(
+    Id id, bool onlyReturnLiteralsWithXsdString) {
+  if (onlyReturnLiteralsWithXsdString) {
+    return std::nullopt;
+  }
+  auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
+  if (!optionalStringAndType) {
+    return std::nullopt;
+  }
+
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(
+      optionalStringAndType->first);
+}
+
+// _____________________________________________________________________________
+bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
+    const LiteralOrIri& word) {
+  AD_CORRECTNESS_CHECK(word.isLiteral());
+  return !word.hasDatatype() ||
+         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
+}
+
+// _____________________________________________________________________________
+std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
+    std::string iriString) {
+  AD_CORRECTNESS_CHECK(iriString.starts_with('<'));
+  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  iriString[0] = '"';
+  iriString[iriString.size() - 1] = '"';
+  return iriString;
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::handleIriOrLiteral(
+    LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
+  if (word.isIri()) {
+    if (onlyReturnLiteralsWithXsdString) {
+      return std::nullopt;
+    }
+    return ad_utility::triple_component::Literal::fromStringRepresentation(
+        replaceAnglesByQuotes(
+            std::move(word.getIri().toStringRepresentation())));
+  }
+  AD_CORRECTNESS_CHECK(word.isLiteral());
+  if (onlyReturnLiteralsWithXsdString) {
+    if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      return std::move(word.getLiteral());
+    }
+    return std::nullopt;
+  }
+
+  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
+    word.getLiteral().removeDatatypeOrLanguageTag();
+  }
+  return std::move(word.getLiteral());
+}
+
+// _____________________________________________________________________________
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -364,7 +424,21 @@ ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     default:
       AD_FAIL();
   }
-};
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ExportQueryExecutionTrees::blankNodeIriToString(
+    const ad_utility::triple_component::Iri& iri) {
+  const auto& representation = iri.toStringRepresentation();
+  if (representation.starts_with(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
+    std::string_view view = representation;
+    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
+    view.remove_suffix(1);
+    AD_CORRECTNESS_CHECK(view.starts_with("_:"));
+    return std::string{view};
+  }
+  return std::nullopt;
+}
 
 // _____________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
@@ -381,12 +455,16 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
   }
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
       -> std::optional<std::pair<std::string, const char*>> {
     if constexpr (onlyReturnLiterals) {
       if (!word.isLiteral()) {
         return std::nullopt;
+      }
+    }
+    if (word.isIri()) {
+      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+        return std::pair{std::move(blankNodeString.value()), nullptr};
       }
     }
     if constexpr (removeQuotesAndAngleBrackets) {
@@ -414,6 +492,32 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
+                                       const LocalVocab& localVocab,
+                                       bool onlyReturnLiteralsWithXsdString) {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+
+  switch (datatype) {
+    case WordVocabIndex:
+      return ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()));
+    case VocabIndex:
+    case LocalVocabIndex:
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab),
+          onlyReturnLiteralsWithXsdString);
+    case TextRecordIndex:
+      return ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.getTextExcerpt(id.getTextRecordIndex()));
+    default:
+      return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
+  }
+}
+
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(

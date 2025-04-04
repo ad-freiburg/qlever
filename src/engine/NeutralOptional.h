@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
+#define QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H
 
 #include "engine/Operation.h"
 
@@ -20,7 +21,7 @@ class NeutralOptional : public Operation {
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   std::unique_ptr<Operation> cloneImpl() const override;
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return true, if `_limit` is configured in a way that will prevent the
@@ -39,3 +40,5 @@ class NeutralOptional : public Operation {
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

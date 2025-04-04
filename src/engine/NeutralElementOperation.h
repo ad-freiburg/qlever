@@ -1,7 +1,9 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
+#define QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 
 #include <engine/Operation.h>
 
@@ -44,7 +46,7 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);
@@ -56,3 +58,5 @@ class NeutralElementOperation : public Operation {
     return {};
   };
 };
+
+#endif  // QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H

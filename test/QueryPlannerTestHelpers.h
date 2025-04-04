@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
+#define QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
 
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
@@ -15,6 +16,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -155,6 +157,12 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
+constexpr auto TextIndexScanForWordConf =
+    [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForWord>(
+      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
+};
+
 // Matcher for the `TextLimit` Operation.
 constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
                               const Variable& textRecVar,
@@ -193,6 +201,12 @@ inline auto TextIndexScanForEntity =
         AD_PROPERTY(::TextIndexScanForEntity, word, word),
         AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
   }
+};
+
+constexpr auto TextIndexScanForEntityConf =
+    [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForEntity>(
+      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,
@@ -363,6 +377,7 @@ inline auto SpatialJoin =
         size_t maxDist, size_t maxResults, Variable left, Variable right,
         std::optional<Variable> distanceVariable,
         PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
+        std::optional<SpatialJoinType> joinType,
         const ChildArgs&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
@@ -374,7 +389,8 @@ inline auto SpatialJoin =
                             Eq(distanceVariable)),
                 AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
                             Eq(payloadVariables)),
-                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
+                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm)),
+                AD_PROPERTY(SpatialJoin, getJoinType, Eq(joinType))));
     };
 
 // Match a GroupBy operation
@@ -422,6 +438,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(
@@ -522,3 +547,5 @@ void expect(std::string query, auto matcher,
                          std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
+
+#endif  // QLEVER_TEST_QUERYPLANNERTESTHELPERS_H

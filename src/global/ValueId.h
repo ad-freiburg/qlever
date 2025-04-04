@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
+#define QLEVER_SRC_GLOBAL_VALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -345,7 +346,19 @@ class ValueId {
   /// and `ad_utility::HashMap`
   template <typename H>
   friend H AbslHashValue(H h, const ValueId& id) {
-    return H::combine(std::move(h), id._bits);
+    // Adding 0/1 to the hash is required to ensure that for two unequal
+    // elements the hash expansions of neither is a suffix of the other.This is
+    // a property that absl requires for hashes. The hash expansion is the list
+    // of simpler values actually being hashed (here: bits or hash expansion of
+    // the LocalVocabEntry).
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      return H::combine(std::move(h), id._bits, 0);
+    }
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
+    }
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
@@ -450,3 +463,5 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
+
+#endif  // QLEVER_SRC_GLOBAL_VALUEID_H

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_TOKENIZERCTRE_H
+#define QLEVER_SRC_PARSER_TOKENIZERCTRE_H
 
 #include <gtest/gtest_prod.h>
 
@@ -351,3 +352,5 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
     }
   };
 };
+
+#endif  // QLEVER_SRC_PARSER_TOKENIZERCTRE_H

@@ -4,7 +4,8 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
+#define QLEVER_SRC_ENGINE_QUERYPLANNER_H
 
 #include <boost/optional.hpp>
 #include <vector>
@@ -312,6 +313,11 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
+  // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
+  // `!<a>` and similar.
+  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
+                                            const PropertyPath& path,
+                                            const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right);
@@ -572,6 +578,7 @@ class QueryPlanner {
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
+    void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);
@@ -629,3 +636,5 @@ class QueryPlanner {
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

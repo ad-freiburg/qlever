@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
+#define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
 // For some include orders the EOF constant is not defined although `<cstdio>`
 // was included, so we define it manually.
@@ -261,3 +262,5 @@ stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
 // Use 1MiB buffer size by default
 using stream_generator = basic_stream_generator<1u << 20>;
 }  // namespace ad_utility::streams
+
+#endif  // QLEVER_SRC_UTIL_STREAM_GENERATOR_H

@@ -4,7 +4,8 @@
 //          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
+#define QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H
 
 #include <antlr4-runtime.h>
 #include <gtest/gtest_prod.h>
@@ -15,20 +16,9 @@
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
+#include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
-
-template <typename T>
-class Reversed {
-  T& _iterable;
-
- public:
-  explicit Reversed(T& iterable) : _iterable(iterable) {}
-
-  auto begin() { return _iterable.rbegin(); };
-
-  auto end() { return _iterable.rend(); }
-};
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -39,6 +29,7 @@ class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using VarOrIri = ad_utility::sparql_types::VarOrIri;
   using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
   using PathObjectPairsAndTriples =
       ad_utility::sparql_types::PathObjectPairsAndTriples;
@@ -72,6 +63,9 @@ class SparqlQleverVisitor {
   enum struct DisableSomeChecksOnlyForTesting { False, True };
 
  private:
+  // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
+  // members.
+
   size_t _blankNodeCounter = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
@@ -81,8 +75,12 @@ class SparqlQleverVisitor {
 
   // The `FROM` and `FROM NAMED` clauses of the query that is currently
   // being parsed. Those are inherited by certain constructs, which are
-  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`).
+  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`). If
+  // `datasetsAreFixed_` is set then datasets are set outside the operation
+  // itself and cannot be overwritten in the operation through `FROM` and `FROM
+  // NAMED`.
   ParsedQuery::DatasetClauses activeDatasetClauses_;
+  bool datasetsAreFixed_ = false;
 
   // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
@@ -106,14 +104,36 @@ class SparqlQleverVisitor {
   // meaning of blank and anonymous nodes is different.
   bool isInsideConstructTriples_ = false;
 
+  // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
+  // members.
+
+  // Resets the Visitors state between updates. This resets everything except
+  // prefix and base, because those are shared between consecutive updates.
+  void resetStateForMultipleUpdates();
+
+  // Turns a vector of `SubjectOrObjectAndTriples` into a single
+  // `SubjectsOrObjectsAndTriples` object that represents an RDF collection.
+  template <typename TripleType, typename Func>
+  TripleType toRdfCollection(std::vector<TripleType> elements,
+                             Func iriStringToPredicate);
+
  public:
   SparqlQleverVisitor() = default;
+  // If `datasetOverride` contains datasets, then the datasets in
+  // the operation itself are ignored. This is used for the datasets from the
+  // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
       PrefixMap prefixMap,
+      std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : prefixMap_{std::move(prefixMap)},
-        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
+    if (datasetOverride.has_value()) {
+      activeDatasetClauses_ = std::move(*datasetOverride);
+      datasetsAreFixed_ = true;
+    }
+  }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
@@ -122,13 +142,8 @@ class SparqlQleverVisitor {
     isInsideConstructTriples_ = true;
   }
 
-  void setActiveDatasetClausesForTesting(
-      ParsedQuery::DatasetClauses datasetClauses) {
-    activeDatasetClauses_ = std::move(datasetClauses);
-  }
-
   // ___________________________________________________________________________
-  ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryContext* ctx);
@@ -200,7 +215,7 @@ class SparqlQleverVisitor {
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  ParsedQuery visit(Parser::UpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
@@ -226,9 +241,9 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
+  Quads visit(Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::InsertClauseContext* ctx);
+  Quads visit(Parser::InsertClauseContext* ctx);
 
   GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
@@ -236,21 +251,20 @@ class SparqlQleverVisitor {
 
   GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadPatternContext* ctx);
+  Quads visit(Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
+  Quads visit(Parser::QuadDataContext* ctx);
 
-  // Parse the triples and set the graph for all of them.
-  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx,
-      const SparqlTripleSimpleWithGraph::Graph& graph);
+  Quads visit(Parser::QuadsContext* ctx);
 
-  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
-
-  vector<SparqlTripleSimpleWithGraph> visit(
-      Parser::QuadsNotTriplesContext* ctx);
+  Quads::GraphBlock visit(Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
+
+  // Limit the variables in EXISTS expressions of the filter to the ones that
+  // are already known outside the EXISTS expression, so that the filter isn't
+  // optimized away because not all variables are covered.
+  void selectExistsVariables(SparqlFilter& filter) const;
 
   ParsedQuery::GraphPattern visit(Parser::GroupGraphPatternContext* ctx);
 
@@ -278,6 +292,9 @@ class SparqlQleverVisitor {
       Parser::ServiceGraphPatternContext* ctx);
 
   GraphPatternOperation visitSpatialQuery(
+      Parser::ServiceGraphPatternContext* ctx);
+
+  parsedQuery::GraphPatternOperation visitTextSearchQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
@@ -368,11 +385,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
-  [[noreturn]] static PropertyPath visit(
-      const Parser::PathNegatedPropertySetContext*);
+  PropertyPath visit(Parser::PathNegatedPropertySetContext*);
 
-  [[noreturn]] static PropertyPath visit(
-      Parser::PathOneInPropertySetContext* ctx);
+  PropertyPath visit(Parser::PathOneInPropertySetContext* ctx);
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
@@ -389,8 +404,7 @@ class SparqlQleverVisitor {
 
   SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] SubjectOrObjectAndPathTriples visit(
-      Parser::CollectionPathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::CollectionPathContext* ctx);
 
   SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
 
@@ -398,7 +412,7 @@ class SparqlQleverVisitor {
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  GraphTerm visit(Parser::VarOrIriContext* ctx);
+  VarOrIri visit(Parser::VarOrIriContext* ctx);
 
   static Variable visit(Parser::VarContext* ctx);
 
@@ -513,12 +527,13 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
-  BlankNode newBlankNode() {
-    std::string label = std::to_string(_blankNodeCounter);
-    _blankNodeCounter++;
-    // true means automatically generated
-    return {true, std::move(label)};
-  }
+  // Create a new generated blank node.
+  BlankNode newBlankNode();
+
+  // Create a distinct `GraphTerm` that represents a blank node, when calling
+  // this inside of a CONSTRUCT block, and a new variable otherwise, which is
+  // required for graph pattern matching inside `WHERE` clauses.
+  GraphTerm newBlankNodeOrVariable();
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
@@ -536,10 +551,6 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
-
-  [[noreturn]] static void throwCollectionsNotSupported(auto* ctx) {
-    reportError(ctx, "( ... ) in triples is not yet supported by QLever.");
-  }
 
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
@@ -610,9 +621,6 @@ class SparqlQleverVisitor {
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
 
-  // Constructs a TripleComponent from a GraphTerm.
-  static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
-
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of
   // the corresponding `RuntimeParameter`).
@@ -628,5 +636,13 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
+  // Set the datasets state of the visitor if `datasetsAreFixed_` is false.
+  // `datasetsAreFixed_` controls whether the datasets can be modified from
+  // inside the query or update. Then returns the currently active datasets.
+  const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
+      const std::vector<DatasetClause>& clauses);
+
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLPARSER_SPARQLQLEVERVISITOR_H

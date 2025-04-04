@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
+#define QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
 
 #include <array>
 #include <vector>
@@ -65,9 +67,11 @@ class MultiColumnJoin : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   void computeSizeEstimateAndMultiplicities();
 };
+
+#endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H

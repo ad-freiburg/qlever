@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_ALIAS_H
+#define QLEVER_SRC_PARSER_ALIAS_H
 
 #include <string>
 
@@ -22,3 +23,5 @@ struct Alias {
            _target == other._target;
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_ALIAS_H

@@ -3,7 +3,8 @@
 // Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_IRI_H
+#define QLEVER_SRC_PARSER_IRI_H
 
 #include <string_view>
 
@@ -73,3 +74,5 @@ class Iri {
 };
 
 }  // namespace ad_utility::triple_component
+
+#endif  // QLEVER_SRC_PARSER_IRI_H

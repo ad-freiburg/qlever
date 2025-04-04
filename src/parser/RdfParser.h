@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_RDFPARSER_H
+#define QLEVER_SRC_PARSER_RDFPARSER_H
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
@@ -798,3 +799,5 @@ class RdfMultifileParser : public RdfParserBase {
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
 };
+
+#endif  // QLEVER_SRC_PARSER_RDFPARSER_H

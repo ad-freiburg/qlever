@@ -1,7 +1,9 @@
 // Copyright 2020, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_MINUS_H
+#define QLEVER_SRC_ENGINE_MINUS_H
 
 #include <array>
 #include <vector>
@@ -74,7 +76,9 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_MINUS_H
