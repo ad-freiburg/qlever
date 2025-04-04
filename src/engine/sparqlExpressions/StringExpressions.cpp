@@ -19,7 +19,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // has to add the quotation marks.
 constexpr auto toLiteral =
     [](std::string_view normalizedContent,
-       std::optional<std::variant<Iri, std::string>> descriptor =
+       const std::optional<std::variant<Iri, std::string>> descriptor =
            std::nullopt) {
       return LiteralOrIri{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
@@ -365,6 +365,21 @@ using StrBeforeExpression =
 using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
+// Helper function to transfer language tag to a new literal
+IdOrLiteralOrIri processLiteral(
+    const std::string& in, const ad_utility::triple_component::Literal& s) {
+  if (s.hasDatatype()) {
+    Iri datatype =
+        Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(s.getDatatype()));
+    return toLiteral(in, datatype);
+  } else if (s.hasLanguageTag()) {
+    std::string languageTag =
+        "@" + std::string{asStringViewUnsafe(s.getLanguageTag())};
+    return toLiteral(in, languageTag);
+  }
+  return toLiteral(in);
+}
+
 [[maybe_unused]] auto replaceImpl =
     [](std::optional<ad_utility::triple_component::Literal> s,
        const std::shared_ptr<RE2>& pattern,
@@ -380,16 +395,7 @@ using MergeRegexPatternAndFlagsExpression =
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
-  if (s.value().hasDatatype()) {
-    Iri datatype = Iri::fromIrirefWithoutBrackets(
-        std::string{asStringViewUnsafe(s.value().getDatatype())});
-    return toLiteral(in, datatype);
-  } else if (s.value().hasLanguageTag()) {
-    std::string languageTag =
-        "@" + std::string{asStringViewUnsafe(s.value().getLanguageTag())};
-    return toLiteral(in, languageTag);
-  }
-  return toLiteral(in);
+  return processLiteral(in, s.value());
 };
 
 using ReplaceExpression =
