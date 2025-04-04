@@ -9,8 +9,10 @@
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/Bind.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/Union.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -402,6 +404,75 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
         unionOperation2.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{1, 4, U}, {1, U, 8}});
     EXPECT_EQ(result->idTable(), expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Union, cacheKeyPreventsAmbiguity) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
+
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
+
+  auto bind = ad_utility::makeExecutionTree<Bind>(
+      qec, leftT->clone(),
+      parsedQuery::Bind{sparqlExpression::SparqlExpressionPimpl{
+                            std::make_unique<sparqlExpression::IdExpression>(
+                                Id::makeFromInt(1)),
+                            "1 AS ?x"},
+                        Variable{"?x"}});
+
+  Union unionOperation1{qec, std::move(bind), rightT};
+  Union unionOperation2{qec, std::move(leftT), std::move(rightT)};
+
+  // If the cache key of `unionOperation2` is a suffix of the cache key of
+  // `unionOperation1` then it is ambiguous and the bind might as well be
+  // applied to the UNION, it would be ambigous.
+  EXPECT_THAT(
+      unionOperation1.getCacheKey(),
+      ::testing::Not(::testing::EndsWith(unionOperation2.getCacheKey())));
+}
+
+// _____________________________________________________________________________
+TEST(Union, cacheKeyStoresColumnMapping) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+
+  {
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
+
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?a"}, Var{"?c"}});
+
+    auto rightTHidden = rightT->clone();
+    rightTHidden->getRootOperation()->setSelectedVariablesForSubquery(
+        {Variable{"?a"}});
+
+    Union unionOperation1{qec, leftT, std::move(rightT)};
+    Union unionOperation2{qec, std::move(leftT), std::move(rightTHidden)};
+
+    EXPECT_NE(unionOperation1.getCacheKey(), unionOperation2.getCacheKey());
+  }
+
+  {
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
+
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?a"}, Var{"?b"}});
+
+    auto rightTSwapped = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{2, 8}}), Vars{Var{"?b"}, Var{"?a"}});
+
+    Union unionOperation1{qec, leftT, std::move(rightT)};
+    Union unionOperation2{qec, std::move(leftT), std::move(rightTSwapped)};
+
+    EXPECT_NE(unionOperation1.getCacheKey(), unionOperation2.getCacheKey());
   }
 }
 
