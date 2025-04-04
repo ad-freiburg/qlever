@@ -1,6 +1,8 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 
@@ -92,7 +94,8 @@ struct WebSocketTestContainer {
   tcp::socket client_;
   QueryHub& queryHub() { return *queryHub_; }
 
-  net::awaitable<void> serverLogic(auto&& completionToken) {
+  template <typename T>
+  net::awaitable<void> serverLogic(T&& completionToken) {
     boost::beast::tcp_stream stream{std::move(server_)};
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;

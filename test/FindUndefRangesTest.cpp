@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
@@ -25,7 +27,8 @@ using Arr = std::array<Id, I>;
 // converts a list of iterators that are yielded by the `generator` to indices
 // in the `range` by subtracting `range.begin()`. Requires that the `generator`
 // yields iterators that point into the `range`.
-std::vector<int64_t> toPositions(auto generator, const auto& range) {
+template <typename G, typename R>
+std::vector<int64_t> toPositions(G generator, const R& range) {
   std::vector<int64_t> foundPositions;
   for (auto it : generator) {
     foundPositions.push_back(it - range.begin());

@@ -1,6 +1,8 @@
 // Copyright 2024, University of Freiburg,
 //                 Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_FSSTCOMPRESSOR_H
 #define QLEVER_FSSTCOMPRESSOR_H
@@ -163,15 +165,16 @@ class FsstEncoder {
   // strings again.
   using BulkResult = std::tuple<std::shared_ptr<std::string>,
                                 std::vector<std::string_view>, FsstDecoder>;
-  static BulkResult compressAll(const auto& strings) {
+  template <typename T>
+  static BulkResult compressAll(const T& strings) {
     return makeEncoder<true>(strings);
   }
 
  private:
   // The implementation of the constructor and of `compressAll`.
-  template <bool alsoCompressAll = false>
+  template <bool alsoCompressAll = false, typename Strings>
   static std::conditional_t<alsoCompressAll, BulkResult, Encoder> makeEncoder(
-      const auto& strings) {
+      const Strings& strings) {
     std::vector<size_t> lengths;
     std::vector<const unsigned char*> pointers;
     [[maybe_unused]] size_t totalSize = 0;

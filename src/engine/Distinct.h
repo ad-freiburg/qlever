@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_DISTINCT_H
 #define QLEVER_SRC_ENGINE_DISTINCT_H
@@ -65,7 +67,8 @@ class Distinct : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Helper function that only compares rows on the columns in `keepIndices_`.
-  bool matchesRow(const auto& a, const auto& b) const;
+  template <typename T1, typename T2>
+  bool matchesRow(const T1& a, const T2& b) const;
 
   // Return a generator that applies an in-place unique algorithm to the
   // `IdTables`s yielded by the input generator. The `yieldOnce` flag controls

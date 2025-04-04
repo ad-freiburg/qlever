@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
 
@@ -94,8 +96,8 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
-  ResultEntry(const std::string& descriptor,
-              const std::invocable auto& functionToMeasure)
+  template <std::invocable F>
+  ResultEntry(const std::string& descriptor, const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure, descriptor)} {}
 
@@ -110,8 +112,9 @@ class ResultEntry : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, who's execution time will be
   measured and saved.
   */
+  template <std::invocable F>
   ResultEntry(const std::string& descriptor, std::string_view descriptorForLog,
-              const std::invocable auto& functionToMeasure)
+              const F& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{
             measureTimeOfFunction(functionToMeasure, descriptorForLog)} {}

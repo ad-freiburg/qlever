@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -104,8 +106,10 @@ auto getComparisonFunctor() {
 // (like `std::less` on the values contained in `a` and `b`
 // (`isMatchingDatatype(a) and `isMatchingDatatype(b)` both are true when
 // `applyComparator` is called.
-auto testGetRangesForId(auto begin, auto end, ValueId id,
-                        auto isMatchingDatatype, auto applyComparator,
+template <typename It, typename IsMatchingDatatype, typename ApplyComparator>
+auto testGetRangesForId(It begin, It end, ValueId id,
+                        IsMatchingDatatype isMatchingDatatype,
+                        ApplyComparator applyComparator,
                         source_location l = source_location::current()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
@@ -214,8 +218,9 @@ TEST_F(ValueIdComparators, Undefined) {
 
 // Similar to `testGetRanges` (see above) but tests the comparison to a range of
 // `ValueId`s that are considered equal.
-auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
-                              ValueId idEnd, auto isMatchingDatatype) {
+template <typename It, typename IsMatchingDatatype>
+auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
+                              IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
   auto testImpl = [&]<Comparison comparison>() {
     if (comparison == Comparison::NE &&

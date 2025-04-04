@@ -1,6 +1,8 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
 #define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
@@ -96,15 +98,17 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
-                           const CompactVectorOfStrings<Id>& patterns);
+  template <typename HasPattern>
+  void computeFreeS(IdTable* resultTable, Id objectId, HasPattern& hasPattern,
+                    const CompactVectorOfStrings<Id>& patterns);
 
   void computeFreeO(IdTable* resultTable, Id subjectAsId,
                     const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
-                              const CompactVectorOfStrings<Id>& patterns,
-                              size_t resultSize);
+  template <typename HasPattern>
+  void computeFullScan(IdTable* resultTable, HasPattern& hasPattern,
+                       const CompactVectorOfStrings<Id>& patterns,
+                       size_t resultSize);
 
   template <int WIDTH>
   Result computeSubqueryS(IdTable* result,

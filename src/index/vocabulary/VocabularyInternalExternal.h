@@ -1,6 +1,8 @@
 // Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (kalmbach@cs.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINTERNALEXTERNAL_H
@@ -142,9 +144,10 @@ class VocabularyInternalExternal {
   // `lower_bound_iterator`, and `upper_bound_iterator`. The `boundFunction`
   // must be a lambda, that calls the corresponding function (e.g.
   // `lower_bound`) on its first argument (see above for usages).
-  template <typename InternalStringType, typename Comparator>
+  template <typename InternalStringType, typename Comparator,
+            typename BoundFunction>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
-                         auto boundFunction) const {
+                         BoundFunction boundFunction) const {
     // First do a binary search in the internal vocab.
     WordAndIndex boundFromInternalVocab =
         boundFunction(internalVocab_, word, comparator);

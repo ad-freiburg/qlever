@@ -1,6 +1,8 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
@@ -258,8 +260,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
 }
 
 // ________________________________________________________________________________________________________
+template <typename T>
 inline void writeMappedIdsToExtVec(
-    const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {

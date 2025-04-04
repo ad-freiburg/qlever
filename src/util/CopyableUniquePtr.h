@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (April of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H
 #define QLEVER_SRC_UTIL_COPYABLEUNIQUEPTR_H
@@ -66,14 +68,15 @@ CPP_template(typename T, typename Deleter = std::default_delete<T>)(
 
  private:
   // This function uses a private constructor, so it needs private access.
-  template <typename T2>
-  friend constexpr CopyableUniquePtr<T2> make_copyable_unique(auto&&... args);
+  template <typename T2, typename... Args>
+  friend constexpr CopyableUniquePtr<T2> make_copyable_unique(Args&&... args);
 
   /*
   @brief Returns an unique pointer, that holds a copy of the dereferenced
   (copyable) unique pointer, that was given.
   */
-  Base CopyDereferencedPointer(const auto& ptr) {
+  template <typename P>
+  Base CopyDereferencedPointer(const P& ptr) {
     // Different behaviour based on whenever the ptr actually owns an object.
     return ptr ? std::make_unique<T>(*ptr) : nullptr;
   }
@@ -88,8 +91,8 @@ CPP_template(typename T, typename Deleter = std::default_delete<T>)(
 /*
 @brief Same as `std::make_unique`, but for `CopyableUniquePtr`.
 */
-template <typename T>
-constexpr CopyableUniquePtr<T> make_copyable_unique(auto&&... args) {
+template <typename T, typename... Args>
+constexpr CopyableUniquePtr<T> make_copyable_unique(Args&&... args) {
   return CopyableUniquePtr<T>(std::make_unique<T>(AD_FWD(args)...));
 }
 

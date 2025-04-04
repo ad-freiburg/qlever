@@ -3,6 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/GraphPatternOperation.h"
 
@@ -47,7 +49,8 @@ std::string SparqlValues::valuesToString() const {
 // Small anonymous helper function that is used in the definition of the member
 // functions of the `Subquery` class.
 namespace {
-auto m(auto&&... args) {
+template <typename... Args>
+auto m(Args&&... args) {
   return std::make_unique<ParsedQuery>(AD_FWD(args)...);
 }
 }  // namespace

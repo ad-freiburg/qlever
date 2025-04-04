@@ -3,6 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -771,8 +773,10 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 }
 
 // Convert a single ID to an XML binding of the given `variable`.
+template <typename IndexType, typename LocalVocabType>
 static std::string idToXMLBinding(std::string_view variable, Id id,
-                                  const auto& index, const auto& localVocab) {
+                                  const IndexType& index,
+                                  const LocalVocabType& localVocab) {
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =

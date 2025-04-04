@@ -1,6 +1,8 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_VISITMIXIN_H
 #define QLEVER_VISITMIXIN_H
@@ -21,12 +23,14 @@ template <typename Derived, typename BaseVariant>
 class VisitMixin {
  public:
   // TODO<C++23> use the `deducing this` feature.
-  decltype(auto) visit(auto&& f) {
+  template <typename F>
+  decltype(auto) visit(F&& f) {
     return std::visit(AD_FWD(f),
                       static_cast<BaseVariant&>(static_cast<Derived&>(*this)));
   }
 
-  decltype(auto) visit(auto&& f) const {
+  template <typename F>
+  decltype(auto) visit(F&& f) const {
     return std::visit(AD_FWD(f), static_cast<const BaseVariant&>(
                                      static_cast<const Derived&>(*this)));
   }

@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -8,7 +10,8 @@
 
 // Test that two `ctll::fixed_string`s are equal. This function is necessary
 // because `ctll::fixed_string` is not compatible with `GTest/GMock` directly.
-static void testEqual(auto s1, auto s2) {
+template <typename T>
+static void testEqual(T s1, T s2) {
   ASSERT_EQ(s1.size(), s2.size());
   for (size_t i = 0; i < s1.size(); ++i) {
     ASSERT_EQ(s1[i], s2[i]);

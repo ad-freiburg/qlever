@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -25,7 +27,8 @@ struct DummyDecoder {
     return result;
   }
   // This class has no state, but it still needs to be serialized.
-  friend std::true_type allowTrivialSerialization(DummyDecoder, auto);
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(DummyDecoder, T);
 };
 
 // A wrapper for the stateless dummy compression.

@@ -1,6 +1,8 @@
 //   Copyright 2024, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -30,7 +32,8 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   Id calculate(const auto& data) { return data.calculateResult(&localVocab_); }
 
-  auto makeCalcAndAddValue(auto& data) {
+  template <typename T>
+  auto makeCalcAndAddValue(T& data) {
     auto calc = [this, &data]() { return calculate(data); };
     auto addValue = [this, &data](auto&& x) {
       data.addValue(AD_FWD(x), &context_);

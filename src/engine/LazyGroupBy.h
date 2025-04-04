@@ -1,6 +1,8 @@
 //   Copyright 2024, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 #define QLEVER_SRC_ENGINE_LAZYGROUPBY_H
@@ -46,9 +48,10 @@ class LazyGroupBy {
   void resetAggregationData();
 
   // Helper function to visit the correct variant of the aggregation data.
-  void visitAggregate(const auto& visitor,
+  template <typename Visitor, typename... Args>
+  void visitAggregate(const Visitor& visitor,
                       const GroupBy::HashMapAggregateInformation& aggregateInfo,
-                      auto&&... additionalVariants);
+                      Args&&... additionalVariants);
 
   auto allAggregateInfoView() const {
     return aggregateAliases_ |

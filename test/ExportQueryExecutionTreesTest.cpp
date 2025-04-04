@@ -3,6 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 
@@ -312,7 +314,8 @@ std::vector<IdTable> convertToVector(
 }
 
 // match the contents of a `vector<IdTable>` to the given `tables`.
-auto matchesIdTables(const auto&... tables) {
+template <typename... Tables>
+auto matchesIdTables(const Tables&... tables) {
   return ElementsAre(matchesIdTable(tables)...);
 }
 

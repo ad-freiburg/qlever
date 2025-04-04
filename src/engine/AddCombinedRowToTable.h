@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
@@ -10,6 +12,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
+#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
@@ -184,7 +187,8 @@ class AddCombinedRowToIdTable {
   // inputs. The arguments to `inputLeft` and `inputRight` can either be
   // `IdTable` or `IdTableView<0>`, or any other type that has a
   // `asStaticView<0>` method that returns an `IdTableView<0>`.
-  void setInput(const auto& inputLeft, const auto& inputRight) {
+  template <typename L, typename R>
+  void setInput(const L& inputLeft, const R& inputRight) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
@@ -194,7 +198,8 @@ class AddCombinedRowToIdTable {
 
   // Only set the left input. After this it is only allowed to call
   // `addOptionalRow` and not `addRow` until `setInput` has been called again.
-  void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
+  template <typename L>
+  void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.

@@ -1,6 +1,8 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
@@ -260,7 +262,8 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-void writeMappedIdsToExtVec(const auto& input,
+template <typename T>
+void writeMappedIdsToExtVec(const T& input,
                             const ad_utility::HashMap<Id, Id>& map,
                             std::unique_ptr<TripleVec>* writePtr);
 

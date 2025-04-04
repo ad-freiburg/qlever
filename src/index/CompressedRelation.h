@@ -1,6 +1,8 @@
 // Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
 #define QLEVER_SRC_INDEX_COMPRESSEDRELATION_H
@@ -97,7 +99,8 @@ struct CompressedBlockMetadataNoBlockIndex {
       return str;
     }
 
-    friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
+    template <typename T>
+    friend std::true_type allowTrivialSerialization(PermutedTriple, T);
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
@@ -394,15 +397,17 @@ class CompressedRelationWriter {
   // each block in the `sortedBlocks` and then calling `finishLargeRelation`.
   // The number of distinct col1 entries will be computed from the blocks
   // directly.
+  template <typename T>
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
-                                                      auto&& sortedBlocks);
+                                                      T&& sortedBlocks);
 
   // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
+  template <typename T>
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      auto inputs, std::string filename, ad_utility::MemorySize blocksize);
+      T inputs, std::string filename, ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
@@ -718,8 +723,9 @@ class CompressedRelationReader {
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
+  template <typename T>
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
+      T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
       LimitOffsetClause& limitOffset) const;
 

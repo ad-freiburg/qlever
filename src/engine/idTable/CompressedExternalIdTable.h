@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 #define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
@@ -222,9 +224,9 @@ class CompressedExternalIdTableWriter {
   }
 
   // The actual implementation of `makeGeneratorForIdTable` above.
-  template <size_t NumCols = 0>
+  template <size_t NumCols = 0, typename Cleanup>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTableImpl(
-      size_t index, auto cleanup) {
+      size_t index, Cleanup cleanup) {
     using Table = IdTableStatic<NumCols>;
     auto firstBlock = startOfSingleIdTables_.at(index);
     auto lastBlock = index + 1 < startOfSingleIdTables_.size()
@@ -540,7 +542,8 @@ inline std::atomic<bool>
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
-  void operator()(auto& block) {
+  template <typename T>
+  void operator()(T& block) {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
