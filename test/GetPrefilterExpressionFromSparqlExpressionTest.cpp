@@ -486,6 +486,26 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(strStartsSprql(VocabId(0), VocabId(10)));
 }
 
+// Test PrefilterExpression creation for SparqlExpression isDatatype, where
+// Datatype is Literal, Iri, Numeric or Blank.
+//______________________________________________________________________________
+TEST(GetPrefilterExpressionFromSparqlExpression,
+     getPrefilterExprForIsDatatypeExpr) {
+  const auto varX = Variable{"?x"};
+  // The following cases should return a <Prefilter, Variable> pair.
+  evalAndEqualityCheck(isIriSprql(varX), pr(isIri(), varX));
+  evalAndEqualityCheck(isLiteralSprql(varX), pr(isLit(), varX));
+  evalAndEqualityCheck(isNumericSprql(varX), pr(isNum(), varX));
+  evalAndEqualityCheck(isBlankSprql(varX), pr(isBlank(), varX));
+
+  // For the cases below, no prefilter procedure should be available given that
+  // the filter reference isn't a Variable.
+  evalAndEqualityCheck(isLiteralSprql(VocabId(0)));
+  evalAndEqualityCheck(isIriSprql(BlankNodeId(10)));
+  evalAndEqualityCheck(isBlankSprql(DoubleId(33.1)));
+  evalAndEqualityCheck(isNumericSprql((IntId(-0.01))));
+}
+
 //______________________________________________________________________________
 // Test PrefilterExpression creation for the expression: `YEAR(?var) op INT`.
 TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {

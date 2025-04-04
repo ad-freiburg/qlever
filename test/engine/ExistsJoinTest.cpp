@@ -15,15 +15,18 @@
 using namespace ad_utility::testing;
 
 namespace {
+auto V = ad_utility::testing::VocabId;
 
 // Helper function that computes an `ExistsJoin` of the given `left` and
 // `right` and checks that the result columns is equal to `expectedAsBool`.
 // The first `numJoinColumns` columns of both `leftInput` and `rightInput` are
 // used as join columns.
 //
-void testExistsFromIdTable(IdTable left, IdTable right,
-                           std::vector<bool> expectedAsBool,
-                           size_t numJoinColumns) {
+void testExistsFromIdTable(
+    IdTable left, IdTable right, std::vector<bool> expectedAsBool,
+    size_t numJoinColumns,
+    ad_utility::source_location loc = ad_utility::source_location::current()) {
+  auto g = generateLocationTrace(loc);
   AD_CORRECTNESS_CHECK(left.numRows() == expectedAsBool.size());
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
   AD_CORRECTNESS_CHECK(right.numColumns() >= numJoinColumns);
@@ -47,10 +50,12 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   // below) doesn't affect it, as the `ExistsJoin` internally sorts its inputs.
   IdTable expected = left.clone();
 
-  // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
-  // pre-sorts its inputs.
-  ad_utility::randomShuffle(left.begin(), left.end());
-  ad_utility::randomShuffle(right.begin(), right.end());
+  if (numJoinColumns > 0) {
+    // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
+    // pre-sorts its inputs.
+    ad_utility::randomShuffle(left.begin(), left.end());
+    ad_utility::randomShuffle(right.begin(), right.end());
+  }
 
   auto qec = getQec();
   using V = Variable;
@@ -91,20 +96,30 @@ void testExistsFromIdTable(IdTable left, IdTable right,
 
 // Same as the function above, but conveniently takes `VectorTable`s instead of
 // `IdTable`s.
-void testExists(const VectorTable& leftInput, const VectorTable& rightInput,
-                std::vector<bool> expectedAsBool, size_t numJoinColumns) {
+void testExists(
+    const VectorTable& leftInput, const VectorTable& rightInput,
+    std::vector<bool> expectedAsBool, size_t numJoinColumns,
+    ad_utility::source_location loc = ad_utility::source_location::current()) {
   auto left = makeIdTableFromVector(leftInput);
   auto right = makeIdTableFromVector(rightInput);
   testExistsFromIdTable(std::move(left), std::move(right),
-                        std::move(expectedAsBool), numJoinColumns);
+                        std::move(expectedAsBool), numJoinColumns,
+                        std::move(loc));
 }
 
 }  // namespace
 
 TEST(Exists, computeResult) {
+  auto alloc = ad_utility::testing::makeAllocator();
   // Single join column.
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {true, false, true}, 1);
+
+  // No join column.
+  testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}}, {true, true, true},
+             0);
+  testExistsFromIdTable(makeIdTableFromVector({{3, 6}, {4, 7}, {5, 8}}),
+                        IdTable{2, alloc}, {false, false, false}, 0);
 
   // Single join column with one UNDEF (which always matches).
   auto U = Id::makeUndefined();
@@ -127,7 +142,6 @@ TEST(Exists, computeResult) {
   testExists({{13, 17}, {25, 38}}, {{U, U}}, {true, true}, 2);
 
   // Empty inputs
-  auto alloc = ad_utility::testing::makeAllocator();
   testExistsFromIdTable(IdTable(2, alloc),
                         makeIdTableFromVector({{U, U}, {3, 7}}), {}, 1);
   testExistsFromIdTable(makeIdTableFromVector({{U, U}, {3, 7}}),
@@ -151,4 +165,56 @@ TEST(Exists, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(existsJoin, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), existsJoin.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Exists, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
+  auto* qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{2, 4}}),
+          std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}}),
+      Variable{"?z"}};
+
+  auto result = existsJoin.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto& idTables = result.idTables();
+  auto it = idTables.begin();
+  ASSERT_NE(it, idTables.end());
+  EXPECT_EQ(it->idTable_,
+            makeIdTableFromVector({{V(0), V(1), Id::makeFromBool(true)}}));
+
+  EXPECT_EQ(++it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
+  auto* qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, IdTable{2, qec->getAllocator()},
+          std::vector<std::optional<Variable>>{Variable{"?c"}, Variable{"?d"}}),
+      Variable{"?z"}};
+
+  auto result = existsJoin.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto& idTables = result.idTables();
+  auto it = idTables.begin();
+  ASSERT_NE(it, idTables.end());
+  EXPECT_EQ(it->idTable_,
+            makeIdTableFromVector({{V(0), V(1), Id::makeFromBool(false)}}));
+
+  EXPECT_EQ(++it, idTables.end());
 }

@@ -102,6 +102,11 @@ class Literal {
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
+
+  // Replace the content of the Literal object with `newContent`.
+  // It truncates or extends the content based on the length of newContent
+  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  void replaceContent(std::string_view newContent);
 };
 }  // namespace ad_utility::triple_component
 

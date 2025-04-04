@@ -31,6 +31,13 @@ auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
   return std::make_unique<RelExpr>(referenceId);
 };
 
+// Make IsDatatypeExpression
+template <typename IsDtypeExpr>
+auto isDtypeExpr =
+    [](bool isNegated = false) -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<IsDtypeExpr>(isNegated);
+};
+
 // Make AndExpression or OrExpression
 template <typename LogExpr>
 auto logExpr = [](std::unique_ptr<PrefilterExpression> child1,
@@ -61,6 +68,14 @@ constexpr auto gt = relExpr<GreaterThanExpression>;
 constexpr auto eq = relExpr<EqualExpression>;
 // NOT EQUAL (`!=`)
 constexpr auto neq = relExpr<NotEqualExpression>;
+// IS IRI
+constexpr auto isIri = isDtypeExpr<IsIriExpression>;
+// IS LITERAL
+constexpr auto isLit = isDtypeExpr<IsLiteralExpression>;
+// IS NUMERIC
+constexpr auto isNum = isDtypeExpr<IsNumericExpression>;
+// IS BLANK
+constexpr auto isBlank = isDtypeExpr<IsBlankExpression>;
 // AND (`&&`)
 constexpr auto andExpr = logExpr<AndExpression>;
 // OR (`||`)
@@ -168,6 +183,25 @@ std::unique_ptr<SparqlExpression> makeStringStartsWithSparqlExpression(
 std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
   return makeYearExpression(std::visit(getExpr, std::move(child)));
 };
+
+//______________________________________________________________________________
+template <prefilterExpressions::IsDatatype Datatype>
+std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
+    VariantArgs child) {
+  using enum prefilterExpressions::IsDatatype;
+  auto childExpr = std::visit(getExpr, std::move(child));
+  if constexpr (Datatype == IRI) {
+    return makeIsIriExpression(std::move(childExpr));
+  } else if constexpr (Datatype == LITERAL) {
+    return makeIsLiteralExpression(std::move(childExpr));
+  } else if constexpr (Datatype == NUMERIC) {
+    return makeIsNumericExpression(std::move(childExpr));
+  } else {
+    static_assert(Datatype == BLANK);
+    return makeIsBlankExpression(std::move(childExpr));
+  }
+}
+
 }  // namespace
 
 //______________________________________________________________________________
@@ -201,6 +235,18 @@ constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 
 //______________________________________________________________________________
+// Create SparqlExpression `isIri`
+constexpr auto isIriSprql =
+    &makeIsDatatypeStartsWithExpression<prefilterExpressions::IsDatatype::IRI>;
+// Create SparqlExpression `isLiteral`
+constexpr auto isLiteralSprql = &makeIsDatatypeStartsWithExpression<
+    prefilterExpressions::IsDatatype::LITERAL>;
+// Create SparqlExpression `isNumeric`
+constexpr auto isNumericSprql = &makeIsDatatypeStartsWithExpression<
+    prefilterExpressions::IsDatatype::NUMERIC>;
+// Create SparqlExpression `isBlank`
+constexpr auto isBlankSprql = &makeIsDatatypeStartsWithExpression<
+    prefilterExpressions::IsDatatype::BLANK>;
 // Create SparqlExpression `YEAR`.
 constexpr auto yearSprqlExpr = &makeYearSparqlExpression;
 
