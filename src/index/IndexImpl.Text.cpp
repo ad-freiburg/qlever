@@ -117,7 +117,7 @@ void IndexImpl::buildTextIndexFile(std::optional<const string> wordsFile,
   // text record or both (but at least one of them, otherwise this function is
   // not called)
   if (addWordsFromFiles) {
-    // TODO ADD LOG(INFO) MESSAGE
+    LOG(INFO) << "Using specified docs- and/or wordsfile to build text index.";
   }
   if (addWordsFromLiterals) {
     LOG(INFO) << (!addWordsFromFiles ? "C" : "Additionally c")
