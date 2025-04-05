@@ -144,8 +144,9 @@ Index makeTestIndex(const std::string& indexBasename,
                     [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex, bool addWordsFromLiterals,
-                    std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsFile,
+                    bool useDocsFileForVocab,
+                    std::optional<std::string> contentsOfWordsFile,
+                    std::optional<std::string> contentsOfDocsFile,
                     ad_utility::MemorySize parserBufferSize,
                     std::optional<TextScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam,
@@ -204,34 +205,33 @@ Index makeTestIndex(const std::string& indexBasename,
               bAndKParam.value().second);
         }
       }
-      if (contentsOfWordsFileAndDocsFile.has_value()) {
+      if (contentsOfDocsFile.has_value() &&
+          (contentsOfWordsFile.has_value() || useDocsFileForVocab)) {
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(contentsOfWordsFileAndDocsFile.value().first.c_str(),
-                        contentsOfWordsFileAndDocsFile.value().first.size());
-        docsFile.write(contentsOfWordsFileAndDocsFile.value().second.c_str(),
-                       contentsOfWordsFileAndDocsFile.value().second.size());
+        wordsFile.write(contentsOfWordsFile.value().c_str(),
+                        contentsOfWordsFile.value().size());
+        docsFile.write(contentsOfDocsFile.value().c_str(),
+                       contentsOfDocsFile.value().size());
         wordsFile.close();
         docsFile.close();
         index.setKbName(indexBasename);
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
         if (addWordsFromLiterals) {
-          index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              true);
+          index.buildTextIndexFile(indexBasename + ".wordsfile",
+                                   indexBasename + ".docsfile", true,
+                                   useDocsFileForVocab);
         } else {
-          index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              false);
+          index.buildTextIndexFile(indexBasename + ".wordsfile",
+                                   indexBasename + ".docsfile", false,
+                                   useDocsFileForVocab);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(std::nullopt, true);
+        index.buildTextIndexFile(std::nullopt, std::nullopt, true, false);
       }
     }
   }
@@ -268,8 +268,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool usePrefixCompression,
                               ad_utility::MemorySize blocksizePermutations,
                               bool createTextIndex, bool addWordsFromLiterals,
-                              std::optional<std::pair<std::string, std::string>>
-                                  contentsOfWordsFileAndDocsFile,
+                              bool useDocsFileForVocab,
+                              std::optional<std::string> contentsOfWordsFile,
+                              std::optional<std::string> contentsOfDocsFile,
                               ad_utility::MemorySize parserBufferSize,
                               std::optional<TextScoringMetric> scoringMetric,
                               std::optional<std::pair<float, float>> bAndKParam,
@@ -309,16 +310,24 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
             SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<
-      std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
-      std::optional<std::pair<std::string, std::string>>,
-      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
+  using Key =
+      std::tuple<std::optional<string>, bool, bool, bool,
+                 ad_utility::MemorySize, bool, bool, std::optional<string>,
+                 std::optional<string>, std::optional<TextScoringMetric>,
+                 std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
-  auto key = Key{turtleInput,           loadAllPermutations,
-                 usePatterns,           usePrefixCompression,
-                 blocksizePermutations, contentsOfWordsFileAndDocsFile,
-                 scoringMetric,         bAndKParam};
+  auto key = Key{turtleInput,
+                 loadAllPermutations,
+                 usePatterns,
+                 usePrefixCompression,
+                 blocksizePermutations,
+                 addWordsFromLiterals,
+                 useDocsFileForVocab,
+                 contentsOfWordsFile,
+                 contentsOfDocsFile,
+                 scoringMetric,
+                 bAndKParam};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -337,8 +346,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                 std::make_unique<Index>(makeTestIndex(
                     testIndexBasename, turtleInput, loadAllPermutations,
                     usePatterns, usePrefixCompression, blocksizePermutations,
-                    createTextIndex, addWordsFromLiterals,
-                    contentsOfWordsFileAndDocsFile, parserBufferSize,
+                    createTextIndex, addWordsFromLiterals, useDocsFileForVocab,
+                    contentsOfWordsFile, contentsOfDocsFile, parserBufferSize,
                     scoringMetric, bAndKParam, indexType)),
                 std::make_unique<QueryResultCache>()});
   }

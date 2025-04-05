@@ -1540,8 +1540,9 @@ QueryExecutionContext* getAllGeometriesQEC() {
   addRow(kg, "5", multiLinestring);
   addRow(kg, "6", multiPolygon);
 
-  auto qec = ad_utility::testing::getQec(kg, true, true, false, 16_MB, false,
-                                         true, std::nullopt, 10_kB);
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, false, 16_MB, false, true,
+                                  false, std::nullopt, std::nullopt, 10_kB);
   return qec;
 }
 

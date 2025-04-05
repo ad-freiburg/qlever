@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  bool useWordsFromDocsfile = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> stxxlMemory;
@@ -206,6 +207,10 @@ int main(int argc, char** argv) {
   // Options for the text index.
   add("text-docs-input-file,d", po::value(&docsfile),
       "The full text of the text records from which to build the text index.");
+  add("text-words-from-docsfile,D", po::value(&useWordsFromDocsfile),
+      "Use the words in the documents from the docsfile to build the text "
+      "index. Can be used together with a wordsfile to add the co-occuring "
+      "entities from the wordsfile.");
   add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
@@ -351,25 +356,28 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
-    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
 
-    if (!(wordsAndDocsFileSpecified ||
-          (wordsfile.empty() && docsfile.empty()))) {
-      throw std::runtime_error(absl::StrCat(
-          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
-          ". Both or none of docsfile and wordsfile have to be given to build "
-          "text index. If none are given the option to add words from literals "
-          "has to be true. For details see --help."));
+    bool buildFromDocsOrWordsFile =
+        !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
+
+    if (!(buildFromDocsOrWordsFile || addWordsFromLiterals)) {
+      throw std::runtime_error(
+          "The text index can be build using a docsfile and a wordsfile or "
+          "only a docsfile while using the option to build only from the "
+          "docsfile. "
+          "If both options aren't given the option to add words from literals "
+          "has to be true. For details see --help.");
     }
-    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
+    if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
       index.storeTextScoringParamsInConfiguration(
           getTextScoringMetricFromString(scoringMetric), bScoringParam,
           kScoringParam);
       index.buildTextIndexFile(
-          wordsAndDocsFileSpecified
-              ? std::optional{std::pair{wordsfile, docsfile}}
-              : std::nullopt,
-          addWordsFromLiterals);
+          wordsfile.empty() ? std::nullopt
+                            : std::optional<const string>(wordsfile),
+          docsfile.empty() ? std::nullopt
+                           : std::optional<const string>(docsfile),
+          addWordsFromLiterals, useWordsFromDocsfile);
     }
 
     if (!docsfile.empty()) {

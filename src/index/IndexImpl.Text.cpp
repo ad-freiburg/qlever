@@ -101,25 +101,26 @@ void IndexImpl::logEntityNotFound(const string& word,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::buildTextIndexFile(
-    const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-    bool addWordsFromLiterals) {
-  AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
+void IndexImpl::buildTextIndexFile(std::optional<const string> wordsFile,
+                                   std::optional<const string> docsFile,
+                                   bool addWordsFromLiterals,
+                                   bool useDocsFileForVocabulary) {
+  bool addWordsFromFiles = docsFile.has_value() &&
+                           (wordsFile.has_value() || useDocsFileForVocabulary);
+  AD_CORRECTNESS_CHECK(addWordsFromFiles || addWordsFromLiterals);
+  string wordsFileString = wordsFile.has_value() ? wordsFile.value() : "";
+  string docsFileString = docsFile.has_value() ? docsFile.value() : "";
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
-  bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
-  const auto& [wordsFile, docsFile] =
-      !addFromWordAndDocsFile ? std::pair("", "") : wordsAndDocsFile.value();
-  // Either read words from given files or consider each literal as text record
-  // or both (but at least one of them, otherwise this function is not called)
-  if (addFromWordAndDocsFile) {
-    AD_CORRECTNESS_CHECK(!(wordsFile.empty() || docsFile.empty()));
-    LOG(INFO) << "Reading words from wordsfile \"" << wordsFile << "\""
-              << " and from docsFile \"" << docsFile << "\"" << std::endl;
+  // Either read words from wordsfile or docsfile or consider each literal as
+  // text record or both (but at least one of them, otherwise this function is
+  // not called)
+  if (addWordsFromFiles) {
+    // TODO ADD LOG(INFO) MESSAGE
   }
   if (addWordsFromLiterals) {
-    LOG(INFO) << (!addFromWordAndDocsFile ? "C" : "Additionally c")
+    LOG(INFO) << (!addWordsFromFiles ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
@@ -139,16 +140,20 @@ void IndexImpl::buildTextIndexFile(
                 bAndKParamForTextScoring_};
 
   // Build the text vocabulary (first scan over the text records).
-  size_t nofLines = processWordsForVocabulary(wordsFile, addWordsFromLiterals);
+  size_t nofLines = processWordsForVocabulary(
+      useDocsFileForVocabulary ? docsFileString : wordsFileString,
+      addWordsFromLiterals, useDocsFileForVocabulary);
   // Calculate the score data for the words
-  scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
-                                vocab_);
+  scoreData_.calculateScoreData(docsFileString, addWordsFromLiterals,
+                                textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  processWordsForInvertedLists(wordsFile, addWordsFromLiterals, v);
+  processWordsForInvertedLists(
+      useDocsFileForVocabulary ? docsFileString : wordsFileString,
+      addWordsFromLiterals, useDocsFileForVocabulary, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(),
               memoryLimitIndexBuilding().getBytes() / 3);
@@ -237,8 +242,9 @@ void IndexImpl::addTextFromOnDiskIndex() {
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
-                                            bool addWordsFromLiterals) {
+size_t IndexImpl::processWordsForVocabulary(const string& file,
+                                            bool addWordsFromLiterals,
+                                            bool useDocsFileForVocabulary) {
   size_t numLines = 0;
   ad_utility::HashSet<string> distinctWords;
   auto processLine = [&numLines, &distinctWords](const WordsFileLine& line) {
@@ -247,10 +253,21 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
       distinctWords.insert(line.word_);
     }
   };
-
-  for (const auto& line :
-       WordsFileParser{contextFile, textVocab_.getLocaleManager()}) {
-    processLine(line);
+  if (useDocsFileForVocabulary) {
+    const auto& localeManager = textVocab_.getLocaleManager();
+    for (const auto& line : DocsFileParser{file, localeManager}) {
+      for (const auto& word :
+           tokenizeAndNormalizeText(line.docContent_, localeManager)) {
+        WordsFileLine lineToProcess = WordsFileLine{
+            word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
+        processLine(lineToProcess);
+      }
+    }
+  } else {
+    for (const auto& line :
+         WordsFileParser{file, textVocab_.getLocaleManager()}) {
+      processLine(line);
+    }
   }
   if (addWordsFromLiterals) {
     for (const auto& line : wordsInLiterals(0)) {
@@ -262,8 +279,9 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::processWordsForInvertedLists(const string& contextFile,
+void IndexImpl::processWordsForInvertedLists(const string& file,
                                              bool addWordsFromLiterals,
+                                             bool useDocsFileForVocabulary,
                                              IndexImpl::TextVec& vec) {
   LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
   TextVec::bufwriter_type writer(vec);
@@ -296,10 +314,21 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                                                   scoreData_);
     }
   };
-
-  for (const auto& line :
-       WordsFileParser{contextFile, textVocab_.getLocaleManager()}) {
-    processLine(line);
+  if (useDocsFileForVocabulary) {
+    const auto& localeManager = textVocab_.getLocaleManager();
+    for (const auto& line : DocsFileParser{file, localeManager}) {
+      for (const auto& word :
+           tokenizeAndNormalizeText(line.docContent_, localeManager)) {
+        WordsFileLine lineToProcess = {
+            word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
+        processLine(lineToProcess);
+      }
+    }
+  } else {
+    for (const auto& line :
+         WordsFileParser{file, textVocab_.getLocaleManager()}) {
+      processLine(line);
+    }
   }
   if (addWordsFromLiterals) {
     for (const auto& line : wordsInLiterals(nofContexts + 1)) {

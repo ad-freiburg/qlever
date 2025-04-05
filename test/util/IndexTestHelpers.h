@@ -51,8 +51,9 @@ Index makeTestIndex(
     bool usePrefixCompression = true,
     ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false, bool addWordsFromLiterals = true,
-    std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt,
+    bool useDocsFileForVocab = false,
+    std::optional<std::string> contentsOfWordsFile = std::nullopt,
+    std::optional<std::string> contentsOfDocsFile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
@@ -70,8 +71,9 @@ QueryExecutionContext* getQec(
     bool usePrefixCompression = true,
     ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false, bool addWordsFromLiterals = true,
-    std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt,
+    bool useDocsFileForVocab = false,
+    std::optional<std::string> contentsOfWordsFile = std::nullopt,
+    std::optional<std::string> contentsOfDocsFile = std::nullopt,
     ad_utility::MemorySize parserBufferSize = 1_kB,
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
