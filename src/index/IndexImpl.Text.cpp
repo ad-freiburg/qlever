@@ -22,43 +22,26 @@
 #include "util/Conversions.h"
 
 // _____________________________________________________________________________
-cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
-    std::string contextFile, bool addWordsFromLiterals) const {
+cppcoro::generator<WordsFileLine> IndexImpl::wordsInLiterals(
+    size_t startIndex) const {
+  TextRecordIndex textRecordIndex = TextRecordIndex::make(startIndex);
   auto localeManager = textVocab_.getLocaleManager();
-  // ROUND 1: If context file aka wordsfile is not empty, read words from there.
-  // Remember the last context id for the (optional) second round.
-  TextRecordIndex contextId = TextRecordIndex::make(0);
-  if (!contextFile.empty()) {
-    WordsFileParser p(contextFile, localeManager);
-    ad_utility::HashSet<string> items;
-    for (auto& line : p) {
-      contextId = line.contextId_;
-      co_yield line;
+  for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
+       index = index.incremented()) {
+    auto text = vocab_[index];
+    if (!isLiteral(text)) {
+      continue;
     }
-    if (contextId > TextRecordIndex::make(0)) {
-      contextId = contextId.incremented();
+    WordsFileLine entityLine{text, true, textRecordIndex, 1, true};
+    co_yield entityLine;
+    std::string_view textView = text;
+    textView = textView.substr(0, textView.rfind('"'));
+    textView.remove_prefix(1);
+    for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
+      WordsFileLine wordLine{std::move(word), false, textRecordIndex, 1};
+      co_yield wordLine;
     }
-  }
-  // ROUND 2: Optionally, consider each literal from the internal vocabulary as
-  // a text record.
-  if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
-      if (!isLiteral(text)) {
-        continue;
-      }
-      WordsFileLine entityLine{text, true, contextId, 1, true};
-      co_yield entityLine;
-      std::string_view textView = text;
-      textView = textView.substr(0, textView.rfind('"'));
-      textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
-        WordsFileLine wordLine{std::move(word), false, contextId, 1};
-        co_yield wordLine;
-      }
-      contextId = contextId.incremented();
-    }
+    textRecordIndex = textRecordIndex.incremented();
   }
 }
 
@@ -258,15 +241,20 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
                                             bool addWordsFromLiterals) {
   size_t numLines = 0;
   ad_utility::HashSet<string> distinctWords;
-  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
+  auto processLine = [&numLines, &distinctWords](const WordsFileLine& line) {
     ++numLines;
-    // LOG(INFO) << "LINE: "
-    //           << std::setw(50) << line.word_ << "   "
-    //           << line.isEntity_ << "\t"
-    //           << line.contextId_.get() << "\t"
-    //           << line.score_ << std::endl;
     if (!line.isEntity_) {
       distinctWords.insert(line.word_);
+    }
+  };
+
+  for (const auto& line :
+       WordsFileParser{contextFile, textVocab_.getLocaleManager()}) {
+    processLine(line);
+  }
+  if (addWordsFromLiterals) {
+    for (const auto& line : wordsInLiterals(0)) {
+      processLine(line);
     }
   }
   textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
@@ -289,7 +277,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   size_t entityNotFoundErrorMsgCount = 0;
   size_t nofLiterals = 0;
 
-  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
+  auto processLine = [&](const WordsFileLine& line) {
     if (line.contextId_ != currentContext) {
       ++nofContexts;
       addContextToVector(writer, currentContext, wordsInContext,
@@ -306,6 +294,16 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
       ++nofWordPostings;
       processWordCaseDuringInvertedListProcessing(line, wordsInContext,
                                                   scoreData_);
+    }
+  };
+
+  for (const auto& line :
+       WordsFileParser{contextFile, textVocab_.getLocaleManager()}) {
+    processLine(line);
+  }
+  if (addWordsFromLiterals) {
+    for (const auto& line : wordsInLiterals(nofContexts + 1)) {
+      processLine(line);
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {
