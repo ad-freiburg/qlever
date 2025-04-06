@@ -1365,20 +1365,6 @@ TEST(SparqlExpression, concatExpression) {
                              ::testing::HasSubstr("<bam>")));
   // Only constants with datatypes or language tags.
   checkConcat(
-      IdOrLiteralOrIri{lit("trueMe1")},
-      std::tuple{T,
-                 IdOrLiteralOrIri{
-                     lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-                 I(1)});
-
-  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me", "@en")}, I(1)});
-
-  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
-              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
-                         IdOrLiteralOrIri{lit("World", "@en")}});
-
-  checkConcat(
       IdOrLiteralOrIri{
           lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>")},
       std::tuple{IdOrLiteralOrIri{lit(
@@ -1394,59 +1380,67 @@ TEST(SparqlExpression, concatExpression) {
       IdOrLiteralOrIri{lit("HelloWorld")},
       std::tuple{IdOrLiteralOrIri{lit(
                      "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-                 IdOrLiteralOrIri{lit("World", "@en")}});
-
-  checkConcat(
-      IdOrLiteralOrIri{lit("HelloWorld")},
-      std::tuple{IdOrLiteralOrIri{lit(
-                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
                  IdOrLiteralOrIri{lit("World")}});
 
   checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
               std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
                          IdOrLiteralOrIri{lit("World")}});
 
-  // Constants at beginning with datatypes or language tags.
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+
   checkConcat(
-      IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit("World", "@en")}});
+
+  checkConcat(
+      IdOrLiteralOrIri{lit("trueMe1")},
       std::tuple{T,
                  IdOrLiteralOrIri{
                      lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-                 Ids{I(1), I(2)}});
-  checkConcat(IdOrLiteralOrIriVec{lit("MeHello"), lit("MeWorld")},
+                 I(1)});
+
+  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
+              std::tuple{T, IdOrLiteralOrIri{lit("Me", "@en")}, I(1)});
+
+  // Constants at beginning with datatypes or language tags.
+  checkConcat(IdOrLiteralOrIriVec{lit("MeHello", "@en"), lit("MeWorld"),
+                                  lit("MeHallo")},
               std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
-                         IdOrLiteralOrIriVec{lit("Hello", "@de"),
-                                             lit("World", "@en")}});
-
-  checkConcat(
-      IdOrLiteralOrIriVec{lit("MeHello"), lit("MeWorld")},
-      std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
-                 IdOrLiteralOrIriVec{lit("Hello", "@de"), lit("World")}});
-
-  checkConcat(
-      IdOrLiteralOrIriVec{lit("MeHello"), lit("MeWorld")},
-      std::tuple{
-          IdOrLiteralOrIri{
-              lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-          IdOrLiteralOrIriVec{
-              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-              lit("World")}});
-
-  checkConcat(IdOrLiteralOrIriVec{lit("MeHello", "@en"), lit("MeWorld", "@en")},
-              std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
-                         IdOrLiteralOrIriVec{lit("Hello", "@en"),
-                                             lit("World", "@en")}});
+                         IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("World"),
+                                             lit("Hallo", "@de")}});
 
   checkConcat(
       IdOrLiteralOrIriVec{
           lit("MeHello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("MeWorld", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+          lit("MeWorld"), lit("MeHallo")},
       std::tuple{
           IdOrLiteralOrIri{
               lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
           IdOrLiteralOrIriVec{
               lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("World"), lit("Hallo", "@de")}});
+
+  // Vector at the beginning with datatypes or language tags.
+  checkConcat(
+      IdOrLiteralOrIriVec{
+          lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("HiWorld"), lit("HalloWorld")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("Hi"), lit("Hallo", "@de")},
+          IdOrLiteralOrIri{
               lit("World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+
+  checkConcat(IdOrLiteralOrIriVec{lit("HelloWorld", "@en"), lit("HiWorld"),
+                                  lit("HalloWorld")},
+              std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hi"),
+                                             lit("Hallo", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
 }
 
 // ______________________________________________________________________________

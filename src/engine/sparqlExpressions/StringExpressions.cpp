@@ -391,7 +391,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using StringVec = VectorWithMemoryLimit<std::string>;
+    using StringVec = VectorWithMemoryLimit<
+        std::tuple<std::string, std::optional<std::string>>>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -406,41 +407,48 @@ class ConcatExpression : public detail::VariadicExpression {
     // were constants (see above).
 
     std::variant<std::string, StringVec> result{std::string{""}};
-    StringVec dataTypesOrLangTags(ctx->_allocator);
+    std::optional<std::string> datatypeOrLangTag;
 
-    auto storeDatatypeOrLanguageTag = [&](const auto& literal) {
+    // Extracts the datatype or language tag from a literal.
+    // Language tags are returned as "@lang",datatypes as IRIs without angle
+    // brackets.
+    auto getDatatypeOrLanguageTag = [&](const auto& literal) {
       if (literal.hasDatatype()) {
-        dataTypesOrLangTags.push_back(
-            std::string{asStringViewUnsafe(literal.getDatatype())});
+        return std::string{asStringViewUnsafe(literal.getDatatype())};
       } else if (literal.hasLanguageTag()) {
-        dataTypesOrLangTags.push_back(
-            std::string{asStringViewUnsafe(literal.getLanguageTag())});
-      } else {
-        dataTypesOrLangTags.push_back("");
+        return "@" + std::string{asStringViewUnsafe(literal.getLanguageTag())};
       }
+      return std::string{};
     };
 
-    auto determineDescriptor =
-        [&]() -> std::optional<std::variant<Iri, std::string>> {
-      if (dataTypesOrLangTags.empty()) {
-        return std::nullopt;
+    auto getCommonDescriptor = [&](const std::optional<std::string>& str1,
+                                   const std::string& str2) {
+      if (!str1.has_value() ||
+          (!str1.value().empty() && str1.value() == str2)) {
+        return str2;
       }
-      // if all elements are the same and not empty
-      if (std::all_of(dataTypesOrLangTags.begin(), dataTypesOrLangTags.end(),
-                      [&](const std::string& s) {
-                        return s == dataTypesOrLangTags[0];
-                      }) &&
-          !dataTypesOrLangTags[0].empty()) {
-        return dataTypesOrLangTags[0];  // alle languagetags sollen zurückgegebn
-                                        // werden, aber nur der datatype
-                                        // std:string
-      }
-      return std::nullopt;
+      return std::string{};
     };
+
+    // Builds a literal from the given string content and descriptor.
+    // If descriptor starts with "@", it's a language tag. Otherwise it's either
+    // the datatype std:string or empty.
+    auto toLiteralFromDescriptor =
+        [](const std::string& content,
+           const std::optional<std::string>& descriptor) {
+          if (descriptor.has_value() && descriptor.value().starts_with("@")) {
+            return toLiteral(content, descriptor);
+          } else if (descriptor.has_value() && !descriptor.value().empty()) {
+            return toLiteral(
+                content, Iri::fromIrirefWithoutBrackets(descriptor.value()));
+          }
+          return toLiteral(content);
+        };
 
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result, &dataTypesOrLangTags, &storeDatatypeOrLanguageTag,
-        &determineDescriptor)(typename T)(T && s)(
+        &ctx, &result, &datatypeOrLangTag, &getCommonDescriptor,
+        &getDatatypeOrLanguageTag,
+        &toLiteralFromDescriptor)(typename T)(T && s)(
         requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant =
@@ -451,17 +459,21 @@ class ConcatExpression : public detail::VariadicExpression {
                                   asNormalizedStringViewUnsafe("")));
         const auto& strFromConstant =
             asStringViewUnsafe(literalFromConstant.getContent());
-        storeDatatypeOrLanguageTag(literalFromConstant);
         if (std::holds_alternative<std::string>(result)) {
           // All previous children were constants, and the current child also is
           // a constant.
           std::get<std::string>(result).append(strFromConstant);
+          datatypeOrLangTag = getCommonDescriptor(
+              datatypeOrLangTag, getDatatypeOrLanguageTag(literalFromConstant));
         } else {
           // One of the previous children was not a constant, so we already
           // store a vector.
           auto& resultAsVector = std::get<StringVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
-            target.append(strFromConstant);
+          ql::ranges::for_each(resultAsVector, [&](auto& tup) {
+            auto& [content, descriptor] = tup;
+            content.append(strFromConstant);
+            descriptor = getCommonDescriptor(
+                descriptor, getDatatypeOrLanguageTag(literalFromConstant));
           });
         }
       } else {
@@ -477,8 +489,9 @@ class ConcatExpression : public detail::VariadicExpression {
           result.emplace<StringVec>(ctx->_allocator);
           auto& resultAsVec = std::get<StringVec>(result);
           resultAsVec.reserve(ctx->size());
+
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
-                      constantResultSoFar);
+                      std::make_tuple(constantResultSoFar, datatypeOrLangTag));
         }
 
         // The `result` already is a vector, and the current child also returns
@@ -492,8 +505,10 @@ class ConcatExpression : public detail::VariadicExpression {
                       std::move(el), ctx);
               literal.has_value()) {
             const auto& str = asStringViewUnsafe(literal.value().getContent());
-            resultAsVec[i].append(str);
-            storeDatatypeOrLanguageTag(literal.value());
+            auto& [content, descriptor] = resultAsVec[i];
+            content.append(str);
+            descriptor = getCommonDescriptor(
+                descriptor, getDatatypeOrLanguageTag(literal.value()));
           }
 
           ctx->cancellationHandle_->throwIfCancelled();
@@ -509,20 +524,18 @@ class ConcatExpression : public detail::VariadicExpression {
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    std::optional<std::variant<Iri, std::string>> descriptor =
-        determineDescriptor();
     if (std::holds_alternative<std::string>(result)) {
-      return IdOrLiteralOrIri{
-          toLiteral(std::get<std::string>(result), descriptor)};
+      return toLiteralFromDescriptor(std::get<std::string>(result),
+                                     datatypeOrLangTag);
     } else {
       auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(stringVec.size());
-      ql::ranges::copy(
-          stringVec | ql::views::transform([&](const std::string& str) {
-            return toLiteral(str, descriptor);
-          }),
-          std::back_inserter(resultAsVec));
+      ql::ranges::copy(stringVec | ql::views::transform([&](const auto& tup) {
+                         const auto& [content, descriptor] = tup;
+                         return toLiteralFromDescriptor(content, descriptor);
+                       }),
+                       std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }
