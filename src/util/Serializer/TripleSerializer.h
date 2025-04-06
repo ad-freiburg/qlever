@@ -70,10 +70,10 @@ CPP_template(typename Serializer)(
   AD_CONTRACT_CHECK(vocab.numSets() == 1);
   const auto& words = vocab.primaryWordSet();
   serializer << words.size();
-  for (const auto& localVocabEntry : words) {
+  ql::ranges::for_each(words, [&serializer](const auto& localVocabEntry) {
     serializer << Id::makeFromLocalVocabIndex(&localVocabEntry);
     serializer << localVocabEntry.toStringRepresentation();
-  }
+  });
 }
 
 // Deserialize the local vocabulary from the input stream.
@@ -100,9 +100,8 @@ CPP_template(typename Serializer)(
 // Serialize a range of Ids to the output stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id before writing it.
 CPP_template(typename Range, typename Serializer)(
-    requires ql::ranges::sized_range<Range>) void serializeIds(Serializer&
-                                                                   serializer,
-                                                               Range&& range) {
+    requires ql::ranges::range<Range>) void serializeIds(Serializer& serializer,
+                                                         Range&& range) {
   ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
       vectorSerializer{std::move(serializer)};
   for (const Id& value : range) {
