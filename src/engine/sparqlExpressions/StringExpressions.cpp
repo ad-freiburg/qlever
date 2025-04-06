@@ -380,7 +380,7 @@ IdOrLiteralOrIri processLiteral(
 
 [[maybe_unused]] auto replaceImpl =
     [](std::optional<ad_utility::triple_component::Literal> s,
-       brna const std::shared_ptr<RE2>& pattern,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
