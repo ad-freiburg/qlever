@@ -19,7 +19,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // has to add the quotation marks.
 constexpr auto toLiteral =
     [](std::string_view normalizedContent,
-       std::optional<std::variant<Iri, std::string>> descriptor =
+       const std::optional<std::variant<Iri, std::string>>& descriptor =
            std::nullopt) {
       return LiteralOrIri{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
@@ -447,8 +447,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
     auto visitSingleExpressionResult = CPP_template_lambda(
         &ctx, &result, &datatypeOrLangTag, &getCommonDescriptor,
-        &getDatatypeOrLanguageTag,
-        &toLiteralFromDescriptor)(typename T)(T && s)(
+        &getDatatypeOrLanguageTag)(typename T)(T && s)(
         requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant =
@@ -531,11 +530,13 @@ class ConcatExpression : public detail::VariadicExpression {
       auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(stringVec.size());
-      ql::ranges::copy(stringVec | ql::views::transform([&](const auto& tup) {
-                         const auto& [content, descriptor] = tup;
-                         return toLiteralFromDescriptor(content, descriptor);
-                       }),
-                       std::back_inserter(resultAsVec));
+      ql::ranges::copy(
+          stringVec |
+              ql::views::transform([&toLiteralFromDescriptor](const auto& tup) {
+                const auto& [content, descriptor] = tup;
+                return toLiteralFromDescriptor(content, descriptor);
+              }),
+          std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }
