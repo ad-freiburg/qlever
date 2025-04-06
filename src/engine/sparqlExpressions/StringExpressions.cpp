@@ -19,7 +19,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // has to add the quotation marks.
 constexpr auto toLiteral =
     [](std::string_view normalizedContent,
-       const std::optional<std::variant<Iri, std::string>> descriptor =
+       const std::optional<std::variant<Iri, std::string>>& descriptor =
            std::nullopt) {
       return LiteralOrIri{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
