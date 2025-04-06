@@ -1107,31 +1107,6 @@ TEST(RdfParserTest,
   forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
 }
 
-// Test for better error message in parallel parser when encountering a string
-// literal parsing error.
-TEST(RdfParserTest, betterErrorMessageOnMultilineLiteralError) {
-  std::string filename{"betterErrorMessageOnMultilineLiteralError.dat"};
-  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
-                                             ad_utility::MemorySize bufferSize,
-                                             std::string_view input) {
-    {
-      auto of = ad_utility::makeOfstream(filename);
-      of << input;
-    }
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::AllOf(::testing::HasSubstr("`--parse-parallel false`"),
-                         ::testing::HasSubstr("multiline string literals")));
-    ad_utility::deleteFile(filename);
-  };
-  // Redefinition
-  std::string_view inputWithMultilineString =
-      "<subject1> <predicate1> <object1> . \n"
-      "<subject2> <predicate2> \"\"\".\n\"\"\" . \n"
-      "<subject3> <predicate3> <object3> . \n";
-  forAllParallelParsers(testWithParser, 40_B, inputWithMultilineString);
-}
-
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.

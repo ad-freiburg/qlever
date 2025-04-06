@@ -23,11 +23,6 @@
 
 using namespace std::chrono_literals;
 
-namespace {
-constexpr std::string_view UNTERMINATED_STRING_LITERAL =
-    "Unterminated string literal";
-}
-
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::clear() {
@@ -685,7 +680,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
     return false;
   }
   if (endPos == string::npos) {
-    raise(UNTERMINATED_STRING_LITERAL);
+    raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
   lastParseResult_ = TripleComponent::Literal::fromEscapedRdfLiteral(
@@ -1080,28 +1075,6 @@ void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
   }
 }
 
-// _____________________________________________________________________________
-template <typename Parser>
-void RdfParallelParser<Parser>::injectHelperMessageForMultilineStringLiterals(
-    std::string& errorMessage) {
-  auto position = errorMessage.find(UNTERMINATED_STRING_LITERAL);
-  if (position == std::string::npos) {
-    position = errorMessage.find(Parser::parsingFailedEndOfInput);
-    if (position != std::string::npos) {
-      position += RdfParserBase::parsingFailedEndOfInput.size();
-    }
-  } else {
-    position += UNTERMINATED_STRING_LITERAL.size();
-  }
-  if (position != std::string::npos) {
-    errorMessage.insert(
-        position,
-        ", please make sure your file does not contain multiline string "
-        "literals, or use the `--parse-parallel false` option to disable "
-        "parallel parsing.");
-  }
-}
-
 // __________________________________________________________________________________
 template <typename T>
 void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
@@ -1119,10 +1092,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
     });
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
-    std::string errorMessage{e.what()};
-    injectHelperMessageForMultilineStringLiterals(errorMessage);
-    errorMessages_.wlock()->emplace_back(parsePosition,
-                                         std::move(errorMessage));
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
     parallelParser_.finish();
   }
@@ -1248,24 +1218,18 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
 // _______________________________________________________________________
 template <class T>
 std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
-  try {
-    // we need a while in case there is a batch that contains no triples
-    // (this should be rare, // TODO warn about this
-    while (triples_.empty()) {
-      auto optionalTripleTask = tripleCollector_.pop();
-      if (!optionalTripleTask) {
-        // everything has been parsed
-        return std::nullopt;
-      }
-      (*optionalTripleTask)();
+  // we need a while in case there is a batch that contains no triples
+  // (this should be rare, // TODO warn about this
+  while (triples_.empty()) {
+    auto optionalTripleTask = tripleCollector_.pop();
+    if (!optionalTripleTask) {
+      // everything has been parsed
+      return std::nullopt;
     }
-
-    return std::move(triples_);
-  } catch (std::exception& e) {
-    std::string errorMessage{e.what()};
-    injectHelperMessageForMultilineStringLiterals(errorMessage);
-    throw std::runtime_error{errorMessage};
+    (*optionalTripleTask)();
   }
+
+  return std::move(triples_);
 }
 
 // __________________________________________________________
