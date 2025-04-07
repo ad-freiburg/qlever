@@ -376,11 +376,14 @@ using ContainsExpression =
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
     [](std::optional<ad_utility::triple_component::Literal> literal,
-       std::optional<std::string> optPattern) -> IdOrLiteralOrIri {
+       std::optional<ad_utility::triple_component::Literal> optPattern)
+    -> IdOrLiteralOrIri {
   if (!optPattern.has_value() || !literal.has_value()) {
     return Id::makeUndefined();
   }
-  const auto& pattern = optPattern.value();
+  // TODO<DuDaAG> also do the correct thing for the language tags etc. of the
+  // pattern.
+  const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
   // TODO: function checkArgumentCompatible: Wenn pattern einen languagetag hat
   // UND das Literal NICHT den gleichen Languagetag, dann werfe Fehler.
   //  Required by the SPARQL standard.
@@ -409,11 +412,13 @@ template <bool isStrAfter>
 
 auto strAfter = strAfterOrBeforeImpl<true>;
 using StrAfterExpression =
-    LiteralExpressionImpl<2, decltype(strAfter), StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strAfter),
+                          LiteralValueGetterWithoutStrFunction>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    LiteralExpressionImpl<2, decltype(strBefore), StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strBefore),
+                          LiteralValueGetterWithoutStrFunction>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
