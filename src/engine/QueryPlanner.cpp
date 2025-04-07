@@ -424,7 +424,7 @@ vector<SubtreePlan> QueryPlanner::getOrderByRow(
     SubtreePlan plan(_qec);
     auto& tree = plan._qet;
     assignNodesFilterAndTextLimitIds(plan, parent);
-    vector<pair<ColumnIndex, bool>> sortIndices;
+    vector<std::pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
     // SPARQL standard, they are allowed but have no effect).
@@ -1669,11 +1669,11 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
+vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
     ad_utility::HashMap<string, vector<size_t>>& contextVarToTextNodes) const {
-  vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
+  vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
   if (contextVarToTextNodes.size() == 0) {
@@ -2168,7 +2168,7 @@ mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
   rightMapping.reserve(jcs.size());
   auto mapColumns = [columnIndex, &unionOperation](
                         bool isLeft, std::array<ColumnIndex, 2> columns)
-      -> std::optional<array<ColumnIndex, 2>> {
+      -> std::optional<std::array<ColumnIndex, 2>> {
     ColumnIndex& column = columns.at(columnIndex);
     auto tmp = unionOperation.getOriginalColumn(isLeft, column);
     if (tmp.has_value()) {
