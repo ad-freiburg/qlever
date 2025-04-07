@@ -102,7 +102,8 @@ class Index {
   void buildTextIndexFile(std::optional<const string> wordsFile,
                           std::optional<const string> docsFile,
                           bool addWordsFromLiterals = false,
-                          bool useDocsFileForVocabulary = false);
+                          bool useDocsFileForVocabulary = false,
+                          bool addEntitiesFromWordsfile = false);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);

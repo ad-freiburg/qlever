@@ -16,6 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
@@ -104,10 +105,12 @@ void IndexImpl::logEntityNotFound(const string& word,
 void IndexImpl::buildTextIndexFile(std::optional<const string> wordsFile,
                                    std::optional<const string> docsFile,
                                    bool addWordsFromLiterals,
-                                   bool useDocsFileForVocabulary) {
+                                   bool useDocsFileForVocabulary,
+                                   bool addEntitiesFromWordsfile) {
   bool addWordsFromFiles = docsFile.has_value() &&
                            (wordsFile.has_value() || useDocsFileForVocabulary);
   AD_CORRECTNESS_CHECK(addWordsFromFiles || addWordsFromLiterals);
+  AD_CORRECTNESS_CHECK(!addEntitiesFromWordsfile || useDocsFileForVocabulary);
   string wordsFileString = wordsFile.has_value() ? wordsFile.value() : "";
   string docsFileString = docsFile.has_value() ? docsFile.value() : "";
   LOG(INFO) << std::endl;
@@ -151,9 +154,9 @@ void IndexImpl::buildTextIndexFile(std::optional<const string> wordsFile,
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  processWordsForInvertedLists(
-      useDocsFileForVocabulary ? docsFileString : wordsFileString,
-      addWordsFromLiterals, useDocsFileForVocabulary, v);
+  processWordsForInvertedLists(wordsFileString, docsFileString,
+                               addWordsFromLiterals, useDocsFileForVocabulary,
+                               addEntitiesFromWordsfile, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(),
               memoryLimitIndexBuilding().getBytes() / 3);
@@ -279,10 +282,15 @@ size_t IndexImpl::processWordsForVocabulary(const string& file,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::processWordsForInvertedLists(const string& file,
+void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
+                                             const string& docsFile,
                                              bool addWordsFromLiterals,
                                              bool useDocsFileForVocabulary,
+                                             bool addEntitiesFromWordsFile,
                                              IndexImpl::TextVec& vec) {
+  AD_CONTRACT_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocabulary);
+  AD_CONTRACT_CHECK(!(wordsFile.empty() && addEntitiesFromWordsFile));
+  AD_CONTRACT_CHECK(!(docsFile.empty() && useDocsFileForVocabulary));
   LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
@@ -314,19 +322,66 @@ void IndexImpl::processWordsForInvertedLists(const string& file,
                                                   scoreData_);
     }
   };
+
   if (useDocsFileForVocabulary) {
     const auto& localeManager = textVocab_.getLocaleManager();
-    for (const auto& line : DocsFileParser{file, localeManager}) {
-      for (const auto& word :
-           tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-        WordsFileLine lineToProcess = {
-            word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
-        processLine(lineToProcess);
+    if (addEntitiesFromWordsFile) {
+      // Initialize DocsFileParser and WordsFileParser and the respective
+      // iterators to parse in parallel
+      auto docsFileParser = DocsFileParser{docsFile, localeManager};
+      auto docsFileIterator = docsFileParser.begin();
+      auto wordsFileParser = WordsFileParser{wordsFile, localeManager};
+      auto wordsFileIterator = wordsFileParser.begin();
+      // Get the respective lines
+      WordsFileLine currentWordsFileLine = *wordsFileIterator;
+      DocsFileLine currentDocsFileLine = *docsFileIterator;
+
+      // Iterate over docsfile and wordsfile in parallel. The wordsfile IDs are
+      // in smaller increments than the docsfile IDs in general and the
+      // wordsfile ID belongs to the next largest or equal docsfile ID. Because
+      // of this the wordsfile is advanced until the wordsfile ID is larger than
+      // the docsfile ID. During this the entities from the wordsfile are added
+      // to the respective context in this case the respective document. Once
+      // the wordsfile ID is larger than the docsfile ID the docsfile line is
+      // processed and so on.
+      while (docsFileIterator != docsFileParser.end()) {
+        if (wordsFileIterator != wordsFileParser.end()) {
+          while (currentDocsFileLine.docId_.get() >=
+                 currentWordsFileLine.contextId_.get()) {
+            if (currentWordsFileLine.isEntity_) {
+              WordsFileLine lineToProcess = currentWordsFileLine;
+              lineToProcess.contextId_ =
+                  TextRecordIndex::make(currentDocsFileLine.docId_.get());
+              processLine(lineToProcess);
+            }
+            ++wordsFileIterator;
+            currentWordsFileLine = *wordsFileIterator;
+          }
+        }
+        for (const auto& word : tokenizeAndNormalizeText(
+                 currentDocsFileLine.docContent_, localeManager)) {
+          WordsFileLine lineToProcess = {
+              word, false,
+              TextRecordIndex::make(currentDocsFileLine.docId_.get()), 0,
+              false};
+          processLine(lineToProcess);
+        }
+        ++docsFileIterator;
+        currentDocsFileLine = *docsFileIterator;
+      }
+    } else {
+      for (const auto& line : DocsFileParser{docsFile, localeManager}) {
+        for (const auto& word :
+             tokenizeAndNormalizeText(line.docContent_, localeManager)) {
+          WordsFileLine lineToProcess = {
+              word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
+          processLine(lineToProcess);
+        }
       }
     }
   } else {
     for (const auto& line :
-         WordsFileParser{file, textVocab_.getLocaleManager()}) {
+         WordsFileParser{wordsFile, textVocab_.getLocaleManager()}) {
       processLine(line);
     }
   }

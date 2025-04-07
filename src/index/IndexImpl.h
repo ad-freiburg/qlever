@@ -268,7 +268,8 @@ class IndexImpl {
   void buildTextIndexFile(std::optional<const string> wordsFile,
                           std::optional<const string> docsFile,
                           bool addWordsFromLiterals = false,
-                          bool useDocsFileForVocabulary = false);
+                          bool useDocsFileForVocabulary = false,
+                          bool addEntitiesFromWordsfile = false);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -561,9 +562,11 @@ class IndexImpl {
                                    bool addWordsFromLiterals,
                                    bool useDocsFileForVocabulary);
 
-  void processWordsForInvertedLists(const string& file,
+  void processWordsForInvertedLists(const string& wordsFile,
+                                    const string& docsFile,
                                     bool addWordsFromLiterals,
                                     bool useDocsFileForVocabulary,
+                                    bool addEntitiesFromWordsFile,
                                     TextVec& vec);
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the

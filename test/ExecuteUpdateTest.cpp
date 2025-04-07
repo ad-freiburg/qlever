@@ -199,8 +199,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     // An Index with Quads/triples that are not in the default graph.
     qec = ad_utility::testing::getQec(
         "<a> <a> <a> <a> . <b> <b> <b> <b> . <c> <c> <c> <c> . <d> <d> <d> .",
-        true, true, true, 16_B, false, true, false, std::nullopt, std::nullopt,
-        1_kB, std::nullopt, std::nullopt, qlever::Filetype::NQuad);
+        true, true, true, 16_B, false, true, false, false, std::nullopt,
+        std::nullopt, 1_kB, std::nullopt, std::nullopt,
+        qlever::Filetype::NQuad);
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
     auto QuadFrom = [&IdTriple](const ::Id& id) {
       return IdTriple(id, id, id, id);

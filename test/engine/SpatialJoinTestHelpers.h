@@ -339,7 +339,7 @@ inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
   std::string kg = createSmallDataset(useAreas);
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = ad_utility::testing::getQec(
-      kg, true, true, false, blocksizePermutations, false, true, false,
+      kg, true, true, false, blocksizePermutations, false, true, false, false,
       std::nullopt, std::nullopt, 10_kB);
   return qec;
 }
@@ -350,7 +350,7 @@ inline QueryExecutionContext* buildMixedAreaPointQEC(
                                           : createMixedDataset();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = ad_utility::testing::getQec(
-      kg, true, true, false, blocksizePermutations, false, true, false,
+      kg, true, true, false, blocksizePermutations, false, true, false, false,
       std::nullopt, std::nullopt, 10_kB);
   return qec;
 }
@@ -367,7 +367,7 @@ inline QueryExecutionContext* buildNonSelfJoinDataset() {
       "<geometryInvalidAdded> <asWKT> 42 .\n");
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = ad_utility::testing::getQec(
-      kg, true, true, false, blocksizePermutations, false, true, false,
+      kg, true, true, false, blocksizePermutations, false, true, false, false,
       std::nullopt, std::nullopt, 10_kB);
   return qec;
 }

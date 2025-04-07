@@ -102,7 +102,7 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
 }  // namespace
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, false,
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, false, false,
                     wordsFileContent, docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
@@ -182,8 +182,9 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Tests if the correct scores are retrieved from the non literal texts for
   // Explicit scores
-  qec = getQec(kg, true, true, true, 16_B, true, true, false, wordsFileContent,
-               docsFileContent, 1_kB, TextScoringMetric::EXPLICIT);
+  qec = getQec(kg, true, true, true, 16_B, true, true, false, false,
+               wordsFileContent, docsFileContent, 1_kB,
+               TextScoringMetric::EXPLICIT);
 
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
@@ -198,8 +199,9 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Tests if the correct scores are retrieved from the non literal texts for
   // TFIDF
-  qec = getQec(kg, true, true, true, 16_B, true, true, false, wordsFileContent,
-               docsFileContent, 1_kB, TextScoringMetric::TFIDF);
+  qec =
+      getQec(kg, true, true, true, 16_B, true, true, false, false,
+             wordsFileContent, docsFileContent, 1_kB, TextScoringMetric::TFIDF);
   TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
   float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
@@ -224,8 +226,9 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Tests if the correct scores are retrieved from the non literal texts for
   // BM25
-  qec = getQec(kg, true, true, true, 16_B, true, true, false, wordsFileContent,
-               docsFileContent, 1_kB, TextScoringMetric::BM25);
+  qec =
+      getQec(kg, true, true, true, 16_B, true, true, false, false,
+             wordsFileContent, docsFileContent, 1_kB, TextScoringMetric::BM25);
   TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultBM25 = score3.computeResultOnlyForTesting();
   float bm25Word1Doc4 =
@@ -253,7 +256,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, false,
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, false, false,
                     wordsFileContent, docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test"};
@@ -292,7 +295,7 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 }
 
 TEST(TextIndexScanForWord, DocsfileIndexBuilding) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, true,
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, true, false,
                     wordsFileContent, docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "tester"};
@@ -330,7 +333,7 @@ TEST(TextIndexScanForWord, DocsfileIndexBuilding) {
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, false,
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, false, false,
                     wordsFileContent, docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
@@ -354,7 +357,7 @@ TEST(TextIndexScanForWord, CacheKey) {
 }
 
 TEST(TextIndexScanForWord, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, false,
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, false, false,
                     wordsFileContent, docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "nonExistentWord*"};

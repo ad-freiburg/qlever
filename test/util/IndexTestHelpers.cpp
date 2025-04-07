@@ -144,7 +144,7 @@ Index makeTestIndex(const std::string& indexBasename,
                     [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex, bool addWordsFromLiterals,
-                    bool useDocsFileForVocab,
+                    bool useDocsFileForVocab, bool addEntitiesFromWordsFile,
                     std::optional<std::string> contentsOfWordsFile,
                     std::optional<std::string> contentsOfDocsFile,
                     ad_utility::MemorySize parserBufferSize,
@@ -207,6 +207,7 @@ Index makeTestIndex(const std::string& indexBasename,
       }
       if (contentsOfDocsFile.has_value() &&
           (contentsOfWordsFile.has_value() || useDocsFileForVocab)) {
+        AD_CONTRACT_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocab);
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
@@ -221,13 +222,13 @@ Index makeTestIndex(const std::string& indexBasename,
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
         if (addWordsFromLiterals) {
-          index.buildTextIndexFile(indexBasename + ".wordsfile",
-                                   indexBasename + ".docsfile", true,
-                                   useDocsFileForVocab);
+          index.buildTextIndexFile(
+              indexBasename + ".wordsfile", indexBasename + ".docsfile", true,
+              useDocsFileForVocab, addEntitiesFromWordsFile);
         } else {
-          index.buildTextIndexFile(indexBasename + ".wordsfile",
-                                   indexBasename + ".docsfile", false,
-                                   useDocsFileForVocab);
+          index.buildTextIndexFile(
+              indexBasename + ".wordsfile", indexBasename + ".docsfile", false,
+              useDocsFileForVocab, addEntitiesFromWordsFile);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
@@ -269,6 +270,7 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               ad_utility::MemorySize blocksizePermutations,
                               bool createTextIndex, bool addWordsFromLiterals,
                               bool useDocsFileForVocab,
+                              bool addEntitiesFromWordsFile,
                               std::optional<std::string> contentsOfWordsFile,
                               std::optional<std::string> contentsOfDocsFile,
                               ad_utility::MemorySize parserBufferSize,
@@ -310,24 +312,18 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
             SortPerformanceEstimator{});
   };
 
-  using Key =
-      std::tuple<std::optional<string>, bool, bool, bool,
-                 ad_utility::MemorySize, bool, bool, std::optional<string>,
-                 std::optional<string>, std::optional<TextScoringMetric>,
-                 std::optional<std::pair<float, float>>>;
+  using Key = std::tuple<
+      std::optional<string>, bool, bool, bool, ad_utility::MemorySize, bool,
+      bool, bool, std::optional<string>, std::optional<string>,
+      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
-  auto key = Key{turtleInput,
-                 loadAllPermutations,
-                 usePatterns,
-                 usePrefixCompression,
-                 blocksizePermutations,
-                 addWordsFromLiterals,
-                 useDocsFileForVocab,
-                 contentsOfWordsFile,
-                 contentsOfDocsFile,
-                 scoringMetric,
-                 bAndKParam};
+  auto key = Key{turtleInput,           loadAllPermutations,
+                 usePatterns,           usePrefixCompression,
+                 blocksizePermutations, addWordsFromLiterals,
+                 useDocsFileForVocab,   addEntitiesFromWordsFile,
+                 contentsOfWordsFile,   contentsOfDocsFile,
+                 scoringMetric,         bAndKParam};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -347,8 +343,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                     testIndexBasename, turtleInput, loadAllPermutations,
                     usePatterns, usePrefixCompression, blocksizePermutations,
                     createTextIndex, addWordsFromLiterals, useDocsFileForVocab,
-                    contentsOfWordsFile, contentsOfDocsFile, parserBufferSize,
-                    scoringMetric, bAndKParam, indexType)),
+                    addEntitiesFromWordsFile, contentsOfWordsFile,
+                    contentsOfDocsFile, parserBufferSize, scoringMetric,
+                    bAndKParam, indexType)),
                 std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();

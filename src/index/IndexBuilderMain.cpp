@@ -166,6 +166,7 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
   bool useWordsFromDocsfile = false;
+  bool addEntitiesFromWordsfile = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> stxxlMemory;
@@ -211,6 +212,9 @@ int main(int argc, char** argv) {
       "Use the words in the documents from the docsfile to build the text "
       "index. Can be used together with a wordsfile to add the co-occuring "
       "entities from the wordsfile.");
+  add("text-entities-from-wordsfile,E", po::value(&addEntitiesFromWordsfile),
+      "Used together with the text-words-from-docsfile option to add entities "
+      "to the text index using the wordsfile.");
   add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
@@ -359,7 +363,6 @@ int main(int argc, char** argv) {
 
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
-
     if (!(buildFromDocsOrWordsFile || addWordsFromLiterals)) {
       throw std::runtime_error(
           "The text index can be build using a docsfile and a wordsfile or "
@@ -367,6 +370,12 @@ int main(int argc, char** argv) {
           "docsfile. "
           "If both options aren't given the option to add words from literals "
           "has to be true. For details see --help.");
+    }
+    if (addEntitiesFromWordsfile && !useWordsFromDocsfile) {
+      throw std::runtime_error(
+          "The option to add entities from wordsfile can only be used together "
+          "with the option to build the text index from docsfile since "
+          "otherwise the wordsfile would be used anyway.");
     }
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
       index.storeTextScoringParamsInConfiguration(
