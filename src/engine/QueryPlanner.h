@@ -294,6 +294,11 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
 
+  // Function to generate spatial join query plans to replace geo function
+  // filters over a cartesian product.
+  std::vector<SubtreePlan> seedImplicitSpatialJoin(
+      std::vector<SparqlFilter> filters);
+
   /**
    * @brief Returns a parsed query for the property path.
    */

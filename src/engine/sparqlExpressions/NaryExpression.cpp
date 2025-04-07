@@ -34,6 +34,9 @@ SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
 
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
+  // TODO<ullingerc> After merge of #1938 handle distance unit and
+  // metricDistance function
+
   // Currently only DistExpression
   auto distExpr = dynamic_cast<const DistExpression*>(&expr);
   if (distExpr == nullptr) {

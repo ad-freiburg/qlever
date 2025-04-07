@@ -47,6 +47,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueId.h"
@@ -1584,6 +1585,109 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 }
 
 // _____________________________________________________________________________
+std::vector<SubtreePlan> QueryPlanner::seedImplicitSpatialJoin(
+    std::vector<SparqlFilter> filters) {
+  std::vector<SubtreePlan> plans;
+
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * geof:distance() < constant
+  // * constant > geof:distance()
+  // * constant >= geof:distance()
+
+  // Helper lambda to detect and extract values from a comparison expression
+  // over geographic distance.
+  auto dissectWithinDistFilter =
+      [](const sparqlExpression::SparqlExpression& filterBody)
+      -> std::optional<std::pair<sparqlExpression::GeoFunctionCall, size_t>> {
+    // Supported comparison operator
+    auto compareExpr =
+        dynamic_cast<const sparqlExpression::LessEqualExpression*>(&filterBody);
+    if (compareExpr == nullptr) {
+      return std::nullopt;
+    }
+
+    // Left child must be distance function
+    auto children = compareExpr->children();
+    const auto& leftChild = *children[0];
+
+    // Right child must be constant
+    auto rightChild = children[1].get();
+    auto literalExpr =
+        dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
+            rightChild);
+    if (literalExpr == nullptr) {
+      return std::nullopt;
+    }
+    ValueId constant = literalExpr->value();
+    // TODO<ullingerc> After merge of #1938 handle distance unit
+    size_t maxDist = 0;
+    if (constant.getDatatype() == Datatype::Double) {
+      maxDist = static_cast<size_t>(round(constant.getDouble() * 1000));
+    } else if (constant.getDatatype() == Datatype::Int) {
+      maxDist = constant.getInt() * 1000;
+    } else {
+      return std::nullopt;
+    }
+
+    auto geoFuncCall = getGeoFunctionExpressionParameters(leftChild);
+    if (!geoFuncCall.has_value()) {
+      return std::nullopt;
+    }
+
+    return std::pair<sparqlExpression::GeoFunctionCall, size_t>{
+        geoFuncCall.value(), maxDist};
+  };
+
+  // Check if the filter expression is suitable for the optimization
+  for (size_t i = 0; i < filters.size(); i++) {
+    auto& filterExpression = filters[i];
+    sparqlExpression::SparqlExpression* filterExp =
+        filterExpression.expression_.getPimpl();
+    const auto& filterBody = *filterExp;
+
+    // Analyze the expression: Check if the body of the filter directly is an
+    // optimizable geof: function
+    auto geoFuncCall = getGeoFunctionExpressionParameters(filterBody);
+    std::optional<size_t> maxDist = std::nullopt;
+
+    if (!geoFuncCall.has_value()) {
+      // If the filter body is no geof: function, it can still be a maximum
+      // distance spatial search (direct body of filter is comparison).
+      auto distFilterRes = dissectWithinDistFilter(filterBody);
+      if (!distFilterRes.has_value()) {
+        continue;
+      }
+      geoFuncCall = distFilterRes.value().first;
+      maxDist = distFilterRes.value().second;
+    }
+
+    // Construct spatial join
+    auto [type, left, right] = geoFuncCall.value();
+    SpatialJoinConfiguration sjConfig{SpatialJoinConfig{type, maxDist},
+                                      left,
+                                      right,
+                                      std::nullopt,
+                                      PayloadVariables::all(),
+                                      SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                                      type};
+    auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
+                                             std::nullopt);
+
+    // Mark that this subtree plan (even if it does not contain a filter
+    // operation) handles the filter
+    plan._idsOfIncludedFilters |= 1ull << i;
+
+    // TODO<ullingerc> Remove this very bad workaround for assertion in
+    // findUniqueNodeIds.
+    plan._idsOfIncludedNodes = 1ull << 63;
+
+    plans.push_back(std::move(plan));
+  }
+
+  return plans;
+};
+
+// _____________________________________________________________________________
 vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children) {
@@ -1592,72 +1696,9 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
 
   // If we have FILTER statements that can also be answered by a SpatialJoin,
-  // replace them with a spatial join.
-
-  // TODO<ullingerc> Add support for more optimizable filters:
-  // * geof:distance() < constant
-  // * constant > geof:distance()
-  // * constant >= geof:distance()
-
-  // Helper for GeoSPARQL filter & cartesian product optimization
-  auto seedImplicitSpatialJoin = [&initialPlans, &filters, this]() {
-    // Check if the filter expression is suitable for the optimization
-    for (size_t i = 0; i < filters.size(); i++) {
-      auto& filterExpression = filters[i];
-      sparqlExpression::SparqlExpression* filterExp =
-          filterExpression.expression_.getPimpl();
-      auto leExp =
-          dynamic_cast<sparqlExpression::LessEqualExpression*>(filterExp);
-      if (leExp == nullptr) {
-        continue;
-      }
-
-      auto children = leExp->children();
-      // Left child must be distance function
-      const auto& leftChild = *children[0];
-
-      // Right child must be constant
-      auto rightChild = children[1].get();
-      // const auto& child = *children[1];
-      auto literalExp =
-          dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
-              rightChild);
-      if (literalExp == nullptr) {
-        continue;
-      }
-      ValueId constant = literalExp->value();
-      int64_t maxDist = 0;
-      if (constant.getDatatype() == Datatype::Double) {
-        maxDist = static_cast<int64_t>(round(constant.getDouble() * 1000));
-      } else if (constant.getDatatype() == Datatype::Int) {
-        maxDist = constant.getInt() * 1000;
-      } else {
-        continue;
-      }
-
-      auto geoFuncCall = getGeoFunctionExpressionParameters(leftChild);
-      if (!geoFuncCall.has_value()) {
-        continue;
-      }
-      auto [type, left, right] = geoFuncCall.value();
-      SpatialJoinConfiguration sjConfig{
-          SpatialJoinConfig{type, static_cast<size_t>(maxDist)},
-          left,
-          right,
-          std::nullopt,
-          PayloadVariables::all(),
-          SpatialJoinAlgorithm::LIBSPATIALJOIN,
-          type};
-      auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
-                                               std::nullopt);
-      plan._idsOfIncludedFilters |= 1ull << i;
-      // TODO<ullingerc> Remove this very bad workaround for assertion in
-      // findUniqueNodeIds.
-      plan._idsOfIncludedNodes = 1ull << 63;
-      initialPlans.push_back(std::move(plan));
-    }
-  };
-  seedImplicitSpatialJoin();
+  // add the respective spatial join query plans.
+  ql::ranges::move(seedImplicitSpatialJoin(filters),
+                   std::back_inserter(initialPlans));
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
