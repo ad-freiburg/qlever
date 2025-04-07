@@ -11,16 +11,11 @@
 #include <optional>
 #include <string_view>
 
+#include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility {
-
-static constexpr std::string_view UNIT_METER_IRI =
-    "http://qudt.org/vocab/unit/M";
-
-static constexpr std::string_view UNIT_KILOMETER_IRI =
-    "http://qudt.org/vocab/unit/KiloM";
 
 namespace detail {
 
@@ -63,23 +58,22 @@ class WktLatitude {
 // Compute the distance between two WKT points.
 class WktDistGeoPoints {
  public:
-  double operator()(const std::optional<GeoPoint>& point1,
-                    const std::optional<GeoPoint>& point2,
-                    const std::optional<ad_utility::triple_component::Iri>&
-                        unit = std::nullopt) const {
+  double operator()(
+      const std::optional<GeoPoint>& point1,
+      const std::optional<GeoPoint>& point2,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!point1.has_value() || !point2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
 
     double multiplicator = 1;
     if (unit.has_value()) {
-      auto unitIri = asStringViewUnsafe(unit.value().getContent());
-      if (unitIri == UNIT_METER_IRI) {
+      if (unit.value() == UnitOfMeasurement::METERS) {
         multiplicator = 1000;
-      } else if (unitIri == UNIT_KILOMETER_IRI) {
+      } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
         multiplicator = 1;
       } else {
-        AD_THROW(absl::StrCat("Unsupported distance unit: ", unitIri));
+        AD_THROW("Unsupported unit of measurement for distance.");
       }
     }
 
@@ -92,10 +86,7 @@ class WktMetricDistGeoPoints {
  public:
   double operator()(const std::optional<GeoPoint>& point1,
                     const std::optional<GeoPoint>& point2) const {
-    return WktDistGeoPoints{}(
-        point1, point2,
-        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-            UNIT_METER_IRI));
+    return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
   }
 };
 

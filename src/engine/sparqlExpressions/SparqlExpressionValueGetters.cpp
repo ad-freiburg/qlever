@@ -315,6 +315,21 @@ OptIri IriValueGetter::operator()(
   }
 }
 
+// _____________________________________________________________________________
+std::optional<UnitOfMeasurement> UnitOfMeasurementValueGetter::operator()(
+    const LiteralOrIri& s,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  if (s.isIri()) {
+    auto unitIri = asStringViewUnsafe(s.getIri().getContent());
+    if (unitIri == UNIT_METER_IRI) {
+      return UnitOfMeasurement::METERS;
+    } else if (unitIri == UNIT_KILOMETER_IRI) {
+      return UnitOfMeasurement::KILOMETERS;
+    }
+  }
+  return std::nullopt;
+}
+
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||

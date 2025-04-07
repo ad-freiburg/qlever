@@ -24,9 +24,10 @@ NARY_EXPRESSION(DistExpression, 2,
 NARY_EXPRESSION(MetricDistExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
                    GeoPointValueGetter>);
-NARY_EXPRESSION(DistWithUnitExpression, 3,
-                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
-                   GeoPointValueGetter, GeoPointValueGetter, IriValueGetter>);
+NARY_EXPRESSION(
+    DistWithUnitExpression, 3,
+    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
+       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
 
 }  // namespace detail
 
