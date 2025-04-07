@@ -7,6 +7,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+#include "parser/NormalizedString.h"
 #include "util/Conversions.h"
 
 using namespace sparqlExpression::detail;
@@ -319,15 +320,21 @@ OptIri IriValueGetter::operator()(
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {
+  std::string_view unit;
   if (s.isIri()) {
-    auto unitIri = asStringViewUnsafe(s.getIri().getContent());
-    if (unitIri == UNIT_METER_IRI) {
-      return UnitOfMeasurement::METERS;
-    } else if (unitIri == UNIT_KILOMETER_IRI) {
-      return UnitOfMeasurement::KILOMETERS;
-    } else if (unitIri == UNIT_MILE_IRI) {
-      return UnitOfMeasurement::MILES;
-    }
+    unit = asStringViewUnsafe(s.getIri().getContent());
+  } else if (s.isLiteral() &&
+             asStringViewUnsafe(s.getLiteral().getDatatype()) ==
+                 XSD_ANYURI_TYPE) {
+    unit = asStringViewUnsafe(s.getLiteral().getContent());
+  }
+
+  if (unit == UNIT_METER_IRI) {
+    return UnitOfMeasurement::METERS;
+  } else if (unit == UNIT_KILOMETER_IRI) {
+    return UnitOfMeasurement::KILOMETERS;
+  } else if (unit == UNIT_MILE_IRI) {
+    return UnitOfMeasurement::MILES;
   }
   return UnitOfMeasurement::UNKNOWN;
 }
