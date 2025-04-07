@@ -89,6 +89,9 @@ TEST(GeoSparqlHelpers, WktDist) {
   ASSERT_NEAR(
       WktDistGeoPoints()(eiffeltower, frCathedral, UnitOfMeasurement::METERS),
       421098, 1);
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, frCathedral, UnitOfMeasurement::MILES),
+      261.658, 0.01);
   ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
               421098, 1);
 }
