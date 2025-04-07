@@ -38,7 +38,8 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 // ____________________________________________________________________________
 util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
     bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
-    sj::Sweeper& sweeper, size_t numThreads) const {
+    std::shared_ptr<const Result> result, sj::Sweeper& sweeper,
+    size_t numThreads) const {
   // Initialize the parser.
   sj::WKTParser parser(&sweeper, numThreads);
 
@@ -52,6 +53,15 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
       const auto& p = id.getGeoPoint();
       parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row,
                         leftOrRightSide);
+    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      const auto& literalOrIri = result->localVocab()
+                                     .getWord(id.getLocalVocabIndex())
+                                     .asLiteralOrIri();
+      if (literalOrIri.isLiteral()) {
+        const auto& wkt = std::string(
+            asStringViewUnsafe(literalOrIri.getLiteral().getContent()));
+        parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
+      }
     }
   }
 
@@ -359,15 +369,17 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper,
-                                   NUM_THREADS);
+    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, resultLeft,
+                                   sweeper, NUM_THREADS);
     sweeper.setFilterBox(box);
-    libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
+    libspatialjoinParse(true, idTableRight, rightJoinCol, resultRight, sweeper,
+                        NUM_THREADS);
   } else {
-    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
-                                   NUM_THREADS);
+    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol,
+                                   resultRight, sweeper, NUM_THREADS);
     sweeper.setFilterBox(box);
-    libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
+    libspatialjoinParse(false, idTableLeft, leftJoinCol, resultLeft, sweeper,
+                        NUM_THREADS);
   }
 
   // Flush the geometry caches and the sweepline event list cache to disk and
