@@ -344,9 +344,9 @@ std::shared_ptr<const Result> Operation::getResult(
           result._cacheStatus == ad_utility::CacheStatus::computed
               ? "This should never happen, non-matching result widths should "
                 "have been caught earlier"
-              : "Retrieved result from cache whose amount of column does not "
-                "match the expected amount. There's something wrong with the "
-                "cache key.");
+              : "Retrieved result from cache with a different number of "
+                "columns than expected. There's something wrong with the cache "
+                "key.");
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 

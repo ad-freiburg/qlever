@@ -45,13 +45,17 @@ Union::Union(QueryExecutionContext* qec,
   }
   // Make sure that the column origins are valid. Because later down the line we
   // might perform unchecked access using these indices.
-  AD_CORRECTNESS_CHECK(
-      ql::ranges::all_of(_columnOrigins, [this](const auto& el) {
-        return (el[0] != NO_COLUMN || el[1] != NO_COLUMN) &&
-               (el[0] == Union::NO_COLUMN ||
-                el[0] < _subtrees[0]->getResultWidth()) &&
-               (el[1] == Union::NO_COLUMN ||
-                el[1] < _subtrees[1]->getResultWidth());
+  auto atLeastOneDefined = [](const std::array<size_t, 2>& element) {
+    return element[0] != NO_COLUMN || element[1] != NO_COLUMN;
+  };
+  auto isValid = [](size_t column,
+                    const std::shared_ptr<QueryExecutionTree>& subtree) {
+    return column == NO_COLUMN || column < subtree->getResultWidth();
+  };
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+      _columnOrigins, [this, &atLeastOneDefined, &isValid](const auto& el) {
+        return atLeastOneDefined(el) && isValid(el[0], _subtrees[0]) &&
+               isValid(el[1], _subtrees[1]);
       }));
 
   if (!targetOrder_.empty()) {
