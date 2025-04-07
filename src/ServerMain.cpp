@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 
   po::options_description options("Options for ServerMain");
   auto add = [&options](auto&&... args) {
-    options.add_options()(std::forward<decltype(args)>(args)...);
+    options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   // TODO<joka921> Can we output the "required" automatically?

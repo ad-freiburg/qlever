@@ -241,9 +241,7 @@ inline auto visitWithVariantsAndParameters =
           return std::variant<std::decay_t<T>>{AD_FWD(t)};
         }
       };
-      return std::visit(
-          f, liftToVariant(std::forward<decltype(parametersOrVariants)>(
-                 parametersOrVariants))...);
+      return std::visit(f, liftToVariant(AD_FWD(parametersOrVariants))...);
     };
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
@@ -253,7 +251,7 @@ inline auto visitWithVariantsAndParameters =
 template <typename Function, typename Tuple>
 auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
   auto transformer = [f = std::forward<Function>(f)](auto&&... args) {
-    return std::tuple{f(std::forward<decltype(args)>(args))...};
+    return std::tuple{f(AD_FWD(args))...};
   };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }

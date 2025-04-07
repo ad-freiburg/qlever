@@ -13,7 +13,7 @@ namespace ad_utility {
 template <typename Tuple, typename Function>
 void forEachInTuple(Tuple&& tuple, Function&& function) {
   auto forEachInParamPack = [&](auto&&... parameters) {
-    (..., function(std::forward<decltype(parameters)>(parameters)));
+    (..., function(AD_FWD(parameters)));
   };
   std::apply(forEachInParamPack, std::forward<Tuple>(tuple));
 }
@@ -27,8 +27,7 @@ void forEachInTuple(Tuple&& tuple, Function&& function) {
 template <typename Tuple, typename Function>
 auto tupleToArray(Tuple&& tuple, Function&& function) {
   auto paramPackToArray = [&](auto&&... parameters) {
-    return std::array{
-        function(std::forward<decltype(parameters)>(parameters))...};
+    return std::array{function(AD_FWD(parameters))...};
   };
   return std::apply(paramPackToArray, std::forward<Tuple>(tuple));
 }

@@ -40,9 +40,11 @@
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
+#include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;
+using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
 using namespace updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -61,21 +63,6 @@ using Parser = SparqlAutomaticParser;
 namespace {
 constexpr std::string_view a =
     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-
-struct MakeExpressionPtr {
-  bool distinct;
-  ExpressionPtr childExpression;
-  std::string descriptor;
-
-  template <typename ExpressionType, typename... Args>
-  ExpressionPtr operator()(Args&&... additionalArgs) {
-    ExpressionPtr result{std::make_unique<ExpressionType>(
-        distinct, std::move(childExpression),
-        std::forward<Args>(additionalArgs)...)};
-    result->descriptor() = descriptor;
-    return result;
-  }
-};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -2114,26 +2101,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
+  auto make = [&](auto t) {
+    using Expr = decltype(t)::type;
+    return createExpression<Expr>(std::move(children[0]),
+                                  std::move(children[1]));
+  };
+
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return createExpression<EqualExpression>(std::move(children[0]),
-                                             std::move(children[1]));
+    return make(ti<EqualExpression>);
   } else if (relation == "!=") {
-    return createExpression<NotEqualExpression>(std::move(children[0]),
-                                                std::move(children[1]));
+    return make(ti<NotEqualExpression>);
   } else if (relation == "<") {
-    return createExpression<LessThanExpression>(std::move(children[0]),
-                                                std::move(children[1]));
+    return make(ti<LessThanExpression>);
   } else if (relation == ">") {
-    return createExpression<GreaterThanExpression>(std::move(children[0]),
-                                                   std::move(children[1]));
+    return make(ti<GreaterThanExpression>);
   } else if (relation == "<=") {
-    return createExpression<LessEqualExpression>(std::move(children[0]),
-                                                 std::move(children[1]));
+    return make(ti<LessEqualExpression>);
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return createExpression<GreaterEqualExpression>(std::move(children[0]),
-                                                    std::move(children[1]));
+    return make(ti<GreaterEqualExpression>);
   }
 }
 
@@ -2605,19 +2592,25 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     AD_CORRECTNESS_CHECK(functionName == "count");
     return makeCountStarExpression(distinct);
   }
-  auto makePtr =
-      MakeExpressionPtr{distinct, visit(ctx->expression()), ctx->getText()};
+  auto childExpression = visit(ctx->expression());
+  auto makePtr = [&](auto t, auto&&... additionalArgs) {
+    using ExpressionType = decltype(t)::type;
+    ExpressionPtr result{std::make_unique<ExpressionType>(
+        distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
+    result->descriptor() = ctx->getText();
+    return result;
+  };
 
   if (functionName == "count") {
-    return makePtr.operator()<CountExpression>();
+    return makePtr(ti<CountExpression>);
   } else if (functionName == "sum") {
-    return makePtr.operator()<SumExpression>();
+    return makePtr(ti<SumExpression>);
   } else if (functionName == "max") {
-    return makePtr.operator()<MaxExpression>();
+    return makePtr(ti<MaxExpression>);
   } else if (functionName == "min") {
-    return makePtr.operator()<MinExpression>();
+    return makePtr(ti<MinExpression>);
   } else if (functionName == "avg") {
-    return makePtr.operator()<AvgExpression>();
+    return makePtr(ti<AvgExpression>);
   } else if (functionName == "group_concat") {
     // Use a space as a default separator
 
@@ -2634,12 +2627,12 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       separator = " "s;
     }
 
-    return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+    return makePtr(ti<GroupConcatExpression>, std::move(separator));
   } else if (functionName == "stdev") {
-    return makePtr.operator()<StdevExpression>();
+    return makePtr(ti<StdevExpression>);
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
-    return makePtr.operator()<SampleExpression>();
+    return makePtr(ti<SampleExpression>);
   }
 }
 

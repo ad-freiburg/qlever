@@ -461,23 +461,6 @@ TEST(RdfParserTest, numericLiteral) {
   }
 }
 
-template <typename F>
-struct TestTripleObjectsNumericLiteralErrorBehavior {
-  F& parseAllTriples;
-
-  template <typename T>
-  void operator()(auto& parser, std::vector<std::string> triples,
-                  std::vector<T> expectedObjects) const {
-    for (size_t i = 0; i < triples.size(); ++i) {
-      const auto& triple = triples[i];
-      std::vector<TurtleTriple> result;
-      ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
-      ASSERT_EQ(result.size(), 1ul);
-      ASSERT_EQ(result[0].object_, expectedObjects[i]);
-    }
-  }
-};
-
 TEST(RdfParserTest, numericLiteralErrorBehavior) {
   auto assertParsingFails = [](auto& parser, std::string input) {
     parser.setInputStream(input);
@@ -489,9 +472,17 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
     return parser.parseAndReturnAllTriples();
   };
 
-  auto testTripleObjects =
-      TestTripleObjectsNumericLiteralErrorBehavior<decltype(parseAllTriples)>{
-          parseAllTriples};
+  auto testTripleObjects = [&parseAllTriples](auto& parser,
+                                              std::vector<std::string> triples,
+                                              auto expectedObjects) {
+    for (size_t i = 0; i < triples.size(); ++i) {
+      const auto& triple = triples[i];
+      std::vector<TurtleTriple> result;
+      ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
+      ASSERT_EQ(result.size(), 1ul);
+      ASSERT_EQ(result[0].object_, expectedObjects[i]);
+    }
+  };
 
   auto runCommonTests = [&assertParsingFails, &testTripleObjects,
                          &parseAllTriples](const auto& p) {

@@ -13,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 // Various helper functions for compile-time programming.
@@ -118,24 +119,6 @@ void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
                    });
 }
 
-namespace detail {
-// Helper for the `getIndexOfFirstTypeToPassCheck` function (see below).
-template <auto checkFunction>
-struct CheckFunctionInvoker {
-  size_t& index;
-
-  template <typename T>
-  constexpr bool operator()() {
-    if constexpr (checkFunction.template operator()<T>()) {
-      return true;
-    } else {
-      ++index;
-      return false;
-    }
-  }
-};
-}  // namespace detail
-
 /*
 @brief Returns the index of the first given type, that passes the given check.
 
@@ -148,11 +131,21 @@ the check. Otherwise, returns `sizeof...(Args)`.
 */
 template <auto checkFunction, typename... Args>
 constexpr size_t getIndexOfFirstTypeToPassCheck() {
+  using ad_utility::use_type_identity::ti;
+
   size_t index = 0;
 
-  detail::CheckFunctionInvoker<checkFunction> l{index};
+  auto l = [&index](auto t) {
+    using T = decltype(t)::type;
+    if constexpr (checkFunction.template operator()<T>()) {
+      return true;
+    } else {
+      ++index;
+      return false;
+    }
+  };
 
-  ((l.template operator()<Args>()) || ...);
+  ((l(ti<Args>)) || ...);
 
   return index;
 }
