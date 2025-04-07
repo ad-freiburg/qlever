@@ -9,8 +9,8 @@
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
-#include "engine/Bind.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/Sort.h"
 #include "engine/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
@@ -412,31 +412,29 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  // Setup the following two UNION operations for the check that follows.
-  //
-  // { VALUES ?x { 1 } BIND (1 AS ?y) } UNION { VALUES ?x { 1 } }
-  //
-  // { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }
-  //
-  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
-  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
-  auto bind = ad_utility::makeExecutionTree<Bind>(
-      qec, values1->clone(),
-      parsedQuery::Bind{sparqlExpression::SparqlExpressionPimpl{
-                            std::make_unique<sparqlExpression::IdExpression>(
-                                Id::makeFromInt(1)),
-                            "1 AS ?x"},
-                        Variable{"?x"}});
-  Union unionOperation1{qec, std::move(bind), values2};
-  Union unionOperation2{qec, std::move(values1), std::move(values2)};
+  // Make sure that the cache keys for
+  // UNION(SORT(VALUES_FOR_TESTING), VALUES_FOR_TESTING)
+  // and
+  // SORT(UNION(VALUES_FOR_TESTING, VALUES_FOR_TESTING))
+  // don't collide
 
-  // Check that the cache key of the second operation is not a suffix of the
-  // first (as was the case before #1933).
-  EXPECT_THAT(
-      unionOperation1.getCacheKey(),
-      ::testing::Not(::testing::EndsWith(unionOperation2.getCacheKey())));
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
+
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
+
+  auto sort = ad_utility::makeExecutionTree<Sort>(qec, leftT->clone(),
+                                                  std::vector<ColumnIndex>{0});
+
+  Union operation1{qec, std::move(sort), rightT};
+  Sort operation2{qec,
+                  ad_utility::makeExecutionTree<Union>(qec, std::move(leftT),
+                                                       std::move(rightT)),
+                  std::vector<ColumnIndex>{0}};
+
+  // Regression test that these keys do not collide.
+  EXPECT_NE(operation1.getCacheKey(), operation2.getCacheKey());
 }
 
 // _____________________________________________________________________________
