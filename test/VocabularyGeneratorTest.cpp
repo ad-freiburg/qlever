@@ -183,14 +183,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
           mergeResult.emplace_back(word, isExternal);
           return mergeResult.size() - 1;
         };
-    auto internalgeoVocabularyAction =
-        [&geoMergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
-          geoMergeResult.emplace_back(word, isExternal);
-          return geoMergeResult.size() - 1;
-        };
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, internalgeoVocabularyAction,
-                          1_GB);
+                          internalVocabularyAction, 1_GB);
   }
 
   EXPECT_THAT(mergeResult,

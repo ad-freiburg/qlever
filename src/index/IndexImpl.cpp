@@ -563,12 +563,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
-    auto geoWordCallback =
-        vocab_.makeGeoWordWriter(onDiskBase_ + GEO_VOCAB_SUFFIX);
     wordCallback.readableName() = "internal vocabulary";
-    geoWordCallback.readableName() = "internal geometry vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback, geoWordCallback,
+        onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;

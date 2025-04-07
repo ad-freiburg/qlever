@@ -33,28 +33,26 @@
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
-template <typename W, typename C, typename CG>
+template <typename W, typename C>
 auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback, CG& internalGeoWordCallback,
+                     C& internalWordCallback,
                      ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
         requires WordComparator<W>&& WordCallback<C>  // ...
     ) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, internalGeoWordCallback,
-                                memoryToUse);
+                                internalWordCallback, memoryToUse);
 }
 
 // _________________________________________________________________
-template <typename W, typename C, typename CG>
+template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
                                        size_t numFiles, W comparator,
-                                       C& wordCallback, CG& geoWordCallback,
+                                       C& wordCallback,
                                        ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>  // ...
-    ) {
+        requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -111,9 +109,9 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // Wait for the (asynchronous) writing of the last batch of words, and
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
-                        &geoWordCallback, &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, wordCallback, geoWordCallback,
-                                     lessThan, progressBar);
+                        &lessThan, &progressBar]() {
+        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
+                                     progressBar);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(bufferSize_);
@@ -137,8 +135,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, wordCallback, geoWordCallback,
-                           lessThan, progressBar);
+    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -149,13 +146,12 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-CPP_template_def(typename C, typename CG, typename L)(
+CPP_template_def(typename C, typename L)(
     requires WordCallback<C> CPP_and
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
-                           C& wordCallback, CG& geoWordCallback,
-                           const L& lessThan,
+                           C& wordCallback, const L& lessThan,
                            ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
@@ -187,17 +183,8 @@ CPP_template_def(typename C, typename CG, typename L)(
       if (nextWord.isBlankNode()) {
         lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        // Decide whether the word we are currently processing needs to go into
-        // the normal or geometry vocabulary.
-        if (RdfsVocabulary::stringIsGeoLiteral(nextWord.iriOrLiteral())) {
-          uint64_t index =
-              geoWordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-          lastTripleComponent_->index_ =
-              RdfsVocabulary::makeGeoVocabIndex(index);
-        } else {
-          lastTripleComponent_->index_ =
-              wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        }
+        lastTripleComponent_->index_ =
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
@@ -341,10 +328,9 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
         }));
     ++i;
   }

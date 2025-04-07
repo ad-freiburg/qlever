@@ -7,9 +7,11 @@
 #include "index/Vocabulary.h"
 
 #include <iostream>
+#include <type_traits>
 
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
 #include "util/Exception.h"
@@ -343,6 +345,61 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
     AD_CONTRACT_CHECK(idx.get() < vocabulary_.size());
     return vocabulary_[idx.get()];
   }
+}
+
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+Vocabulary<S, C, I>::WordWriter::WordWriter(
+    VocabularyWithUnicodeComparator& vocabulary, const std::string& filename)
+    : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
+          filename)},
+      underlyingGeoWordWriter_{
+          vocabulary.getUnderlyingVocabulary().makeDiskWriter(
+              filename + geoVocabSuffix)} {};
+
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
+                                                     bool isExternal) {
+  if (stringIsGeoLiteral(word)) {
+    // The word to be stored in the vocabulary is a geometry literal. It
+    // needs to be written to the dedicated geometry vocabulary and get an
+    // index with the marker bit set to 1.
+    uint64_t index;
+    // if constexpr (std::is_same_v<S, CompressedString>) {
+    index = underlyingGeoWordWriter_(word, isExternal);
+    // } else {
+    //   index = underlyingGeoWordWriter_(word);
+    // }
+    AD_CONTRACT_CHECK(index <= maxWordIndex);
+    return makeGeoVocabIndex(index);
+  } else {
+    // We have any other word: it goes to the normal vocabulary.
+    uint64_t index;
+    // if constexpr (std::is_same_v<S, CompressedString>) {
+    index = underlyingWordWriter_(word, isExternal);
+    // } else {
+    //   index = underlyingWordWriter_(word);
+    // }
+    AD_CONTRACT_CHECK(index <= maxWordIndex);
+    return index;
+  }
+}
+
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+void Vocabulary<S, C, I>::WordWriter::finish() {
+  underlyingWordWriter_.finish();
+  underlyingGeoWordWriter_.finish();
+}
+
+// _____________________________________________________________________________
+template <class S, class C, typename I>
+std::string& Vocabulary<S, C, I>::WordWriter::readableName() {
+  // if constexpr (std::is_same_v<S, CompressedString>) {
+  return underlyingWordWriter_.readableName();
+  // }
+  // ?
 }
 
 // Explicit template instantiations

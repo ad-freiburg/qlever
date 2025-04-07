@@ -120,6 +120,7 @@ class Vocabulary {
   // geometry vocabulary.
   static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
   static constexpr uint64_t geoVocabMarkerInvert = ~geoVocabMarker;
+  static constexpr uint64_t maxWordIndex = geoVocabMarker - 1;
 
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
@@ -256,16 +257,37 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
+  static constexpr std::string_view geoVocabSuffix = ".geometries";
+
+  // This word writer writes words to different vocabularies depending on their
+  // content.
+  class WordWriter {
+   private:
+    using WW = UnderlyingVocabulary::WordWriter;
+    WW underlyingWordWriter_;
+    WW underlyingGeoWordWriter_;
+
+   public:
+    explicit WordWriter(VocabularyWithUnicodeComparator& vocabulary,
+                        const std::string& filename);
+
+    // Add the next word to the vocabulary and return its index.
+    uint64_t operator()(std::string_view word, bool isExternal);
+
+    // Finish the writing on both underlying word writers. After this no more
+    // calls to `operator()` are allowed.
+    void finish();
+
+    std::string& readableName();
+  };
+
   // Get a writer for each underlying vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
-  // the internal vocabulary  have to be pushed one by one to add words to the
-  // vocabulary.
-  using WW = UnderlyingVocabulary::WordWriter;
-  WW makeWordWriter(const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
-  }
-  WW makeGeoWordWriter(const std::string& filename) const {
-    return geoVocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
+  // the internal vocabulary have to be pushed one by one to add words to the
+  // vocabulary. This writer internally splits the words into a generic
+  // vocabulary and a geometry vocabulary.
+  WordWriter makeWordWriter(const std::string& filename) const {
+    return {vocabulary_, filename};
   }
 };
 

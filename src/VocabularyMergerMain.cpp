@@ -28,17 +28,7 @@ int main(int argc, char** argv) {
     return count - 1;
   };
 
-  auto geoFile = ad_utility::makeOfstream(basename + GEO_VOCAB_SUFFIX);
-  uint64_t geoCount = 0;
-  auto geoWordCallback = [&geoFile, &geoCount](
-                             const auto& word,
-                             [[maybe_unused]] bool isExternal) {
-    geoFile << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    geoCount++;
-    return geoCount - 1;
-  };
   VocabularyOnDisk vocab;
   ad_utility::vocabulary_merger::mergeVocabulary(
-      basename, numFiles, TripleComponentComparator(), wordCallback,
-      geoWordCallback, 4_GB);
+      basename, numFiles, TripleComponentComparator(), wordCallback, 4_GB);
 }
