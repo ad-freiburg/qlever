@@ -412,28 +412,27 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  // Make sure that the cache keys for
+  // Construct the following two operations (for the check that follows):
+  //
   // { VALUES ?a { 1 } INTERNAL SORT BY ?a } UNION { VALUES ?a { 1 } }
-  // and
+  //
   // { VALUES ?a { 1 } } UNION { VALUES ?a { 1 } } INTERNAL SORT BY ?a
-  // don't collide
-
+  //
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
 
   auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
-
   auto sort = ad_utility::makeExecutionTree<Sort>(qec, values1->clone(),
                                                   std::vector<ColumnIndex>{0});
-
   Union operation1{qec, std::move(sort), values2};
   Sort operation2{qec,
                   ad_utility::makeExecutionTree<Union>(qec, std::move(values1),
                                                        std::move(values2)),
                   std::vector<ColumnIndex>{0}};
 
-  // Regression test that these keys do not collide.
+  // Check that the two cache keys are different (which was not the case before
+  // #1933).
   EXPECT_NE(operation1.getCacheKey(), operation2.getCacheKey());
 }
 
