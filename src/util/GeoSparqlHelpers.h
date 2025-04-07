@@ -22,6 +22,8 @@ namespace detail {
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
+static constexpr double kilometerToMile = 1.609344;
+
 // Implementations of the lambdas below + two helper functions. Note: our SPARQL
 // expression code currently needs lambdas, and we can't define the lambdas in
 // the .cpp file, hence this detour.
@@ -72,6 +74,8 @@ class WktDistGeoPoints {
         multiplicator = 1000;
       } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
         multiplicator = 1;
+      } else if (unit.value() == UnitOfMeasurement::MILES) {
+        multiplicator = detail::kilometerToMile;
       } else {
         AD_THROW("Unsupported unit of measurement for distance.");
       }

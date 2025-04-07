@@ -154,11 +154,14 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
 
-enum class UnitOfMeasurement { METERS, KILOMETERS };
+enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
+constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
 constexpr inline std::string_view UNIT_METER_IRI =
-    "http://qudt.org/vocab/unit/M";
+    ad_utility::constexprStrCat<UNIT_PREFIX, "M">();
 constexpr inline std::string_view UNIT_KILOMETER_IRI =
-    "http://qudt.org/vocab/unit/KiloM";
+    ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
+constexpr inline std::string_view UNIT_MILE_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";

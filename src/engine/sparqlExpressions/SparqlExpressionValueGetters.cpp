@@ -316,7 +316,7 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-std::optional<UnitOfMeasurement> UnitOfMeasurementValueGetter::operator()(
+UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {
   if (s.isIri()) {
@@ -325,9 +325,11 @@ std::optional<UnitOfMeasurement> UnitOfMeasurementValueGetter::operator()(
       return UnitOfMeasurement::METERS;
     } else if (unitIri == UNIT_KILOMETER_IRI) {
       return UnitOfMeasurement::KILOMETERS;
+    } else if (unitIri == UNIT_MILE_IRI) {
+      return UnitOfMeasurement::MILES;
     }
   }
-  return std::nullopt;
+  return UnitOfMeasurement::UNKNOWN;
 }
 
 //______________________________________________________________________________

@@ -355,12 +355,12 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 // If the `LiteralOrIri` object contains an `Iri` of a known unit.
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   using Mixin<UnitOfMeasurementValueGetter>::operator();
-  std::optional<UnitOfMeasurement> operator()([[maybe_unused]] ValueId id,
-                                              const EvaluationContext*) const {
-    return std::nullopt;
+  UnitOfMeasurement operator()([[maybe_unused]] ValueId id,
+                               const EvaluationContext*) const {
+    return UnitOfMeasurement::UNKNOWN;
   }
-  std::optional<UnitOfMeasurement> operator()(const LiteralOrIri& s,
-                                              const EvaluationContext*) const;
+  UnitOfMeasurement operator()(const LiteralOrIri& s,
+                               const EvaluationContext*) const;
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
