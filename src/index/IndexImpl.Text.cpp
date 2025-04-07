@@ -170,6 +170,7 @@ void IndexImpl::buildTextIndexFile(
   vec.setAccessPattern(ad_utility::AccessPattern::Random);
   ql::ranges::sort(vec, SortText());
   LOG(DEBUG) << "Sort done" << std::endl;
+  vec.setAccessPattern(ad_utility::AccessPattern::Sequential);
   createTextIndex(indexFilename, vec);
   openTextFileHandle();
 }
