@@ -413,24 +413,24 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   auto* qec = ad_utility::testing::getQec();
 
   // Make sure that the cache keys for
-  // UNION(SORT(VALUES_FOR_TESTING), VALUES_FOR_TESTING)
+  // { VALUES ?a { 1 } INTERNAL SORT BY ?a } UNION { VALUES ?a { 1 } }
   // and
-  // SORT(UNION(VALUES_FOR_TESTING, VALUES_FOR_TESTING))
+  // { VALUES ?a { 1 } } UNION { VALUES ?a { 1 } } INTERNAL SORT BY ?a
   // don't collide
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
 
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
 
-  auto sort = ad_utility::makeExecutionTree<Sort>(qec, leftT->clone(),
+  auto sort = ad_utility::makeExecutionTree<Sort>(qec, values1->clone(),
                                                   std::vector<ColumnIndex>{0});
 
-  Union operation1{qec, std::move(sort), rightT};
+  Union operation1{qec, std::move(sort), values2};
   Sort operation2{qec,
-                  ad_utility::makeExecutionTree<Union>(qec, std::move(leftT),
-                                                       std::move(rightT)),
+                  ad_utility::makeExecutionTree<Union>(qec, std::move(values1),
+                                                       std::move(values2)),
                   std::vector<ColumnIndex>{0}};
 
   // Regression test that these keys do not collide.
