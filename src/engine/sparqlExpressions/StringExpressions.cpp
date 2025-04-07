@@ -39,6 +39,30 @@ static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(s, &isUtf8CodepointStart);
 }
 
+// Extracts the datatype or language tag from a literal.
+// Language tags are returned as "@lang",datatypes as IRIs without angle
+// brackets. If neither is present, an empty string is returned.
+std::string getDatatypeOrLanguageTag(
+    const ad_utility::triple_component::Literal& literal) {
+  if (literal.hasDatatype()) {
+    return std::string{asStringViewUnsafe(literal.getDatatype())};
+  } else if (literal.hasLanguageTag()) {
+    return "@" + std::string{asStringViewUnsafe(literal.getLanguageTag())};
+  }
+  return std::string{};
+}
+
+// Checks whether two strings representing language tags or datatypes are
+// identical. If they are equal (and not empty), the common value is returned.
+// In all other cases, an empty string is returned.
+std::string getCommonDescriptor(const std::optional<std::string>& str1,
+                                const std::string& str2) {
+  if (!str1.has_value() || (!str1->empty() && *str1 == str2)) {
+    return str2;
+  }
+  return std::string{};
+}
+
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
 // string length, the byte offset will be set to the size of the string.
 static std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
@@ -406,29 +430,17 @@ class ConcatExpression : public detail::VariadicExpression {
     // If the result is a string, then all the previously evaluated children
     // were constants (see above).
 
+    // The type `StringVec` stores as first element the concatenated string
+    // built up from all previously evaluated children and as the second element
+    // an optional string representing either a language tag or a datatype IRI.
+    // For each row, we compute and store exactly one such suffix (language tag
+    // or datatype). This entry may either:
+    // - contain the currently matching suffix,
+    // - be empty (if no suffix has been determined yet),
+    // - or indicate a mismatch (in which case the final suffix will be empty).
+
     std::variant<std::string, StringVec> result{std::string{""}};
     std::optional<std::string> datatypeOrLangTag;
-
-    // Extracts the datatype or language tag from a literal.
-    // Language tags are returned as "@lang",datatypes as IRIs without angle
-    // brackets.
-    auto getDatatypeOrLanguageTag = [&](const auto& literal) {
-      if (literal.hasDatatype()) {
-        return std::string{asStringViewUnsafe(literal.getDatatype())};
-      } else if (literal.hasLanguageTag()) {
-        return "@" + std::string{asStringViewUnsafe(literal.getLanguageTag())};
-      }
-      return std::string{};
-    };
-
-    auto getCommonDescriptor = [&](const std::optional<std::string>& str1,
-                                   const std::string& str2) {
-      if (!str1.has_value() ||
-          (!str1.value().empty() && str1.value() == str2)) {
-        return str2;
-      }
-      return std::string{};
-    };
 
     // Builds a literal from the given string content and descriptor.
     // If descriptor starts with "@", it's a language tag. Otherwise it's either
@@ -446,8 +458,7 @@ class ConcatExpression : public detail::VariadicExpression {
         };
 
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result, &datatypeOrLangTag, &getCommonDescriptor,
-        &getDatatypeOrLanguageTag)(typename T)(T && s)(
+        &ctx, &result, &datatypeOrLangTag)(typename T)(T && s)(
         requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant =

@@ -108,6 +108,8 @@ class Literal {
   // It truncates or extends the content based on the length of newContent
   // Used in UCASE/LCASE functions in StringExpressions.cpp.
   void replaceContent(std::string_view newContent);
+
+  Literal concat(const Literal& other) const;
 };
 }  // namespace ad_utility::triple_component
 
