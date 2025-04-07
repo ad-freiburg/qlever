@@ -219,19 +219,20 @@ Index makeTestIndex(const std::string& indexBasename,
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
         if (addWordsFromLiterals) {
-          index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              true);
+          index.buildTextIndexFile(indexBasename + ".text-index-disk",
+                                   std::pair{indexBasename + ".wordsfile",
+                                             indexBasename + ".docsfile"},
+                                   true);
         } else {
-          index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              false);
+          index.buildTextIndexFile(indexBasename + ".text-index-disk",
+                                   std::pair{indexBasename + ".wordsfile",
+                                             indexBasename + ".docsfile"},
+                                   false);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(std::nullopt, true);
+        index.buildTextIndexFile(indexBasename + ".text-index-disk", std::nullopt,
+                                 true);
       }
     }
   }

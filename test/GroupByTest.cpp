@@ -3,7 +3,6 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include <engine/SpatialJoinAlgorithms.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
@@ -16,6 +15,7 @@
 #include "engine/Join.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -26,8 +26,6 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
-#include "gtest/gtest.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -77,10 +75,12 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.buildTextIndexFile(
-        std::pair<std::string, std::string>{"group_by_test.words",
-                                            "group_by_test.documents"},
-        false);
+    _index.buildTextIndexFile("group_by_test.text-index-disk",
+                              std::pair{
+                                  "group_by_test.words",
+                                  "group_by_test.documents",
+                              },
+                              false);
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
