@@ -19,7 +19,7 @@
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
+#include "util/ReadableNumberFacet.h"
 
 using std::string;
 
