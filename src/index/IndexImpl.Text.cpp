@@ -330,8 +330,9 @@ void IndexImpl::processWordsForInvertedLists(const string& file,
       processLine(line);
     }
   }
+  lastTextRecordIndexOfNonLiterals_ = currentContext.get();
   if (addWordsFromLiterals) {
-    for (const auto& line : wordsInLiterals(nofContexts + 1)) {
+    for (const auto& line : wordsInLiterals(currentContext.get() + 1)) {
       processLine(line);
     }
   }
@@ -346,9 +347,8 @@ void IndexImpl::processWordsForInvertedLists(const string& file,
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
-  nofNonLiteralsInTextIndex_ = nofContexts - nofLiterals;
-  configurationJson_["num-non-literals-text-index"] =
-      nofNonLiteralsInTextIndex_;
+  configurationJson_["last-text-record-index-of-non-literals"] =
+      lastTextRecordIndexOfNonLiterals_;
   writeConfiguration();
 
   writer.finish();

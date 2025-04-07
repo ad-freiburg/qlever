@@ -1142,7 +1142,8 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
-  loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
+  loadDataMember("last-text-record-index-of-non-literals",
+                 lastTextRecordIndexOfNonLiterals_, 0);
   loadDataMember("text-scoring-metric", textScoringMetric_,
                  TextScoringMetric::EXPLICIT);
   loadDataMember("b-and-k-parameter-for-text-scoring",

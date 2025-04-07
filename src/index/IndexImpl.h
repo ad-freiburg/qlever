@@ -167,7 +167,7 @@ class IndexImpl {
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
   // wordsFile.tsv starts with contextId 1 and is continuous.
-  size_t nofNonLiteralsInTextIndex_;
+  size_t lastTextRecordIndexOfNonLiterals_;
 
   TextScoringMetric textScoringMetric_;
   std::pair<float, float> bAndKParamForTextScoring_;
@@ -457,8 +457,8 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
-  size_t getNofNonLiteralsInTextIndex() const {
-    return nofNonLiteralsInTextIndex_;
+  size_t getLastTextRecordIndexOfNonLiterals() const {
+    return lastTextRecordIndexOfNonLiterals_;
   }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }

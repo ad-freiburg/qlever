@@ -99,7 +99,7 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
       getTextScoringMetricFromString("fail"),
       ::testing::StrEq(R"(Faulty text scoring metric given: "fail".)"),
       std::runtime_error);
-}
+}  // namespace
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQec(kg, true, true, true, 16_B, true, true, false,
@@ -289,6 +289,44 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 0));
+}
+
+TEST(TextIndexScanForWord, DocsfileIndexBuilding) {
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, true,
+                    wordsFileContent, docsFileContent);
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "tester"};
+
+  ASSERT_EQ(s1.getResultWidth(), 2);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 0));
+
+  TextIndexScanForWord s2{qec, Variable{"?text1"}, "test*"};
+
+  ASSERT_EQ(s2.getResultWidth(), 3);
+
+  result = s2.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
+
+  ASSERT_EQ(h::combineToString(secondDocText, "tester"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 0),
+                               h::getWordFromResultTable(qec, result, 0)));
+
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 1),
+                               h::getWordFromResultTable(qec, result, 1)));
+  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 2),
+                               h::getWordFromResultTable(qec, result, 2)));
+  ASSERT_EQ(
+      h::combineToString("\"the test on friday was really hard\"", "test"),
+      h::combineToString(h::getTextRecordFromResultTable(qec, result, 3),
+                         h::getWordFromResultTable(qec, result, 3)));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
