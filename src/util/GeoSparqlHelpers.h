@@ -22,7 +22,7 @@ namespace detail {
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
 
-static constexpr double kilometerToMile = 1.609344;
+static constexpr double kilometerToMile = 0.62137119;
 
 // Implementations of the lambdas below + two helper functions. Note: our SPARQL
 // expression code currently needs lambdas, and we can't define the lambdas in
