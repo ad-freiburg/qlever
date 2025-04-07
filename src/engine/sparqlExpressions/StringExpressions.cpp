@@ -363,21 +363,6 @@ using StrBeforeExpression =
 using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
-// Helper function to transfer language tag to a new literal
-IdOrLiteralOrIri processLiteral(
-    const std::string& in, const ad_utility::triple_component::Literal& s) {
-  if (s.hasDatatype()) {
-    Iri datatype =
-        Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(s.getDatatype()));
-    return toLiteral(in, datatype);
-  } else if (s.hasLanguageTag()) {
-    std::string languageTag =
-        "@" + std::string{asStringViewUnsafe(s.getLanguageTag())};
-    return toLiteral(in, languageTag);
-  }
-  return toLiteral(in);
-}
-
 [[maybe_unused]] auto replaceImpl =
     [](std::optional<ad_utility::triple_component::Literal> s,
        const std::shared_ptr<RE2>& pattern,
@@ -393,7 +378,8 @@ IdOrLiteralOrIri processLiteral(
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
-  return processLiteral(in, s.value());
+  s.value().replaceContent(in);
+  return std::move(s.value());
 };
 
 using ReplaceExpression =
