@@ -231,8 +231,8 @@ Index makeTestIndex(const std::string& indexBasename,
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(indexBasename + ".text-index-disk", std::nullopt,
-                                 true);
+        index.buildTextIndexFile(indexBasename + ".text-index-disk",
+                                 std::nullopt, true);
       }
     }
   }
