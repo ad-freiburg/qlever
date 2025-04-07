@@ -2,16 +2,19 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
+#ifndef QLEVER_SRC_UTIL_MMAPVECTOR_IMPL_H
+#define QLEVER_SRC_UTIL_MMAPVECTOR_IMPL_H
+
 #include <fcntl.h>
-#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <utility>
 
-#include "../util/Log.h"
+#include "util/MmapVector.h"
 
 namespace ad_utility {
 // definition of static constants
@@ -204,8 +207,8 @@ void MmapVector<T>::push_back(const T& el) {
 
 // ________________________________________________________________
 template <class T>
-void MmapVector<T>::open(size_t size, const T& defaultValue, string filename,
-                         AccessPattern pattern) {
+void MmapVector<T>::open(size_t size, const T& defaultValue,
+                         std::string filename, AccessPattern pattern) {
   open(size, filename, pattern);
   advise(AccessPattern::Sequential);
   for (size_t i = 0; i < _size; ++i) {
@@ -217,7 +220,7 @@ void MmapVector<T>::open(size_t size, const T& defaultValue, string filename,
 // ________________________________________________________________
 template <class T>
 template <class It>
-void MmapVector<T>::open(It begin, It end, const string& filename,
+void MmapVector<T>::open(It begin, It end, const std::string& filename,
                          AccessPattern pattern) {
   open(end - begin, filename, pattern);
   advise(AccessPattern::Sequential);
@@ -231,7 +234,8 @@ void MmapVector<T>::open(It begin, It end, const string& filename,
 
 // _______________________________________________________________________
 template <class T>
-void MmapVector<T>::open(size_t size, string filename, AccessPattern pattern) {
+void MmapVector<T>::open(size_t size, std::string filename,
+                         AccessPattern pattern) {
   unmap();
   _size = size;
   _filename = std::move(filename);
@@ -250,7 +254,8 @@ void MmapVector<T>::open(size_t size, string filename, AccessPattern pattern) {
 
 // _____________________________________________________________
 template <class T>
-void MmapVector<T>::open(string filename, ReuseTag, AccessPattern pattern) {
+void MmapVector<T>::open(std::string filename, ReuseTag,
+                         AccessPattern pattern) {
   unmap();
   _filename = std::move(filename);
   _pattern = pattern;
@@ -363,3 +368,5 @@ void MmapVectorView<T>::close() {
 }
 
 }  // namespace ad_utility
+
+#endif  // header guard

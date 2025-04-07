@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_DESCRIBE_H
+#define QLEVER_SRC_ENGINE_DESCRIBE_H
 
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
@@ -47,8 +48,9 @@ class Describe : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Add all triples where the subject is one of the `blankNodes` (an `IdTable`
@@ -76,3 +78,5 @@ class Describe : public Operation {
   // IRIs that match `?y` in the WHERE clause, with all duplicates removed.
   IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_DESCRIBE_H

@@ -526,7 +526,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
   SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -548,7 +548,7 @@ TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -1081,4 +1081,34 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
 
   EXPECT_EQ(leftGenerator.begin(), leftGenerator.end());
   EXPECT_EQ(rightGenerator.begin(), rightGenerator.end());
+}
+// _____________________________________________________________________________
+TEST(IndexScan, clone) {
+  auto* qec = getQec();
+  {
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    IndexScan scan{qec, Permutation::PSO, xpy};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+  }
+  {
+    using namespace makeFilterExpression;
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    IndexScan scan{
+        qec,
+        Permutation::PSO,
+        xpy,
+        std::nullopt,
+        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+  }
 }

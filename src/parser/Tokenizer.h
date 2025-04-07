@@ -2,12 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_TOKENIZER_H
+#define QLEVER_SRC_PARSER_TOKENIZER_H
 
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
+#include <regex>
+
 #include "parser/TurtleTokenId.h"
+#include "util/Exception.h"
 #include "util/Log.h"
 
 using re2::RE2;
@@ -237,7 +242,7 @@ struct SkipWhitespaceAndCommentsMixin {
     auto v = self().view();
     if (v.starts_with('#')) {
       auto pos = v.find('\n');
-      if (pos == std::string::npos) {
+      if (pos == string::npos) {
         // TODO<joka921>: This should rather yield an error.
         LOG(INFO) << "Warning, unfinished comment found while parsing"
                   << std::endl;
@@ -269,8 +274,6 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   // Construct from a std::string_view;
   Tokenizer(std::string_view input)
       : _tokens(), _data(input.data(), input.size()) {}
-
-  static constexpr bool UseRelaxedParsing = false;
 
   // if a prefix of the input stream matches the regex argument,
   // return true and that prefix and move the input stream forward
@@ -360,3 +363,5 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
+
+#endif  // QLEVER_SRC_PARSER_TOKENIZER_H

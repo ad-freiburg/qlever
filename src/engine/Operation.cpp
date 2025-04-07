@@ -133,13 +133,13 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
 }
 
 // _____________________________________________________________________________
-ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
-                                      ComputationMode computationMode) {
+Result Operation::runComputation(const ad_utility::Timer& timer,
+                                 ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
-  ProtoResult result =
+  Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
                     result.isFullyMaterialized());
@@ -624,4 +624,32 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::clone() const {
+  auto result = cloneImpl();
+  auto compareTypes = [this, &result]() {
+    const auto& reference = *result;
+    return typeid(*this) == typeid(reference);
+  };
+  AD_CORRECTNESS_CHECK(compareTypes());
+  AD_CORRECTNESS_CHECK(result->_executionContext == _executionContext);
+  auto areChildrenDifferent = [this, &result]() {
+    auto ownChildren = getChildren();
+    auto otherChildren = result->getChildren();
+    if (ownChildren.size() != otherChildren.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < ownChildren.size(); i++) {
+      if (ownChildren.at(i) == otherChildren.at(i)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  AD_CORRECTNESS_CHECK(areChildrenDifferent());
+  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  return result;
 }

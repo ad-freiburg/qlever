@@ -21,8 +21,6 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -553,6 +551,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
+  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
+              << std::endl;
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -867,7 +867,8 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
+void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
+                                      bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
@@ -894,11 +895,16 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   // TODO<joka921> We could delegate the setting of the metadata to the
   // `Permutation`class, but we first have to deal with The delta triples for
   // the additional permutations.
+  // The setting of the metadata doesn't affect the contents of the delta
+  // triples, so we don't need to call `writeToDisk`, therefore the second
+  // argument to `modify` is `false`.
   auto setMetadata = [this](const Permutation& p) {
-    deltaTriplesManager().modify<void>([&p](DeltaTriples& deltaTriples) {
-      deltaTriples.setOriginalMetadata(p.permutation(),
-                                       p.metaData().blockDataShared());
-    });
+    deltaTriplesManager().modify<void>(
+        [&p](DeltaTriples& deltaTriples) {
+          deltaTriples.setOriginalMetadata(p.permutation(),
+                                           p.metaData().blockDataShared());
+        },
+        false);
   };
 
   auto load = [this, &isInternalId, &setMetadata](
@@ -941,6 +947,10 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
           << e.what() << std::endl;
       usePatterns_ = false;
     }
+  }
+  if (persistUpdatesOnDisk) {
+    deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
+        onDiskBase + ".update-triples");
   }
 }
 
@@ -1134,6 +1144,10 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
+  loadDataMember("text-scoring-metric", textScoringMetric_,
+                 TextScoringMetric::EXPLICIT);
+  loadDataMember("b-and-k-parameter-for-text-scoring",
+                 bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 
   ad_utility::VocabularyType vocabType(
       ad_utility::VocabularyType::Enum::OnDiskCompressed);

@@ -2,9 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
+#define QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
 
-#include <ranges>
+#include "backports/algorithm.h"
+#include "global/Id.h"
+#include "util/Generator.h"
 
 namespace ad_utility {
 // The following functions `findSmallerUndefRanges...` have the following in
@@ -198,3 +201,5 @@ struct FindSmallerUndefRanges {
 };
 constexpr FindSmallerUndefRanges findSmallerUndefRanges;
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H

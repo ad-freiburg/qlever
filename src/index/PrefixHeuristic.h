@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_PREFIXHEURISTIC_H
+#define QLEVER_SRC_INDEX_PREFIXHEURISTIC_H
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -137,3 +139,5 @@ class Tree {
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_INDEX_PREFIXHEURISTIC_H

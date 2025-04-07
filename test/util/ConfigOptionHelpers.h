@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (August of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
+#define QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
+
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 
@@ -19,3 +21,5 @@ static void doForTypeInConfigOptionValueType(Function function) {
   ad_utility::forEachTypeInTemplateType<
       ad_utility::ConfigOption::AvailableTypes>(function);
 }
+
+#endif  // QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H

@@ -6,7 +6,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
 #include <fstream>
@@ -249,3 +250,5 @@ using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
                                   TripleComponentComparator, VocabIndex>;
 using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
                                   SimpleStringComparator, WordVocabIndex>;
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_H

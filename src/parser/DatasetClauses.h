@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATASETCLAUSES_H
+#define QLEVER_SRC_PARSER_DATASETCLAUSES_H
+
 #include <vector>
 
 #include "index/ScanSpecification.h"
@@ -22,3 +24,5 @@ struct DatasetClauses {
   bool operator==(const DatasetClauses& other) const = default;
 };
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_DATASETCLAUSES_H

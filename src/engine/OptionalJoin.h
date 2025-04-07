@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
+#define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -67,9 +69,11 @@ class OptionalJoin : public Operation {
       Implementation implementation = Implementation::GeneralCase);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   void computeSizeEstimateAndMultiplicities();
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -79,3 +83,5 @@ class OptionalJoin : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };
+
+#endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

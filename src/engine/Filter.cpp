@@ -60,7 +60,7 @@ void Filter::setPrefilterExpressionForChildren() {
 }
 
 // _____________________________________________________________________________
-ProtoResult Filter::computeResult(bool requestLaziness) {
+Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(true);
   LOG(DEBUG) << "Filter result computation..." << endl;
@@ -98,7 +98,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
           computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
                                    pair.localVocab_, subRes->sortedBy());
-          resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
+          resultLocalVocab.mergeWith(pair.localVocab_);
         }
       });
 
@@ -127,15 +127,16 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
 CPP_template_def(int WIDTH, typename Table)(
     requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
     computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                      const LocalVocab& localVocab,
+                      [[maybe_unused]] const LocalVocab& localVocab,
                       std::vector<ColumnIndex> sortedBy) const {
+  LocalVocab dummyLocalVocab{};
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
-      getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
-      deadline_);
+      getExecutionContext()->getAllocator(), dummyLocalVocab,
+      cancellationHandle_, deadline_);
 
   // TODO<joka921> This should be a mandatory argument to the
   // EvaluationContext constructor.
@@ -239,4 +240,10 @@ size_t Filter::getCostEstimate() {
                  _subtree->getSizeEstimate(),
                  _subtree->getRootOperation()->getPrimarySortKeyVariable())
              .costEstimate;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneImpl() const {
+  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+                                  _expression);
 }

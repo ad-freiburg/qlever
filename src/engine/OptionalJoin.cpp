@@ -90,7 +90,7 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
@@ -378,4 +378,12 @@ void OptionalJoin::optionalJoin(
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
+  auto copy = std::make_unique<OptionalJoin>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

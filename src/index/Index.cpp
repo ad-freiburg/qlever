@@ -20,14 +20,16 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
-  pimpl_->createFromOnDiskIndex(onDiskBase);
+void Index::createFromOnDiskIndex(const std::string& onDiskBase,
+                                  bool persistUpdatesOnDisk) {
+  pimpl_->createFromOnDiskIndex(onDiskBase, persistUpdatesOnDisk);
 }
 
 // ____________________________________________________________________________
-void Index::addTextFromContextFile(const std::string& contextFile,
-                                   bool addWordsFromLiterals) {
-  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
+void Index::buildTextIndexFile(
+    const std::optional<std::pair<std::string, std::string>>& wordsAndDocsFile,
+    bool addWordsFromLiterals) {
+  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals);
 }
 
 // ____________________________________________________________________________
@@ -217,10 +219,21 @@ void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
 }
 
 // ____________________________________________________________________________
+void Index::storeTextScoringParamsInConfiguration(
+    TextScoringMetric scoringMetric, float b, float k) {
+  return pimpl_->storeTextScoringParamsInConfiguration(scoringMetric, b, k);
+}
+
+// ____________________________________________________________________________
 const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 
 // ____________________________________________________________________________
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
+
+// ____________________________________________________________________________
+const std::string& Index::getOnDiskBase() const {
+  return pimpl_->getOnDiskBase();
+}
 
 // ____________________________________________________________________________
 const std::string& Index::getIndexId() const { return pimpl_->getIndexId(); }

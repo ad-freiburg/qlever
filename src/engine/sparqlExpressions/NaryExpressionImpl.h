@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
 #include <ranges>
 
@@ -41,8 +42,9 @@ class NaryExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // _________________________________________________________________________
-  std::optional<SparqlExpression*> getNthChild(size_t pos) const {
-    return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
+  std::optional<SparqlExpression*> getChildAtIndex(size_t childIndex) const {
+    return childIndex < N ? std::make_optional(children_[childIndex].get())
+                          : std::nullopt;
   }
 
  private:
@@ -202,3 +204,5 @@ template <typename Op>
   };
 
 }  // namespace sparqlExpression::detail
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H

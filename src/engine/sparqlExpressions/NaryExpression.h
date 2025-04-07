@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
 
 #include <charconv>
 #include <cstdlib>
@@ -82,10 +83,12 @@ SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
-
+SparqlExpression::Ptr makeMergeRegexPatternAndFlagsExpression(
+    SparqlExpression::Ptr pattern, SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
                                             SparqlExpression::Ptr pattern,
-                                            SparqlExpression::Ptr replacement);
+                                            SparqlExpression::Ptr replacement,
+                                            SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeLangMatchesExpression(SparqlExpression::Ptr child1,
@@ -104,7 +107,7 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
 
-// Implemented in ConvertToNumeric.cpp
+// Implemented in ConvertToDtypeConstructor.cpp
 SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
@@ -112,6 +115,9 @@ SparqlExpression::Ptr makeConvertToDecimalExpression(
     SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToBooleanExpression(
     SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateTimeExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateExpression(SparqlExpression::Ptr child);
 
 // Implemented in RdfTermExpressions.cpp
 SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
@@ -163,3 +169,5 @@ constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

@@ -16,10 +16,11 @@ add_library(sparqlExpressions
         ConditionalExpressions.cpp
         SparqlExpressionTypes.cpp
         SparqlExpression.cpp
-        ConvertToNumericExpression.cpp
+        ConvertToDtypeConstructor.cpp
         RdfTermExpressions.cpp
         LangExpression.cpp
         CountStarExpression.cpp
-        PrefilterExpressionIndex.cpp)
+        PrefilterExpressionIndex.cpp
+        BlankNodeExpression.cpp)
 
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

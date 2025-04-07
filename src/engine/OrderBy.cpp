@@ -20,7 +20,7 @@ size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 vector<pair<ColumnIndex, bool>> sortIndices)
+                 vector<std::pair<ColumnIndex, bool>> sortIndices)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
@@ -63,7 +63,7 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
+Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();
@@ -138,4 +138,10 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
                         isDescending ? Desc : Asc);
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> OrderBy::cloneImpl() const {
+  return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
+                                   sortIndices_);
 }

@@ -3,7 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PARSEDQUERY_H
+#define QLEVER_SRC_PARSER_PARSEDQUERY_H
 
 #include <initializer_list>
 #include <string>
@@ -90,6 +91,7 @@ class ParsedQuery {
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
+  std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -173,16 +175,6 @@ class ParsedQuery {
     return _rootGraphPattern._graphPatterns;
   }
 
-  // TODO<joka921> This is currently necessary because of the missing scoping of
-  // subqueries
-  [[nodiscard]] int64_t getNumInternalVariables() const {
-    return numInternalVariables_;
-  }
-
-  void setNumInternalVariables(int64_t numInternalVariables) {
-    numInternalVariables_ = numInternalVariables;
-  }
-
  private:
   // Add a BIND clause to the body of the query. The second argument determines
   // whether the `targetVariable` will be part of the visible variables that are
@@ -258,3 +250,5 @@ class ParsedQuery {
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 };
+
+#endif  // QLEVER_SRC_PARSER_PARSEDQUERY_H

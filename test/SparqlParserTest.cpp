@@ -1255,6 +1255,41 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
+  // Ensure filter is applied regularly if variable does not originate from
+  // triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { VALUES ?x { \"test\"@en } . FILTER (LANG(?x) = \"en\")}");
+
+    EXPECT_TRUE(std::holds_alternative<parsedQuery::Values>(
+        q._rootGraphPattern._graphPatterns[0]));
+    ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
+    ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
+              "(LANG(?x) = \"en\")");
+  }
+  // Verify the filter is not applied as a regular filter if it is used
+  // somewhere in a triple
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * { ?x ?y ?z . ?a ?b ?c ."
+        "?d <a> ?f . FILTER (LANG(?a) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+  }
 }
 
 // _____________________________________________________________________________
@@ -1383,4 +1418,73 @@ TEST(ParserTest, BaseDeclaration) {
       SparqlParser::parseQuery("BASE <http://example.com> BASE <relative> "
                                "SELECT * WHERE { ?s ?p ?o }"),
       ::testing::HasSubstr("absolute IRI"), InvalidSparqlQueryException);
+}
+
+TEST(ParserTest, parseWithDatasets) {
+  // This test tests the correct behaviour and propagation of override datasets
+  // (datasets passed as URL parameters overwrite all datasets in the
+  // operation). `SparqlParser::Datasets` tests that datasets set in the
+  // operation are propagated correctly.
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto query = "SELECT * WHERE { ?s ?p ?o }";
+  auto queryGraphPatternMatcher =
+      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}}));
+  EXPECT_THAT(SparqlParser::parseQuery(query, {}),
+              m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {{DatasetClause{Iri("<foo>"), true}}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     std::nullopt, {{Iri("<foo>")}}));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {{DatasetClause{Iri("<bar>"), false}}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     {{Iri("<bar>")}}, std::nullopt));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {{DatasetClause{Iri("<bar>"), false},
+                                        DatasetClause{Iri("<foo>"), true},
+                                        DatasetClause{Iri("<baz>"), false}}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
+  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<h>")}};
+  auto filterGraphPattern = m::Filters(m::ExistsFilter(
+      m::GraphPattern(m::Triples({{Var("?a"), "?b", Var("?c")}})), datasets));
+  EXPECT_THAT(
+      SparqlParser::parseQuery("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+                               "?z FILTER EXISTS {?a ?b ?c} }",
+                               {{{Iri("<h>"), false}}}),
+      m::UpdateClause(m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"),
+                                       std::monostate{}}},
+                                     {}, std::nullopt),
+                      filterGraphPattern, m::datasetClausesMatcher(datasets)));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(
+          "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
+          {{{Iri("<h>"), false}}}),
+      m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
+  EXPECT_THAT(SparqlParser::parseQuery(
+                  "ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+                  {{{Iri("<h>"), false}}}),
+              m::AskQuery(filterGraphPattern, datasets));
+  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { ?x "
+                                       "?y ?z FILTER EXISTS {?a ?b?c}}",
+                                       {{{Iri("<h>"), false}}}),
+              m::ConstructQuery({std::array<GraphTerm, 3>{
+                                    ::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+                                filterGraphPattern, datasets));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(
+          "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+          {{{Iri("<h>"), false}}}),
+      m::DescribeQuery(
+          m::Describe({Var("?x")}, {datasets, {}},
+                      m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
+                                     filterGraphPattern)),
+          datasets));
+}
+
+TEST(ParserTest, multipleUpdatesAreForbidden) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
+      testing::HasSubstr("Multiple Updates in one request are not supported."));
 }
