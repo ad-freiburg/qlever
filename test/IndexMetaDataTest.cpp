@@ -46,7 +46,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
 TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   std::string imdFilename = "_testtmp.imd";
   std::string mmapFilename = imdFilename + ".mmap";
-  vector<CompressedBlockMetadata> bs;
+  std::vector<CompressedBlockMetadata> bs;
   // A value for the Graph Id.
   bs.push_back(CompressedBlockMetadata{{{{12, 34}, {42, 17}},
                                         5,
