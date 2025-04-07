@@ -350,7 +350,8 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 Vocabulary<S, C, I>::WordWriter::WordWriter(
-    VocabularyWithUnicodeComparator& vocabulary, const std::string& filename)
+    const VocabularyWithUnicodeComparator& vocabulary,
+    const std::string& filename)
     : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
           filename)},
       underlyingGeoWordWriter_{
@@ -366,21 +367,21 @@ uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
     // needs to be written to the dedicated geometry vocabulary and get an
     // index with the marker bit set to 1.
     uint64_t index;
-    // if constexpr (std::is_same_v<S, CompressedString>) {
-    index = underlyingGeoWordWriter_(word, isExternal);
-    // } else {
-    //   index = underlyingGeoWordWriter_(word);
-    // }
+    if constexpr (std::is_same_v<S, CompressedString>) {
+      index = underlyingGeoWordWriter_(word, isExternal);
+    } else {
+      index = underlyingGeoWordWriter_(word);
+    }
     AD_CONTRACT_CHECK(index <= maxWordIndex);
     return makeGeoVocabIndex(index);
   } else {
     // We have any other word: it goes to the normal vocabulary.
     uint64_t index;
-    // if constexpr (std::is_same_v<S, CompressedString>) {
-    index = underlyingWordWriter_(word, isExternal);
-    // } else {
-    //   index = underlyingWordWriter_(word);
-    // }
+    if constexpr (std::is_same_v<S, CompressedString>) {
+      index = underlyingWordWriter_(word, isExternal);
+    } else {
+      index = underlyingWordWriter_(word);
+    }
     AD_CONTRACT_CHECK(index <= maxWordIndex);
     return index;
   }
@@ -396,10 +397,11 @@ void Vocabulary<S, C, I>::WordWriter::finish() {
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 std::string& Vocabulary<S, C, I>::WordWriter::readableName() {
-  // if constexpr (std::is_same_v<S, CompressedString>) {
-  return underlyingWordWriter_.readableName();
-  // }
-  // ?
+  if constexpr (std::is_same_v<S, CompressedString>) {
+    return underlyingWordWriter_.readableName();
+  }
+  static std::string dummy;
+  return dummy;
 }
 
 // Explicit template instantiations

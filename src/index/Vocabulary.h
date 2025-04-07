@@ -268,8 +268,8 @@ class Vocabulary {
     WW underlyingGeoWordWriter_;
 
    public:
-    explicit WordWriter(VocabularyWithUnicodeComparator& vocabulary,
-                        const std::string& filename);
+    WordWriter(const VocabularyWithUnicodeComparator& vocabulary,
+               const std::string& filename);
 
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternal);
