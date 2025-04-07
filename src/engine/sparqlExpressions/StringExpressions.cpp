@@ -39,28 +39,16 @@ static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(s, &isUtf8CodepointStart);
 }
 
-// Extracts the datatype or language tag from a literal.
-// Language tags are returned as "@lang",datatypes as IRIs without angle
-// brackets. If neither is present, an empty string is returned.
-std::string getDatatypeOrLanguageTag(
-    const ad_utility::triple_component::Literal& literal) {
-  if (literal.hasDatatype()) {
-    return std::string{asStringViewUnsafe(literal.getDatatype())};
-  } else if (literal.hasLanguageTag()) {
-    return "@" + std::string{asStringViewUnsafe(literal.getLanguageTag())};
+// Initialize or concat a literal. If `literalSoFarOpt` is set, concat
+// `nextLiteral` to it; otherwise, initialize it with `nextLiteral`
+void concatOrSetLiteral(
+    std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
+    const ad_utility::triple_component::Literal& nextLiteral) {
+  if (literalSoFarOpt.has_value()) {
+    literalSoFarOpt.value().concat(nextLiteral);
+  } else {
+    literalSoFarOpt = nextLiteral;
   }
-  return std::string{};
-}
-
-// Checks whether two strings representing language tags or datatypes are
-// identical. If they are equal (and not empty), the common value is returned.
-// In all other cases, an empty string is returned.
-std::string getCommonDescriptor(const std::optional<std::string>& str1,
-                                const std::string& str2) {
-  if (!str1.has_value() || (!str1->empty() && *str1 == str2)) {
-    return str2;
-  }
-  return std::string{};
 }
 
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
@@ -415,8 +403,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using StringVec = VectorWithMemoryLimit<
-        std::tuple<std::string, std::optional<std::string>>>;
+    using Literal = ad_utility::triple_component::Literal;
+    using LiteralVec = VectorWithMemoryLimit<std::optional<Literal>>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -427,86 +415,60 @@ class ConcatExpression : public detail::VariadicExpression {
     // expression only once).
 
     // We store the (intermediate) result either as single string or a vector.
-    // If the result is a string, then all the previously evaluated children
+    // If the result is a Literal, then all the previously evaluated children
     // were constants (see above).
 
-    // The type `StringVec` stores as first element the concatenated string
-    // built up from all previously evaluated children and as the second element
-    // an optional string representing either a language tag or a datatype IRI.
-    // For each row, we compute and store exactly one such suffix (language tag
-    // or datatype). This entry may either:
-    // - contain the currently matching suffix,
-    // - be empty (if no suffix has been determined yet),
-    // - or indicate a mismatch (in which case the final suffix will be empty).
+    // `LiteralVec` stores literals whose string contents are the result of
+    // concatenation. Each literal also carries a suffix (language tag or
+    // datatype) that is determined by the previously processed children. For
+    // each row, the suffix reflects either the current matching suffix or a
+    // mismatch (in which case the final suffix will be empty).
 
-    std::variant<std::string, StringVec> result{std::string{""}};
-    std::optional<std::string> datatypeOrLangTag;
-
-    // Builds a literal from the given string content and descriptor.
-    // If descriptor starts with "@", it's a language tag. Otherwise it's either
-    // the datatype std:string or empty.
-    auto toLiteralFromDescriptor =
-        [](const std::string& content,
-           const std::optional<std::string>& descriptor) {
-          if (descriptor.has_value() && descriptor.value().starts_with("@")) {
-            return toLiteral(content, descriptor);
-          } else if (descriptor.has_value() && !descriptor.value().empty()) {
-            return toLiteral(
-                content, Iri::fromIrirefWithoutBrackets(descriptor.value()));
-          }
-          return toLiteral(content);
-        };
+    std::variant<std::optional<Literal>, LiteralVec> result;
 
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result, &datatypeOrLangTag)(typename T)(T && s)(
-        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
+        &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
+                                           std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant =
             sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(s,
                                                                           ctx)
-                .value_or(ad_utility::triple_component::Literal::
-                              literalWithNormalizedContent(
-                                  asNormalizedStringViewUnsafe("")));
-        const auto& strFromConstant =
-            asStringViewUnsafe(literalFromConstant.getContent());
-        if (std::holds_alternative<std::string>(result)) {
+                .value_or(Literal::literalWithNormalizedContent(
+                    asNormalizedStringViewUnsafe("")));
+        if (std::holds_alternative<std::optional<Literal>>(result)) {
           // All previous children were constants, and the current child also is
           // a constant.
-          std::get<std::string>(result).append(strFromConstant);
-          datatypeOrLangTag = getCommonDescriptor(
-              datatypeOrLangTag, getDatatypeOrLanguageTag(literalFromConstant));
+          concatOrSetLiteral(std::get<std::optional<Literal>>(result),
+                             literalFromConstant);
         } else {
           // One of the previous children was not a constant, so we already
           // store a vector.
-          auto& resultAsVector = std::get<StringVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](auto& tup) {
-            auto& [content, descriptor] = tup;
-            content.append(strFromConstant);
-            descriptor = getCommonDescriptor(
-                descriptor, getDatatypeOrLanguageTag(literalFromConstant));
+          auto& resultAsVector = std::get<LiteralVec>(result);
+          ql::ranges::for_each(resultAsVector, [&](auto& literalSoFar) {
+            concatOrSetLiteral(literalSoFar, literalFromConstant);
           });
         }
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
 
-        if (std::holds_alternative<std::string>(result)) {
+        if (std::holds_alternative<std::optional<Literal>>(result)) {
           // All previous children were constants, but now we have a
           // non-constant child, so we have to expand the `result` from a single
           // string to a vector.
-          std::string constantResultSoFar =
-              std::move(std::get<std::string>(result));
-          result.emplace<StringVec>(ctx->_allocator);
-          auto& resultAsVec = std::get<StringVec>(result);
+          std::optional<Literal> constantResultSoFar =
+              std::move(std::get<std::optional<Literal>>(result));
+          result.emplace<LiteralVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<LiteralVec>(result);
           resultAsVec.reserve(ctx->size());
 
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
-                      std::make_tuple(constantResultSoFar, datatypeOrLangTag));
+                      constantResultSoFar);
         }
 
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
-        auto& resultAsVec = std::get<StringVec>(result);
+        auto& resultAsVec = std::get<LiteralVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
@@ -514,11 +476,7 @@ class ConcatExpression : public detail::VariadicExpression {
                   sparqlExpression::detail::LiteralValueGetterWithStrFunction{}(
                       std::move(el), ctx);
               literal.has_value()) {
-            const auto& str = asStringViewUnsafe(literal.value().getContent());
-            auto& [content, descriptor] = resultAsVec[i];
-            content.append(str);
-            descriptor = getCommonDescriptor(
-                descriptor, getDatatypeOrLanguageTag(literal.value()));
+            concatOrSetLiteral(resultAsVec[i], literal.value());
           }
 
           ctx->cancellationHandle_->throwIfCancelled();
@@ -534,18 +492,21 @@ class ConcatExpression : public detail::VariadicExpression {
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    if (std::holds_alternative<std::string>(result)) {
-      return toLiteralFromDescriptor(std::get<std::string>(result),
-                                     datatypeOrLangTag);
+    if (std::holds_alternative<std::optional<Literal>>(result)) {
+      return IdOrLiteralOrIri(
+          LiteralOrIri{std::get<std::optional<Literal>>(result).value_or(
+              Literal::literalWithNormalizedContent(
+                  asNormalizedStringViewUnsafe("")))});
     } else {
-      auto& stringVec = std::get<StringVec>(result);
+      auto& literalVec = std::get<LiteralVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
-      resultAsVec.reserve(stringVec.size());
+      resultAsVec.reserve(literalVec.size());
       ql::ranges::copy(
-          stringVec |
-              ql::views::transform([&toLiteralFromDescriptor](const auto& tup) {
-                const auto& [content, descriptor] = tup;
-                return toLiteralFromDescriptor(content, descriptor);
+          literalVec |
+              ql::views::transform([](const std::optional<Literal>& literal) {
+                return IdOrLiteralOrIri(LiteralOrIri(
+                    literal.value_or(Literal::literalWithNormalizedContent(
+                        asNormalizedStringViewUnsafe("")))));
               }),
           std::back_inserter(resultAsVec));
       return resultAsVec;

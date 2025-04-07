@@ -164,22 +164,17 @@ void Literal::replaceContent(std::string_view newContent) {
   beginOfSuffix_ = newContent.size() + 2;
 }
 
-Literal Literal::concat(const Literal& other) const {
-  std::string newContent = content_.substr(1, beginOfSuffix_ - 2) +
+// __________________________________________
+void Literal::concat(const Literal& other) {
+  std::string newContent = std::string{asStringViewUnsafe(getContent())} +
                            std::string{asStringViewUnsafe(other.getContent())};
-  std::optional<std::variant<Iri, std::string>> commonDescriptor;
-
-  if (hasLanguageTag() && other.hasLanguageTag() &&
-      getLanguageTag() == other.getLanguageTag()) {
-    commonDescriptor = "@" + std::string{asStringViewUnsafe(getLanguageTag())};
-  } else if (hasDatatype() && other.hasDatatype() &&
-             getDatatype() == other.getDatatype()) {
-    commonDescriptor =
-        Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(getDatatype()));
-  } else {
-    commonDescriptor = std::nullopt;
+  replaceContent(newContent);
+  if (!((hasLanguageTag() && other.hasLanguageTag() &&
+         getLanguageTag() == other.getLanguageTag()) ||
+        (hasDatatype() && other.hasDatatype() &&
+         getDatatype() == other.getDatatype()))) {
+    removeDatatypeOrLanguageTag();
   }
-  return literalWithoutQuotes(newContent, commonDescriptor);
 }
 
 }  // namespace ad_utility::triple_component
