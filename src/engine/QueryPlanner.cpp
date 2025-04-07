@@ -1594,6 +1594,11 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   // If we have FILTER statements that can also be answered by a SpatialJoin,
   // replace them with a spatial join.
 
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * geof:distance() < constant
+  // * constant > geof:distance()
+  // * constant >= geof:distance()
+
   // Helper for GeoSPARQL filter & cartesian product optimization
   auto seedImplicitSpatialJoin = [&initialPlans, &filters, this]() {
     // Check if the filter expression is suitable for the optimization
@@ -1609,10 +1614,11 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
       auto children = leExp->children();
       // Left child must be distance function
-      auto leftChild = children[0].get();
+      const auto& leftChild = *children[0];
 
       // Right child must be constant
       auto rightChild = children[1].get();
+      // const auto& child = *children[1];
       auto literalExp =
           dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
               rightChild);
@@ -1629,19 +1635,19 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
         continue;
       }
 
-      auto distExprVars = getDistExpressionVariables(leftChild);
-      if (!distExprVars.has_value()) {
+      auto geoFuncCall = getGeoFunctionExpressionParameters(leftChild);
+      if (!geoFuncCall.has_value()) {
         continue;
       }
-      auto [left, right] = distExprVars.value();
+      auto [type, left, right] = geoFuncCall.value();
       SpatialJoinConfiguration sjConfig{
-          MaxDistanceConfig{static_cast<size_t>(maxDist)},
+          SpatialJoinConfig{type, static_cast<size_t>(maxDist)},
           left,
           right,
           std::nullopt,
           PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN,
-          SpatialJoinType::WITHIN_DIST};
+          type};
       auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
                                                std::nullopt);
       plan._idsOfIncludedFilters |= 1ull << i;
