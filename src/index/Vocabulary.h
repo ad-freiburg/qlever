@@ -118,7 +118,7 @@ class Vocabulary {
   // The 5th highest bit of the vocabulary index is used as a marker to
   // determine whether the word is stored in the normal vocabulary or the
   // geometry vocabulary.
-  static constexpr uint64_t geoVocabMarker = static_cast<uint64_t>(1) << 59;
+  static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
   static constexpr uint64_t geoVocabMarkerInvert = ~geoVocabMarker;
 
   using UnderlyingVocabulary =
@@ -192,6 +192,8 @@ class Vocabulary {
 
   static bool stringIsLiteral(std::string_view s);
 
+  static constexpr std::string_view geoLiteralSuffix =
+      ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
   static bool stringIsGeoLiteral(std::string_view s);
 
   static uint64_t makeGeoVocabIndex(uint64_t vocabIndex);

@@ -68,10 +68,12 @@ class VocabularyInMemory
   /// documentation of `CompactVectorOfStrings` for details.
   struct WordWriter {
     typename Words::Writer writer_;
+    uint64_t index_ = 0;
+
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
     uint64_t operator()(std::string_view str) {
       writer_.push(str.data(), str.size());
-      return writer_._offsets.size() - 1;  // Is this the correct counter?
+      return index_++;
     }
 
     void finish() { writer_.finish(); }

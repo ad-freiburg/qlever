@@ -63,7 +63,7 @@ uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
   lastIndex_ = idx;
   writer_.push(str.data(), str.size());
   offsetWriter_.push(idx);
-  return lastIndex_.value_or(0);  // ?
+  return idx;
 }
 
 // _____________________________________________________________________________

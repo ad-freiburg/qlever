@@ -124,8 +124,7 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::stringIsGeoLiteral(std::string_view s) {
-  return stringIsLiteral(s) &&
-         s.ends_with("\"^^<" + std::string(GEO_WKT_LITERAL) + ">");
+  return stringIsLiteral(s) && s.ends_with(geoLiteralSuffix);
 }
 
 // _____________________________________________________________________________
@@ -265,7 +264,8 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  // TODO geometry
+  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
+  // together. For WKT literals the result is therefore not correct.
   auto wordAndIndex = vocabulary_.upper_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -275,7 +275,8 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
-  // TODO geometry
+  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
+  // together. For WKT literals the result is therefore not correct.
   auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -318,7 +319,8 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
     -> Vocabulary<S, C, I>::PrefixRanges {
-  // TODO problem with geometry
+  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
+  // together. For WKT literals the result is therefore not correct.
   auto rangeInternal = vocabulary_.prefix_range(prefix);
   std::pair<I, I> indexRangeInternal{
       I::make(rangeInternal.first.value_or(size())),
