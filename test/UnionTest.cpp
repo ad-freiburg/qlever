@@ -412,26 +412,28 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  // Setup the following two UNION operations for the check that follows.
+  //
+  // { VALUES ?x { 1 } BIND (1 AS ?y) } UNION { VALUES ?x { 1 } }
+  //
+  // { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }
+  //
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
-
-  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}});
-
   auto bind = ad_utility::makeExecutionTree<Bind>(
-      qec, leftT->clone(),
+      qec, values1->clone(),
       parsedQuery::Bind{sparqlExpression::SparqlExpressionPimpl{
                             std::make_unique<sparqlExpression::IdExpression>(
                                 Id::makeFromInt(1)),
                             "1 AS ?x"},
                         Variable{"?x"}});
+  Union unionOperation1{qec, std::move(bind), values2};
+  Union unionOperation2{qec, std::move(values1), std::move(values2)};
 
-  Union unionOperation1{qec, std::move(bind), rightT};
-  Union unionOperation2{qec, std::move(leftT), std::move(rightT)};
-
-  // If the cache key of `unionOperation2` is a suffix of the cache key of
-  // `unionOperation1` then it is ambiguous and the bind might as well be
-  // applied to the UNION, it would be ambiguous.
+  // Check that the cache key of the second operation is not a suffix of the
+  // first (as was the case before #1933).
   EXPECT_THAT(
       unionOperation1.getCacheKey(),
       ::testing::Not(::testing::EndsWith(unionOperation2.getCacheKey())));

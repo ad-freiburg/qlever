@@ -82,6 +82,8 @@ string Union::getCacheKeyImpl() const {
   os << "} UNION {\n";
   os << _subtrees[1]->getCacheKey() << "\n";
   os << "} column origins: ";
+  // Since the cache keys above (of the left and right side of the UNION) do not
+  // specify the selected columns, we have to add them here. This fixes #1933.
   for (auto [left, right] : _columnOrigins) {
     os << '(' << left << ", " << right << ") ";
   }
