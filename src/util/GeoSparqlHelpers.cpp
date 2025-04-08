@@ -15,6 +15,7 @@
 #include <numbers>
 #include <string_view>
 
+#include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "util/Exception.h"
 
@@ -52,6 +53,25 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
   auto p1 = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
   auto p2 = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
   return S2Earth::ToKm(S1Angle(p1, p2));
+}
+
+// ____________________________________________________________________________
+double kilometerToUnit(double kilometers,
+                       std::optional<UnitOfMeasurement> unit) {
+  double multiplicator = 1;
+  if (unit.has_value()) {
+    if (unit.value() == UnitOfMeasurement::METERS) {
+      multiplicator = 1000;
+    } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
+      multiplicator = 1;
+    } else if (unit.value() == UnitOfMeasurement::MILES) {
+      multiplicator = detail::kilometerToMile;
+    } else {
+      AD_CONTRACT_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
+      AD_THROW("Unsupported unit of measurement for distance.");
+    }
+  }
+  return multiplicator * kilometers;
 }
 
 }  // namespace detail

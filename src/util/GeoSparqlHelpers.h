@@ -24,14 +24,18 @@ static constexpr double invalidCoordinate =
 
 static constexpr double kilometerToMile = 0.62137119;
 
-// Implementations of the lambdas below + two helper functions. Note: our SPARQL
-// expression code currently needs lambdas, and we can't define the lambdas in
-// the .cpp file, hence this detour.
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
+
+// Extract coordinates from a well-known text literal.
 std::pair<double, double> parseWktPoint(const std::string_view point);
 
+// Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
+
+// Convert kilometers to other supported units.
+double kilometerToUnit(double kilometers,
+                       std::optional<UnitOfMeasurement> unit);
 
 }  // namespace detail
 
@@ -67,21 +71,8 @@ class WktDistGeoPoints {
     if (!point1.has_value() || !point2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
-
-    double multiplicator = 1;
-    if (unit.has_value()) {
-      if (unit.value() == UnitOfMeasurement::METERS) {
-        multiplicator = 1000;
-      } else if (unit.value() == UnitOfMeasurement::KILOMETERS) {
-        multiplicator = 1;
-      } else if (unit.value() == UnitOfMeasurement::MILES) {
-        multiplicator = detail::kilometerToMile;
-      } else {
-        AD_THROW("Unsupported unit of measurement for distance.");
-      }
-    }
-
-    return multiplicator * detail::wktDistImpl(point1.value(), point2.value());
+    return detail::kilometerToUnit(
+        detail::wktDistImpl(point1.value(), point2.value()), unit);
   }
 };
 
