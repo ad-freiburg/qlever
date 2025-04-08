@@ -364,6 +364,8 @@ uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
     // needs to be written to the dedicated geometry vocabulary and get an
     // index with the marker bit set to 1.
     uint64_t index;
+    // TODO<ullingerc> Remove type check as soon as word writers have a unified
+    // signature.
     if constexpr (std::is_same_v<S, CompressedString>) {
       index = underlyingGeoWordWriter_(word, isExternal);
     } else {
@@ -374,6 +376,8 @@ uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
   } else {
     // We have any other word: it goes to the normal vocabulary.
     uint64_t index;
+    // TODO<ullingerc> Remove type check as soon as word writers have a unified
+    // signature.
     if constexpr (std::is_same_v<S, CompressedString>) {
       index = underlyingWordWriter_(word, isExternal);
     } else {
