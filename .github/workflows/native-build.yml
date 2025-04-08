@@ -27,7 +27,8 @@ jobs:
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
-        isPr: ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
+        isPr:
+          - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
         exclude:
           - compiler: gcc
             compiler-version: 8
