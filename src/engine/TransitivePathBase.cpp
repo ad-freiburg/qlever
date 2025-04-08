@@ -62,18 +62,24 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
   auto x = makeInternalVariable("x");
   auto y = makeInternalVariable("y");
   auto z = makeInternalVariable("z");
+  // We don't need to materialize the extra variables y and z in the union.
+  auto selectXVariable =
+      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
+        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
+        return executionTree;
+      };
   auto allValues = ad_utility::makeExecutionTree<Union>(
       qec,
-      ad_utility::makeExecutionTree<IndexScan>(
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
           SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
                        TripleComponent{z}},
-          activeGraphs),
-      ad_utility::makeExecutionTree<IndexScan>(
+          activeGraphs)),
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
           SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
                        TripleComponent{x}},
-          activeGraphs));
+          activeGraphs)));
   auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
       qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
       std::vector<ColumnIndex>{0});
@@ -441,9 +447,7 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
   size_t inCol = 0;
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 ==
-                           outputTable.numColumns() ||
-                       emptyPathBound_);
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
     if (skipCol == inCol) {
       inCol++;
