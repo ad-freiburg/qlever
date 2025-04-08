@@ -646,7 +646,7 @@ TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinContains) {
   testGetResultWidthOrVariableToColumnMapSpatialJoinContains(GetParam());
 }
 
-// Test a spatial join with VALUES as both childs
+// Test a spatial join with VALUES as both children
 TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
   auto qec = buildNonSelfJoinDataset();
 
