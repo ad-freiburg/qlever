@@ -17,40 +17,6 @@
 /*
 @brief Generate a dummy value of the given type. Used for generating test values
 for `ad_benchmark::ResultTable`.
-Aufklappen
-
-
-Chat
-
-
-4
-Personen
-
-
-Heben
-
-
-Reagieren
-
-
-Ansicht
-
-
-Weitere
-
-
-Kamera
-
-
-
-Mikro
-
-
-
-Teilen
-
-
-Verlassen
 */
 CPP_template(typename Type)(requires ad_utility::SimilarToAnyTypeIn<
                             Type, ad_benchmark::ResultTable::EntryType>) Type
