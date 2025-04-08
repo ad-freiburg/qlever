@@ -12,7 +12,8 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "parser/RdfEscaping.h"
+#include "engine/Union.h"
+#include "global/RuntimeParameters.h"
 
 using std::string;
 
@@ -77,10 +78,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (cachedResult_) {
-    // result is pinned in cache. Nothing to compute
+  // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
+  // to `true`, we set the cost estimate to zero.
+  if (cachedResult_ &&
+      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
     return 0;
   }
+
+  // Otherwise, we return the cost estimate of the root operation. For index
+  // scans, we assume one unit of work per result row.
   if (getRootOperation()->isIndexScanWithNumVariables(1)) {
     return getSizeEstimate();
   } else {
@@ -147,6 +153,21 @@ void QueryExecutionTree::readFromCache() {
 }
 
 // ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree>
+QueryExecutionTree::createSortedTreeAnyPermutation(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const vector<ColumnIndex>& sortColumns) {
+  const auto& sortedOn = qet->resultSortedOn();
+  std::span relevantSortedCols{sortedOn.begin(),
+                               std::min(sortedOn.size(), sortColumns.size())};
+  bool isSorted = ql::ranges::all_of(
+      sortColumns, [relevantSortedCols](ColumnIndex distinctCol) {
+        return ad_utility::contains(relevantSortedCols, distinctCol);
+      });
+  return isSorted ? qet : createSortedTree(std::move(qet), sortColumns);
+}
+
+// ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<ColumnIndex>& sortColumns) {
@@ -159,7 +180,23 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return qet;
   }
 
+  // Unwrap sort to avoid stacking sorts on top of each other.
+  if (auto sort = std::dynamic_pointer_cast<Sort>(qet->getRootOperation())) {
+    AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
+                    "with `Sort` with a different sort order. This is "
+                    "indicates a flaw during query planning."
+                 << std::endl;
+    qet = sort->getSubtree();
+  }
+
+  // Push down sort into Union.
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
+  if (auto unionOperation =
+          std::dynamic_pointer_cast<Union>(qet->getRootOperation())) {
+    return std::make_shared<QueryExecutionTree>(
+        qec, unionOperation->createSortedVariant(sortColumns));
+  }
+
   auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }

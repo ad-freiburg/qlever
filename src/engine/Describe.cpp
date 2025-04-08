@@ -183,7 +183,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
 
   // The `indexScan` might have added some delta triples with local vocab IDs,
   // so make sure to merge them into the `localVocab`.
-  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  localVocab.mergeWith(result->localVocab());
 
   return resultTable;
 }
@@ -222,7 +222,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 }
 
 // _____________________________________________________________________________
-ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab;
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //
@@ -243,4 +243,10 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
                            std::move(blankNodes));
 
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Describe::cloneImpl() const {
+  return std::make_unique<Describe>(_executionContext, subtree_->clone(),
+                                    describe_);
 }

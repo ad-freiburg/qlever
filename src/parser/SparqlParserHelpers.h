@@ -35,15 +35,21 @@ struct ParserAndVisitor {
   ad_utility::antlr_utility::ThrowingErrorListener<InvalidSparqlQueryException>
       errorListener_{};
 
+  // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
+  // before beginning with actual parsing as the SPARQL standard mandates.
+  static std::string unescapeUnicodeSequences(std::string input);
+
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
   explicit ParserAndVisitor(
       string input,
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
       string input, SparqlQleverVisitor::PrefixMap prefixes,
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 

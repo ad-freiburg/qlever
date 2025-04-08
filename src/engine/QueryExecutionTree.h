@@ -3,7 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
+#define QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 
 #include <memory>
 #include <optional>
@@ -154,6 +155,14 @@ class QueryExecutionTree {
 
   // Create a `QueryExecutionTree` that produces exactly the same result as
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
+  // sorted accordingly, or sorted by another permutation of the same columns,
+  // it is simply returned.
+  static std::shared_ptr<QueryExecutionTree> createSortedTreeAnyPermutation(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const std::vector<ColumnIndex>& sortColumns);
+
+  // Create a `QueryExecutionTree` that produces exactly the same result as
+  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
@@ -243,6 +252,12 @@ class QueryExecutionTree {
           predicate_{std::move(predicate)},
           object_{std::move(object)} {}
   };
+
+  std::shared_ptr<QueryExecutionTree> clone() const {
+    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
+                                qec_, rootOperation_->clone())
+                          : std::make_shared<QueryExecutionTree>(qec_);
+  }
 };
 
 namespace ad_utility {
@@ -256,3 +271,5 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H

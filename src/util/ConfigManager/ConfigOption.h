@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
 
 #include <absl/strings/str_cat.h>
 
@@ -91,8 +92,9 @@ class ConfigOption {
   bool wasSet() const;
 
   // Returns, if this configuration option holds values of the given type.
-  template <ad_utility::SameAsAnyTypeIn<ConfigOption::AvailableTypes> Type>
-  constexpr bool holdsType() const {
+  CPP_template(typename Type)(
+      requires ad_utility::SameAsAnyTypeIn<
+          Type, AvailableTypes>) constexpr bool holdsType() const {
     return std::holds_alternative<Data<Type>>(data_);
   }
 
@@ -101,8 +103,8 @@ class ConfigOption {
   exception, should the given value have a different type, than what the
   configuration option was set to.
   */
-  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
-  void setValue(const T& value) {
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) void setValue(const T& value) {
     // Only set the variable, that our internal pointer points to, if the given
     // value is of the right type.
     if (auto* data = std::get_if<Data<T>>(&data_); data != nullptr) {
@@ -127,8 +129,9 @@ class ConfigOption {
   there is no default value, or `T` is the wrong type, then it will throw an
   exception.
   */
-  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
-  T getDefaultValue() const {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
+      getDefaultValue() const {
     if (hasDefaultValue() && std::holds_alternative<Data<T>>(data_)) {
       return std::get<Data<T>>(data_).defaultValue_.value();
     } else if (!hasDefaultValue()) {
@@ -156,8 +159,9 @@ class ConfigOption {
   @brief Return the content of the variable, that the internal pointer points
   to. If `T` is the wrong type, then it will throw an exception.
   */
-  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
-  T getValue() const {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>) T
+      getValue() const {
     if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else if (!wasSet()) {
@@ -212,9 +216,11 @@ class ConfigOption {
   @param defaultValue The optional default value. An empty `std::optional` is
   for no default value and a non empty for a default value.
   */
-  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
-  ConfigOption(std::string_view identifier, std::string_view description,
-               T* variablePointer, std::optional<T> defaultValue = std::nullopt)
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAnyTypeIn<T, AvailableTypes>)
+      ConfigOption(std::string_view identifier, std::string_view description,
+                   T* variablePointer,
+                   std::optional<T> defaultValue = std::nullopt)
       : data_{Data<T>{std::move(defaultValue), variablePointer}},
         identifier_{identifier},
         description_{description} {
@@ -251,8 +257,9 @@ class ConfigOption {
   /*
   @brief Return the string representation/name of the type.
   */
-  template <ad_utility::SameAsAnyTypeIn<AvailableTypes> T>
-  static std::string availableTypesToString() {
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) static std::string
+      availableTypesToString() {
     return availableTypesToString(T{});
   }
 
@@ -266,8 +273,10 @@ class ConfigOption {
 
 // Shorthand for checking, if `T` is part of the available options.
 template <typename T>
-concept SupportedConfigOptionType =
+CPP_concept SupportedConfigOptionType =
     ad_utility::SameAsAnyTypeIn<T, ConfigOption::AvailableTypes>;
 }  // namespace ConfigManagerImpl
 using ConfigManagerImpl::ConfigOption;
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H

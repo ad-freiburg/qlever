@@ -1,7 +1,8 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
+#define QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H
 
 #include "util/ExceptionHandling.h"
 
@@ -10,9 +11,8 @@ namespace detail {
 
 // The implementation of `makeOnDestructionDontThrowDuringStackUnwinding` (see
 // below).
-template <typename F>
-requires(std::is_invocable_v<F>)
-class OnDestructionDontThrowDuringStackUnwinding {
+CPP_template(typename F)(requires std::is_invocable_v<
+                         F>) class OnDestructionDontThrowDuringStackUnwinding {
   static_assert(
       !std::is_nothrow_invocable_v<F>,
       "When using a non-throwing callback, use the simpler `absl::Cleanup`");
@@ -72,9 +72,9 @@ class OnDestructionCreator {
 // return object in a container because all of its constructors are either
 // private or deleted. This is disabled deliberately as it might lead to program
 // termination (for `std::vector`) or to uncalled destructors.
-template <std::invocable F>
-[[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<F>
-makeOnDestructionDontThrowDuringStackUnwinding(F f) {
+CPP_template(typename F)(requires std::invocable<F>)
+    [[nodiscard("")]] detail::OnDestructionDontThrowDuringStackUnwinding<
+        F> makeOnDestructionDontThrowDuringStackUnwinding(F f) {
   static_assert(
       !std::is_nothrow_invocable_v<F>,
       "When using a non-throwing callback, use the simpler `absl::Cleanup`");
@@ -82,3 +82,5 @@ makeOnDestructionDontThrowDuringStackUnwinding(F f) {
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_ONDESTRUCTIONDONTTHROWDURINGSTACKUNWINDING_H

@@ -2,10 +2,13 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_GENERATORS_H
+#define QLEVER_SRC_UTIL_GENERATORS_H
 
 #include <absl/cleanup/cleanup.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <optional>
 
 #include "util/Generator.h"
@@ -19,13 +22,16 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
-template <typename InputRange,
-          typename T = ql::ranges::range_value_t<InputRange>>
-cppcoro::generator<T> wrapGeneratorWithCache(
-    InputRange generator,
-    InvocableWithExactReturnType<bool, std::optional<T>&, const T&> auto
-        aggregator,
-    InvocableWithExactReturnType<void, T> auto onFullyCached) {
+// NOTE: The `int` is just a dummy value.
+CPP_template(typename InputRange, typename AggregatorT,
+             typename T = ql::ranges::range_value_t<InputRange>,
+             typename FullyCachedFuncT = int)(
+    requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
+                                          const T&>
+        CPP_and InvocableWithExactReturnType<FullyCachedFuncT, void, T>)
+    cppcoro::generator<T> wrapGeneratorWithCache(
+        InputRange generator, AggregatorT aggregator,
+        FullyCachedFuncT onFullyCached) {
   std::optional<T> aggregatedData{};
   bool shouldBeAggregated = true;
   for (T& element : generator) {
@@ -159,3 +165,5 @@ cppcoro::generator<T> generatorFromActionWithCallback(
   }
 }
 };  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_GENERATORS_H

@@ -2,7 +2,8 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_NORMALIZEDSTRING_H
+#define QLEVER_SRC_PARSER_NORMALIZEDSTRING_H
 
 #include <string>
 #include <string_view>
@@ -29,3 +30,5 @@ inline NormalizedStringView asNormalizedStringViewUnsafe(
     std::string_view input) {
   return {reinterpret_cast<const NormalizedChar*>(input.data()), input.size()};
 }
+
+#endif  // QLEVER_SRC_PARSER_NORMALIZEDSTRING_H

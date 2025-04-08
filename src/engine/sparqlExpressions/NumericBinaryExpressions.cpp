@@ -314,9 +314,9 @@ constexpr auto getMergeFunction(bool isNegated) {
 }  // namespace
 
 //______________________________________________________________________________
-template <typename BinaryPrefilterExpr, typename NaryOperation>
-requires isOperation<NaryOperation>
-class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
+    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
@@ -324,10 +324,10 @@ class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
       bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 2);
     auto leftChild =
-        this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
+        this->getChildAtIndex(0).value()->getPrefilterExpressionForMetadata(
             isNegated);
     auto rightChild =
-        this->getNthChild(1).value()->getPrefilterExpressionForMetadata(
+        this->getChildAtIndex(1).value()->getPrefilterExpressionForMetadata(
             isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));

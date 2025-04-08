@@ -3,7 +3,8 @@
 //  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_SPARQLTRIPLE_H
+#define QLEVER_SRC_PARSER_SPARQLTRIPLE_H
 
 #include <utility>
 #include <vector>
@@ -19,8 +20,8 @@ inline bool isVariable(const TripleComponent& elem) {
 }
 
 inline bool isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
+  return elem.operation_ == PropertyPath::Operation::IRI &&
+         isVariable(elem.iri_);
 }
 
 // Data container for parsed triples from the where clause.
@@ -56,7 +57,7 @@ class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
 
 class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
-  using Graph = std::variant<std::monostate, Iri, Variable>;
+  using Graph = std::variant<std::monostate, TripleComponent::Iri, Variable>;
 
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
                               TripleComponent o, Graph g,
@@ -88,9 +89,9 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   SparqlTripleSimple getSimple() const {
     AD_CONTRACT_CHECK(p_.isIri());
     TripleComponent p =
-        isVariable(p_._iri)
-            ? TripleComponent{Variable{p_._iri}}
-            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
+        isVariable(p_.iri_)
+            ? TripleComponent{Variable{p_.iri_}}
+            : TripleComponent(TripleComponent::Iri::fromIriref(p_.iri_));
     return {s_, p, o_, additionalScanColumns_};
   }
 
@@ -105,3 +106,5 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
     return {triple.s_, p, triple.o_};
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
+#define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
 #include <string>
 #include <utility>
@@ -28,11 +30,11 @@ namespace ad_utility::vocabulary_merger {
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
 template <typename T>
-CPP_concept WordCallback = std::invocable<T, std::string_view, bool>;
+CPP_concept WordCallback = ranges::invocable<T, std::string_view, bool>;
 // Concept for a callable that compares to `string_view`s.
 template <typename T>
 CPP_concept WordComparator =
-    std::predicate<T, std::string_view, std::string_view>;
+    ranges::predicate<T, std::string_view, std::string_view>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
@@ -68,8 +70,8 @@ struct VocabularyMetaData {
     bool contains(Id id) const { return begin_ <= id && id < end_; }
 
    private:
-    Id begin_ = ID_NO_VALUE;
-    Id end_ = ID_NO_VALUE;
+    Id begin_ = Id::makeUndefined();
+    Id end_ = Id::makeUndefined();
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
@@ -293,3 +295,5 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }  // namespace ad_utility::vocabulary_merger
 
 #include "VocabularyMergerImpl.h"
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYMERGER_H

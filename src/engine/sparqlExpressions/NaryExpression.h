@@ -3,12 +3,13 @@
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
 
 #include <charconv>
-#include <concepts>
 #include <cstdlib>
 
+#include "backports/concepts.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 // Factory functions for all kinds of expressions that only have other
@@ -65,7 +66,8 @@ SparqlExpression::Ptr makeStrLangTagExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeIriOrUriExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIriOrUriExpression(SparqlExpression::Ptr child,
+                                             SparqlExpression::Ptr baseIri);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
                                            SparqlExpression::Ptr start,
@@ -81,10 +83,12 @@ SparqlExpression::Ptr makeContainsExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrAfterExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
-
+SparqlExpression::Ptr makeMergeRegexPatternAndFlagsExpression(
+    SparqlExpression::Ptr pattern, SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
                                             SparqlExpression::Ptr pattern,
-                                            SparqlExpression::Ptr replacement);
+                                            SparqlExpression::Ptr replacement,
+                                            SparqlExpression::Ptr flags);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeLangMatchesExpression(SparqlExpression::Ptr child1,
@@ -96,14 +100,24 @@ SparqlExpression::Ptr makeSHA256Expression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSHA384Expression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSHA512Expression(SparqlExpression::Ptr child);
 
+SparqlExpression::Ptr makeConvertToStringExpression(
+    SparqlExpression::Ptr child);
+
 SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
 
-// Implemented in ConvertToNumeric.cpp
+// Implemented in ConvertToDtypeConstructor.cpp
 SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDecimalExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToBooleanExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateTimeExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateExpression(SparqlExpression::Ptr child);
 
 // Implemented in RdfTermExpressions.cpp
 SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
@@ -129,12 +143,13 @@ SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
-template <auto function>
-requires std::is_invocable_r_v<SparqlExpression::Ptr, decltype(function),
-                               std::vector<SparqlExpression::Ptr>>
-constexpr auto variadicExpressionFactory =
-    []<std::derived_from<SparqlExpression>... Exps>(
-        std::unique_ptr<Exps>... children) {
+CPP_template(auto function)(
+    requires std::is_invocable_r_v<
+        SparqlExpression::Ptr, decltype(function),
+        std::vector<
+            SparqlExpression::Ptr>>) constexpr auto variadicExpressionFactory =
+    []<typename... Exps>(std::unique_ptr<Exps>... children) {
+      CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
       std::vector<SparqlExpression::Ptr> vec;
       (..., (vec.push_back(std::move(children))));
       return std::invoke(function, std::move(vec));
@@ -154,3 +169,5 @@ constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

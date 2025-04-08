@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_GEOPOINT_H
+#define QLEVER_SRC_PARSER_GEOPOINT_H
 
 #include <absl/strings/str_cat.h>
 
@@ -40,8 +41,9 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<GeoPoint> auto& g) {
+  CPP_template(typename H,
+               typename G)(requires std::same_as<G, GeoPoint>) friend H
+      AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
@@ -91,3 +93,5 @@ class GeoPoint {
 
   bool operator==(const GeoPoint& other) const = default;
 };
+
+#endif  // QLEVER_SRC_PARSER_GEOPOINT_H

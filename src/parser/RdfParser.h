@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_RDFPARSER_H
+#define QLEVER_SRC_PARSER_RDFPARSER_H
 
 #include <gtest/gtest_prod.h>
 #include <sys/mman.h>
@@ -429,6 +430,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, booleanLiteralLongForm);
   FRIEND_TEST(RdfParserTest, collection);
   FRIEND_TEST(RdfParserTest, iriref);
+  FRIEND_TEST(RdfParserTest, specialPredicateA);
 };
 
 template <class Tokenizer_T>
@@ -458,8 +460,9 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-template <std::derived_from<RdfParserBase> Parser>
-class RdfStringParser : public Parser {
+CPP_template(typename Parser)(
+    requires std::derived_from<Parser, RdfParserBase>) class RdfStringParser
+    : public Parser {
  public:
   using Parser::getLine;
   using Parser::prefixMap_;
@@ -783,3 +786,5 @@ class RdfMultifileParser : public RdfParserBase {
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
 };
+
+#endif  // QLEVER_SRC_PARSER_RDFPARSER_H

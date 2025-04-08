@@ -2,13 +2,14 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_GRAPHREF_H
+#define QLEVER_SRC_PARSER_DATA_GRAPHREF_H
 
 #include <variant>
 
 #include "parser/Iri.h"
 
-using GraphRef = TripleComponent::Iri;
+using GraphRef = ad_utility::triple_component::Iri;
 // Denotes the target graph for an operation. Here the target is the default
 // graph.
 struct DEFAULT {
@@ -29,3 +30,5 @@ struct ALL {
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;
 using GraphOrDefault = std::variant<GraphRef, DEFAULT>;
+
+#endif  // QLEVER_SRC_PARSER_DATA_GRAPHREF_H

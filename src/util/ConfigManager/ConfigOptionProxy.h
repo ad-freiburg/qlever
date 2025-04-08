@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
+#define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H
 
 #include <absl/strings/str_cat.h>
 
@@ -43,26 +44,26 @@ CPP_template(typename T, typename ConfigOptionType)(
 
   // Get access to the configuration option, this is a proxy for. Const access
   // only for the const version, to make the usage clearer.
-  ConfigOptionType& getConfigOption() const
-      requires std::is_const_v<ConfigOptionType> {
+  const ConfigOptionType& getConfigOption() const
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   ConfigOptionType& getConfigOption()
-      requires(!std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     AD_CORRECTNESS_CHECK(option_ != nullptr);
     return *option_;
   }
 
   // (Implicit) conversion to `ConfigOptionType&`.
   explicit(false) operator ConfigOptionType&() const
-      requires(std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 
   explicit(false) operator ConfigOptionType&()
-      requires(!std::is_const_v<ConfigOptionType>) {
+      QL_CONCEPT_OR_NOTHING(requires(!std::is_const_v<ConfigOptionType>)) {
     return getConfigOption();
   }
 };
@@ -107,3 +108,5 @@ class ConfigOptionProxy
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTIONPROXY_H

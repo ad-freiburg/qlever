@@ -11,7 +11,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
   std::visit(
       [&os]<typename T>(const T& s) {
         auto& stream = *os;
-        if constexpr (std::same_as<T, ValueId>) {
+        if constexpr (concepts::same_as<T, ValueId>) {
           stream << s;
         } else {
           stream << s.toStringRepresentation();
@@ -24,8 +24,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
-    const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const LocalVocab& localVocab,
+    const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
     ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},

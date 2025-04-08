@@ -33,7 +33,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-ProtoResult Minus::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
@@ -219,4 +219,12 @@ Minus::RowComparison Minus::isRowEqSkipFirst(
     }
   }
   return RowComparison::EQUAL;
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Minus::cloneImpl() const {
+  auto copy = std::make_unique<Minus>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

@@ -3,7 +3,8 @@
 // Author: Andre Schlegel (October of 2023,
 // schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_VALIDATORHELPERS_H
+#define QLEVER_TEST_UTIL_VALIDATORHELPERS_H
 
 #include <cstddef>
 #include <sstream>
@@ -18,9 +19,9 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-template <
-    ad_utility::SameAsAnyTypeIn<ad_utility::ConfigOption::AvailableTypes> Type>
-Type createDummyValueForValidator(size_t variant);
+CPP_template(typename Type)(requires ad_utility::SameAsAnyTypeIn<
+                            Type, ad_utility::ConfigOption::AvailableTypes>)
+    Type createDummyValueForValidator(size_t variant);
 
 /*
 @brief For easily creating `Validator` functions, that compare given values to
@@ -65,3 +66,5 @@ auto generateDummyNonExceptionValidatorFunction(size_t variant) {
     return (compare(args, dummyValuesToCompareTo) || ...);
   };
 };
+
+#endif  // QLEVER_TEST_UTIL_VALIDATORHELPERS_H

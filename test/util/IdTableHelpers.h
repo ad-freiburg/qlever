@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_TEST_UTIL_IDTABLEHELPERS_H
+#define QLEVER_TEST_UTIL_IDTABLEHELPERS_H
 
 #include <algorithm>
 #include <concepts>
@@ -19,8 +20,6 @@
 #include "./IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
@@ -108,7 +107,8 @@ struct MatchesIdTable {
   }
 
   // Overload for lvalue-references (`IdTable`s are not copyable)
-  template <ad_utility::SimilarTo<IdTable> T>
+  template <typename T,
+            typename = std::enable_if_t<ad_utility::SimilarTo<T, IdTable>>>
   auto operator()(T& table) const {
     // Note: We could use `Eq(cref(table))` , but the explicit deep copy
     // gets rid of all possibly lifetime and mutability issues.
@@ -261,3 +261,5 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 // local vocabs in a vector.
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
     Result::LazyResult generator, size_t numColumns);
+
+#endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

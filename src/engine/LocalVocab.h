@@ -3,7 +3,8 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_LOCALVOCAB_H
+#define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
@@ -117,6 +118,9 @@ class LocalVocab {
       const R& vocabs) {
     using ql::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      if (set == primaryWordSet_) {
+        return;
+      }
       bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
     };
@@ -150,6 +154,9 @@ class LocalVocab {
     localBlankNodeManager_->mergeWith(localManagersView);
   }
 
+  // Convenience function for a single `LocalVocab`.
+  void mergeWith(const LocalVocab& other);
+
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.
   static LocalVocab merge(std::span<const LocalVocab*> vocabs);
@@ -157,6 +164,8 @@ class LocalVocab {
   // Return all the words from all the word sets as a vector. This is useful
   // for testing.
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
+
+  const Set& primaryWordSet() const { return *primaryWordSet_; }
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
@@ -169,10 +178,11 @@ class LocalVocab {
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
-  const Set& primaryWordSet() const { return *primaryWordSet_; }
 
   // Common implementation for the two methods `getIndexAndAddIfNotContained`
   // and `getIndexOrNullopt` above.
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
+
+#endif  // QLEVER_SRC_ENGINE_LOCALVOCAB_H

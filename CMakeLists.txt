@@ -106,7 +106,17 @@ FetchContent_Declare(
         GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
 )
 
-
+#################################
+# libspatialjoin
+################################
+FetchContent_Declare(
+        spatialjoin
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG 21be46ab71ecbc8400daa8c5a19f47853dea0ac8
+)
+# disable bzip2 and zlib support in spatialjoin, we don't need it
+add_definitions("-DSPATIALJOIN_NO_BZIP2=True")
+add_definitions("-DSPATIALJOIN_NO_ZLIB=True")
 
 ################################
 # Threading
@@ -232,7 +242,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 FetchContent_Declare(
         ctre
         GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-        GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+        GIT_TAG eb9577aae3515d14e6c5564f9aeb046d2e7c1124 # v3.9.0
 )
 
 ################################
@@ -341,7 +351,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3 spatialjoin)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -425,6 +435,7 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/global)
 add_subdirectory(benchmark)
 
 enable_testing()

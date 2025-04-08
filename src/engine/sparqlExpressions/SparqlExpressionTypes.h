@@ -3,15 +3,14 @@
 
 // Several helper types needed for the SparqlExpression module
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
 #include <vector>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
-#include "parser/LiteralOrIri.h"
-#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
@@ -45,19 +44,20 @@ class VectorWithMemoryLimit
   // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
   // `vector` take the allocator as a last parameter)
   // * there must be a constructor of `Base` for the given arguments.
-  template <typename... Args>
-  requires(sizeof...(Args) > 0 &&
-           !std::derived_from<std::remove_cvref_t<ad_utility::First<Args...>>,
-                              Base> &&
-           std::convertible_to<ad_utility::Last<Args...>, Allocator> &&
-           std::constructible_from<Base, Args && ...>)
-  explicit(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
+  CPP_template(typename... Args)(
+      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
+          concepts::derived_from<
+              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
+          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
+              CPP_and concepts::constructible_from<
+                  Base, Args&&...>) explicit(sizeof...(Args) == 1)
+      VectorWithMemoryLimit(Args&&... args)
       : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
   VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc){};
+      : Base(init, alloc) {}
 
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
@@ -113,15 +113,18 @@ using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 /// Only the different types contained in the variant `ExpressionResult` (above)
 /// match this concept.
 template <typename T>
-concept SingleExpressionResult =
+CPP_concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
-inline ExpressionResult copyExpressionResult(
-    ad_utility::SimilarTo<ExpressionResult> auto&& result) {
+CPP_template(typename ResultT)(
+    requires ad_utility::SimilarTo<ResultT,
+                                   ExpressionResult>) inline ExpressionResult
+    copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable =
-      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (requires { R{AD_FWD(x)}; }) {
+      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
+                                     requires SingleExpressionResult<R>) {
+    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
       return x.clone();
@@ -166,7 +169,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
+  LocalVocab& _localVocab;
 
   // If the expression is part of a GROUP BY then this member has to be set to
   // the variables by which the input is grouped. These variables will then be
@@ -202,7 +205,7 @@ struct EvaluationContext {
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab,
+                    LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
 
@@ -221,9 +224,10 @@ struct EvaluationContext {
 
 namespace detail {
 /// Get Id of constant result of type T.
-template <SingleExpressionResult T, typename LocalVocabT>
-requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
-Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+CPP_template(typename T, typename LocalVocabT)(
+    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
+        std::is_rvalue_reference_v<T&&>) Id
+    constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
@@ -275,9 +279,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (requires {
-                      Function{}(std::forward<Operands>(operands)...);
-                    }) {
+      if constexpr (ranges::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();
@@ -334,11 +336,12 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 // for multiple `ValueGetters` because there can be multiple `ValueGetters` as
 // well as zero or more `SpezializedFunctions`, but there can only be a single
 // parameter pack in C++.
-template <
-    size_t NumOperands,
-    ad_utility::isInstantiation<FunctionAndValueGetters>
-        FunctionAndValueGettersT,
-    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+template <size_t NumOperands,
+          QL_CONCEPT_OR_TYPENAME(
+              ad_utility::isInstantiation<FunctionAndValueGetters>)
+              FunctionAndValueGettersT,
+          QL_CONCEPT_OR_TYPENAME(ad_utility::isInstantiation<
+                                 SpecializedFunction>)... SpecializedFunctions>
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
@@ -366,10 +369,12 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // Return the common logical size of the `SingleExpressionResults`.
 // This is either 1 (in case all the `inputs` are constants) or the
 // size of the `context`.
-template <SingleExpressionResult... Inputs>
-size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
+    size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 
 }  // namespace detail
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H

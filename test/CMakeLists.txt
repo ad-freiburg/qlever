@@ -33,7 +33,7 @@ endfunction()
 # required e.g. if several tests cases write to the same file.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
             TRUE)
 endfunction()
 
@@ -41,7 +41,7 @@ if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
+    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
             TRUE)
 else ()
     message(STATUS "The tests are split over multiple binaries")
@@ -130,7 +130,7 @@ addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
-addLinkAndDiscoverTest(ConcurrentCacheTest)
+addLinkAndDiscoverTestNoLibs(ConcurrentCacheTest)
 
 # This test also seems to use the same filenames and should be fixed.
 addLinkAndDiscoverTestSerial(FileTest)
@@ -225,7 +225,7 @@ addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engi
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(SerializerTest)
 
-addLinkAndDiscoverTest(ParametersTest)
+addLinkAndDiscoverTestNoLibs(ParametersTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
@@ -233,7 +233,7 @@ addLinkAndDiscoverTest(TaskQueueTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
-addLinkAndDiscoverTest(TypeTraitsTest)
+addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
 
 addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
 
@@ -245,7 +245,7 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTest(RdfEscapingTest parser)
 
-addLinkAndDiscoverTest(CompactStringVectorTest)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
@@ -254,16 +254,9 @@ addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
-addLinkAndDiscoverTest(MilestoneIdTest)
-
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
-
-# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
-# makes it impossible to run the test cases for the Index class in parallel.
-# TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
 
@@ -291,7 +284,7 @@ addLinkAndDiscoverTest(TripleComponentTest parser)
 
 addLinkAndDiscoverTest(ValueIdTest util)
 
-addLinkAndDiscoverTest(LambdaHelpersTest)
+addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
 addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
@@ -417,13 +410,13 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
 
-addLinkAndDiscoverTest(CancellationHandleTest util)
+addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
 addLinkAndDiscoverTest(ProgressBarTest util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
-addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 
@@ -455,4 +448,16 @@ addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
+addLinkAndDiscoverTest(ValueGetterTest engine)
+
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
+
+addLinkAndDiscoverTest(SPARQLProtocolTest engine)
+
+addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
+
+addLinkAndDiscoverTest(LruCacheTest)
+
+addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
+
+addLinkAndDiscoverTest(TripleSerializerTest)

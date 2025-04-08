@@ -17,7 +17,8 @@
 // f2(ti<int>); // Minimal visual overhead for specifying the template
 // parameter.
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_TYPEIDENTITY_H
+#define QLEVER_SRC_UTIL_TYPEIDENTITY_H
 
 #include <type_traits>
 
@@ -28,3 +29,5 @@ using TI = std::type_identity<T>;
 template <typename T>
 static constexpr auto ti = TI<T>{};
 }  // namespace ad_utility::use_type_identity
+
+#endif  // QLEVER_SRC_UTIL_TYPEIDENTITY_H

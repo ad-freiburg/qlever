@@ -32,8 +32,9 @@ using valueIdComparators::Comparison;
 
 // First the `idGenerator` for constants (string, int, double). It yields the
 // same ID `targetSize` many times.
-template <SingleExpressionResult S>
-requires isConstantResult<S> auto idGenerator(const S& value, size_t targetSize,
+CPP_template(typename S)(
+    requires SingleExpressionResult<S> CPP_and
+        isConstantResult<S>) auto idGenerator(const S& value, size_t targetSize,
                                               const EvaluationContext* context)
     -> cppcoro::generator<const decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
@@ -45,8 +46,9 @@ requires isConstantResult<S> auto idGenerator(const S& value, size_t targetSize,
 // Version of `idGenerator` for vectors. Asserts that the size of the vector is
 // equal to `targetSize` and the yields the corresponding ID for each of the
 // elements in the vector.
-template <SingleExpressionResult S>
-requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
+CPP_template(typename S)(
+    requires SingleExpressionResult<S> CPP_and
+        isVectorResult<S>) auto idGenerator(const S& values, size_t targetSize,
                                             const EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
   AD_CONTRACT_CHECK(targetSize == values.size());
@@ -58,8 +60,13 @@ requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
 
 // For the `Variable` and `SetOfIntervals` class, the generator from the
 // `sparqlExpressions` module already yields the `ValueIds`.
-template <ad_utility::SimilarToAny<Variable, ad_utility::SetOfIntervals> S>
-auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
+CPP_template(typename S)(
+    requires ad_utility::SimilarToAny<
+        S, Variable,
+        ad_utility::SetOfIntervals>) auto idGenerator(S input,
+                                                      size_t targetSize,
+                                                      const EvaluationContext*
+                                                          context) {
   return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
                                                  context);
 }
@@ -70,9 +77,10 @@ auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
 // `ValueId, vector<ValueId>, Variable`), then `idGenerator`s are returned for
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
-template <SingleExpressionResult S1, SingleExpressionResult S2>
-auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
-                   const EvaluationContext* context) {
+CPP_template(typename S1, typename S2)(
+    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<
+        S2>) auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
+                                const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
                      idGenerator(AD_FWD(value2), targetSize, context)};
@@ -134,9 +142,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
-template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
-requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
-    S1&& value1, S2&& value2, const EvaluationContext* context) {
+CPP_template(Comparison Comp, typename S1, typename S2)(
+    requires SingleExpressionResult<S1> CPP_and SingleExpressionResult<S2>
+        CPP_and AreComparable<S1, S2>) ExpressionResult
+    evaluateRelationalExpression(S1&& value1, S2&& value2,
+                                 const EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -210,17 +220,17 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
 
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
-template <Comparison, typename A, typename B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*)
-    requires StoresBoolean<A> || StoresBoolean<B> {
+CPP_template(Comparison, typename A,
+             typename B)(requires(StoresBoolean<A> || StoresBoolean<B>)) Id
+    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
       "boolean arguments");
 }
 
-template <Comparison Comp, typename A, typename B>
-requires AreIncomparable<A, B>
-Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
+CPP_template(Comparison Comp, typename A,
+             typename B)(requires AreIncomparable<A, B>) Id
+    evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
   // TODO<joka921> We should probably return `undefined` here.
   if constexpr (Comp == Comparison::NE) {
     return Id::makeFromBool(true);
@@ -231,10 +241,12 @@ Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
 
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
-template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires(!AreComparable<A, B> && AreComparable<B, A>)
-ExpressionResult evaluateRelationalExpression(
-    A&& a, B&& b, const EvaluationContext* context) {
+CPP_template(Comparison Comp, typename A, typename B)(
+    requires SingleExpressionResult<A> CPP_and SingleExpressionResult<B> CPP_and
+        CPP_NOT(AreComparable<A, B>)
+            CPP_and AreComparable<B, A>) ExpressionResult
+    evaluateRelationalExpression(A&& a, B&& b,
+                                 const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
       AD_FWD(b), AD_FWD(a), context);
 }
@@ -414,6 +426,35 @@ ExpressionResult InExpression::evaluate(
 }
 
 // _____________________________________________________________________________
+// (1) the provided `SparqlExpression* child` is a direct `Variable` expression
+// (e.g. `?x`), return `<Variable, false>`.
+// (2) the provided `SparqlExpression* child` is an expression `YEAR` which
+// refers to a `Variable` value (e.g. `YEAR(?x)`), return `<Variable, true>`.
+// (3) None of the previous expression cases, return default `std::nullopt`.
+// The `bool` flag is relevant later on to differentiate w.r.t. the logic that
+// needs to be applied for the creation of `PrefilterExpression`.
+static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
+    const SparqlExpression* child) {
+  bool isYear = false;
+  if (child->isYearExpression()) {
+    // The direct child is an expression YEAR();
+    isYear = true;
+    const auto& grandChild = child->children();
+    // The expression YEAR() should by definition hold a single child.
+    AD_CORRECTNESS_CHECK(grandChild.size() == 1);
+    child = grandChild[0].get();
+  }
+  if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
+    // (1) isYear is false: The direct child is already a Variable (expression).
+    // (2) isYear is true: The direct child is expression YEAR(). The actual
+    // pre-filter reference Variable is the child of expression YEAR().
+    return std::make_pair(optVariable.value(), isYear);
+  }
+  // No Variable for pre-filtering available.
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
@@ -425,18 +466,14 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   const auto tryGetPrefilterExprVariablePairVec =
       [](const SparqlExpression* child0, const SparqlExpression* child1,
          bool reversed) -> std::vector<PrefilterExprVariablePair> {
-    const auto* variableExpr = dynamic_cast<const VariableExpression*>(child0);
-    if (!variableExpr) {
-      return {};
-    }
-
+    const auto& optVariableIsYearPair = getOptVariableAndIsYear(child0);
+    if (!optVariableIsYearPair.has_value()) return {};
+    const auto& [variable, prefilterDate] = optVariableIsYearPair.value();
     const auto& optReferenceValue =
         detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
-    if (!optReferenceValue.has_value()) {
-      return {};
-    }
+    if (!optReferenceValue.has_value()) return {};
     return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
-        optReferenceValue.value(), variableExpr->value(), reversed);
+        optReferenceValue.value(), variable, reversed, prefilterDate);
   };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child

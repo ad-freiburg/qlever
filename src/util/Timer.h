@@ -1,7 +1,9 @@
 // Copyright 2011-2023, University of Freiburg, Chair of Algorithms and Data
 // Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-#pragma once
+
+#ifndef QLEVER_SRC_UTIL_TIMER_H
+#define QLEVER_SRC_UTIL_TIMER_H
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -52,8 +54,9 @@ class Timer {
 
   // Convert any `std::chrono::duration` to the underlying `Duration` type
   // of the `Timer` class.
-  template <ad_utility::isInstantiation<chr::duration> T>
-  static Duration toDuration(T duration) {
+  CPP_template(typename T)(
+      requires ad_utility::isInstantiation<T, chr::duration>) static Duration
+      toDuration(T duration) {
     return chr::duration_cast<Duration>(duration);
   }
 
@@ -227,3 +230,5 @@ using detail::TimeBlockAndLog;
 using timer::TimeBlockAndLog;
 using timer::Timer;
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_TIMER_H

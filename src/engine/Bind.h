@@ -2,20 +2,21 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_BIND_H
+#define QLEVER_SRC_ENGINE_BIND_H
 
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
-/// BIND operation, currently only supports a very limited subset of expressions
+// BIND operation.
 class Bind : public Operation {
  public:
   static constexpr size_t CHUNK_SIZE = 10'000;
 
+  // ____________________________________________________________________________
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       parsedQuery::Bind b)
-      : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
+       parsedQuery::Bind b);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -30,8 +31,10 @@ class Bind : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
+  bool supportsLimit() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
@@ -42,7 +45,7 @@ class Bind : public Operation {
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   static IdTable cloneSubView(const IdTable& idTable,
                               const std::pair<size_t, size_t>& subrange);
@@ -54,3 +57,5 @@ class Bind : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_BIND_H

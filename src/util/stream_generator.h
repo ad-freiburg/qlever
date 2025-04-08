@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_STREAM_GENERATOR_H
+#define QLEVER_SRC_UTIL_STREAM_GENERATOR_H
 
 // For some include orders the EOF constant is not defined although `<cstdio>`
 // was included, so we define it manually.
@@ -74,8 +75,8 @@ class stream_generator_promise {
    * @return Whether or not the coroutine should get suspended (currently based
    * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
    */
-  suspend_sometimes yield_value(
-      const ad_utility::Streamable auto& value) noexcept {
+  CPP_template(typename S)(requires ad_utility::Streamable<S>) suspend_sometimes
+      yield_value(const S& value) noexcept {
     // _stream appends its result to _value
     _stream << value;
     return suspend_sometimes{isBufferLargeEnough()};
@@ -261,3 +262,5 @@ stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
 // Use 1MiB buffer size by default
 using stream_generator = basic_stream_generator<1u << 20>;
 }  // namespace ad_utility::streams
+
+#endif  // QLEVER_SRC_UTIL_STREAM_GENERATOR_H

@@ -151,16 +151,13 @@ bool TurtleParser<T>::objectList() {
 // ______________________________________________________
 template <class T>
 bool TurtleParser<T>::verb() {
-  return predicateSpecialA() || predicate();
+  return predicate() || predicateSpecialA();
 }
 
 // ___________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicateSpecialA() {
-  tok_.skipWhitespaceAndComments();
-  if (auto [success, word] = tok_.template getNextToken<TurtleTokenId::A>();
-      success) {
-    (void)word;
+  if (parseTerminal<TurtleTokenId::A>()) {
     activePredicate_ = TripleComponent::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;

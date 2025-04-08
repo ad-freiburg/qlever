@@ -90,6 +90,9 @@ bool SparqlExpression::containsLangExpression() const {
 }
 
 // _____________________________________________________________________________
+bool SparqlExpression::isYearExpression() const { return false; }
+
+// _____________________________________________________________________________
 using LangFilterData = SparqlExpressionPimpl::LangFilterData;
 std::optional<LangFilterData> SparqlExpression::getLanguageFilterExpression()
     const {
@@ -179,5 +182,32 @@ bool SparqlExpression::isInsideAggregate() const {
         "constructor of an aggregate expression");
   }
   return isInsideAggregate_;
+}
+
+// ________________________________________________________________
+bool SparqlExpression::isExistsExpression() const { return false; }
+
+//______________________________________________________________________________
+template <typename SparqlExpressionT>
+void getExistsExpressionsImpl(SparqlExpressionT& self,
+                              std::vector<SparqlExpressionT*>& result) {
+  static_assert(ad_utility::isSimilar<SparqlExpressionT, SparqlExpression>);
+  if (self.isExistsExpression()) {
+    result.push_back(&self);
+  }
+  for (auto& child : self.children()) {
+    child->getExistsExpressions(result);
+  }
+}
+
+//______________________________________________________________________________
+void SparqlExpression::getExistsExpressions(
+    std::vector<const SparqlExpression*>& result) const {
+  getExistsExpressionsImpl(*this, result);
+}
+//______________________________________________________________________________
+void SparqlExpression::getExistsExpressions(
+    std::vector<SparqlExpression*>& result) {
+  getExistsExpressionsImpl(*this, result);
 }
 }  // namespace sparqlExpression

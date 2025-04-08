@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
+#define QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 
 #include <util/Forward.h>
 #include <util/TypeTraits.h>
@@ -58,14 +59,14 @@ struct GetImpl {
 // Implementation of `getIf` (see below).
 template <typename T>
 struct GetIfImpl {
-  template <typename Ptr>
-  requires std::is_pointer_v<std::remove_cvref_t<Ptr>>
-  constexpr decltype(auto) operator()(Ptr& variantPtr) const {
+  CPP_template(typename Ptr)(requires std::is_pointer_v<
+                             std::remove_cvref_t<Ptr>>) constexpr decltype(auto)
+  operator()(Ptr& variantPtr) const {
     return std::get_if<T>(variantPtr);
   }
-  template <typename Ptr>
-  requires(!std::is_pointer_v<std::remove_cvref_t<Ptr>>)
-  constexpr decltype(auto) operator()(Ptr& variant) const {
+  CPP_template(typename Ptr)(requires CPP_NOT(
+      std::is_pointer_v<std::remove_cvref_t<Ptr>>)) constexpr decltype(auto)
+  operator()(Ptr& variant) const {
     return std::get_if<T>(&variant);
   }
 };
@@ -140,3 +141,5 @@ struct Noop {
 [[maybe_unused]] static constexpr Noop noop{};
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H

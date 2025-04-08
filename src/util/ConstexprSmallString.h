@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
+#define QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H
 
 #include <array>
 #include <stdexcept>
@@ -37,7 +38,7 @@ struct ConstexprSmallString {
   }
 
   /// Construct at runtime from a string_view
-  ConstexprSmallString(std::string_view input) : _size(input.size()) {
+  constexpr ConstexprSmallString(std::string_view input) : _size(input.size()) {
     if (input.size() >= MaxSize) {
       throw std::runtime_error{
           "ConstexprSmallString can only be constructed from strings with a "
@@ -89,3 +90,5 @@ struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
   }
 };
 }  // namespace std
+
+#endif  // QLEVER_SRC_UTIL_CONSTEXPRSMALLSTRING_H

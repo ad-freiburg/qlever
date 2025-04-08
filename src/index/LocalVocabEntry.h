@@ -2,10 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
+#define QLEVER_SRC_INDEX_LOCALVOCABENTRY_H
 
 #include <atomic>
 
+#include "backports/algorithm.h"
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
@@ -68,9 +70,10 @@ class alignas(16) LocalVocabEntry
 
   // It suffices to hash the base class `LiteralOrIri` as the position in the
   // vocab is redundant for those purposes.
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<LocalVocabEntry> auto& entry) {
-    return AbslHashValue(std::move(h), static_cast<const Base&>(entry));
+  template <typename H, typename V>
+  friend auto AbslHashValue(H h, const V& entry)
+      -> CPP_ret(H)(requires ranges::same_as<V, LocalVocabEntry>) {
+    return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
   // Comparison between two entries could in theory also be sped up using the
@@ -85,3 +88,5 @@ class alignas(16) LocalVocabEntry
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
+
+#endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

@@ -2,7 +2,8 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_LITERALORIRI_H
+#define QLEVER_SRC_PARSER_LITERALORIRI_H
 
 #include <variant>
 
@@ -24,9 +25,19 @@ class alignas(16) LiteralOrIri {
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
 
+  // Return a modifiable reference to the contained Iri object if available,
+  // throw exception otherwise. Allows the caller to modify the Iri object
+  // e.g. for SubStr in StringExpressions.cpp
+  Iri& getIri();
+
   // Return contained Literal object if available, throw exception
   // otherwise
   const Literal& getLiteral() const;
+
+  // Return a modifiable reference to the contained Literal object if available,
+  // throw exception otherwise. Allows the caller to modify the Literal object
+  // e.g. for SubStr in StringExpressions.cpp
+  Literal& getLiteral();
 
   // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal literal);
@@ -50,9 +61,9 @@ class alignas(16) LiteralOrIri {
       return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
-  template <typename H>
-  friend H AbslHashValue(H h,
-                         const std::same_as<LiteralOrIri> auto& literalOrIri) {
+  CPP_template(typename H,
+               typename L)(requires std::same_as<L, LiteralOrIri>) friend H
+      AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }
   bool operator==(const LiteralOrIri&) const = default;
@@ -128,3 +139,5 @@ class alignas(16) LiteralOrIri {
 };
 
 }  // namespace ad_utility::triple_component
+
+#endif  // QLEVER_SRC_PARSER_LITERALORIRI_H

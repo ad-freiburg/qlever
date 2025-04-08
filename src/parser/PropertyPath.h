@@ -1,54 +1,55 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
 
+#ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
+#define QLEVER_SRC_PARSER_PROPERTYPATH_H
+
+#include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <vector>
 
 #include "data/Variable.h"
 
-using std::string;
-using std::vector;
-
 class PropertyPath {
  public:
-  enum class Operation {
+  enum class Operation : std::uint8_t {
     SEQUENCE,
     ALTERNATIVE,
     INVERSE,
     IRI,
     ZERO_OR_MORE,
     ONE_OR_MORE,
-    ZERO_OR_ONE
+    ZERO_OR_ONE,
+    NEGATED
   };
 
-  PropertyPath() : _operation(Operation::IRI) {}
-  explicit PropertyPath(Operation op) : _operation(op) {
+  PropertyPath() : operation_(Operation::IRI) {}
+  explicit PropertyPath(Operation op) : operation_(op) {
     if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
-      can_be_null_ = true;
+      canBeNull_ = true;
     }
   }
   PropertyPath(Operation op, std::string iri,
                std::initializer_list<PropertyPath> children);
 
   static PropertyPath fromIri(std::string iri) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(iri);
+    PropertyPath p(Operation::IRI);
+    p.iri_ = std::move(iri);
     return p;
   }
 
-  static PropertyPath fromVariable(Variable var) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(var.name());
+  static PropertyPath fromVariable(const Variable& var) {
+    PropertyPath p(Operation::IRI);
+    p.iri_ = var.name();
     return p;
   }
 
   static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
-                                       PropertyPath::Operation op) {
-    PropertyPath p(std::move(op));
-    p._children = std::move(children);
+                                       const Operation op) {
+    PropertyPath p(op);
+    p.children_ = std::move(children);
     return p;
   }
 
@@ -95,6 +96,10 @@ class PropertyPath {
     return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
   }
 
+  static PropertyPath makeNegated(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::NEGATED);
+  }
+
   bool operator==(const PropertyPath& other) const = default;
 
   void writeToStream(std::ostream& out) const;
@@ -107,16 +112,18 @@ class PropertyPath {
   [[nodiscard]] const std::string& getIri() const;
   bool isIri() const;
 
-  Operation _operation;
+  Operation operation_;
 
   // In case of an iri
-  std::string _iri;
+  std::string iri_;
 
-  std::vector<PropertyPath> _children;
+  std::vector<PropertyPath> children_;
 
   /**
    * True iff this property path is either a transitive path with minimum length
    * of 0, or if all of this transitive path's children can be null.
    */
-  bool can_be_null_ = false;
+  bool canBeNull_ = false;
 };
+
+#endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

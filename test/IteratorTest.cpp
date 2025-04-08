@@ -171,6 +171,29 @@ TEST(Iterator, InputRangeFromGet) {
   };
   testIota(makeIota);
 }
+
+//_____________________________________________________________________________
+TEST(Iterator, InputRangeFromGetCallable) {
+  using namespace ad_utility;
+  auto makeLambda = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return [value = lower, upper]() mutable -> std::optional<size_t> {
+      if (value == upper) {
+        return std::nullopt;
+      }
+      return value++;
+    };
+  };
+  auto makeIota = [&makeLambda](size_t lower = 0,
+                                std::optional<size_t> upper = {}) {
+    return InputRangeFromGetCallable{makeLambda(lower, upper)};
+    /*
+    return InputRangeFromGetCallable<size_t, decltype(makeLambda(0, 3))>{
+        makeLambda(lower, upper)};
+        */
+  };
+  testIota(makeIota);
+}
+
 //_____________________________________________________________________________
 TEST(Iterator, InputRangeTypeErased) {
   using namespace ad_utility;

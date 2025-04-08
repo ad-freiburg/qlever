@@ -5,6 +5,7 @@
 #ifndef QLEVER_SERIALIZEVECTOR_H
 #define QLEVER_SERIALIZEVECTOR_H
 
+#include <cstdint>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -36,8 +37,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
 
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
-template <typename T, WriteSerializer Serializer>
-class VectorIncrementalSerializer {
+CPP_template(typename T, typename Serializer)(
+    requires WriteSerializer<Serializer>) class VectorIncrementalSerializer {
  private:
   Serializer _serializer;
   uint64_t _startPosition;

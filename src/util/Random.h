@@ -4,7 +4,8 @@
 
 // Simple interfaces for the random facilities from the STL
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_RANDOM_H
+#define QLEVER_SRC_UTIL_RANDOM_H
 
 #include <array>
 #include <boost/uuid/uuid_generators.hpp>
@@ -31,9 +32,8 @@ using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
  * match (because of the std::enable_if) and there will be a compile-time
  * error.
  */
-template <typename Int>
-requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
-class FastRandomIntGenerator {
+CPP_template(typename Int)(requires std::is_integral_v<Int> CPP_and(
+    sizeof(Int) <= sizeof(uint64_t))) class FastRandomIntGenerator {
  public:
   explicit FastRandomIntGenerator(
       RandomSeed seed = RandomSeed::make(std::random_device{}())) {
@@ -129,3 +129,5 @@ void randomShuffle(RandomIt begin, RandomIt end,
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_RANDOM_H

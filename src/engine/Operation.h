@@ -3,7 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_OPERATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_H
 
 #include <gtest/gtest_prod.h>
 
@@ -309,12 +310,20 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ProtoResult computeResultOnlyForTesting(
+  virtual Result computeResultOnlyForTesting(
       bool requestLaziness = false) final {
     return computeResult(requestLaziness);
   }
 
   const auto& getLimit() const { return _limit; }
+
+ private:
+  // Actual implementation of `clone()` without extra checks.
+  virtual std::unique_ptr<Operation> cloneImpl() const = 0;
+
+ public:
+  // Create a deep copy of this operation.
+  std::unique_ptr<Operation> clone() const;
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -358,7 +367,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ProtoResult computeResult(bool requestLaziness) = 0;
+  virtual Result computeResult(bool requestLaziness) = 0;
 
   // Update the runtime information of this operation according to the given
   // arguments, considering the possibility that the initial runtime information
@@ -376,15 +385,15 @@ class Operation {
   // `Operation`. The value provided by `computationMode` decides if lazy
   // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
   // an `ad_utility::Exception`.
-  ProtoResult runComputation(const ad_utility::Timer& timer,
-                             ComputationMode computationMode);
+  Result runComputation(const ad_utility::Timer& timer,
+                        ComputationMode computationMode);
 
   // Call `runComputation` and transform it into a value that could be inserted
   // into the cache.
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
                                               const QueryCacheKey& cacheKey,
-                                              bool pinned);
+                                              bool pinned, bool isRoot);
 
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
@@ -454,4 +463,7 @@ class Operation {
   FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
+  FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };
+
+#endif  // QLEVER_SRC_ENGINE_OPERATION_H

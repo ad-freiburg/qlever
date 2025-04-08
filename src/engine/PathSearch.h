@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_PATHSEARCH_H
+#define QLEVER_SRC_ENGINE_PATHSEARCH_H
 
 #include <memory>
 #include <optional>
@@ -253,6 +254,8 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
 
   /**
@@ -283,3 +286,5 @@ class PathSearch : public Operation {
   void pathsToResultTable(IdTable& tableDyn, pathSearch::PathsLimited& paths,
                           const pathSearch::BinSearchWrapper& binSearch) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_PATHSEARCH_H

@@ -2,12 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
+#define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
@@ -99,9 +101,15 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
 
+// Compress src using zstd and write compressed bytes to file while advancing
+// currentOffset by the nofBytes written
+template <typename T>
+void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+                      off_t& currentOffset);
+
 /**
  * @brief Writes posting to given file. It splits the vector of postings into
- *        the lists for each respetive tuple element of postings.
+ *        the lists for each respective tuple element of postings.
  *        The TextRecordIndex list gets gap encoded and then simple8b encoded
  *        before being written to file. The WordIndex and Score lists get
  *        frequency encoded and then simple8b encoded before being written to
@@ -120,7 +128,7 @@ namespace textIndexReadWrite {
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset);
+                                  off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>
 size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
@@ -137,6 +145,17 @@ template <typename T>
 void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset);
+
+template <typename T>
+vector<T> readZstdComprList(size_t nofElements, off_t from,
+                            size_t nofBytesCompressed,
+                            const ad_utility::File& textIndexFile) {
+  std::vector<char> compressed(nofBytesCompressed);
+  size_t ret = textIndexFile.read(compressed.data(), nofBytesCompressed, from);
+  AD_CONTRACT_CHECK(ret == nofBytesCompressed);
+  return ZstdWrapper::decompress<T>(compressed.data(), nofBytesCompressed,
+                                    nofElements);
+}
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
@@ -277,7 +296,7 @@ class FrequencyEncode {
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
-      !std::same_as<
+      !ranges::same_as<
           FrequencyEncode,
           std::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
     initialize(std::forward<View>(view));
@@ -331,9 +350,8 @@ class GapEncode {
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
-      !std::same_as<GapEncode,
-                    std::remove_cvref_t<View>>)) explicit GapEncode(View&&
-                                                                        view) {
+      !ranges::same_as<GapEncode, std::remove_cvref_t<
+                                      View>>)) explicit GapEncode(View&& view) {
     initialize(std::forward<View>(view));
   };
 
@@ -359,3 +377,5 @@ class GapEncode {
 template <typename View>
 GapEncode(View&& view)
     -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
+
+#endif  // QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
