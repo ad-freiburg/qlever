@@ -38,8 +38,7 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
 // ____________________________________________________________________________
 util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
     bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
-    std::shared_ptr<const Result> result, sj::Sweeper& sweeper,
-    size_t numThreads) const {
+    sj::Sweeper& sweeper, size_t numThreads) const {
   // Initialize the parser.
   sj::WKTParser parser(&sweeper, numThreads);
 
@@ -367,17 +366,15 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // inflated for `WITHIN_DIST` joins) and only add those geometries from the
   // larger table that intersect this bounding box.
   if (idTableLeft->size() < idTableRight->size()) {
-    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, resultLeft,
-                                   sweeper, NUM_THREADS);
+    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper,
+                                   NUM_THREADS);
     sweeper.setFilterBox(box);
-    libspatialjoinParse(true, idTableRight, rightJoinCol, resultRight, sweeper,
-                        NUM_THREADS);
+    libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
   } else {
-    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol,
-                                   resultRight, sweeper, NUM_THREADS);
+    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
+                                   NUM_THREADS);
     sweeper.setFilterBox(box);
-    libspatialjoinParse(false, idTableLeft, leftJoinCol, resultLeft, sweeper,
-                        NUM_THREADS);
+    libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
   }
 
   // Flush the geometry caches and the sweepline event list cache to disk and

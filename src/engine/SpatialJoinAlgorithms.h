@@ -209,7 +209,6 @@ class SpatialJoinAlgorithms {
   util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
                                         const IdTable* idTable,
                                         ColumnIndex column,
-                                        std::shared_ptr<const Result> result,
                                         sj::Sweeper& sweeper,
                                         size_t numThreads) const;
 
