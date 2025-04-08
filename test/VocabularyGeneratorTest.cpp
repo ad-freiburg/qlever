@@ -25,6 +25,8 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 
   for (size_t i = 0; i < a.size(); ++i) {
     if (a[i] != b[i]) {
+      LOG(ERROR) << a[i].first << " " << a[i].second << " != " << b[i].first
+                 << " " << b[i].second << std::endl;
       return false;
     }
   }
@@ -178,11 +180,21 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   std::vector<std::pair<std::string, bool>> mergeResult;
   std::vector<std::pair<std::string, bool>> geoMergeResult;
   {
+    // Simulate Vocabulary::WordWriter::operation() for testing purposes
     auto internalVocabularyAction =
-        [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
-          mergeResult.emplace_back(word, isExternal);
-          return mergeResult.size() - 1;
-        };
+        [&mergeResult, &geoMergeResult](
+            const auto& word, [[maybe_unused]] bool isExternal) -> uint64_t {
+      if (word.starts_with("\"") &&
+          word.ends_with(
+              "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
+        geoMergeResult.emplace_back(word, isExternal);
+        return (geoMergeResult.size() - 1) | (1ull << 59);
+      } else {
+        mergeResult.emplace_back(word, isExternal);
+        return mergeResult.size() - 1;
+      }
+    };
+
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, 1_GB);
   }
