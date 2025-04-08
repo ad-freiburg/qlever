@@ -272,7 +272,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
   auto locatedTriples = LocatedTriplesPerBlock{};
   auto loc = LocatedTriple::locateTriplesInPermutation(
-      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+      locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();
@@ -847,8 +847,10 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
         perm.permutation());
     auto [actual_lower, actual_upper] =
         reader.getSizeEstimateForScan(scanSpec, augmentedBlocks, ltpb);
-    EXPECT_THAT(actual_lower, testing::Eq(lower));
-    EXPECT_THAT(actual_upper, testing::Eq(upper));
+    EXPECT_THAT(actual_lower, testing::Eq(lower))
+        << "Permutation: " << static_cast<int>(p);
+    EXPECT_THAT(actual_upper, testing::Eq(upper))
+        << "Permutation: " << static_cast<int>(p);
     auto actual_exact =
         reader.getResultSizeOfScan(scanSpec, augmentedBlocks, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));

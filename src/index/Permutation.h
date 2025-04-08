@@ -28,7 +28,8 @@ struct LocatedTriplesSnapshot;
 // STXXL.
 class Permutation {
  public:
-  // TODO<joka921> comment.
+  // TODO<joka921> comment
+  // TODO<joka921> Make this a strong type, s.t. the invariants are met...
   using KeyOrder = std::array<size_t, 4>;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP, GPSO, GPOS };

@@ -177,7 +177,10 @@ TEST(ServerTest, createResponseMetadata) {
       {"OSP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
       {"SOP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
       {"PSO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
-      {"OPS", {{"blocks-affected", 1}, {"blocks-total", 1}}}};
+      {"OPS", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"GPOS", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"GPSO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+  };
   EXPECT_THAT(metadata["update"], testing::Eq(update));
   EXPECT_THAT(metadata["status"], testing::Eq("OK"));
   EXPECT_THAT(metadata["warnings"],

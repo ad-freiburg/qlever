@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
 
+#include <absl/container/inlined_vector.h>
+
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
@@ -14,6 +16,9 @@
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/Synchronized.h"
+
+// Forward declaration to break cyclic dependencies
+class IndexImpl;
 
 // Typedef for one `LocatedTriplesPerBlock` object for each of the six
 // permutations.
@@ -103,8 +108,9 @@ class DeltaTriples {
   static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
   static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
   static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
-  // TODO<joka921> Adapt this here.
-  // static_assert(Permutation::ALL.size() == 6);
+  static_assert(static_cast<int>(Permutation::Enum::GPSO) == 6);
+  static_assert(static_cast<int>(Permutation::Enum::GPOS) == 7);
+  static_assert(Permutation::ALL.size() == 8);
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
@@ -124,10 +130,18 @@ class DeltaTriples {
   TriplesToHandlesMap triplesInserted_;
   TriplesToHandlesMap triplesDeleted_;
 
+  // The subset of permutations that is actually loaded in the `index_` and
+  // therefore has to be updated. Note that it is fine to for example load an
+  // index with only two permutations, perform some updates, and then reload the
+  // index with all permutations, because the distribution of the updates to the
+  // located triples per permutation is reapplied when the engine is started.
+  absl::InlinedVector<Permutation::Enum, Permutation::ALL.size()>
+      loadedPermutations_;
+
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index);
-  explicit DeltaTriples(const IndexImpl& index) : index_{index} {}
+  explicit DeltaTriples(const IndexImpl& index);
 
   // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
@@ -187,6 +201,12 @@ class DeltaTriples {
   void setOriginalMetadata(
       Permutation::Enum permutation,
       std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
+
+  // Has to be called after the `Index` with which this instance of the delta
+  // triples is associated has been loaded (but before reading the delta triples
+  // from disk) to inform the `DeltaTriples` about which permutations are
+  // actually loaded.
+  void setLoadedPermutations();
 
  private:
   // Find the position of the given triple in the given permutation and add it

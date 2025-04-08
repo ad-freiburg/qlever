@@ -969,6 +969,11 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
       usePatterns_ = false;
     }
   }
+
+  // As it would be wrong to write the delta triples to disk at this point
+  // (because they haven't even been loaded), the second argument is `false`.
+  deltaTriples_.value().modify<void>(&DeltaTriples::setLoadedPermutations,
+                                     false);
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
