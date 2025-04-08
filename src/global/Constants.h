@@ -155,7 +155,6 @@ constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
-constexpr inline std::string_view GEO_VOCAB_SUFFIX = ".geo-vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";
 
