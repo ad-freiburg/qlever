@@ -2,12 +2,16 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 #define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
+#include <util/TransparentFunctors.h>
+
 #include <limits>
 #include <memory>
+#include <vector>
 
 #include "engine/PathSearch.h"
 #include "engine/SpatialJoin.h"
@@ -170,8 +174,14 @@ struct Bind {
   Variable _target;  // the variable to which the expression will be bound
 
   // Return all the variables that are used in the BIND expression (the target
-  // variable as well as all variables from the expression).
-  cppcoro::generator<const Variable> containedVariables() const;
+  // variable as well as all variables from the expression). The lifetime of the
+  // resulting `view` is bound to the lifetime of this `Bind` instance.
+  auto containedVariables() const {
+    auto result = _expression.containedVariables();
+    result.push_back(&_target);
+    return ad_utility::OwningView{std::move(result)} |
+           ql::views::transform(ad_utility::dereference);
+  }
 
   [[nodiscard]] string getDescriptor() const;
 };
