@@ -37,6 +37,9 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit);
 
+// Convert a unit IRI string (without quotes or brackets) to unit.
+UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.

@@ -74,6 +74,18 @@ double kilometerToUnit(double kilometers,
   return multiplicator * kilometers;
 }
 
+// ____________________________________________________________________________
+UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
+  if (iri == UNIT_METER_IRI) {
+    return UnitOfMeasurement::METERS;
+  } else if (iri == UNIT_KILOMETER_IRI) {
+    return UnitOfMeasurement::KILOMETERS;
+  } else if (iri == UNIT_MILE_IRI) {
+    return UnitOfMeasurement::MILES;
+  }
+  return UnitOfMeasurement::UNKNOWN;
+}
+
 }  // namespace detail
 
 }  // namespace ad_utility
