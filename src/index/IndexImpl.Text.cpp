@@ -15,8 +15,6 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "engine/CallFixedSize.h"
-#include "global/Constants.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"

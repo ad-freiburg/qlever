@@ -18,7 +18,6 @@
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "global/Constants.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
