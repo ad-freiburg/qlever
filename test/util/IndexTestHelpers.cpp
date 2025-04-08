@@ -144,8 +144,9 @@ Index makeTestIndex(const std::string& indexBasename,
                     [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex, bool addWordsFromLiterals,
-                    std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsFile,
+                    bool useDocsFileForVocab, bool addEntitiesFromWordsFile,
+                    std::optional<std::string> contentsOfWordsFile,
+                    std::optional<std::string> contentsOfDocsFile,
                     ad_utility::MemorySize parserBufferSize,
                     std::optional<TextScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam,
@@ -204,15 +205,17 @@ Index makeTestIndex(const std::string& indexBasename,
               bAndKParam.value().second);
         }
       }
-      if (contentsOfWordsFileAndDocsFile.has_value()) {
+      if (contentsOfDocsFile.has_value() &&
+          (contentsOfWordsFile.has_value() || useDocsFileForVocab)) {
+        AD_CONTRACT_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocab);
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(contentsOfWordsFileAndDocsFile.value().first.c_str(),
-                        contentsOfWordsFileAndDocsFile.value().first.size());
-        docsFile.write(contentsOfWordsFileAndDocsFile.value().second.c_str(),
-                       contentsOfWordsFileAndDocsFile.value().second.size());
+        wordsFile.write(contentsOfWordsFile.value().c_str(),
+                        contentsOfWordsFile.value().size());
+        docsFile.write(contentsOfDocsFile.value().c_str(),
+                       contentsOfDocsFile.value().size());
         wordsFile.close();
         docsFile.close();
         index.setKbName(indexBasename);
@@ -220,18 +223,16 @@ Index makeTestIndex(const std::string& indexBasename,
         index.setOnDiskBase(indexBasename);
         if (addWordsFromLiterals) {
           index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              true);
+              indexBasename + ".wordsfile", indexBasename + ".docsfile", true,
+              useDocsFileForVocab, addEntitiesFromWordsFile);
         } else {
           index.buildTextIndexFile(
-              std::pair<std::string, std::string>{indexBasename + ".wordsfile",
-                                                  indexBasename + ".docsfile"},
-              false);
+              indexBasename + ".wordsfile", indexBasename + ".docsfile", false,
+              useDocsFileForVocab, addEntitiesFromWordsFile);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(std::nullopt, true);
+        index.buildTextIndexFile(std::nullopt, std::nullopt, true, false);
       }
     }
   }
@@ -268,8 +269,10 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool usePrefixCompression,
                               ad_utility::MemorySize blocksizePermutations,
                               bool createTextIndex, bool addWordsFromLiterals,
-                              std::optional<std::pair<std::string, std::string>>
-                                  contentsOfWordsFileAndDocsFile,
+                              bool useDocsFileForVocab,
+                              bool addEntitiesFromWordsFile,
+                              std::optional<std::string> contentsOfWordsFile,
+                              std::optional<std::string> contentsOfDocsFile,
                               ad_utility::MemorySize parserBufferSize,
                               std::optional<TextScoringMetric> scoringMetric,
                               std::optional<std::pair<float, float>> bAndKParam,
@@ -310,14 +313,16 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
   };
 
   using Key = std::tuple<
-      std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
-      std::optional<std::pair<std::string, std::string>>,
+      std::optional<string>, bool, bool, bool, ad_utility::MemorySize, bool,
+      bool, bool, std::optional<string>, std::optional<string>,
       std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput,           loadAllPermutations,
                  usePatterns,           usePrefixCompression,
-                 blocksizePermutations, contentsOfWordsFileAndDocsFile,
+                 blocksizePermutations, addWordsFromLiterals,
+                 useDocsFileForVocab,   addEntitiesFromWordsFile,
+                 contentsOfWordsFile,   contentsOfDocsFile,
                  scoringMetric,         bAndKParam};
 
   if (!contextMap.contains(key)) {
@@ -337,9 +342,10 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                 std::make_unique<Index>(makeTestIndex(
                     testIndexBasename, turtleInput, loadAllPermutations,
                     usePatterns, usePrefixCompression, blocksizePermutations,
-                    createTextIndex, addWordsFromLiterals,
-                    contentsOfWordsFileAndDocsFile, parserBufferSize,
-                    scoringMetric, bAndKParam, indexType)),
+                    createTextIndex, addWordsFromLiterals, useDocsFileForVocab,
+                    addEntitiesFromWordsFile, contentsOfWordsFile,
+                    contentsOfDocsFile, parserBufferSize, scoringMetric,
+                    bAndKParam, indexType)),
                 std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();

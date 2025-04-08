@@ -22,13 +22,14 @@ namespace textIndexScanTestHelpers {
 inline std::string getTextRecordFromResultTable(
     const QueryExecutionContext* qec, const Result& result,
     const size_t& rowIndex) {
-  size_t nofNonLiterals = qec->getIndex().getNofNonLiteralsInTextIndex();
+  size_t lastTextRecordIndexOfNonLiterals =
+      qec->getIndex().getLastTextRecordIndexOfNonLiterals();
   uint64_t textRecordIdFromTable =
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
-  if (nofNonLiterals <= textRecordIdFromTable) {
+  if (lastTextRecordIndexOfNonLiterals < textRecordIdFromTable) {
     // Return when from Literals
-    return qec->getIndex().indexToString(
-        VocabIndex::make(textRecordIdFromTable - nofNonLiterals));
+    return qec->getIndex().indexToString(VocabIndex::make(
+        textRecordIdFromTable - (lastTextRecordIndexOfNonLiterals + 1)));
   } else {
     // Return when from DocsDB
     return qec->getIndex().getTextExcerpt(
