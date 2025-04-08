@@ -1,6 +1,7 @@
-// Copyright 2022, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -130,4 +131,24 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   ASSERT_NEAR(
       ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::MILES),
       0.62137119, 0.0001);
+}
+
+TEST(GeoSparqlHelpers, IriToUnit) {
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(""),
+            UnitOfMeasurement::UNKNOWN);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement("http://example.com"),
+            UnitOfMeasurement::UNKNOWN);
+  ASSERT_EQ(
+      ad_utility::detail::iriToUnitOfMeasurement("http://qudt.org/vocab/unit/"),
+      UnitOfMeasurement::UNKNOWN);
+
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/M"),
+            UnitOfMeasurement::METERS);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/KiloM"),
+            UnitOfMeasurement::KILOMETERS);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/MI"),
+            UnitOfMeasurement::MILES);
 }

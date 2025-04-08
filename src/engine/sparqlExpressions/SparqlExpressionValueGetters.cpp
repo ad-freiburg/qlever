@@ -339,7 +339,8 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
             auto lit =
                 ad_utility::triple_component::Literal::fromStringRepresentation(
                     content);
-            if (asStringViewUnsafe(lit.getDatatype()) == XSD_ANYURI_TYPE) {
+            if (lit.hasDatatype() &&
+                asStringViewUnsafe(lit.getDatatype()) == XSD_ANYURI_TYPE) {
               unit = asStringViewUnsafe(lit.getContent());
             }
           } else if (content.starts_with("<")) {
@@ -361,7 +362,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
   // of measurement. Because this is a rather obscure requirement, we support
   // IRIs also.
   if (s.isIri() ||
-      (s.isLiteral() &&
+      (s.isLiteral() && s.getLiteral().hasDatatype() &&
        asStringViewUnsafe(s.getLiteral().getDatatype()) == XSD_ANYURI_TYPE)) {
     return ad_utility::detail::iriToUnitOfMeasurement(
         asStringViewUnsafe(s.getContent()));

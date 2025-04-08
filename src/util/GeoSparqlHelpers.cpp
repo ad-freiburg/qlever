@@ -1,6 +1,7 @@
-// Copyright 2022, University of Freiburg,
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "./GeoSparqlHelpers.h"
 
