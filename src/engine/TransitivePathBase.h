@@ -248,6 +248,11 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol, bool yieldOnce,
                                           size_t skipCol = 0) const;
 
+  // Return an execution tree that represents one side of an empty path. This is
+  // used as a starting point for evaluating the empty path.
+  static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
+      QueryExecutionContext* qec, const Graphs& activeGraphs);
+
  public:
   size_t getCostEstimate() override;
 

@@ -45,34 +45,39 @@ TransitivePathBase::TransitivePathBase(
   }
   if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
     emptyPathBound_ = true;
-    auto makeInternalVariable = [](std::string_view string) {
-      return Variable{
-          absl::StrCat("?internal_property_path_variable_", string)};
-    };
-    // Dummy variables to get a full scan of the index.
-    auto x = makeInternalVariable("x");
-    auto y = makeInternalVariable("y");
-    auto z = makeInternalVariable("z");
-    auto allValues = ad_utility::makeExecutionTree<Union>(
-        qec,
-        ad_utility::makeExecutionTree<IndexScan>(
-            qec, Permutation::Enum::SPO,
-            SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                         TripleComponent{z}},
-            activeGraphs),
-        ad_utility::makeExecutionTree<IndexScan>(
-            qec, Permutation::Enum::OPS,
-            SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                         TripleComponent{x}},
-            activeGraphs));
-    auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
-        qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
-        std::vector<ColumnIndex>{0});
-    lhs_.treeAndCol_.emplace(uniqueValues, 0);
+    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs), 0);
   }
 
   lhs_.outputCol_ = 0;
   rhs_.outputCol_ = 1;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
+    QueryExecutionContext* qec, const Graphs& activeGraphs) {
+  auto makeInternalVariable = [](std::string_view string) {
+    return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+  };
+  // Dummy variables to get a full scan of the index.
+  auto x = makeInternalVariable("x");
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+  auto allValues = ad_utility::makeExecutionTree<Union>(
+      qec,
+      ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
+                       TripleComponent{z}},
+          activeGraphs),
+      ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
+                       TripleComponent{x}},
+          activeGraphs));
+  auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
+      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
+      std::vector<ColumnIndex>{0});
+  return uniqueValues;
 }
 
 // _____________________________________________________________________________
