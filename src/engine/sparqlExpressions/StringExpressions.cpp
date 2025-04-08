@@ -384,7 +384,8 @@ template <bool isStrAfter>
   //  If the pattern has a language tag and the literal does not have the same
   //  language tag, then throw an error.
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
-  if ((optPattern.value().languageTag() && !literal.value().hasLanguageTag()) ||
+  if ((optPattern.value().haslanguageTag() &&
+       !literal.value().hasLanguageTag()) ||
       (optPattern.value().hasLanguageTag() &&
        literal.value().hasLanguageTag() &&
        literal.value().getLanguageTag() !=

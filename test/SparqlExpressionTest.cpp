@@ -771,6 +771,13 @@ TEST(SparqlExpression, binaryStringOperations) {
       },
       ad_utility::Exception);
 
+  EXPECT_THROW(
+      {
+        sparqlExpression::detail::string_expressions::strAfter(
+            lit("abc").getLiteral(), lit("abc", "@fr").getLiteral());
+      },
+      ad_utility::Exception);
+
   checkStrBefore(
       S({"", "", "", "", "Hä", "", "", "Hä"}),
       S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
@@ -795,6 +802,13 @@ TEST(SparqlExpression, binaryStringOperations) {
       {
         sparqlExpression::detail::string_expressions::strBefore(
             lit("abc", "@en").getLiteral(), lit("abc", "@fr").getLiteral());
+      },
+      ad_utility::Exception);
+
+  EXPECT_THROW(
+      {
+        sparqlExpression::detail::string_expressions::strBefore(
+            lit("abc").getLiteral(), lit("abc", "@fr").getLiteral());
       },
       ad_utility::Exception);
 }
