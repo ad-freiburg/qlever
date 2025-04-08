@@ -1443,10 +1443,13 @@ TEST(SparqlExpression, concatExpression) {
                          IdOrLiteralOrIri{lit("World", "@en")}});
 
   checkConcat(
-      IdOrLiteralOrIriVec{lit("HelloWorld!"), lit("HalloWorld!")},
+      IdOrLiteralOrIriVec{lit("HelloWorld!", "@en"), lit("HalloWorld!"),
+         lit("HelloWorld?"), lit("HalloWorld?"),
+          lit("HelloWorld!"), lit("HalloWorld!"),
+           lit("HelloWorldSTR"), lit("HalloWorldSTR")},
       std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hallo", "@de")},
                  IdOrLiteralOrIri{lit("World", "@en")},
-                 IdOrLiteralOrIri{lit("!", "@fr")}});
+                 IdOrLiteralOrIriVec{lit("!", "@en"), lit("?"), lit("!", "@fr"), lit("STR", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
 }
 
 // ______________________________________________________________________________
