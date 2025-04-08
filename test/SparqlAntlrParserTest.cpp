@@ -1869,8 +1869,6 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeLongitudeExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
-  expectFunctionCall(absl::StrCat(ql, "isGeoLiteral>(?x)"),
-                     matchUnary(&makeIsGeoLiteralExpression));
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
