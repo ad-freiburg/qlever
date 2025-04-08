@@ -758,9 +758,9 @@ TEST(SparqlExpression, binaryStringOperations) {
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-          lit("", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
       IdOrLiteralOrIriVec{
-          lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("abc", "@en"),
+          lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
           lit("z", "@en"),
           lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
 
