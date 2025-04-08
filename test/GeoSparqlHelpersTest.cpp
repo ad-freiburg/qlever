@@ -94,4 +94,40 @@ TEST(GeoSparqlHelpers, WktDist) {
       261.658, 0.01);
   ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
               421098, 1);
+
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, eiffeltower, UnitOfMeasurement::METERS),
+      0, 0.01);
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, eiffeltower, UnitOfMeasurement::MILES), 0,
+      0.01);
+}
+
+TEST(GeoSparqlHelpers, KmToUnit) {
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(0.0, std::nullopt), 0.0,
+              0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::KILOMETERS),
+      0.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::METERS), 0.0,
+      0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::MILES), 0.0,
+      0.0001);
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(
+                  -500.0, UnitOfMeasurement::KILOMETERS),
+              -500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(-500.0, std::nullopt), -500.0,
+              0.0001);
+
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(500.0, UnitOfMeasurement::METERS),
+      500000.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(500.0, UnitOfMeasurement::MILES),
+      310.685595, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::MILES),
+      0.62137119, 0.0001);
 }
