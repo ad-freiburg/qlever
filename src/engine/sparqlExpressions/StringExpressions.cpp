@@ -379,7 +379,7 @@ using MergeRegexPatternAndFlagsExpression =
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
   s.value().replaceContent(in);
-  return std::move(s.value());
+  return LiteralOrIri(std::move(s.value()));
 };
 
 using ReplaceExpression =
