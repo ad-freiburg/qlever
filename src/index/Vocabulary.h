@@ -28,6 +28,7 @@
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -119,8 +120,11 @@ class Vocabulary {
   // determine whether the word is stored in the normal vocabulary or the
   // geometry vocabulary.
   static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
-  static constexpr uint64_t geoVocabMarkerInvert = ~geoVocabMarker;
+  static constexpr uint64_t geoVocabIndexMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits - 1);
   static constexpr uint64_t maxWordIndex = geoVocabMarker - 1;
+
+  static constexpr std::string_view geoVocabSuffix = ".geometries";
 
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
@@ -154,8 +158,7 @@ class Vocabulary {
 
   //! Read the vocabulary from files containing words and geometries
   //! respectively.
-  void readFromFile(const string& fileName,
-                    const std::optional<string>& geoFileName);
+  void readFromFile(const string& fileName);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -188,8 +191,7 @@ class Vocabulary {
 
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set,
-                     const std::string& filename,
-                     const std::optional<std::string>& geoFileName);
+                     const std::string& filename);
 
   static bool stringIsLiteral(std::string_view s);
 
@@ -256,8 +258,6 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
-
-  static constexpr std::string_view geoVocabSuffix = ".geometries";
 
   // This word writer writes words to different vocabularies depending on their
   // content.

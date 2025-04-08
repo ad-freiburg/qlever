@@ -20,7 +20,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     auto filename = "vocTest1.dat";
-    v.createFromSet(s, filename, std::nullopt);
+    v.createFromSet(s, filename);
     WordVocabIndex idx;
     ASSERT_TRUE(v.getId("ba", &idx));
     ASSERT_EQ(2u, idx.get());
@@ -35,7 +35,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   auto filename = "vocTest2.dat";
-  voc.createFromSet(s2, filename, std::nullopt);
+  voc.createFromSet(s2, filename);
   WordVocabIndex idx;
   ASSERT_TRUE(voc.getId("Ba", &idx));
   ASSERT_EQ(2u, idx.get());
@@ -51,7 +51,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
                                 "wordB4"};
   auto filename = "vocTest3.dat";
-  v.createFromSet(s, filename, std::nullopt);
+  v.createFromSet(s, filename);
 
   uint64_t word0 = 0;
   // Match exactly one
@@ -98,8 +98,7 @@ TEST(VocabularyTest, createFromSetTest) {
 
   TextVocabulary v;
   auto filename = "vocTest4.dat";
-  auto geoFilename = "vocTest4-geo.dat";
-  v.createFromSet(s, filename, geoFilename);
+  v.createFromSet(s, filename);
 
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
@@ -122,7 +121,6 @@ TEST(VocabularyTest, createFromSetTest) {
   ASSERT_EQ((static_cast<uint64_t>(1) << 59) | 1, idx.get());
 
   ad_utility::deleteFile(filename);
-  ad_utility::deleteFile(geoFilename);
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
@@ -141,7 +139,7 @@ TEST(Vocabulary, PrefixFilter) {
   words.insert("\"ext\"");
   words.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
   auto filename = "vocTest5.dat";
-  vocabulary.createFromSet(words, filename, std::nullopt);
+  vocabulary.createFromSet(words, filename);
 
   // Found in internal but not in external vocabulary.
   auto ranges = vocabulary.prefixRanges("\"exp");
@@ -167,7 +165,7 @@ TEST(VocabularyTest, ItemAt) {
   TextVocabulary v;
   auto filename = "vocTest6.dat";
   auto geoFilename = "vocTest6-geo.dat";
-  v.createFromSet(s, filename, geoFilename);
+  v.createFromSet(s, filename);
 
   ASSERT_EQ(v[WordVocabIndex::make(0)], "a");
   ASSERT_EQ(v[WordVocabIndex::make(1)], "ab");

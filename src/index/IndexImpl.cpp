@@ -871,8 +871,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
                                       bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX,
-                      onDiskBase_ + GEO_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
   globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "

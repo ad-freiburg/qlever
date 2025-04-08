@@ -6,6 +6,7 @@
 
 #include "index/Vocabulary.h"
 
+#include <filesystem>
 #include <iostream>
 #include <type_traits>
 
@@ -43,8 +44,7 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(
-    const string& fileName, const std::optional<string>& geoFileName) {
+void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   auto readSingle = [](VocabularyWithUnicodeComparator& vocab,
                        const string& fileName) {
     LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
@@ -64,9 +64,7 @@ void Vocabulary<S, C, I>::readFromFile(
   };
 
   readSingle(vocabulary_, fileName);
-  if (geoFileName.has_value()) {
-    readSingle(geoVocabulary_, geoFileName.value());
-  }
+  readSingle(geoVocabulary_, fileName + geoVocabSuffix);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -81,8 +79,7 @@ void Vocabulary<S, C, I>::readFromFile(
 // _____________________________________________________________________________
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
-    const ad_utility::HashSet<std::string>& set, const std::string& fileName,
-    const std::optional<std::string>& geoFileName) {
+    const ad_utility::HashSet<std::string>& set, const std::string& fileName) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
   vocabulary_.close();
   geoVocabulary_.close();
@@ -93,7 +90,6 @@ void Vocabulary<S, C, I>::createFromSet(
   std::vector<std::string> geoWords;
   for (const auto& word : set) {
     if (stringIsGeoLiteral(word)) {
-      AD_CONTRACT_CHECK(geoFileName.has_value());
       geoWords.push_back(word);
     } else {
       words.push_back(word);
@@ -110,9 +106,7 @@ void Vocabulary<S, C, I>::createFromSet(
     vocab.build(words, fileName);
   };
   buildSingle(vocabulary_, words, fileName);
-  if (geoFileName.has_value()) {
-    buildSingle(geoVocabulary_, geoWords, geoFileName.value());
-  }
+  buildSingle(geoVocabulary_, geoWords, fileName + geoVocabSuffix);
 
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
@@ -314,7 +308,6 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     idx->get() = wordAndIndex.index();
     return true;
   }
-  return false;
 }
 
 // ___________________________________________________________________________
@@ -337,12 +330,11 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
   // Check marker bit to determine which vocabulary to use
   if (idx.get() & geoVocabMarker) {
     // The requested word is stored in the geometry vocabulary
-    uint64_t unmarkedIdx = idx.get() & geoVocabMarkerInvert;
-    AD_CONTRACT_CHECK(unmarkedIdx < geoVocabulary_.size());
+    uint64_t unmarkedIdx = idx.get() & geoVocabIndexMask;
     return geoVocabulary_[unmarkedIdx];
   } else {
     // The requested word is stored in the vocabulary for normal words
-    AD_CONTRACT_CHECK(idx.get() < vocabulary_.size());
+    AD_CONTRACT_CHECK(idx.get() <= maxWordIndex);
     return vocabulary_[idx.get()];
   }
 }
@@ -400,6 +392,7 @@ std::string& Vocabulary<S, C, I>::WordWriter::readableName() {
   if constexpr (std::is_same_v<S, CompressedString>) {
     return underlyingWordWriter_.readableName();
   }
+  // TODO<ullingerc> Remove this dummy as soon as possible.
   static std::string dummy;
   return dummy;
 }

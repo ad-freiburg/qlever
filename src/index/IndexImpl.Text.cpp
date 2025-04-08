@@ -151,7 +151,7 @@ void IndexImpl::buildTextIndexFile(
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX, std::nullopt);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
                 bAndKParamForTextScoring_};
@@ -213,7 +213,7 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
-  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary", std::nullopt);
+  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
 
   // Initialize the text index.
   std::string textIndexFileName = onDiskBase_ + ".text.index";
@@ -263,8 +263,7 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
       distinctWords.insert(line.word_);
     }
   }
-  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary",
-                           std::nullopt);
+  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
   return numLines;
 }
 

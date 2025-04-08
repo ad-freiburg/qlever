@@ -161,7 +161,7 @@ TEST_F(GroupByTest, doGroupBy) {
   s.insert("<entity2>");
   s.insert("<entity3>");
   auto filename = "groupByTestVocab.dat";
-  vocab.createFromSet(s, filename, std::nullopt);
+  vocab.createFromSet(s, filename);
   ad_utility::deleteFile(filename);
 
   // Create an input result table with a local vocabulary.
