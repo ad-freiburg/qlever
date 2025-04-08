@@ -68,6 +68,14 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  // Create a sorted variant of this operation. This can be more efficient than
+  // stacking a `Sort` operation on top of this one because Union can simply
+  // push the sort down to its children. If one of the children is already
+  // sorted properly then it is way cheaper to sort the other child and then
+  // merge the two sorted results.
+  PreconditionAction createSortedClone(
+      const vector<ColumnIndex>& sortColumns) const override;
+
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {
     return _subtrees[0];
@@ -83,13 +91,6 @@ class Union : public Operation {
   // respective child, std::nullopt is returned.
   std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
                                                ColumnIndex unionColumn) const;
-  // Create a sorted variant of this operation. This can be more efficient than
-  // stacking a `Sort` operation on top of this one because Union can simply
-  // push the sort down to its children. If one of the children is already
-  // sorted properly then it is way cheaper to sort the other child and then
-  // merge the two sorted results.
-  PreconditionAction createSortedClone(
-      const vector<ColumnIndex>& sortColumns) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
