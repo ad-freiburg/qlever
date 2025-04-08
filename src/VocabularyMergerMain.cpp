@@ -18,7 +18,6 @@ int main(int argc, char** argv) {
   std::string basename = argv[1];
   size_t numFiles = atoi(argv[2]);
 
-  // TODO<ullingerc> redundancy
   auto file = ad_utility::makeOfstream(basename + VOCAB_SUFFIX);
   uint64_t count = 0;
   auto wordCallback = [&file, &count](const auto& word,
