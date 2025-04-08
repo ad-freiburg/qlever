@@ -351,14 +351,11 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns an `std::optional<UnitOfMeasurement>`.
-// If the `LiteralOrIri` object contains an `Iri` of a known unit.
+// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
 struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
+  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{5};
   using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()([[maybe_unused]] ValueId id,
-                               const EvaluationContext*) const {
-    return UnitOfMeasurement::UNKNOWN;
-  }
+  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
                                const EvaluationContext*) const;
 };

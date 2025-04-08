@@ -7,8 +7,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 using namespace sparqlExpression::detail;
 
@@ -318,23 +320,51 @@ OptIri IriValueGetter::operator()(
 
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  // Use the cache to remember units for valueIds
+  return cache_.getOrCompute(
+      id, [&context](const ValueId& value) -> UnitOfMeasurement {
+        // Get string content of ValueId.
+        auto str = ExportQueryExecutionTrees::idToStringAndType<false, false>(
+            context->_qec.getIndex(), value, context->_localVocab);
+        std::string_view unit = "";
+
+        if (str.has_value()) {
+          auto content = str.value().first;
+          if (content.starts_with("\"")) {
+            // The unit is given as a ValueId pointing to a literal with
+            // datatype xsd:anyURI (for details see LiteralOrIri overload of the
+            // operator() function).
+
+            auto lit =
+                ad_utility::triple_component::Literal::fromStringRepresentation(
+                    content);
+            if (asStringViewUnsafe(lit.getDatatype()) == XSD_ANYURI_TYPE) {
+              unit = asStringViewUnsafe(lit.getContent());
+            }
+          } else if (content.starts_with("<")) {
+            // The unit is given as a ValueId pointing to an IRI.
+            unit = asStringViewUnsafe(
+                ad_utility::triple_component::Iri::fromIriref(content)
+                    .getContent());
+          }
+        }
+        return ad_utility::detail::iriToUnitOfMeasurement(unit);
+      });
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {
-  std::string_view unit;
-  if (s.isIri()) {
-    unit = asStringViewUnsafe(s.getIri().getContent());
-  } else if (s.isLiteral() &&
-             asStringViewUnsafe(s.getLiteral().getDatatype()) ==
-                 XSD_ANYURI_TYPE) {
-    unit = asStringViewUnsafe(s.getLiteral().getContent());
-  }
-
-  if (unit == UNIT_METER_IRI) {
-    return UnitOfMeasurement::METERS;
-  } else if (unit == UNIT_KILOMETER_IRI) {
-    return UnitOfMeasurement::KILOMETERS;
-  } else if (unit == UNIT_MILE_IRI) {
-    return UnitOfMeasurement::MILES;
+  // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
+  // of measurement. Because this is a rather obscure requirement, we support
+  // IRIs also.
+  if (s.isIri() ||
+      (s.isLiteral() &&
+       asStringViewUnsafe(s.getLiteral().getDatatype()) == XSD_ANYURI_TYPE)) {
+    return ad_utility::detail::iriToUnitOfMeasurement(
+        asStringViewUnsafe(s.getContent()));
   }
   return UnitOfMeasurement::UNKNOWN;
 }
