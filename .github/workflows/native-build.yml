@@ -27,9 +27,13 @@ jobs:
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
+        isPr: ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
         exclude:
           - compiler: gcc
             compiler-version: 8
+          - compiler: gcc
+            compiler-version: 12
+            isPr: true
           - compiler: gcc
             compiler-version: 15
           - compiler: gcc
@@ -48,6 +52,12 @@ jobs:
             compiler-version: 13
           - compiler: clang
             compiler-version: 15
+          - compiler: clang
+            compiler-version: 16
+            isPr: true
+          - compiler: clang
+            compiler-version: 17
+            isPr: true
         include:
           - compiler: gcc
             compiler-version: 8
@@ -65,6 +75,7 @@ jobs:
             compiler-version: 15
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
             build-type: Debug
+            isPr: false
             expensive-tests: false
             continue-on-error: true
             use-keep-going: true
