@@ -219,9 +219,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
-                   size_t outputRow, size_t skipCol) const;
+  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
+                          size_t inputRow, size_t outputRow, size_t skipCol);
 
   // A small helper function: Insert the `value` to the set at `map[key]`.
   // As the sets all have an allocator with memory limit, this construction is a

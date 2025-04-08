@@ -443,7 +443,7 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow,
-                                     size_t skipCol) const {
+                                     size_t skipCol) {
   size_t inCol = 0;
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
