@@ -54,13 +54,11 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
       parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row,
                         leftOrRightSide);
     } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-      const auto& literalOrIri = result->localVocab()
-                                     .getWord(id.getLocalVocabIndex())
-                                     .asLiteralOrIri();
+      const auto& literalOrIri = *id.getLocalVocabIndex();
       if (literalOrIri.isLiteral()) {
-        const auto& wkt = std::string(
-            asStringViewUnsafe(literalOrIri.getLiteral().getContent()));
-        parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
+        const auto& wkt =
+            asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+        parser.parseWKT(wkt, row, leftOrRightSide);
       }
     }
   }
