@@ -214,9 +214,6 @@ struct IsSomethingValueGetter
   Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
     // TODO<joka921> Use the `isLiteral` etc. functions directly as soon as the
     // local vocabulary also stores `LiteralOrIri`.
-    if (isLiteralOrIriSomethingFunction == "") {
-      return Id::makeFromBool(true);
-    }
     return Id::makeFromBool(s.toStringRepresentation().starts_with(
         isLiteralOrIriSomethingFunction));
   }
