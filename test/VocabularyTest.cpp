@@ -164,7 +164,6 @@ TEST(VocabularyTest, ItemAt) {
 
   TextVocabulary v;
   auto filename = "vocTest6.dat";
-  auto geoFilename = "vocTest6-geo.dat";
   v.createFromSet(s, filename);
 
   ASSERT_EQ(v[WordVocabIndex::make(0)], "a");
@@ -182,7 +181,6 @@ TEST(VocabularyTest, ItemAt) {
             "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   ad_utility::deleteFile(filename);
-  ad_utility::deleteFile(geoFilename);
 }
 
 TEST(Vocabulary, GeoLiteral) {
@@ -196,6 +194,27 @@ TEST(Vocabulary, GeoLiteral) {
   ASSERT_FALSE(RdfsVocabulary::stringIsGeoLiteral("\"abc\""));
   ASSERT_FALSE(
       RdfsVocabulary::stringIsGeoLiteral("\"\"^^<http://example.com>"));
-  //
-  ;
+}
+
+TEST(Vocabulary, WordWriter) {
+  // The word writer in vocabulary wraps another word writer. Its task is to
+  // split words to two different vocabularies for geo and non-geo words. This
+  // split is tested here.
+  RdfsVocabulary vocabulary;
+  auto wordCallback = vocabulary.makeWordWriter("vocTest7.dat");
+
+  ASSERT_EQ(wordCallback("a", true), 0);
+  ASSERT_EQ(wordCallback("ab", true), 1);
+  ASSERT_EQ(
+      wordCallback("\"LINESTRING(1 2, 3 "
+                   "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                   true),
+      (1ull << 59));
+  ASSERT_EQ(wordCallback("ba", true), 2);
+  ASSERT_EQ(wordCallback("car", true), 3);
+  ASSERT_EQ(
+      wordCallback("\"POLYGON((1 2, 3 "
+                   "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                   true),
+      (1ull << 59) | 1);
 }
