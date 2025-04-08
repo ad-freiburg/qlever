@@ -31,6 +31,100 @@
 #include "util/MemorySize/MemorySize.h"
 
 // ____________________________________________________________________________
+std::optional<SpatialJoinType> stringToSpatialJoinType(
+    const std::string_view& type) {
+  if (type == SJ_INTERSECTS) {
+    return SpatialJoinType::INTERSECTS;
+  } else if (type == SJ_COVERS) {
+    return SpatialJoinType::COVERS;
+  } else if (type == SJ_CONTAINS) {
+    return SpatialJoinType::CONTAINS;
+  } else if (type == SJ_TOUCHES) {
+    return SpatialJoinType::TOUCHES;
+  } else if (type == SJ_CROSSES) {
+    return SpatialJoinType::CROSSES;
+  } else if (type == SJ_OVERLAPS) {
+    return SpatialJoinType::OVERLAPS;
+  } else if (type == SJ_EQUALS) {
+    return SpatialJoinType::EQUALS;
+  } else if (type == SJ_WITHIN_DIST) {
+    return SpatialJoinType::WITHIN_DIST;
+  }
+  return std::nullopt;
+};
+
+// ____________________________________________________________________________
+const std::string_view& spatialJoinTypeToString(const SpatialJoinType& type) {
+  if (type == SpatialJoinType::INTERSECTS) {
+    return SJ_INTERSECTS;
+  } else if (type == SpatialJoinType::COVERS) {
+    return SJ_COVERS;
+  } else if (type == SpatialJoinType::CONTAINS) {
+    return SJ_CONTAINS;
+  } else if (type == SpatialJoinType::TOUCHES) {
+    return SJ_TOUCHES;
+  } else if (type == SpatialJoinType::CROSSES) {
+    return SJ_CROSSES;
+  } else if (type == SpatialJoinType::OVERLAPS) {
+    return SJ_OVERLAPS;
+  } else if (type == SpatialJoinType::EQUALS) {
+    return SJ_EQUALS;
+  } else if (type == SpatialJoinType::WITHIN_DIST) {
+    return SJ_WITHIN_DIST;
+  }
+  return SJ_INTERSECTS;
+};
+
+// ____________________________________________________________________________
+std::vector<SpatialJoinType> allSpatialJoinTypes() {
+  std::vector<SpatialJoinType> res;
+  for (size_t i = 0; i < static_cast<size_t>(SpatialJoinType::MaxValue); i++) {
+    res.push_back(static_cast<SpatialJoinType>(i));
+  }
+  return res;
+}
+
+// ____________________________________________________________________________
+std::optional<SpatialJoinAlgorithm> stringToSpatialJoinAlgorithm(
+    const std::string_view& algo) {
+  if (algo == SJ_BASELINE) {
+    return SpatialJoinAlgorithm::BASELINE;
+  } else if (algo == SJ_S2_GEOMETRY) {
+    return SpatialJoinAlgorithm::S2_GEOMETRY;
+  } else if (algo == SJ_BOUNDING_BOX) {
+    return SpatialJoinAlgorithm::BOUNDING_BOX;
+  } else if (algo == SJ_LIBSPATIALJOIN) {
+    return SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  }
+  return std::nullopt;
+}
+
+// ____________________________________________________________________________
+const std::string_view& spatialJoinAlgorithmToString(
+    SpatialJoinAlgorithm algo) {
+  if (algo == SpatialJoinAlgorithm::BASELINE) {
+    return SJ_BASELINE;
+  } else if (algo == SpatialJoinAlgorithm::S2_GEOMETRY) {
+    return SJ_S2_GEOMETRY;
+  } else if (algo == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    return SJ_BOUNDING_BOX;
+  } else if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return SJ_LIBSPATIALJOIN;
+  }
+  return SJ_S2_GEOMETRY;
+}
+
+// ____________________________________________________________________________
+std::vector<SpatialJoinAlgorithm> allSpatialJoinAlgorithms() {
+  std::vector<SpatialJoinAlgorithm> res;
+  for (size_t i = 0; i < static_cast<size_t>(SpatialJoinAlgorithm::MaxValue);
+       i++) {
+    res.push_back(static_cast<SpatialJoinAlgorithm>(i));
+  }
+  return res;
+}
+
+// ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,

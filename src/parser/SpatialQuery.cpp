@@ -1,9 +1,11 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #include "parser/SpatialQuery.h"
+
+#include <absl/strings/str_join.h>
 
 #include <type_traits>
 #include <variant>
@@ -23,108 +25,89 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 
   auto predString = extractParameterName(predicate, SPATIAL_SEARCH_IRI);
 
-  if (predString == "left") {
-    setVariable("left", object, left_);
-  } else if (predString == "right") {
-    setVariable("right", object, right_);
-  } else if (predString == "numNearestNeighbors") {
+  if (predString == SJ_LEFT_VAR) {
+    setVariable(SJ_LEFT_VAR, object, left_);
+  } else if (predString == SJ_RIGHT_VAR) {
+    setVariable(SJ_RIGHT_VAR, object, right_);
+  } else if (predString == SJ_MAX_RESULTS) {
     if (!object.isInt()) {
       throw SpatialSearchException(
-          "The parameter `<numNearestNeighbors>` expects an integer (the "
-          "maximum "
-          "number of nearest neighbors)");
+          "The parameter " + esc(SJ_MAX_RESULTS) +
+          " expects an integer (the maximum  number of nearest neighbors)");
     }
     maxResults_ = object.getInt();
-  } else if (predString == "maxDistance") {
+  } else if (predString == SJ_MAX_DIST) {
     if (!object.isInt()) {
       throw SpatialSearchException(
-          "The parameter `<maxDistance>` expects an integer (the maximum "
-          "distance in meters)");
+          "The parameter " + esc(SJ_MAX_DIST) +
+          " expects an integer (the maximum distance in meters)");
     }
     maxDist_ = object.getInt();
-  } else if (predString == "bindDistance") {
-    setVariable("bindDistance", object, distanceVariable_);
-  } else if (predString == "joinType") {
+  } else if (predString == SJ_DIST_VAR) {
+    setVariable(SJ_DIST_VAR, object, distanceVariable_);
+  } else if (predString == SJ_JOIN_TYPE) {
     if (!object.isIri()) {
       // This case is already covered in `extractParameterName` below, but we
       // want to throw a more precise error description
-      throw SpatialSearchException(
-          "The parameter `<joinType>` needs an IRI that selects the algorithm "
-          "to employ. Currently supported are `<intersects>`, `<covers>`, "
-          "`<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, `<equals>`, "
-          "`<within-dist>`");
+      throw SpatialSearchException("The parameter " + esc(SJ_JOIN_TYPE) +
+                                   " needs an IRI that selects the algorithm"
+                                   " to employ. Currently supported are " +
+                                   allJoinTypesAsStr());
     }
-    auto type = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (type == "intersects") {
-      joinType_ = SpatialJoinType::INTERSECTS;
-    } else if (type == "covers") {
-      joinType_ = SpatialJoinType::COVERS;
-    } else if (type == "contains") {
-      joinType_ = SpatialJoinType::CONTAINS;
-    } else if (type == "touches") {
-      joinType_ = SpatialJoinType::TOUCHES;
-    } else if (type == "crosses") {
-      joinType_ = SpatialJoinType::CROSSES;
-    } else if (type == "overlaps") {
-      joinType_ = SpatialJoinType::OVERLAPS;
-    } else if (type == "equals") {
-      joinType_ = SpatialJoinType::EQUALS;
-    } else if (type == "within-dist") {
-      joinType_ = SpatialJoinType::WITHIN_DIST;
+    auto type = stringToSpatialJoinType(
+        extractParameterName(object, SPATIAL_SEARCH_IRI));
+    if (type.has_value()) {
+      joinType_ = type.value();
     } else {
       throw SpatialSearchException(
-          "The IRI given for the parameter `<joinType>` does not refer to a "
-          "supported join type. Currently supported are `<intersects>`, "
-          "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within-dist>`");
+          "The IRI given for the parameter " + esc(SJ_JOIN_TYPE) +
+          " does not refer to a supported join type. Currently supported are " +
+          allJoinTypesAsStr());
     }
-  } else if (predString == "algorithm") {
+  } else if (predString == SJ_ALGORITHM) {
     if (!object.isIri()) {
       // This case is already covered in `extractParameterName` below, but we
       // want to throw a more precise error description
-      throw SpatialSearchException(
-          "The parameter `<algorithm>` needs an IRI that selects the algorithm "
-          "to employ. Currently supported are `<baseline>`, `<s2>`, "
-          "`<libspatialjoin>`, or `<boundingBox>`");
+      throw SpatialSearchException("The parameter " + esc(SJ_ALGORITHM) +
+                                   " needs an IRI that selects the algorithm "
+                                   "to employ. Currently supported are " +
+                                   allAlgorithmsAsStr());
     }
-    auto algo = extractParameterName(object, SPATIAL_SEARCH_IRI);
-    if (algo == "baseline") {
-      algo_ = SpatialJoinAlgorithm::BASELINE;
-    } else if (algo == "s2") {
-      algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
-    } else if (algo == "boundingBox") {
-      algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
-    } else if (algo == "libspatialjoin") {
-      algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+    auto algo = stringToSpatialJoinAlgorithm(
+        extractParameterName(object, SPATIAL_SEARCH_IRI));
+    if (algo.has_value()) {
+      algo_ = algo.value();
     } else {
       throw SpatialSearchException(
-          "The IRI given for the parameter `<algorithm>` does not refer to a "
-          "supported spatial search algorithm. Please select either "
-          "`<baseline>`, `<s2>`, `<libspatialjoin>`, or `<boundingBox>`");
+          "The IRI given for the parameter " + esc(SJ_ALGORITHM) +
+          " does not refer to a supported spatial search algorithm. Please "
+          "select one of: " +
+          allAlgorithmsAsStr());
     }
-  } else if (predString == "payload") {
+  } else if (predString == SJ_PAYLOAD) {
     if (object.isVariable()) {
       // Single selected variable
 
       // If we have already selected all payload variables, we can ignore
       // another explicitly selected variable.
-      payloadVariables_.addVariable(getVariable("payload", object));
+      payloadVariables_.addVariable(getVariable(SJ_PAYLOAD, object));
     } else if (object.isIri() &&
-               extractParameterName(object, SPATIAL_SEARCH_IRI) == "all") {
+               extractParameterName(object, SPATIAL_SEARCH_IRI) ==
+                   SJ_PAYLOAD_ALL) {
       // All variables selected
       payloadVariables_.setToAll();
     } else {
-      throw SpatialSearchException(
-          "The argument to the `<payload>` parameter must be either a variable "
-          "to be selected or `<all>`");
+      throw SpatialSearchException("The argument to the " + esc(SJ_PAYLOAD) +
+                                   " parameter must be either a variable "
+                                   "to be selected or " +
+                                   esc(SJ_PAYLOAD_ALL));
     }
 
   } else {
-    throw SpatialSearchException(absl::StrCat(
-        "Unsupported argument ", predString,
-        " in spatial search; supported arguments are: `<left>`, `<right>`, "
-        "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
-        "`<joinType>`, `<payload>`, and `<algorithm>`"));
+    throw SpatialSearchException(
+        absl::StrCat("Unsupported argument ", predString,
+                     " in spatial search; supported arguments are: " +
+                         allSpatialQueryArgs()));
   }
 }
 
@@ -266,6 +249,37 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
                           ". This must be a valid spatial condition like ",
                           "`<max-distance-in-meters:50>`"));
   }
+}
+
+// ____________________________________________________________________________
+std::string SpatialQuery::esc(const std::string_view rawIri) {
+  return absl::StrCat("`<", rawIri, ">`");
+};
+
+// ____________________________________________________________________________
+std::string SpatialQuery::allJoinTypesAsStr() {
+  std::vector<std::string> joinTypes;
+  for (const auto& joinType : allSpatialJoinTypes()) {
+    joinTypes.push_back(esc(spatialJoinTypeToString(joinType)));
+  }
+  return absl::StrJoin(joinTypes, ", ");
+}
+
+// ____________________________________________________________________________
+std::string SpatialQuery::allAlgorithmsAsStr() {
+  std::vector<std::string> algorithms;
+  for (const auto& algorithm : allSpatialJoinAlgorithms()) {
+    algorithms.push_back(esc(spatialJoinAlgorithmToString(algorithm)));
+  }
+  return absl::StrJoin(algorithms, ", ");
+}
+
+// ____________________________________________________________________________
+std::string SpatialQuery::allSpatialQueryArgs() {
+  return "`<left>`, `<right>`, "
+         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
+         "`<joinType>`, `<payload>`, `<algorithm>`";
+  // TODO
 }
 
 }  // namespace parsedQuery

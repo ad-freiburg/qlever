@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //          Patrick Brosi <brosi@cs.uni-freiburg.de>
@@ -65,6 +65,18 @@ struct SpatialQuery : MagicServiceQuery {
   SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
   ~SpatialQuery() noexcept override = default;
 
+  // Constants for the internal IRIs used for configuring a spatial query magic
+  // service.
+  static const inline std::string_view SJ_LEFT_VAR = "left";
+  static const inline std::string_view SJ_RIGHT_VAR = "right";
+  static const inline std::string_view SJ_MAX_RESULTS = "numNearestNeighbors";
+  static const inline std::string_view SJ_MAX_DIST = "maxDistance";
+  static const inline std::string_view SJ_DIST_VAR = "bindDistance";
+  static const inline std::string_view SJ_JOIN_TYPE = "joinType";
+  static const inline std::string_view SJ_ALGORITHM = "algorithm";
+  static const inline std::string_view SJ_PAYLOAD = "payload";
+  static const inline std::string_view SJ_PAYLOAD_ALL = "all";
+
   // Alternative constructor for backward compatibility (allows initializing a
   // SpatialJoin using a magic predicate)
   explicit SpatialQuery(const SparqlTriple& triple);
@@ -75,6 +87,18 @@ struct SpatialQuery : MagicServiceQuery {
   // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
   // check if all required values have been provided and otherwise throw.
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
+
+  // Helper to format an IRI for a message to the user.
+  std::string esc(const std::string_view rawIri);
+
+  // Helper to format the different available join types.
+  std::string allJoinTypesAsStr();
+
+  // Helper to format the different available algorithms.
+  std::string allAlgorithmsAsStr();
+
+  // Helper to format the different available configuration keys.
+  std::string allSpatialQueryArgs();
 };
 
 }  // namespace parsedQuery
