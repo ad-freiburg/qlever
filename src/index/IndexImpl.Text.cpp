@@ -123,6 +123,7 @@ void IndexImpl::buildTextIndexFile(
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
+  readConfiguration();
   string indexFilename = onDiskBase_ + ".text.index";
   bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
   const auto& [wordsFile, docsFile] =
@@ -803,5 +804,4 @@ void IndexImpl::storeTextScoringParamsInConfiguration(
     configurationJson_["b-and-k-parameter-for-text-scoring"] =
         std::make_pair(0.75, 1.75);
   }
-  writeConfiguration();
 }
