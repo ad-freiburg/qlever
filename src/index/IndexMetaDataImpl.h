@@ -7,8 +7,8 @@
 #define QLEVER_SRC_INDEX_INDEXMETADATAIMPL_H
 
 #include "index/IndexMetaData.h"
-#include "index/MetaDataHandler.h"
 #include "util/File.h"
+#include "util/ReadableNumberFacet.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeHashMap.h"
