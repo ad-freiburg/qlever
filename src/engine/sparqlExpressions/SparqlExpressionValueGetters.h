@@ -221,8 +221,6 @@ struct IsSomethingValueGetter
         isLiteralOrIriSomethingFunction));
   }
 };
-static constexpr auto skipLiteralOrIriCheck =
-    ad_utility::ConstexprSmallString<1>{""};
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
 static constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
@@ -230,10 +228,6 @@ using IsIriValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
 using IsLiteralValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isLiteral, isLiteralPrefix>;
-// We assume only literals are stored in the geo vocabulary and therefore can
-// skip loading the full string.
-using IsGeoLiteralValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isGeoLiteral, skipLiteralOrIriCheck>;
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a `std::optional<DateYearOrDuration>`.
