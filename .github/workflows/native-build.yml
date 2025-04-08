@@ -29,6 +29,7 @@ jobs:
         additional-cmake-options: [""]
         isPr:
           - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
+        skipIfPr: [false]
         exclude:
           - compiler: gcc
             compiler-version: 8
@@ -76,7 +77,7 @@ jobs:
             compiler-version: 15
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
             build-type: Debug
-            isPr: false
+            skipIfPr: true
             expensive-tests: false
             continue-on-error: true
             use-keep-going: true
@@ -102,6 +103,9 @@ jobs:
 
 
     steps:
+      - name: Skip early if conditions are not met
+        if: (matrix.isPr && matrix.skipIfPr)
+        run: exit 0;
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
