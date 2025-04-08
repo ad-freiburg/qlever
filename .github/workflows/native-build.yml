@@ -100,6 +100,9 @@ jobs:
       - name: Running and printing the benchmark examples.
         run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
 
+      # Run the E2E test only once, but for GCC add the text index separately.
+      # Note that the dispatch by the compiler is arbitrarily, we just want
+      # to have both cases tested.
       - name: E2E with index in one go
         if: (matrix.compiler == 'clang')
         run: ${{github.workspace}}/e2e/e2e.sh
