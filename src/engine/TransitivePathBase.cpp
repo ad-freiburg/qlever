@@ -63,6 +63,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
   auto x = makeInternalVariable("x");
   auto y = makeInternalVariable("y");
   auto z = makeInternalVariable("z");
+  // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
+  // and ?z in the first place.
   // We don't need to materialize the extra variables y and z in the union.
   auto selectXVariable =
       [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
