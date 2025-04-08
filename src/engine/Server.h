@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SERVER_H
+#define QLEVER_SRC_ENGINE_SERVER_H
 
 #include <util/http/websocket/MessageSender.h>
 
@@ -21,7 +22,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
-#include "util/http/HttpServer.h"
+#include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
@@ -51,13 +52,14 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true);
+                  bool usePatterns = true, bool loadAllPermutations = true,
+                  bool persistUpdates = false);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
   void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool loadAllPermutations = true);
+           bool loadAllPermutations = true, bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -84,11 +86,11 @@ class Server {
   /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
-  net::static_thread_pool queryThreadPool_;
-  net::static_thread_pool updateThreadPool_{1};
+  boost::asio::static_thread_pool queryThreadPool_;
+  boost::asio::static_thread_pool updateThreadPool_{1};
 
   /// Executor with a single thread that is used to run timers asynchronously.
-  net::static_thread_pool timerExecutor_{1};
+  boost::asio::static_thread_pool timerExecutor_{1};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -175,23 +177,18 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Parse an operation
-  CPP_template_2(typename Operation)(
-      requires QueryOrUpdate<
-          Operation>) auto parseOperation(ad_utility::websocket::MessageSender&
-                                              messageSender,
-                                          const ad_utility::url_parser::
-                                              ParamValueMap& params,
-                                          const Operation& operation,
-                                          TimeLimit timeLimit);
+  //  Prepare the execution of an operation
+  auto prepareOperation(std::string_view operationName,
+                        std::string_view operationSPARQL,
+                        ad_utility::websocket::MessageSender& messageSender,
+                        const ad_utility::url_parser::ParamValueMap& params,
+                        TimeLimit timeLimit);
 
   // Plan a parsed query.
-  Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
-                                    ParsedQuery&& operation,
-                                    const ad_utility::Timer& requestTimer,
-                                    TimeLimit timeLimit,
-                                    QueryExecutionContext& qec,
-                                    SharedCancellationHandle handle);
+  Awaitable<PlannedQuery> planQuery(
+      boost::asio::static_thread_pool& thread_pool, ParsedQuery&& operation,
+      const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+      QueryExecutionContext& qec, SharedCancellationHandle handle);
   // Creates a `MessageSender` for the given operation.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -218,7 +215,7 @@ class Server {
   /// its completion, wrapping the result.
   template <std::invocable Function,
             typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(net::static_thread_pool& threadPool,
+  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
                                   Function function,
                                   SharedCancellationHandle handle);
 
@@ -273,7 +270,7 @@ class Server {
   /// Forbidden HTTP response if the change is not allowed. Return the new
   /// timeout otherwise.
   CPP_template_2(typename RequestT, typename ResponseT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) net::
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) boost::asio::
       awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
           std::optional<std::string_view> userTimeout, bool accessTokenOk,
           const RequestT& request, ResponseT& send) const;
@@ -288,3 +285,5 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SERVER_H

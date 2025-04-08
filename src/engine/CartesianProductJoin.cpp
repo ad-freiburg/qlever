@@ -17,6 +17,9 @@ CartesianProductJoin::CartesianProductJoin(
   AD_CONTRACT_CHECK(!children_.empty());
   AD_CONTRACT_CHECK(ql::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
+  // Ensure estimated largest tree is on the right side.
+  ql::ranges::stable_sort(
+      children_, {}, [](const auto& tree) { return tree->getSizeEstimate(); });
 
   // Check that the variables of the passed in operations are in fact
   // disjoint.
@@ -128,7 +131,7 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
 }
 
 // ____________________________________________________________________________
-ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
+Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (knownEmptyResult()) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
@@ -189,7 +192,7 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
   // single result is left. This can probably be done by using the
-  // `ProtoResult`.
+  // `Result`.
 
   auto sizesView = ql::views::transform(idTables, &IdTable::size);
   auto totalResultSize =
@@ -344,7 +347,7 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
       continue;
     }
     idTables.emplace_back(idTable);
-    localVocab.mergeWith(std::span{&staticMergedVocab, 1});
+    localVocab.mergeWith(staticMergedVocab);
     size_t producedTableSize = 0;
     for (auto& idTableAndVocab : produceTablesLazily(
              std::move(localVocab),

@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_ITERATORS_H
+#define QLEVER_SRC_UTIL_ITERATORS_H
 
 #include <cstdint>
 #include <iterator>
@@ -334,6 +335,27 @@ class InputRangeFromGet {
   Sentinel end() const { return {}; };
 };
 
+// A simple helper to define an `InputRangeFromGet` where the `get()` function
+// is a simple callable.
+CPP_template(typename T, typename F)(
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        F, std::optional<T>>) struct InputRangeFromGetCallable
+    : public InputRangeFromGet<T> {
+ private:
+  F function_;
+
+ public:
+  std::optional<T> get() override { return function_(); }
+  explicit InputRangeFromGetCallable(F f) : function_{std::move(f)} {}
+};
+
+// Deduction guide to be able to simply call the constructor with any callable
+// `f` that returns `optional<Something>`.
+template <typename F>
+InputRangeFromGetCallable(F f)
+    -> InputRangeFromGetCallable<typename std::invoke_result_t<F>::value_type,
+                                 F>;
+
 // This class takes an arbitrary input range, and turns it into a class that
 // inherits from `InputRangeFromGet` (see above). While this adds a layer of
 // indirection, it makes type erasure between input ranges with the same value
@@ -408,4 +430,18 @@ class InputRangeTypeErased {
   decltype(auto) end() { return impl_->end(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
+
+// Analogous to `cppcoro::getSingleElement`, but generalized for all ranges.
+// Ensure that the range only contains a single element, move it out and return
+// it.
+template <typename Range>
+ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
+  auto it = ql::ranges::begin(range);
+  AD_CORRECTNESS_CHECK(it != ql::ranges::end(range));
+  ql::ranges::range_value_t<Range> t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == ql::ranges::end(range));
+  return t;
+}
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_ITERATORS_H

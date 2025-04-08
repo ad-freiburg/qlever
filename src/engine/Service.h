@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SERVICE_H
+#define QLEVER_SRC_ENGINE_SERVICE_H
 
 #include <functional>
 
@@ -53,6 +54,13 @@ class Service : public Operation {
 
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
+
+  // Counter to generate fresh ids for each instance of the class.
+  static inline std::atomic_uint32_t counter_ = 0;
+
+  // Id that is being used to avoid caching of the result. It is supposed to be
+  // unique for every instance of the class.
+  uint32_t cacheBreaker_ = counter_++;
 
  public:
   // Construct from parsed Service clause.
@@ -108,17 +116,26 @@ class Service : public Operation {
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
+  // Push down a `VALUES` clause into the body of the SERVICE clause and return
+  // it.
+  static std::string pushDownValues(std::string_view pattern,
+                                    std::string_view values);
+
+  // Return the optimized graph pattern derived from `parsedServiceClause_` and
+  // an optional derived sibling.
+  std::string getGraphPattern() const;
+
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Actually compute the result for the function above.
-  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
+  Result computeResultImpl(bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
 
   // Create result for silent fail.
-  ProtoResult makeNeutralElementResultForSilentFail() const;
+  Result makeNeutralElementResultForSilentFail() const;
 
   // Check that all visible variables of the SERVICE clause exist in the json
   // object, otherwise throw an error.
@@ -148,6 +165,9 @@ class Service : public Operation {
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
   FRIEND_TEST(ServiceTest, computeResult);
+  FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
   FRIEND_TEST(ServiceTest, getCacheKey);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
+
+#endif  // QLEVER_SRC_ENGINE_SERVICE_H

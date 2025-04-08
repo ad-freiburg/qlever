@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_TEXTMETADATA_H
+#define QLEVER_SRC_INDEX_TEXTMETADATA_H
 
 #include <cstdio>
 #include <vector>
@@ -36,6 +38,18 @@ class ContextListMetaData {
   off_t _startWordlist;
   off_t _startScorelist;
   off_t _lastByte;
+
+  size_t getByteLengthContextList() const {
+    return static_cast<size_t>(_startWordlist - _startContextlist);
+  }
+
+  size_t getByteLengthWordlist() const {
+    return static_cast<size_t>(_startScorelist - _startWordlist);
+  }
+
+  size_t getByteLengthScorelist() const {
+    return static_cast<size_t>(_lastByte + 1 - _startScorelist);
+  }
 
   bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
 
@@ -122,3 +136,5 @@ class TextMetaData {
     serializer | arg._blocks;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_TEXTMETADATA_H
