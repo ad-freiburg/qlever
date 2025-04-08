@@ -178,11 +178,11 @@ CPP_template_def(typename C, typename L)(
       // idVecs to have a more useful external access pattern.
 
       // Write the new word to the vocabulary.
-      const auto& nextWord = lastTripleComponent_.value();
+      auto& nextWord = lastTripleComponent_.value();
       if (nextWord.isBlankNode()) {
-        lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
+        nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        lastTripleComponent_->index_ =
+        nextWord.index_ =
             wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
@@ -327,10 +327,9 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
         }));
     ++i;
   }
