@@ -45,7 +45,8 @@ TransitivePathBase::TransitivePathBase(
   }
   if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
     emptyPathBound_ = true;
-    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs), 0);
+    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
+                             0);
   }
 
   lhs_.outputCol_ = 0;
@@ -54,7 +55,7 @@ TransitivePathBase::TransitivePathBase(
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
-    QueryExecutionContext* qec, const Graphs& activeGraphs) {
+    QueryExecutionContext* qec, Graphs activeGraphs) {
   auto makeInternalVariable = [](std::string_view string) {
     return Variable{absl::StrCat("?internal_property_path_variable_", string)};
   };
