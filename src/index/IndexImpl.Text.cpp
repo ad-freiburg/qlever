@@ -345,18 +345,20 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
       // the wordsfile ID is larger than the docsfile ID the docsfile line is
       // processed and so on.
       while (docsFileIterator != docsFileParser.end()) {
-        if (wordsFileIterator != wordsFileParser.end()) {
-          while (currentDocsFileLine.docId_.get() >=
-                 currentWordsFileLine.contextId_.get()) {
-            if (currentWordsFileLine.isEntity_) {
-              WordsFileLine lineToProcess = currentWordsFileLine;
-              lineToProcess.contextId_ =
-                  TextRecordIndex::make(currentDocsFileLine.docId_.get());
-              processLine(lineToProcess);
-            }
-            ++wordsFileIterator;
-            currentWordsFileLine = *wordsFileIterator;
+        currentDocsFileLine = *docsFileIterator;
+        while (wordsFileIterator != wordsFileParser.end()) {
+          currentWordsFileLine = *wordsFileIterator;
+          if (currentDocsFileLine.docId_.get() <
+              currentWordsFileLine.contextId_.get()) {
+            break;
           }
+          if (currentWordsFileLine.isEntity_) {
+            WordsFileLine lineToProcess = currentWordsFileLine;
+            lineToProcess.contextId_ =
+                TextRecordIndex::make(currentDocsFileLine.docId_.get());
+            processLine(lineToProcess);
+          }
+          ++wordsFileIterator;
         }
         for (const auto& word : tokenizeAndNormalizeText(
                  currentDocsFileLine.docContent_, localeManager)) {
@@ -367,7 +369,6 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
           processLine(lineToProcess);
         }
         ++docsFileIterator;
-        currentDocsFileLine = *docsFileIterator;
       }
     } else {
       for (const auto& line : DocsFileParser{docsFile, localeManager}) {
