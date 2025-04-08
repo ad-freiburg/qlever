@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "engine/PreconditionAction.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -324,6 +325,11 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Most operations do not sort their result. Operations that are able to
+  // efficiently sort their result should override this function.
+  virtual PreconditionAction createSortedClone(
+      const vector<ColumnIndex>& sortColumns) const;
 
  protected:
   // The QueryExecutionContext for this particular element.

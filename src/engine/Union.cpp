@@ -351,10 +351,15 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> Union::createSortedVariant(
-    const vector<ColumnIndex>& sortOrder) const {
-  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
-                                 _subtrees.at(1), sortOrder);
+PreconditionAction Union::createSortedClone(
+    const vector<ColumnIndex>& sortColumns) const {
+  if (sortColumns.empty()) {
+    return PreconditionAction::ALREADY_SATISFIED;
+  }
+  auto operation = std::make_shared<Union>(_executionContext, _subtrees.at(0),
+                                           _subtrees.at(1), sortColumns);
+  return PreconditionAction{std::make_shared<QueryExecutionTree>(
+      getExecutionContext(), std::move(operation))};
 }
 
 // _____________________________________________________________________________

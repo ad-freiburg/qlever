@@ -653,3 +653,18 @@ std::unique_ptr<Operation> Operation::clone() const {
   AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
   return result;
 }
+
+// _____________________________________________________________________________
+PreconditionAction Operation::createSortedClone(
+    const vector<ColumnIndex>& sortColumns) const {
+  auto inputSortedOn = resultSortedOn();
+  if (sortColumns.size() > inputSortedOn.size()) {
+    return PreconditionAction::NOT_SATISFIABLE;
+  }
+  for (size_t i = 0; i < sortColumns.size(); ++i) {
+    if (sortColumns[i] != inputSortedOn[i]) {
+      return PreconditionAction::NOT_SATISFIABLE;
+    }
+  }
+  return PreconditionAction::ALREADY_SATISFIED;
+}
