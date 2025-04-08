@@ -419,11 +419,15 @@ auto getRelevantIdFromTriple(
 // fulfill a concept for the `ql::ranges` algorithms.
 struct BlockLessThanBlock {
   template <typename T = void>
+  /*
   bool operator()(const CompressedBlockMetadata&,
                   const CompressedBlockMetadata&) const {
     static_assert(ad_utility::alwaysFalse<T>);
     AD_FAIL();
   }
+  */
+  bool operator()(const CompressedBlockMetadata&,
+                  const CompressedBlockMetadata&) const;
 };
 }  // namespace
 
