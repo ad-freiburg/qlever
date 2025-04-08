@@ -44,13 +44,13 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
+void Vocabulary<S, C, I>::readFromFile(const string& filename) {
   auto readSingle = [](VocabularyWithUnicodeComparator& vocab,
-                       const string& fileName) {
-    LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
+                       const string& filename) {
+    LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
     vocab.close();
-    vocab.open(fileName);
+    vocab.open(filename);
     if constexpr (isCompressed_) {
       const auto& internalExternalVocab =
           vocab.getUnderlyingVocabulary().getUnderlyingVocabulary();
@@ -63,8 +63,8 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
     }
   };
 
-  readSingle(vocabulary_, fileName);
-  readSingle(geoVocabulary_, fileName + geoVocabSuffix);
+  readSingle(vocabulary_, filename);
+  readSingle(geoVocabulary_, filename + geoVocabSuffix);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -79,7 +79,7 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
-    const ad_utility::HashSet<std::string>& set, const std::string& fileName) {
+    const ad_utility::HashSet<std::string>& set, const std::string& filename) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
   vocabulary_.close();
   geoVocabulary_.close();
@@ -101,12 +101,12 @@ void Vocabulary<S, C, I>::createFromSet(
   };
   auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
                                        std::vector<std::string>& words,
-                                       const std::string& fileName) {
+                                       const std::string& filename) {
     std::sort(begin(words), end(words), totalComparison);
-    vocab.build(words, fileName);
+    vocab.build(words, filename);
   };
-  buildSingle(vocabulary_, words, fileName);
-  buildSingle(geoVocabulary_, geoWords, fileName + geoVocabSuffix);
+  buildSingle(vocabulary_, words, filename);
+  buildSingle(geoVocabulary_, geoWords, filename + geoVocabSuffix);
 
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }

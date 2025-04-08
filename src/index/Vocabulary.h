@@ -158,7 +158,7 @@ class Vocabulary {
 
   //! Read the vocabulary from files containing words and geometries
   //! respectively.
-  void readFromFile(const string& fileName);
+  void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
