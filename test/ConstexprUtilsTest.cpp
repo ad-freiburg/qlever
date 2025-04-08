@@ -192,6 +192,23 @@ struct PushToVector {
   }
 };
 
+struct PushToVectorWithTI {
+  std::vector<std::string>* typeToStringVector;
+
+  void operator()(auto t) const {
+    using T = decltype(t)::type;
+    if constexpr (ad_utility::isSimilar<T, int>) {
+      typeToStringVector->emplace_back("int");
+    } else if constexpr (ad_utility::isSimilar<T, bool>) {
+      typeToStringVector->emplace_back("bool");
+    } else if constexpr (ad_utility::isSimilar<T, std::string>) {
+      typeToStringVector->emplace_back("std::string");
+    } else {
+      AD_FAIL();
+    }
+  }
+};
+
 /*
 @brief Create a lambda, that adds the string representation of a (supported)
 type to a given vector.
@@ -203,6 +220,10 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
   return PushToVector{typeToStringVector};
 }
 
+auto typeToStringFactoryWithTI(std::vector<std::string>* typeToStringVector) {
+  return PushToVectorWithTI{typeToStringVector};
+}
+
 /*
 @brief Test a normal call for a `constExprForEachType` function.
 
@@ -211,13 +232,13 @@ parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
 void testConstExprForEachNormalCall(
-    const auto& callToForEachWrapper,
+    const auto& callToForEachWrapper, auto callToTypeToStringFactory,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
 
   std::vector<std::string> typeToStringVector{};
-  auto typeToString = typeToStringFactory(&typeToStringVector);
+  auto typeToString = callToTypeToStringFactory(&typeToStringVector);
 
   // Normal call.
   callToForEachWrapper.template
@@ -233,7 +254,7 @@ void testConstExprForEachNormalCall(
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
 
-struct TestConstExprForEachNormalCallForEachTypeInParameterPack {
+struct TestForEachTypeInParameterPack {
   template <typename... Ts>
   void operator()(const auto& func) const {
     forEachTypeInParameterPack<Ts...>(func);
@@ -242,8 +263,8 @@ struct TestConstExprForEachNormalCallForEachTypeInParameterPack {
 
 TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   // Normal call.
-  testConstExprForEachNormalCall(
-      TestConstExprForEachNormalCallForEachTypeInParameterPack{});
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPack{},
+                                 typeToStringFactory);
 
   // No types given should end in nothing happening.
   std::vector<std::string> typeToStringVector{};
@@ -252,14 +273,33 @@ TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
-struct TestConstExprForEachNormalCallForEachTypeInVariantTemplateType {
+struct TestForEachTypeInParameterPackWithTI {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInParameterPackWithTI<Ts...>(func);
+  }
+};
+
+TEST(ConstexprUtils, ForEachTypeInParameterPackWithTI) {
+  // Normal call.
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPackWithTI{},
+                                 typeToStringFactoryWithTI);
+
+  // No types given should end in nothing happening.
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = typeToStringFactoryWithTI(&typeToStringVector);
+  forEachTypeInParameterPackWithTI<>(typeToString);
+  ASSERT_TRUE(typeToStringVector.empty());
+}
+
+struct TestForEachTypeInTemplateTypeOfVariant {
   template <typename... Ts>
   void operator()(const auto& func) const {
     forEachTypeInTemplateType<std::variant<Ts...>>(func);
   }
 };
 
-struct TestConstExprForEachNormalCallForEachTypeInTupleTemplateType {
+struct TestForEachTypeInTemplateTypeOfTuple {
   template <typename... Ts>
   void operator()(const auto& func) const {
     forEachTypeInTemplateType<std::tuple<Ts...>>(func);
@@ -268,10 +308,36 @@ struct TestConstExprForEachNormalCallForEachTypeInTupleTemplateType {
 
 TEST(ConstexprUtils, forEachTypeInTemplateType) {
   // Normal call with `std::variant`.
-  testConstExprForEachNormalCall(
-      TestConstExprForEachNormalCallForEachTypeInVariantTemplateType{});
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfVariant{},
+                                 typeToStringFactory);
 
   // Normal call with `std::tuple`.
-  testConstExprForEachNormalCall(
-      TestConstExprForEachNormalCallForEachTypeInTupleTemplateType{});
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfTuple{},
+                                 typeToStringFactory);
+}
+
+struct TestForEachTypeInTemplateTypeWithTIOfVariant {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::variant<Ts...>>, func);
+  }
+};
+
+struct TestForEachTypeInTemplateTypeWithTIOfTuple {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::tuple<Ts...>>, func);
+  }
+};
+
+TEST(ConstexprUtils, forEachTypeInTemplateTypeWithTI) {
+  // Normal call with `std::variant`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfVariant{},
+                                 typeToStringFactoryWithTI);
+
+  // Normal call with `std::tuple`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfTuple{},
+                                 typeToStringFactoryWithTI);
 }

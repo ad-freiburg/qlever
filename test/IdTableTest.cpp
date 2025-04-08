@@ -17,8 +17,10 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/BufferedVector.h"
+#include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
+using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
 }
@@ -245,10 +247,10 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
     }
     allocators.emplace_back(makeAllocator());
   }
-  testCase.template operator()<IdTable>(V, std::move(allocators));
-  testCase.template operator()<BufferedTable>(V, std::move(buffers));
+  testCase(ti<IdTable>, V, std::move(allocators));
+  testCase(ti<BufferedTable>, V, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
-  testCase.template operator()<IntTable>(makeInt);
+  testCase(ti<IntTable>, makeInt);
 }
 
 // This helper function has to be used inside the `testCase` lambdas for the
@@ -266,11 +268,12 @@ auto clone(const auto& table, auto... args) {
   }
 }
 
-// A callable that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckPushBackAndAssign {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
+TEST(IdTable, push_back_and_assign) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
 
@@ -314,19 +317,17 @@ struct CheckPushBackAndAssign {
       ASSERT_EQ(t1(i / NUM_COLS, i % NUM_COLS),
                 make((NUM_ROWS * NUM_COLS) - i));
     }
-  }
-};
-
-TEST(IdTable, push_back_and_assign) {
-  runTestForDifferentTypes<1>(CheckPushBackAndAssign{},
-                              "idTableTest.pushBackAssign");
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
 }
 
-// A struct that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckAt {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
+// __________________________________________________________________
+TEST(IdTable, at) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
 
@@ -342,17 +343,16 @@ struct CheckAt {
     // Valid column but invalid row
     ASSERT_ANY_THROW(t1.at(NUM_ROWS, 0));
     ASSERT_ANY_THROW(std::as_const(t1).at(NUM_ROWS, 0));
-  }
-};
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.at");
+}
 
-// __________________________________________________________________
-TEST(IdTable, at) { runTestForDifferentTypes<1>(CheckAt{}, "idTableTest.at"); }
+TEST(IdTable, insertAtEnd) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
 
-// A struct that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckInsertAtEnd {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
     Table t1{4, std::move(additionalArgs.at(0))...};
     t1.push_back({make(7), make(2), make(4), make(1)});
     t1.push_back({make(0), make(22), make(1), make(4)});
@@ -372,18 +372,17 @@ struct CheckInsertAtEnd {
     for (size_t i = 0; i < t1.size(); i++) {
       ASSERT_EQ(t1[i], t2[i + init.size()]);
     }
-  }
-};
-
-TEST(IdTable, insertAtEnd) {
-  runTestForDifferentTypes<3>(CheckInsertAtEnd{}, "idTableTest.insertAtEnd");
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
-// A struct that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckInsertAtEndWithPermutationAndLimit {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
+// _____________________________________________________________________________
+TEST(IdTable, insertAtEndWithPermutationAndLimit) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
+
     Table init{4, std::move(additionalArgs.at(0))...};
     init.push_back({make(7), make(2), make(4), make(1)});
     init.push_back({make(0), make(22), make(1), make(4)});
@@ -412,20 +411,17 @@ struct CheckInsertAtEndWithPermutationAndLimit {
     EXPECT_EQ(t2.at(3, 1), make(6));
     EXPECT_EQ(t2.at(3, 2), make(0));
     EXPECT_EQ(t2.at(3, 3), make(1337));
-  }
-};
-
-// _____________________________________________________________________________
-TEST(IdTable, insertAtEndWithPermutationAndLimit) {
-  runTestForDifferentTypes<3>(CheckInsertAtEndWithPermutationAndLimit{},
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable,
                               "IdTable.insertAtEndWithPermutationAndLimit");
 }
 
-// A struct that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckReserveAndResize {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
+TEST(IdTable, reserve_and_resize) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 34;
     constexpr size_t NUM_COLS = 20;
 
@@ -465,19 +461,17 @@ struct CheckReserveAndResize {
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       ASSERT_EQ(make(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
     }
-  }
-};
-
-TEST(IdTable, reserve_and_resize) {
-  runTestForDifferentTypes<2>(CheckReserveAndResize{},
+  };
+  runTestForDifferentTypes<2>(runTestForIdTable,
                               "idTableTest.reserveAndResize");
 }
 
-// A struct that is used as the `testCase` argument to the
-// `runTestForDifferentTypes` function (see above for details).
-struct CheckCopyAndMove {
-  template <typename Table>
-  void operator()(auto make, auto... additionalArgs) const {
+TEST(IdTable, copyAndMove) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
+    using Table = decltype(t)::type;
+
     constexpr size_t NUM_ROWS = 100;
     constexpr size_t NUM_COLS = 4;
 
@@ -524,11 +518,9 @@ struct CheckCopyAndMove {
       ASSERT_EQ(make(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
       ASSERT_EQ(make(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
     }
-  }
-};
+  };
 
-TEST(IdTable, copyAndMove) {
-  runTestForDifferentTypes<6>(CheckCopyAndMove{}, "idTableTest.copyAndMove");
+  runTestForDifferentTypes<6>(runTestForIdTable, "idTableTest.copyAndMove");
 }
 
 TEST(IdTable, erase) {

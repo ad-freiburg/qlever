@@ -24,22 +24,6 @@ CPP_template(typename Type)(requires ad_utility::SimilarToAnyTypeIn<
                             Type, ad_benchmark::ResultTable::EntryType>) Type
     createDummyValueEntryType();
 
-namespace detail {
-// Helper for the `doForTypeInResultTableEntryType` function (see below).
-template <typename Function>
-struct FunctionCaller {
-  Function& function;
-
-  template <typename IndexType>
-  void operator()() const {
-    // `std::monostate` is not important for these kinds of tests.
-    if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
-      function.template operator()<IndexType>();
-    }
-  }
-};
-}  // namespace detail
-
 /*
 @brief Call the lambda with each of the alternatives in
 `ad_benchmark::ResultTable::EntryType`, except `std::monostate`, as template
@@ -51,8 +35,15 @@ arguments. Should be passed per deduction.
 */
 template <typename Function>
 static void doForTypeInResultTableEntryType(Function function) {
-  ad_utility::forEachTypeInTemplateType<ad_benchmark::ResultTable::EntryType>(
-      detail::FunctionCaller<decltype(function)>{function});
+  ad_utility::forEachTypeInTemplateTypeWithTI(
+      ad_utility::use_type_identity::ti<ad_benchmark::ResultTable::EntryType>,
+      [&function](auto t) {
+        using IndexType = decltype(t)::type;
+        // `std::monostate` is not important for these kinds of tests.
+        if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
+          function(ad_utility::use_type_identity::ti<IndexType>);
+        }
+      });
 }
 
 #endif  // QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H

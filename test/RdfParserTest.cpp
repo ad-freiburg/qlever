@@ -21,6 +21,7 @@
 
 using std::string;
 using namespace std::literals;
+using ad_utility::use_type_identity::ti;
 using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
 using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
 using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
@@ -483,7 +484,6 @@ TEST(RdfParserTest, numericLiteralErrorBehavior) {
       ASSERT_EQ(result[0].object_, expectedObjects[i]);
     }
   };
-
   auto runCommonTests = [&assertParsingFails, &testTripleObjects,
                          &parseAllTriples](const auto& p) {
     using Parser = std::decay_t<decltype(p)>;
@@ -837,44 +837,24 @@ std::vector<TurtleTriple> parseFromFile(
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
 auto forAllParallelParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
-      true, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
-      false, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
-      true, args...);
-  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
-      false, args...);
+  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, true, args...);
+  function(ti<RdfParallelParser<TurtleParser<Tokenizer>>>, false, args...);
+  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, true, args...);
+  function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
 }
 auto forAllMultifileParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfMultifileParser<Tokenizer>>(true, args...);
-  function.template operator()<RdfMultifileParser<TokenizerCtre>>(true,
-                                                                  args...);
+  function(ti<RdfMultifileParser<Tokenizer>>, true, args...);
+  function(ti<RdfMultifileParser<TokenizerCtre>>, true, args...);
 }
 
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
-      true, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
-      false, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
-      true, args...);
-  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
-      false, args...);
+  function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, true, args...);
+  function(ti<RdfStreamParser<TurtleParser<Tokenizer>>>, false, args...);
+  function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, true, args...);
+  function(ti<RdfStreamParser<TurtleParser<TokenizerCtre>>>, false, args...);
   forAllParallelParsers(function, args...);
   forAllMultifileParsers(function, args...);
 }
-
-struct TurtleStreamAndParallelWithParser {
-  const std::string& filename;
-  const std::vector<TurtleTriple>& expectedTriples;
-
-  template <typename Parser>
-  void operator()(bool useBatchInterface) const {
-    auto result = parseFromFile<Parser>(filename, useBatchInterface);
-    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
-  }
-};
 
 TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   std::string filename{"turtleStreamAndParallelParserTest.dat"};
@@ -890,19 +870,23 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
     }
   }
 
-  auto testWithParser =
-      TurtleStreamAndParallelWithParser{filename, expectedTriples};
+  auto testWithParser = [&](auto t, bool useBatchInterface) {
+    using Parser = decltype(t)::type;
+    auto result = parseFromFile<Parser>(filename, useBatchInterface);
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
+  };
 
   forAllParsers(testWithParser);
   forAllMultifileParsers(testWithParser);
   ad_utility::deleteFile(filename);
 }
 
-struct TestEmptyInputWithParser {
-  const std::string& filename;
-
-  template <typename Parser>
-  void operator()(bool useBatchInterface, std::string_view input = "") const {
+// _______________________________________________________________________
+TEST(RdfParserTest, emptyInput) {
+  std::string filename{"turtleParserEmptyInput.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input = "") {
+    using Parser = decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -910,13 +894,7 @@ struct TestEmptyInputWithParser {
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::ElementsAre());
     ad_utility::deleteFile(filename);
-  }
-};
-
-// _______________________________________________________________________
-TEST(RdfParserTest, emptyInput) {
-  std::string filename{"turtleParserEmptyInput.dat"};
-  auto testWithParser = TestEmptyInputWithParser{filename};
+  };
 
   forAllParsers(testWithParser, "");
   std::string onlyPrefixes = "PREFIX bim: <http://www.bimm.bam.de/blubb/>";
@@ -924,12 +902,13 @@ TEST(RdfParserTest, emptyInput) {
   forAllMultifileParsers(testWithParser);
 }
 
-struct TestMultilineCommentsWithParser {
-  const std::string& filename;
-
-  template <typename Parser>
-  void operator()(bool useBatchInterface, std::string_view input,
-                  const auto& expectedTriples) const {
+// ________________________________________________________________________
+TEST(RdfParserTest, multilineComments) {
+  std::string filename{"turtleParserMultilineComments.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input,
+                            const auto& expectedTriples) {
+    using Parser = decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -937,13 +916,7 @@ struct TestMultilineCommentsWithParser {
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
     ad_utility::deleteFile(filename);
-  }
-};
-
-// ________________________________________________________________________
-TEST(RdfParserTest, multilineComments) {
-  std::string filename{"turtleParserMultilineComments.dat"};
-  auto testWithParser = TestMultilineCommentsWithParser{filename};
+  };
 
   // Test an input with many lines that contain only comments and whitespace.
   // There was a bug for this case in a previous version of the parser.
@@ -980,11 +953,14 @@ TEST(RdfParserTest, multilineComments) {
   forAllParsers(testWithParser, input, expected);
 }
 
-struct TestExceptionPropagationWithParser {
-  const std::string& filename;
-
-  template <typename Parser>
-  void operator()(bool useBatchInterface, std::string_view input) const {
+// Test that exceptions during the turtle parsing are properly propagated to the
+// calling code. This is especially important for the parallel parsers where the
+// actual parsing happens on background threads.
+TEST(RdfParserTest, exceptionPropagation) {
+  std::string filename{"turtleParserExceptionPropagation.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            std::string_view input) {
+    using Parser = decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -993,24 +969,18 @@ struct TestExceptionPropagationWithParser {
         (parseFromFile<Parser>(filename, useBatchInterface)),
         ::testing::ContainsRegex("Parse error"));
     ad_utility::deleteFile(filename);
-  }
-};
-
-// Test that exceptions during the turtle parsing are properly propagated to the
-// calling code. This is especially important for the parallel parsers where the
-// actual parsing happens on background threads.
-TEST(RdfParserTest, exceptionPropagation) {
-  std::string filename{"turtleParserExceptionPropagation.dat"};
-  auto testWithParser = TestExceptionPropagationWithParser{filename};
+  };
   forAllParsers(testWithParser, "<missing> <object> .");
 }
 
-struct TestExceptionPropagationFileBufferReadingWithParser {
-  const std::string& filename;
-
-  template <typename Parser>
-  void operator()(bool useBatchInterface, ad_utility::MemorySize bufferSize,
-                  std::string_view input) const {
+// Test that exceptions in the batched reading of the input file are properly
+// propagated.
+TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
+  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -1022,15 +992,7 @@ struct TestExceptionPropagationFileBufferReadingWithParser {
             ::testing::HasSubstr("use `--parser-buffer-size`"),
             ::testing::HasSubstr("use `--parse-parallel false`")));
     ad_utility::deleteFile(filename);
-  }
-};
-
-// Test that exceptions in the batched reading of the input file are properly
-// propagated.
-TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
-  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
-  auto testWithParser =
-      TestExceptionPropagationFileBufferReadingWithParser{filename};
+  };
   // Input, where the first triple fits into a 40_B buffer, but the second
   // one does not.
   std::string inputWithLongTriple =
@@ -1040,16 +1002,22 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
-struct TestStopParsingOnOutsideFailureWithParser {
-  const std::string& filename;
-
-  template <typename Parser>
-  void operator()(bool, std::string_view input) const {
+// Test that the parallel parser's destructor can be run quickly and without
+// blocking, even when there are still lots of blocks in the pipeline that are
+// currently being parsed.
+TEST(RdfParserTest, stopParsingOnOutsideFailure) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
+  auto testWithParser = [&](auto t, [[maybe_unused]] bool useBatchInterface,
+                            std::string_view input) {
+    using Parser = decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
     }
-    ad_utility::Timer t{ad_utility::Timer::Stopped};
+    ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
@@ -1059,21 +1027,10 @@ struct TestStopParsingOnOutsideFailureWithParser {
           return Parser{filename, 40_B, 10ms};
         }
       }();
-      t.cont();
+      timer.cont();
     }
-    EXPECT_LE(t.msecs(), 20ms);
-  }
-};
-
-// Test that the parallel parser's destructor can be run quickly and without
-// blocking, even when there are still lots of blocks in the pipeline that are
-// currently being parsed.
-TEST(RdfParserTest, stopParsingOnOutsideFailure) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
-  std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
-  auto testWithParser = TestStopParsingOnOutsideFailureWithParser{filename};
+    EXPECT_LE(timer.msecs(), 20ms);
+  };
   const std::string input = []() {
     std::string singleBlock = "<subject> <predicate> <object> . \n ";
     std::string longBlock;
@@ -1137,26 +1094,23 @@ TEST(RdfParserTest, noGetlineInStringParser) {
   runTestsForParser(CtreParser{});
 }
 
-struct TestNoGetlineInMultifileParsersForParser {
-  template <typename Parser>
-  void operator()([[maybe_unused]] bool interface) const {
-    Parser parser{};
-    TurtleTriple t;
-    // Also test the dummy parse position member.
-    EXPECT_EQ(parser.getParsePosition(), 0u);
-    EXPECT_ANY_THROW(parser.getLine(t));
-  }
-};
-
 // _____________________________________________________________________________
 TEST(RdfParserTest, noGetlineInMultifileParsers) {
-  auto runTestsForParser = TestNoGetlineInMultifileParsersForParser{};
+  auto runTestsForParser = [](auto t, [[maybe_unused]] bool interface) {
+    using Parser = decltype(t)::type;
+    Parser parser{};
+    TurtleTriple triple;
+    // Also test the dummy parse position member.
+    EXPECT_EQ(parser.getParsePosition(), 0u);
+    EXPECT_ANY_THROW(parser.getLine(triple));
+  };
   forAllMultifileParsers(runTestsForParser);
 }
 
-struct TestMultifileParser {
-  template <typename Parser>
-  void operator()(bool useParallelParser) const {
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParser) {
+  auto impl = [](auto t, bool useParallelParser) {
+    using Parser = decltype(t)::type;
     std::vector<TurtleTriple> expected;
     std::string ttl = "<x> <y> <z>. <x> <y> <z2>.";
     expected.push_back(TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"),
@@ -1189,12 +1143,8 @@ struct TestMultifileParser {
       ql::ranges::copy(batch.value(), std::back_inserter(result));
     }
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
-  }
-};
-
-// _____________________________________________________________________________
-TEST(RdfParserTest, multifileParser) {
-  forAllMultifileParsers(TestMultifileParser{});
+  };
+  forAllMultifileParsers(impl);
 }
 
 // _____________________________________________________________________________

@@ -235,6 +235,11 @@ constexpr void forEachTypeInParameterPack(const auto& lambda) {
   (lambda.template operator()<Ts>(), ...);
 }
 
+template <typename... Ts>
+constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
+  (lambda(use_type_identity::ti<Ts>), ...);
+}
+
 /*
 Implementation for `forEachTypeInTemplateType`.
 
@@ -251,6 +256,16 @@ struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };
+
+template <class T>
+struct forEachTypeInTemplateTypeWithTIImpl;
+
+template <template <typename...> typename Template, typename... Ts>
+struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
+  constexpr void operator()(const auto& lambda) const {
+    forEachTypeInParameterPackWithTI<Ts...>(lambda);
+  }
+};
 }  // namespace detail
 
 /*
@@ -260,6 +275,12 @@ template type as explicit template parameter, keeping the same order.
 template <typename TemplateType>
 constexpr void forEachTypeInTemplateType(const auto& lambda) {
   detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
+}
+
+template <typename TemplateType>
+constexpr void forEachTypeInTemplateTypeWithTI(
+    use_type_identity::TI<TemplateType>, const auto& lambda) {
+  detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
 }  // namespace ad_utility

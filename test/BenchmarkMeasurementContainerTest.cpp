@@ -89,24 +89,6 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ASSERT_EQ(table.getEntry<std::string>(1, 0), rowNames.at(1));
 }
 
-template <typename WantedType, typename F>
-struct CheckTableEntryType {
-  const ResultTable& table;
-  const size_t rowNumber;
-  const size_t column;
-  const WantedType& wantedContent;
-  const F& assertEqual;
-
-  template <typename PossiblyWrongType>
-  void operator()() const {
-    if constexpr (ad_utility::isSimilar<PossiblyWrongType, WantedType>) {
-      assertEqual(wantedContent, table.getEntry<WantedType>(rowNumber, column));
-    } else {
-      ASSERT_ANY_THROW(table.getEntry<PossiblyWrongType>(rowNumber, column));
-    }
-  }
-};
-
 /*
 Check the content of a `Result` row.
 */
@@ -128,90 +110,22 @@ static void checkResultTableRow(const ResultTable& table,
   size_t column = 0;
   auto check = [&table, &rowNumber, &column,
                 &assertEqual](const auto& wantedContent) mutable {
+    using T = decltype(wantedContent);
     // `getEntry` should ONLY work with `T`
-    doForTypeInResultTableEntryType(
-        CheckTableEntryType<std::decay_t<decltype(wantedContent)>,
-                            std::decay_t<decltype(assertEqual)>>{
-            table, rowNumber, column, wantedContent, assertEqual});
+    doForTypeInResultTableEntryType([&table, &rowNumber, &column, &assertEqual,
+                                     &wantedContent](auto t) {
+      using PossiblyWrongType = decltype(t)::type;
+      if constexpr (ad_utility::isSimilar<PossiblyWrongType, T>) {
+        assertEqual(wantedContent,
+                    table.getEntry<std::decay_t<T>>(rowNumber, column));
+      } else {
+        ASSERT_ANY_THROW(table.getEntry<PossiblyWrongType>(rowNumber, column));
+      }
+    });
     column++;
   };
   ((check(wantedContent)), ...);
 }
-
-struct TryAccess {
-  const ResultTable& table;
-  const size_t& row;
-  const size_t& column;
-
-  template <typename T>
-  void operator()() const {
-    ASSERT_ANY_THROW(table.getEntry<T>(row, column));
-  }
-};
-
-template <typename C>
-struct CustomEntryChecker {
-  ResultTable& table;
-  const C& checkNeverSet;
-
-  template <typename T1>
-  struct InnerChecker {
-    ResultTable& table;
-    const C& checkNeverSet;
-
-    template <typename T2>
-    void operator()() const {
-      // Set custom entries.
-      table.setEntry(0, 2, createDummyValueEntryType<T1>());
-      table.setEntry(1, 1, createDummyValueEntryType<T2>());
-
-      // Check the entries.
-      checkResultTableRow(table, 0, "row1"s, 0.01f,
-                          createDummyValueEntryType<T1>());
-      checkResultTableRow(table, 1, "row2"s, createDummyValueEntryType<T2>());
-      checkNeverSet(table, 1, 2);
-    }
-  };
-
-  template <typename T1>
-  void operator()() const {
-    doForTypeInResultTableEntryType(InnerChecker<T1>{table, checkNeverSet});
-  }
-};
-
-template <typename C1, typename C2>
-struct AddRowTester {
-  ResultTable& table;
-  const C1& checkNeverSet;
-  const C2& checkForm;
-  const std::vector<std::string>& columnNames;
-  std::vector<std::string>& addRowRowNames;
-
-  template <typename T>
-  void operator()() const {
-    // What is the index of the new row?
-    const size_t indexNewRow = table.numRows();
-
-    // Can we add a new row, without changing things?
-    table.addRow();
-    addRowRowNames.emplace_back(absl::StrCat("row", indexNewRow + 1));
-    table.setEntry(indexNewRow, 0, addRowRowNames.back());
-    checkForm(table, "My table", "My table", addRowRowNames, columnNames);
-    checkResultTableRow(table, 0, "row1"s, 0.01f);
-    checkResultTableRow(table, 1, "row2"s);
-    checkNeverSet(table, 1, 2);
-
-    // Are the entries of the new row empty?
-    checkNeverSet(table, indexNewRow, 1);
-    checkNeverSet(table, indexNewRow, 2);
-
-    // Do those new fields work like the old ones?
-    table.addMeasurement(indexNewRow, 1, createWaitLambda(29ms));
-    table.setEntry(indexNewRow, 2, createDummyValueEntryType<T>());
-    checkResultTableRow(table, indexNewRow, addRowRowNames.back(), 0.029f,
-                        createDummyValueEntryType<T>());
-  }
-};
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Looks, if the general form is correct.
@@ -239,7 +153,10 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
         table.entries_.at(row).at(column)));
 
     // Does trying to access it anyway cause an error?
-    doForTypeInResultTableEntryType(TryAccess{table, row, column});
+    doForTypeInResultTableEntryType([&table, &row, &column](auto t) {
+      using T = decltype(t)::type;
+      ASSERT_ANY_THROW(table.getEntry<T>(row, column));
+    });
   };
 
   /*
@@ -271,15 +188,52 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.addMeasurement(0, 1, createWaitLambda(10ms));
 
   // Check, if it works with custom entries.
-  doForTypeInResultTableEntryType(
-      CustomEntryChecker<decltype(checkNeverSet)>{table, checkNeverSet});
+  doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t1) {
+    using T1 = decltype(t1)::type;
+    doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t2) {
+      using T2 = decltype(t2)::type;
+
+      // Set custom entries.
+      table.setEntry(0, 2, createDummyValueEntryType<T1>());
+      table.setEntry(1, 1, createDummyValueEntryType<T2>());
+
+      // Check the entries.
+      checkResultTableRow(table, 0, "row1"s, 0.01f,
+                          createDummyValueEntryType<T1>());
+      checkResultTableRow(table, 1, "row2"s, createDummyValueEntryType<T2>());
+      checkNeverSet(table, 1, 2);
+    });
+  });
 
   // For keeping track of the new row names.
   std::vector<std::string> addRowRowNames(rowNames);
   // Testing `addRow`.
-  doForTypeInResultTableEntryType(
-      AddRowTester<decltype(checkNeverSet), decltype(checkForm)>{
-          table, checkNeverSet, checkForm, columnNames, addRowRowNames});
+  doForTypeInResultTableEntryType([&table, &checkNeverSet, &checkForm,
+                                   &columnNames, &addRowRowNames](auto t) {
+    using T = decltype(t)::type;
+
+    // What is the index of the new row?
+    const size_t indexNewRow = table.numRows();
+
+    // Can we add a new row, without changing things?
+    table.addRow();
+    addRowRowNames.emplace_back(absl::StrCat("row", indexNewRow + 1));
+    table.setEntry(indexNewRow, 0, addRowRowNames.back());
+    checkForm(table, "My table", "My table", addRowRowNames, columnNames);
+    checkResultTableRow(table, 0, "row1"s, 0.01f);
+    checkResultTableRow(table, 1, "row2"s);
+    checkNeverSet(table, 1, 2);
+
+    // Are the entries of the new row empty?
+    checkNeverSet(table, indexNewRow, 1);
+    checkNeverSet(table, indexNewRow, 2);
+
+    // To those new fields work like the old ones?
+    table.addMeasurement(indexNewRow, 1, createWaitLambda(29ms));
+    table.setEntry(indexNewRow, 2, createDummyValueEntryType<T>());
+    checkResultTableRow(table, indexNewRow, addRowRowNames.back(), 0.029f,
+                        createDummyValueEntryType<T>());
+  });
 
   // Just a simple existence test for printing.
   const auto tableAsString = static_cast<std::string>(table);
