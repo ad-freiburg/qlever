@@ -234,7 +234,13 @@ const Permutation& Permutation::getActualPermutation(
   bool isInternalScan = isInternal(spec.col0Id()) ||
                         isInternal(spec.col1Id()) || isInternal(spec.col2Id());
 
-  if (!isInternalScan) {
+  bool isGraphPermutation = permutation_ == GPOS || permutation_ == GPSO;
+
+  // Currently the graph permutations don't actually store internal triples, but
+  // the default graph IRI is technically `internal`.
+  // TODO<joka921> find a better interface, in particular by passing a complete
+  // `ScanSpecification` into the `isInternal` function.
+  if (!isInternalScan || isGraphPermutation) {
     return *this;
   }
   AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr, [this]() {

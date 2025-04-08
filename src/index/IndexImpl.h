@@ -148,6 +148,7 @@ class IndexImpl {
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
+  bool useGraphPermutations_ = true;
 
   // Pattern trick data
   bool usePatterns_ = false;
@@ -418,6 +419,9 @@ class IndexImpl {
   bool& usePatterns();
 
   bool& loadAllPermutations();
+
+  bool& useGraphPermutations();
+  bool useGraphPermutations() const;
 
   void setKeepTempFiles(bool keepTempFiles);
 

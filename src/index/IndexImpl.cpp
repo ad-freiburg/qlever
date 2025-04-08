@@ -370,13 +370,24 @@ void IndexImpl::createFromFiles(
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
+  configurationJson_["has-graph-permutations"] = useGraphPermutations_;
+  configurationJson_["has-all-permutations"] = loadAllPermutations_;
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
-    configurationJson_["has-all-permutations"] = false;
+
+    if (useGraphPermutations_) {
+      auto gpsoSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
+      createFirstPermutationPair(NumColumnsIndexBuilding,
+                                 std::move(firstSorterWithUnique), gpsoSorter);
+      createGPSOAndGPOS(NumColumnsIndexBuilding,
+                        gpsoSorter.getSortedBlocks<0>());
+    } else {
+      createFirstPermutationPair(NumColumnsIndexBuilding,
+                                 std::move(firstSorterWithUnique));
+    }
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
     // Without patterns, we explicitly have to pass in the next sorters to all
@@ -390,14 +401,19 @@ void IndexImpl::createFromFiles(
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    auto fourthSorter =
-        makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>(), fourthSorter);
-    configurationJson_["has-all-permutations"] = true;
+    if (useGraphPermutations_) {
+      auto fourthSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
+      createThirdPermutationPair(NumColumnsIndexBuilding,
+                                 thirdSorter.getSortedBlocks<0>(),
+                                 fourthSorter);
 
-    createGPSOAndGPOS(NumColumnsIndexBuilding,
-                      fourthSorter.getSortedBlocks<0>());
+      createGPSOAndGPOS(NumColumnsIndexBuilding,
+                        fourthSorter.getSortedBlocks<0>());
+    } else {
+      createThirdPermutationPair(NumColumnsIndexBuilding,
+                                 thirdSorter.getSortedBlocks<0>());
+    }
 
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -410,15 +426,21 @@ void IndexImpl::createFromFiles(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    auto fourthSorter =
-        makeSorter<SortByGPSO, NumColumnsIndexBuilding + 2>("gpos-sorter");
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-
-                               thirdSorterPtr->template getSortedBlocks<0>(),
-                               fourthSorter);
-    createGPSOAndGPOS(NumColumnsIndexBuilding + 2,
-                      fourthSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
+    if (useGraphPermutations_) {
+      auto fourthSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding + 2>("gpos-sorter");
+      createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+
+                                 thirdSorterPtr->template getSortedBlocks<0>(),
+                                 fourthSorter);
+      createGPSOAndGPOS(NumColumnsIndexBuilding + 2,
+                        fourthSorter.getSortedBlocks<0>());
+    } else {
+      createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+
+                                 thirdSorterPtr->template getSortedBlocks<0>());
+    }
   }
 
   configurationJson_["num-blank-nodes-total"] =
@@ -426,6 +448,7 @@ void IndexImpl::createFromFiles(
 
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
+  writeConfiguration();
   AD_LOG_INFO << "Index build completed" << std::endl;
 }
 
@@ -940,14 +963,19 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
     load(osp_);
     load(spo_);
     load(sop_);
-    // TODO<joka921> Do this only if they exist.
+  } else {
+    AD_LOG_INFO << "No Oxx and Sxx permutations were loaded, SPARQL queries "
+                   "with predicate variables will therefore not work"
+                << std::endl;
+  }
+
+  if (useGraphPermutations_) {
     load(gpos_);
     load(gpso_);
   } else {
-    AD_LOG_INFO
-        << "Only the PSO and POS permutation were loaded, SPARQL queries "
-           "with predicate variables will therefore not work"
-        << std::endl;
+    AD_LOG_INFO << "No GPSO and GPOS permutations were loaded. Queries with "
+                   "GRAPH and FROM (NAMED) clauses might be less efficient"
+                << std::endl;
   }
 
   // We have to load the patterns first to figure out if the patterns were built
@@ -1042,6 +1070,12 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
+
+// _____________________________________________________________________________
+bool& IndexImpl::useGraphPermutations() { return useGraphPermutations_; }
+
+// _____________________________________________________________________________
+bool IndexImpl::useGraphPermutations() const { return useGraphPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -1164,6 +1198,7 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
+  loadDataMember("has-graph-permutations", useGraphPermutations_, false);
   loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});

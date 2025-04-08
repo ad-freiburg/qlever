@@ -7,6 +7,7 @@
 #include "engine/QueryPlanner.h"
 
 #include <absl/strings/str_split.h>
+#include <index/IndexImpl.h>
 
 #include <memory>
 #include <optional>
@@ -844,6 +845,9 @@ auto QueryPlanner::seedWithScansAndText(
               _qec, permutation, std::move(triple.value()), relevantGraphs));
 
           // If we only have a single graph, also consider the GPxx permutations
+          if (!_qec->getIndex().getImpl().useGraphPermutations()) {
+            return;
+          }
           if (permutation == PSO && relevantGraphs.has_value() &&
               relevantGraphs->size() == 1) {
             pushPlan(makeSubtreePlan<IndexScan>(
