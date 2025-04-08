@@ -38,8 +38,7 @@ auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
                      C& internalWordCallback,
                      ad_utility::MemorySize memoryToUse)
     -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>  // ...
-    ) {
+        requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, memoryToUse);
