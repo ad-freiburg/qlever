@@ -166,15 +166,14 @@ void Literal::replaceContent(std::string_view newContent) {
 
 // __________________________________________
 void Literal::concat(const Literal& other) {
-  std::string newContent = std::string{asStringViewUnsafe(getContent())} +
-                           std::string{asStringViewUnsafe(other.getContent())};
-  replaceContent(newContent);
   if (!((hasLanguageTag() && other.hasLanguageTag() &&
          getLanguageTag() == other.getLanguageTag()) ||
         (hasDatatype() && other.hasDatatype() &&
          getDatatype() == other.getDatatype()))) {
     removeDatatypeOrLanguageTag();
   }
+  content_.insert(beginOfSuffix_ - 1, asStringViewUnsafe(other.getContent()));
+  beginOfSuffix_ += other.beginOfSuffix_ - 2;
 }
 
 }  // namespace ad_utility::triple_component

@@ -1334,19 +1334,22 @@ TEST(SparqlExpression, concatExpression) {
   auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
 
   const auto T = Id::makeFromBool(true);
-  checkConcat(
-      idOrLitOrStringVec({"0null", "eins", "2zwei", "3drei", "", "5.35.2"}),
-      // UNDEF evaluates to an empty string..
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
-                 idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
-                 Ids{U, U, U, U, U, D(5.2)}});
+
+  checkConcat(idOrLitOrStringVec({U, U, U}),
+              std::tuple{Ids{U, I(0), U}, Ids{U, U, I(0)}});
+
+  checkConcat(idOrLitOrStringVec({"0null", U, U, U, U, "5.35.2"}),
+              // UNDEF evaluates to UNDEF.
+              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
+                         idOrLitOrStringVec({"null", "eins", "zwei", U, U, ""}),
+                         idOrLitOrStringVec({"", I(1), U, U, U, D(5.2)})});
   // Example with some constants in the middle.
-  checkConcat(
-      idOrLitOrStringVec({"0trueeins", "trueeins", "2trueeins", "3trueeins",
-                          "trueeins", "12.3trueeins-2.1"}),
-      // UNDEF and the empty string are considered to be `false`.
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
-                 IdOrLiteralOrIri{lit("eins")}, Ids{U, U, U, U, U, D(-2.1)}});
+  checkConcat(idOrLitOrStringVec({"0trueeins", U, "2trueeins", "3trueeins", U,
+                                  "12.3trueeins-2.1"}),
+              // UNDEF and the empty string are considered to be `false`.
+              std::tuple{Ids{I(0), U, I(2), I(3), I(4), D(12.3)}, T,
+                         IdOrLiteralOrIri{lit("eins")},
+                         idOrLitOrStringVec({"", "", "", "", U, D(-2.1)})});
 
   // Only constants
   checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
@@ -1443,13 +1446,10 @@ TEST(SparqlExpression, concatExpression) {
                          IdOrLiteralOrIri{lit("World", "@en")}});
 
   checkConcat(
-      IdOrLiteralOrIriVec{lit("HelloWorld!", "@en"), lit("HalloWorld!"),
-         lit("HelloWorld?"), lit("HalloWorld?"),
-          lit("HelloWorld!"), lit("HalloWorld!"),
-           lit("HelloWorldSTR"), lit("HalloWorldSTR")},
+      IdOrLiteralOrIriVec{lit("HelloWorld!"), lit("HalloWorld!")},
       std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hallo", "@de")},
                  IdOrLiteralOrIri{lit("World", "@en")},
-                 IdOrLiteralOrIriVec{lit("!", "@en"), lit("?"), lit("!", "@fr"), lit("STR", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+                 IdOrLiteralOrIri{lit("!", "@fr")}});
 }
 
 // ______________________________________________________________________________

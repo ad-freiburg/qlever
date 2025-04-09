@@ -71,7 +71,6 @@ class Literal {
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-
   NormalizedStringView getDatatype() const;
 
   // For documentation, see documentation of function
