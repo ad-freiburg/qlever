@@ -771,7 +771,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
+                                     Permutation::KeyOrder permutation,
                                      auto&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -1575,7 +1575,11 @@ vector<float> IndexImpl::getMultiplicities(
   std::array<float, 3> m{numTriples / numDistinctSubjects().normal,
                          numTriples / numDistinctPredicates().normal,
                          numTriples / numDistinctObjects().normal};
-  return {m[p.keyOrder()[0]], m[p.keyOrder()[1]], m[p.keyOrder()[2]]};
+  auto [a, b, c, d] = p.keyOrder().keys();
+  // TODO<joka921> could we update this once we have the number of distinct
+  // graphs stored and therefore also a multiplicity for the graph column?
+  AD_CORRECTNESS_CHECK(d == ADDITIONAL_COLUMN_GRAPH_ID);
+  return {m[a], m[b], m[c]};
 }
 
 // _____________________________________________________________________________

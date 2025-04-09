@@ -16,7 +16,7 @@
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     std::span<const IdTriple<0>> triples,
     std::span<const CompressedBlockMetadata> blockMetadata,
-    const std::array<size_t, 3>& keyOrder, bool shouldExist,
+    const qlever::KeyOrder& keyOrder, bool shouldExist,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   std::vector<LocatedTriple> out;
   out.reserve(triples.size());

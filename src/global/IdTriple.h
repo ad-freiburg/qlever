@@ -12,6 +12,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
+#include "index/KeyOrder.h"
 
 template <size_t N = 0>
 struct IdTriple {
@@ -52,9 +53,9 @@ struct IdTriple {
 
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
-  IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
-    std::array<Id, NumCols> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
-                                   ids_[keyOrder[2]], ids_[3]};
+  IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
+    const auto& [a, b, c, d] = keyOrder.keys();
+    std::array<Id, NumCols> newIds{ids_[a], ids_[b], ids_[b], ids_[c]};
     if constexpr (N == 0) {
       return IdTriple<N>(newIds);
     } else {
