@@ -89,16 +89,16 @@ struct SpatialQuery : MagicServiceQuery {
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
 
   // Helper to format an IRI for a message to the user.
-  std::string esc(const std::string_view rawIri);
+  static std::string esc(const std::string_view rawIri);
 
   // Helper to format the different available join types.
-  std::string allJoinTypesAsStr();
+  static std::string allJoinTypesAsStr();
 
   // Helper to format the different available algorithms.
-  std::string allAlgorithmsAsStr();
+  static std::string allAlgorithmsAsStr();
 
   // Helper to format the different available configuration keys.
-  std::string allSpatialQueryArgs();
+  static std::string allSpatialQueryArgs();
 };
 
 }  // namespace parsedQuery

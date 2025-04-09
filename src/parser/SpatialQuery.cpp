@@ -120,40 +120,42 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   }
 
   if (!left_.has_value()) {
-    throw SpatialSearchException(
-        "Missing parameter `<left>` in spatial search.");
+    throw SpatialSearchException("Missing parameter " + esc(SJ_LEFT_VAR) +
+                                 " in spatial search.");
   }
 
   if (algo != SpatialJoinAlgorithm::LIBSPATIALJOIN && !maxDist_.has_value() &&
       !maxResults_.has_value()) {
-    throw SpatialSearchException(
-        "Neither `<numNearestNeighbors>` nor `<maxDistance>` were provided but "
-        "at least one of them is required for the selected algorithm");
+    throw SpatialSearchException("Neither " + esc(SJ_MAX_RESULTS) + " nor " +
+                                 esc(SJ_MAX_DIST) +
+                                 " were provided but at least one of them is "
+                                 "required for the selected algorithm");
   }
 
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN && maxResults_.has_value()) {
-    throw SpatialSearchException(
-        "The algorithm `<libspatialjoin>` does not support the option "
-        "`<numNearestNeighbors>`");
+    throw SpatialSearchException("The algorithm " + esc(SJ_LIBSPATIALJOIN) +
+                                 " does not support the option " +
+                                 esc(SJ_MAX_RESULTS));
   }
 
   if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN &&
       joinType_ != SpatialJoinType::WITHIN_DIST && maxDist_.has_value()) {
-    throw SpatialSearchException(
-        "The algorithm `<libspatialjoin>` supports the "
-        "`<maxDistance>` option only if `<joinType>` is set to "
-        "`<within-dist>`.");
+    throw SpatialSearchException("The algorithm " + esc(SJ_LIBSPATIALJOIN) +
+                                 " supports the " + esc(SJ_MAX_DIST) +
+                                 " option only if " + esc(SJ_JOIN_TYPE) +
+                                 " is set to " + esc(SJ_WITHIN_DIST));
   }
 
   if (joinType_.has_value() && algo != SpatialJoinAlgorithm::LIBSPATIALJOIN) {
     throw SpatialSearchException(
-        "The selected algorithm does not support the `<joinType>` option. Only "
-        "the `<libspatialjoin>` algorithm is suitable for this option.");
+        "The selected algorithm does not support the " + esc(SJ_JOIN_TYPE) +
+        " option. Only the " + esc(SJ_LIBSPATIALJOIN) +
+        " algorithm is suitable for this option.");
   }
 
   if (!right_.has_value()) {
-    throw SpatialSearchException(
-        "Missing parameter `<right>` in spatial search.");
+    throw SpatialSearchException("Missing parameter " + esc(SJ_RIGHT_VAR) +
+                                 " in spatial search.");
   }
 
   // Only if the number of results is limited, it is mandatory that the right
@@ -170,9 +172,11 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
              !payloadVariables_.isAll() && !payloadVariables_.empty()) {
     throw SpatialSearchException(
         "The right variable for the spatial search is declared outside the "
-        "SERVICE, but the <payload> parameter was set. Please move the "
-        "declaration of the right variable into the SERVICE if you wish to use "
-        "`<payload>`");
+        "SERVICE, but the " +
+        esc(SJ_PAYLOAD) +
+        " parameter was set. Please move the declaration of the right variable "
+        "into the SERVICE if you wish to use " +
+        esc(SJ_PAYLOAD));
   }
 
   std::optional<SpatialJoinType> joinType = std::nullopt;
@@ -276,10 +280,11 @@ std::string SpatialQuery::allAlgorithmsAsStr() {
 
 // ____________________________________________________________________________
 std::string SpatialQuery::allSpatialQueryArgs() {
-  return "`<left>`, `<right>`, "
-         "`<numNearestNeighbors>`, `<maxDistance>`, `<bindDistance>`, "
-         "`<joinType>`, `<payload>`, `<algorithm>`";
-  // TODO
+  std::vector<std::string_view> options{esc(SJ_LEFT_VAR),    esc(SJ_RIGHT_VAR),
+                                        esc(SJ_MAX_RESULTS), esc(SJ_MAX_DIST),
+                                        esc(SJ_DIST_VAR),    esc(SJ_JOIN_TYPE),
+                                        esc(SJ_PAYLOAD),     esc(SJ_ALGORITHM)};
+  return absl::StrJoin(options, ", ");
 }
 
 }  // namespace parsedQuery
