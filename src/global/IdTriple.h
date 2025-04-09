@@ -55,7 +55,7 @@ struct IdTriple {
   // its keyOrder.
   IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
     const auto& [a, b, c, d] = keyOrder.keys();
-    std::array<Id, NumCols> newIds{ids_[a], ids_[b], ids_[b], ids_[c]};
+    std::array<Id, NumCols> newIds{ids_[a], ids_[b], ids_[c], ids_[d]};
     if constexpr (N == 0) {
       return IdTriple<N>(newIds);
     } else {
