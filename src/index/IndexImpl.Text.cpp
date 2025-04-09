@@ -155,22 +155,17 @@ void IndexImpl::buildTextIndexFile(
                 bAndKParamForTextScoring_};
 
   // Build the text vocabulary (first scan over the text records).
-  size_t nofLines = processWordsForVocabulary(wordsFile, addWordsFromLiterals);
+  processWordsForVocabulary(wordsFile, addWordsFromLiterals);
   // Calculate the score data for the words
   scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
                                 vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
-  TextVec vec{temporaryStorageFile};
-  vec.setAccessPattern(ad_utility::AccessPattern::Sequential);
-  vec.reserve(nofLines);
+  TextVec vec{temporaryStorageFile, memoryLimitIndexBuilding() / 3, allocator_};
   processWordsForInvertedLists(wordsFile, addWordsFromLiterals, vec);
   LOG(DEBUG) << "Sorting text index, #elements = " << vec.size() << std::endl;
-  vec.setAccessPattern(ad_utility::AccessPattern::Random);
-  ql::ranges::sort(vec, SortText());
   LOG(DEBUG) << "Sort done" << std::endl;
-  vec.setAccessPattern(ad_utility::AccessPattern::Sequential);
   createTextIndex(indexFilename, vec);
   openTextFileHandle();
 }
@@ -331,8 +326,10 @@ void IndexImpl::addContextToVector(
   for (auto it = words.begin(); it != words.end(); ++it) {
     TextBlockIndex blockId = getWordBlockId(it->first);
     touchedBlocks.insert(blockId);
-    vec.push_back(
-        std::make_tuple(blockId, context, it->first, it->second, false));
+    vec.push(
+        std::array{Id::makeFromInt(blockId), Id::makeFromInt(context.get()),
+                   Id::makeFromInt(it->first), Id::makeFromDouble(it->second),
+                   Id::makeFromBool(false)});
   }
 
   // All entities have to be written in the entity list part for each block.
@@ -343,14 +340,16 @@ void IndexImpl::addContextToVector(
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-      vec.push_back(std::make_tuple(
-          blockId, context, it->first.getVocabIndex().get(), it->second, true));
+      vec.push(
+          std::array{Id::makeFromInt(blockId), Id::makeFromInt(context.get()),
+                     Id::makeFromInt(it->first.getVocabIndex().get()),
+                     Id::makeFromDouble(it->second), Id::makeFromBool(true)});
     }
   }
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createTextIndex(const string& filename, const TextVec& vec) {
+void IndexImpl::createTextIndex(const string& filename, TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   currenttOffset_ = 0;
   // Detect block boundaries from the main key of the vec.
@@ -361,8 +360,13 @@ void IndexImpl::createTextIndex(const string& filename, const TextVec& vec) {
   WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
-  for (const auto& value : vec) {
-    if (std::get<0>(value) != currentBlockIndex) {
+  for (const auto& value : vec.sortedView()) {
+    TextBlockIndex textBlockIndex = value[0].getInt();
+    TextRecordIndex textRecordIndex = TextRecordIndex::make(value[1].getInt());
+    WordOrEntityIndex wordOrEntityIndex = value[2].getInt();
+    Score score = value[3].getDouble();
+    bool flag = value[4].getBool();
+    if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
@@ -373,23 +377,21 @@ void IndexImpl::createTextIndex(const string& filename, const TextVec& vec) {
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
       entityPostings.clear();
-      currentBlockIndex = std::get<0>(value);
-      currentMinWordIndex = std::get<2>(value);
-      currentMaxWordIndex = std::get<2>(value);
+      currentBlockIndex = textBlockIndex;
+      currentMinWordIndex = wordOrEntityIndex;
+      currentMaxWordIndex = wordOrEntityIndex;
     }
-    if (!std::get<4>(value)) {
-      classicPostings.emplace_back(std::get<1>(value), std::get<2>(value),
-                                   std::get<3>(value));
-      if (std::get<2>(value) < currentMinWordIndex) {
-        currentMinWordIndex = std::get<2>(value);
+    if (!flag) {
+      classicPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
+      if (wordOrEntityIndex < currentMinWordIndex) {
+        currentMinWordIndex = wordOrEntityIndex;
       }
-      if (std::get<2>(value) > currentMaxWordIndex) {
-        currentMaxWordIndex = std::get<2>(value);
+      if (wordOrEntityIndex > currentMaxWordIndex) {
+        currentMaxWordIndex = wordOrEntityIndex;
       }
 
     } else {
-      entityPostings.emplace_back(std::get<1>(value), std::get<2>(value),
-                                  std::get<3>(value));
+      entityPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
     }
   }
   // Write the last block

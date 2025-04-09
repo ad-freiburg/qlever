@@ -54,15 +54,12 @@ using SortByPSONoGraphColumn = SortTriple<1, 0, 2, false>;
 using SortBySPO = SortTriple<0, 1, 2>;
 using SortByOSP = SortTriple<2, 0, 1>;
 
-// TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
-  using T = std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
-                       Score, bool>;
+  using Row = IdTableStatic<5>::row_type;
   // comparison function
-  bool operator()(const T& a, const T& b) const {
-    auto permute = [](const T& x) {
-      using namespace std;
-      return tie(get<0>(x), get<4>(x), get<1>(x), get<2>(x), get<3>(x));
+  bool operator()(const Row& a, const Row& b) const {
+    auto permute = [](const Row& x) {
+      return std::tie(x[0], x[4], x[1], x[2], x[3]);
     };
     return permute(a) < permute(b);
   }

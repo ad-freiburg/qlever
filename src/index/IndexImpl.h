@@ -107,8 +107,7 @@ class IndexImpl {
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, Context Id, Word Id, Score, entity
-  using TextVec = ad_utility::MmapVectorTmp<
-      tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
+  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -607,7 +606,7 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      auto&&... perTripleCallbacks);
 
-  void createTextIndex(const string& filename, const TextVec& vec);
+  void createTextIndex(const string& filename, TextVec& vec);
 
   void openTextFileHandle();
 
