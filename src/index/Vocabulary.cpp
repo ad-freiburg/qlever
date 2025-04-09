@@ -64,7 +64,17 @@ void Vocabulary<S, C, I>::readFromFile(const string& filename) {
   };
 
   readSingle(vocabulary_, filename);
-  readSingle(geoVocabulary_, filename + geoVocabSuffix);
+
+  // TODO<ullingerc> De-duplicate
+  auto readSingleGeo = [](GeoVocabularyWithUnicodeComparator& vocab,
+                          const string& filename) {
+    LOG(INFO) << "Reading geometry vocabulary from file " << filename << " ..."
+              << std::endl;
+    vocab.close();
+    vocab.open(filename);
+    LOG(INFO) << "Done, number of geo literals: " << vocab.size() << std::endl;
+  };
+  readSingleGeo(geoVocabulary_, filename + geoVocabSuffix);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -99,7 +109,7 @@ void Vocabulary<S, C, I>::createFromSet(
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
-  auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
+  auto buildSingle = [totalComparison](auto& vocab,
                                        std::vector<std::string>& words,
                                        const std::string& filename) {
     std::sort(begin(words), end(words), totalComparison);
@@ -292,8 +302,7 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   // Helper lambda to lookup a the word in a given vocabulary.
-  auto checkWord =
-      [&word, &idx](const VocabularyWithUnicodeComparator& vocab) -> bool {
+  auto checkWord = [&word, &idx](const auto& vocab) -> bool {
     // We need the TOTAL level because we want the unique word.
     auto wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
     if (wordAndIndex.isEnd()) {
@@ -348,11 +357,12 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
 template <class S, class C, typename I>
 Vocabulary<S, C, I>::WordWriter::WordWriter(
     const VocabularyWithUnicodeComparator& vocabulary,
+    const GeoVocabularyWithUnicodeComparator& geoVocabulary,
     const std::string& filename)
     : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
           filename)},
       underlyingGeoWordWriter_{
-          vocabulary.getUnderlyingVocabulary().makeDiskWriter(
+          geoVocabulary.getUnderlyingVocabulary().makeWordWriter(
               filename + geoVocabSuffix)} {};
 
 // _____________________________________________________________________________
@@ -366,11 +376,7 @@ uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
     uint64_t index;
     // TODO<ullingerc> Remove type check as soon as word writers have a unified
     // signature.
-    if constexpr (std::is_same_v<S, CompressedString>) {
-      index = underlyingGeoWordWriter_(word, isExternal);
-    } else {
-      index = underlyingGeoWordWriter_(word);
-    }
+    index = underlyingGeoWordWriter_(word, isExternal);
     AD_CONTRACT_CHECK(index <= maxWordIndex);
     return makeGeoVocabIndex(index);
   } else {

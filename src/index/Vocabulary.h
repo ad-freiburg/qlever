@@ -25,6 +25,7 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -133,10 +134,14 @@ class Vocabulary {
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
+  using UnderlyingGeoVocabulary = GeoVocabulary<UnderlyingVocabulary>;
+  using GeoVocabularyWithUnicodeComparator =
+      UnicodeVocabulary<UnderlyingGeoVocabulary, ComparatorType>;
+
   // The vocabulary is split into an underlying vocabulary for normal literals
   // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
-  VocabularyWithUnicodeComparator geoVocabulary_;
+  GeoVocabularyWithUnicodeComparator geoVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -263,12 +268,12 @@ class Vocabulary {
   // content.
   class WordWriter {
    private:
-    using WW = UnderlyingVocabulary::WordWriter;
-    WW underlyingWordWriter_;
-    WW underlyingGeoWordWriter_;
+    UnderlyingVocabulary::WordWriter underlyingWordWriter_;
+    UnderlyingGeoVocabulary::WordWriter underlyingGeoWordWriter_;
 
    public:
     WordWriter(const VocabularyWithUnicodeComparator& vocabulary,
+               const GeoVocabularyWithUnicodeComparator& geoVocabulary,
                const std::string& filename);
 
     // Add the next word to the vocabulary and return its index.
@@ -287,7 +292,7 @@ class Vocabulary {
   // vocabulary. This writer internally splits the words into a generic
   // vocabulary and a geometry vocabulary.
   WordWriter makeWordWriter(const std::string& filename) const {
-    return {vocabulary_, filename};
+    return {vocabulary_, geoVocabulary_, filename};
   }
 };
 
