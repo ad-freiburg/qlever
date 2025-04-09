@@ -7,28 +7,52 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "parser/GeoInfo.h"
 
 // ____________________________________________________________________________
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
-    : underlyingWordWriter_{vocabulary.makeDiskWriter(filename)} {};
+    : underlyingWordWriter_{vocabulary.makeDiskWriter(filename)},
+      geoInfoFile_{filename + geoInfoSuffix, "w"} {};
 
 // ____________________________________________________________________________
 template <typename V>
 uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
                                                   bool isExternal) {
+  uint64_t index;
+
+  // Store the WKT literal
   if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
-    return underlyingWordWriter_(word, isExternal);
+    index = underlyingWordWriter_(word, isExternal);
   } else {
-    return underlyingWordWriter_(word);
+    index = underlyingWordWriter_(word);
   }
+
+  // Precompute geometry info
+  auto info = GeometryInfo::fromWktLiteral(word);
+  geoInfoFile_.write(&info, geoInfoOffset);
+
+  return index;
 };
 
 // ____________________________________________________________________________
 template <typename V>
 void GeoVocabulary<V>::WordWriter::finish() {
+  // Don't close file twice.
+  if (std::exchange(isFinished_, true)) {
+    return;
+  }
+
   underlyingWordWriter_.finish();
+  geoInfoFile_.close();
+}
+
+// _____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::WordWriter::~WordWriter() {
+  throwInDestructorIfSafe_([this]() { finish(); },
+                           "`~GeoVocabulary::WordWriter`");
 }
 
 // ____________________________________________________________________________
@@ -47,6 +71,15 @@ template <typename V>
 void GeoVocabulary<V>::build(const std::vector<std::string>& v,
                              const std::string& filename) {
   literals_.build(v, filename);
+  // TODO<ullingerc> Write geoInfoFile
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeometryInfo GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
+  GeometryInfo info;
+  geoInfoFile_.read(&info, geoInfoOffset, index * geoInfoOffset);
+  return info;
 }
 
 // Avoid linker trouble.
