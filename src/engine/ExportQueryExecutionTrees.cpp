@@ -518,6 +518,31 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   }
 }
 
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
+                                            const LocalVocab& localVocab) {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case WordVocabIndex:
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithoutQuotes(
+              index.indexToString(id.getWordVocabIndex()))};
+    case VocabIndex:
+    case LocalVocabIndex:
+      return getLiteralOrIriFromVocabIndex(index, id, localVocab);
+    case TextRecordIndex:
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithoutQuotes(
+              index.getTextExcerpt(id.getTextRecordIndex()))};
+    default:
+      auto idLiteral = idToLiteralForEncodedValue(id);
+      return idLiteral.has_value()
+                 ? std::optional<LiteralOrIri>{LiteralOrIri{idLiteral.value()}}
+                 : std::nullopt;
+  }
+}
+
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
@@ -689,9 +714,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab_,
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
           }

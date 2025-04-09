@@ -321,36 +321,15 @@ OptIri IriValueGetter::operator()(
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  // Use the cache to remember units for valueIds
+  // Use cache to remember fully parsed units for reoccurring ValueIds
   return cache_.getOrCompute(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
-        // Get string content of ValueId.
-        auto str = ExportQueryExecutionTrees::idToStringAndType<false, false>(
+        // Get string content of ValueId
+        auto str = ExportQueryExecutionTrees::idToLiteralOrIri(
             context->_qec.getIndex(), value, context->_localVocab);
-        auto compute = [](const auto& inp) {
-          return ad_utility::detail::iriToUnitOfMeasurement(
-              asStringViewUnsafe(inp.getContent()));
-        };
-
+        // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
-          auto content = str.value().first;
-          if (content.starts_with("\"")) {
-            // The unit is given as a ValueId pointing to a literal with
-            // datatype xsd:anyURI (for details see LiteralOrIri overload of the
-            // operator() function).
-
-            auto lit =
-                ad_utility::triple_component::Literal::fromStringRepresentation(
-                    content);
-            if (lit.hasDatatype() &&
-                asStringViewUnsafe(lit.getDatatype()) == XSD_ANYURI_TYPE) {
-              return compute(lit);
-            }
-          } else if (content.starts_with("<")) {
-            // The unit is given as a ValueId pointing to an IRI.
-            auto iri = ad_utility::triple_component::Iri::fromIriref(content);
-            return compute(iri);
-          }
+          return UnitOfMeasurementValueGetter{}(str.value(), context);
         }
         return UnitOfMeasurement::UNKNOWN;
       });
