@@ -537,17 +537,15 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
               index.getTextExcerpt(id.getTextRecordIndex()))};
     default:
       auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-      std::optional<LiteralOrIri> res = std::nullopt;
       if (idLiteralAndType.has_value()) {
         auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
             idLiteralAndType.value().first);
         lit.addDatatype(
             ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
                 idLiteralAndType.value().second));
-        res = LiteralOrIri{lit};
+        return LiteralOrIri{lit};
       }
-
-      return res;
+      return std::nullopt;
   }
 }
 
