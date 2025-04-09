@@ -5,21 +5,24 @@
 #include "index/vocabulary/GeoVocabulary.h"
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 
 // ____________________________________________________________________________
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
-    : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary()
-                                .getUnderlyingVocabulary()
-                                .makeDiskWriter(filename)} {};
+    : underlyingWordWriter_{vocabulary.makeDiskWriter(filename)} {};
 
 // ____________________________________________________________________________
 template <typename V>
 uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
                                                   bool isExternal) {
-  underlyingWordWriter_(word, isExternal);
+  if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
+    return underlyingWordWriter_(word, isExternal);
+  } else {
+    return underlyingWordWriter_(word);
+  }
 };
 
 // ____________________________________________________________________________
@@ -31,7 +34,12 @@ void GeoVocabulary<V>::WordWriter::finish() {
 // ____________________________________________________________________________
 template <typename V>
 std::string& GeoVocabulary<V>::WordWriter::readableName() {
-  return underlyingWordWriter_.readableName();
+  if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
+    return underlyingWordWriter_.readableName();
+  }
+  // TODO<ullingerc> Remove this dummy as soon as possible.
+  static std::string dummy;
+  return dummy;
 }
 
 // ____________________________________________________________________________
@@ -40,3 +48,7 @@ void GeoVocabulary<V>::build(const std::vector<std::string>& v,
                              const std::string& filename) {
   literals_.build(v, filename);
 }
+
+// Avoid linker trouble.
+template class GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
+template class GeoVocabulary<VocabularyInMemory>;
