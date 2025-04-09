@@ -267,7 +267,8 @@ class IndexImpl {
   // called with the pair empty and bool false
   void buildTextIndexFile(
       const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-      bool addWordsFromLiterals);
+      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+      std::pair<float, float> bAndKForBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -442,9 +443,6 @@ class IndexImpl {
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
-
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
 
   const string& getTextName() const { return textMeta_.getName(); }
   const string& getKbName() const { return pso_.getKbName(); }
@@ -801,6 +799,9 @@ class IndexImpl {
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
+
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H
