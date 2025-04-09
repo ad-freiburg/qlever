@@ -327,7 +327,10 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
         // Get string content of ValueId.
         auto str = ExportQueryExecutionTrees::idToStringAndType<false, false>(
             context->_qec.getIndex(), value, context->_localVocab);
-        std::string_view unit = "";
+        auto compute = [](const auto& inp) {
+          return ad_utility::detail::iriToUnitOfMeasurement(
+              asStringViewUnsafe(inp.getContent()));
+        };
 
         if (str.has_value()) {
           auto content = str.value().first;
@@ -341,16 +344,15 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
                     content);
             if (lit.hasDatatype() &&
                 asStringViewUnsafe(lit.getDatatype()) == XSD_ANYURI_TYPE) {
-              unit = asStringViewUnsafe(lit.getContent());
+              return compute(lit);
             }
           } else if (content.starts_with("<")) {
             // The unit is given as a ValueId pointing to an IRI.
-            unit = asStringViewUnsafe(
-                ad_utility::triple_component::Iri::fromIriref(content)
-                    .getContent());
+            auto iri = ad_utility::triple_component::Iri::fromIriref(content);
+            return compute(iri);
           }
         }
-        return ad_utility::detail::iriToUnitOfMeasurement(unit);
+        return UnitOfMeasurement::UNKNOWN;
       });
 }
 
