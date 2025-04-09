@@ -114,7 +114,7 @@ static void checkResultTableRow(const ResultTable& table,
     // `getEntry` should ONLY work with `T`
     doForTypeInResultTableEntryType([&table, &rowNumber, &column, &assertEqual,
                                      &wantedContent](auto t) {
-      using PossiblyWrongType = decltype(t)::type;
+      using PossiblyWrongType = typename decltype(t)::type;
       if constexpr (ad_utility::isSimilar<PossiblyWrongType, T>) {
         assertEqual(wantedContent,
                     table.getEntry<std::decay_t<T>>(rowNumber, column));
@@ -154,7 +154,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
 
     // Does trying to access it anyway cause an error?
     doForTypeInResultTableEntryType([&table, &row, &column](auto t) {
-      using T = decltype(t)::type;
+      using T = typename decltype(t)::type;
       ASSERT_ANY_THROW(table.getEntry<T>(row, column));
     });
   };
@@ -189,9 +189,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
 
   // Check, if it works with custom entries.
   doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t1) {
-    using T1 = decltype(t1)::type;
+    using T1 = typename decltype(t1)::type;
     doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t2) {
-      using T2 = decltype(t2)::type;
+      using T2 = typename decltype(t2)::type;
 
       // Set custom entries.
       table.setEntry(0, 2, createDummyValueEntryType<T1>());
@@ -210,7 +210,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Testing `addRow`.
   doForTypeInResultTableEntryType([&table, &checkNeverSet, &checkForm,
                                    &columnNames, &addRowRowNames](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
 
     // What is the index of the new row?
     const size_t indexNewRow = table.numRows();

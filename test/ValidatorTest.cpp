@@ -67,8 +67,8 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(
             !ValidatorFunction<decltype([](FirstParameter, SecondParameter) {
                                  return true;
@@ -87,8 +87,8 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(
             !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
                                  return n;
@@ -108,8 +108,8 @@ TEST(ValidatorConceptTest, ValidatorConcept) {
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(
             !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
                                  return n;
@@ -184,8 +184,8 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
 
   auto validParameterButFunctionParameterWrongAndReturnTypeRightTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(!ExceptionValidatorFunction<
                       decltype([](FirstParameter, SecondParameter) {
                         return std::optional<ErrorMessage>{};
@@ -209,8 +209,8 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
 
   auto validParameterButFunctionParameterRightAndReturnTypeWrongTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(
             !ExceptionValidatorFunction<
                 decltype([](FirstParameter n, SecondParameter) { return n; }),
@@ -232,8 +232,8 @@ TEST(ExceptionValidatorConceptTest, ExceptionValidatorConcept) {
 
   auto validParameterButFunctionParameterWrongAndReturnTypeWrongTestHelper =
       [](auto t1, auto t2) {
-        using FirstParameter = decltype(t1)::type;
-        using SecondParameter = decltype(t2)::type;
+        using FirstParameter = typename decltype(t1)::type;
+        using SecondParameter = typename decltype(t2)::type;
         static_assert(
             !ValidatorFunction<decltype([](FirstParameter n, SecondParameter) {
                                  return n;

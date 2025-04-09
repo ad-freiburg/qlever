@@ -196,7 +196,7 @@ struct PushToVectorWithTI {
   std::vector<std::string>* typeToStringVector;
 
   void operator()(auto t) const {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {

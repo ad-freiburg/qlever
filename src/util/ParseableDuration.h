@@ -82,7 +82,7 @@ class ParseableDuration {
       auto unit = m.template get<2>().to_view();
 
       auto toDuration = [&m](auto t) {
-        using OriginalDuration = decltype(t)::type;
+        using OriginalDuration = typename decltype(t)::type;
         auto amount = m.template get<1>()
                           .template to_number<typename OriginalDuration::rep>();
         return duration_cast<DurationType>(OriginalDuration{amount});

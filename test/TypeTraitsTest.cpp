@@ -45,9 +45,9 @@ TEST(TypeTraits, SimiliarToAnyTypeIn) {
 
   // All the test, were the concept is supposed to return true.
   forEachTypeInTemplateTypeWithTI(ti<tup>, [](auto t) {
-    using TupType = decltype(t)::type;
+    using TupType = typename decltype(t)::type;
     callLambdaWithAllVariationsOfType<TupType>([](auto t) {
-      using T = decltype(t)::type;
+      using T = typename decltype(t)::type;
       static_assert(SimilarToAnyTypeIn<T, tup>);
     });
   });
@@ -56,9 +56,9 @@ TEST(TypeTraits, SimiliarToAnyTypeIn) {
   // All the test, were the concept is supposed to return false.
   forEachTypeInParameterPackWithTI<unsigned int, float, bool, size_t,
                                    unsigned char>([](auto t) {
-    using WrongType = decltype(t)::type;
+    using WrongType = typename decltype(t)::type;
     callLambdaWithAllVariationsOfType<WrongType>([](auto t) {
-      using T = decltype(t)::type;
+      using T = typename decltype(t)::type;
       static_assert(!SimilarToAnyTypeIn<T, tup>);
     });
   });
@@ -73,7 +73,7 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
 
   // Successful comparison.
   forEachTypeInTemplateTypeWithTI(ti<tup>, [](auto t) {
-    using TupType = decltype(t)::type;
+    using TupType = typename decltype(t)::type;
     static_assert(SameAsAnyTypeIn<TupType, tup>);
   });
   static_assert(SameAsAnyTypeIn<tup, nested>);
@@ -81,7 +81,7 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
   // Unsuccessful comparison, where the underlying type is wrong.
   forEachTypeInParameterPackWithTI<tup, size_t, double, unsigned char>(
       [](auto t) {
-        using WrongType = decltype(t)::type;
+        using WrongType = typename decltype(t)::type;
         callLambdaWithAllVariationsOfType<WrongType>(
             [](auto) { static_assert(!SameAsAnyTypeIn<WrongType, tup>); });
       });
@@ -89,11 +89,10 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
   // Unsuccessful comparison, where the underlying type is contained, but not
   // with those qualifiers.
   auto testNotIncludedWithThoseQualifiers = [](auto t) {
-    using TemplatedType = decltype(t)::type;
-    forEachTypeInTemplateTypeWithTI(ti<TemplatedType>, [](auto t) {
-      using CorrectType = decltype(t)::type;
+    forEachTypeInTemplateTypeWithTI(t, [](auto t) {
+      using CorrectType = typename decltype(t)::type;
       callLambdaWithAllVariationsOfType<CorrectType>([](auto t) {
-        using T = decltype(t)::type;
+        using T = typename decltype(t)::type;
         if constexpr (!std::same_as<CorrectType, T>) {
           static_assert(!SameAsAnyTypeIn<T, tup>);
         }
@@ -215,7 +214,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   `Type, Type&, const Type&, Type&&, const Type&&` as template parameter.
   */
   constexpr auto callWithEveryVariantOfType = [](auto t, auto func) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     passListOfTypesToLambda<T, T&, const T&, T&&, const T&&>(std::move(func));
   };
 
@@ -226,7 +225,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   */
   constexpr auto callWithCartesianProductOfEveryVariantOfType = [](auto t,
                                                                    auto func) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     passCartesianPorductToLambda<T, T&, const T&, T&&, const T&&>(
         std::move(func));
   };
@@ -247,7 +246,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
-        using ParameterType = decltype(t)::type;
+        using ParameterType = typename decltype(t)::type;
         static_assert(bothInvocableWithExactReturnType.template
                       operator()<std::negate<int>, int, ParameterType>());
         static_assert(bothInvocableWithSimilarReturnType.template
@@ -256,8 +255,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithCartesianProductOfEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t1, auto t2) {
-        using FirstParameterType = decltype(t1)::type;
-        using SecondParameterType = decltype(t2)::type;
+        using FirstParameterType = typename decltype(t1)::type;
+        using SecondParameterType = typename decltype(t2)::type;
         static_assert(bothInvocableWithExactReturnType.template
                       operator()<std::equal_to<int>, bool, FirstParameterType,
                                  SecondParameterType>());
@@ -276,7 +275,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
-        using ReturnType = decltype(t)::type;
+        using ReturnType = typename decltype(t)::type;
         if constexpr (std::same_as<ReturnType, int>) {
           static_assert(bothInvocableWithExactReturnType.template
                         operator()<SingleParameter, ReturnType, int&>());
@@ -287,7 +286,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(ti<bool>, [&bothInvocableWithSimilarReturnType,
                                         &bothInvocableWithExactReturnType](
                                            auto t) {
-    using ReturnType = decltype(t)::type;
+    using ReturnType = typename decltype(t)::type;
     if constexpr (std::same_as<ReturnType, bool>) {
       static_assert(bothInvocableWithExactReturnType.template
                     operator()<DoubleParameter, ReturnType, bool&, bool&>());
@@ -312,7 +311,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType,
                 &bothInvocableWithSimilarReturnType](auto t) {
-        using ParameterType = decltype(t)::type;
+        using ParameterType = typename decltype(t)::type;
         if constexpr (!std::same_as<ParameterType, int&>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, int, ParameterType>());
@@ -323,8 +322,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithCartesianProductOfEveryVariantOfType(
       ti<bool>, [&bothInvocableWithExactReturnType,
                  &bothInvocableWithSimilarReturnType](auto t1, auto t2) {
-        using FirstParameterType = decltype(t1)::type;
-        using SecondParameterType = decltype(t2)::type;
+        using FirstParameterType = typename decltype(t1)::type;
+        using SecondParameterType = typename decltype(t2)::type;
         if constexpr (!std::same_as<FirstParameterType, bool&> ||
                       !std::same_as<SecondParameterType, bool&>) {
           static_assert(!bothInvocableWithExactReturnType.template
@@ -339,7 +338,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   // Parameter types are correct, but return type is wrong.
   callWithEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType](auto t) {
-        using ReturnType = decltype(t)::type;
+        using ReturnType = typename decltype(t)::type;
         if constexpr (!std::same_as<ReturnType, int>) {
           static_assert(!bothInvocableWithExactReturnType.template
                          operator()<SingleParameter, ReturnType, int&>());
@@ -347,7 +346,7 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
       });
   callWithEveryVariantOfType(ti<bool>, [&bothInvocableWithExactReturnType](
                                            auto t) {
-    using ReturnType = decltype(t)::type;
+    using ReturnType = typename decltype(t)::type;
     if constexpr (!std::same_as<ReturnType, bool>) {
       static_assert(!bothInvocableWithExactReturnType.template
                      operator()<DoubleParameter, ReturnType, bool&, bool&>());
@@ -358,8 +357,8 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   // TODO Is there a cleaner way of iterating multiple parameter packs?
   callWithCartesianProductOfEveryVariantOfType(
       ti<int>, [&bothInvocableWithExactReturnType](auto t1, auto t2) {
-        using ReturnType = decltype(t1)::type;
-        using ParameterType = decltype(t2)::type;
+        using ReturnType = typename decltype(t1)::type;
+        using ParameterType = typename decltype(t2)::type;
         if constexpr (!std::same_as<ReturnType, int> &&
                       !std::same_as<ParameterType, int&>) {
           static_assert(
@@ -370,12 +369,12 @@ TEST(TypeTraits, InvocableWithConvertibleReturnType) {
   callWithCartesianProductOfEveryVariantOfType(
       ti<bool>, [&bothInvocableWithExactReturnType,
                  &callWithEveryVariantOfType](auto t1, auto t2) {
-        using FirstParameterType = decltype(t1)::type;
-        using SecondParameterType = decltype(t2)::type;
+        using FirstParameterType = typename decltype(t1)::type;
+        using SecondParameterType = typename decltype(t2)::type;
         // For the return type.
         callWithEveryVariantOfType(
             ti<bool>, [&bothInvocableWithExactReturnType](auto t) {
-              using ReturnType = decltype(t)::type;
+              using ReturnType = typename decltype(t)::type;
               if constexpr ((!std::same_as<FirstParameterType, bool&> ||
                              !std::same_as<SecondParameterType, bool&>)&&!std::
                                 same_as<ReturnType, bool>) {

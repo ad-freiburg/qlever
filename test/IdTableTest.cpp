@@ -272,7 +272,7 @@ TEST(IdTable, push_back_and_assign) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
@@ -326,7 +326,7 @@ TEST(IdTable, at) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     constexpr size_t NUM_ROWS = 30;
     constexpr size_t NUM_COLS = 4;
@@ -351,7 +351,7 @@ TEST(IdTable, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     Table t1{4, std::move(additionalArgs.at(0))...};
     t1.push_back({make(7), make(2), make(4), make(1)});
@@ -381,7 +381,7 @@ TEST(IdTable, insertAtEndWithPermutationAndLimit) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     Table init{4, std::move(additionalArgs.at(0))...};
     init.push_back({make(7), make(2), make(4), make(1)});
@@ -420,7 +420,7 @@ TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     constexpr size_t NUM_ROWS = 34;
     constexpr size_t NUM_COLS = 20;
@@ -470,7 +470,7 @@ TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = [](auto t, auto make, auto... additionalArgs) {
-    using Table = decltype(t)::type;
+    using Table = typename decltype(t)::type;
 
     constexpr size_t NUM_ROWS = 100;
     constexpr size_t NUM_COLS = 4;

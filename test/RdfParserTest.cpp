@@ -871,7 +871,7 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   }
 
   auto testWithParser = [&](auto t, bool useBatchInterface) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
   };
@@ -886,7 +886,7 @@ TEST(RdfParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             std::string_view input = "") {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -908,7 +908,7 @@ TEST(RdfParserTest, multilineComments) {
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             std::string_view input,
                             const auto& expectedTriples) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -960,7 +960,7 @@ TEST(RdfParserTest, exceptionPropagation) {
   std::string filename{"turtleParserExceptionPropagation.dat"};
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             std::string_view input) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -980,7 +980,7 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   auto testWithParser = [&](auto t, bool useBatchInterface,
                             ad_utility::MemorySize bufferSize,
                             std::string_view input) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -1012,7 +1012,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
   auto testWithParser = [&](auto t, [[maybe_unused]] bool useBatchInterface,
                             std::string_view input) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
@@ -1097,7 +1097,7 @@ TEST(RdfParserTest, noGetlineInStringParser) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, noGetlineInMultifileParsers) {
   auto runTestsForParser = [](auto t, [[maybe_unused]] bool interface) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     Parser parser{};
     TurtleTriple triple;
     // Also test the dummy parse position member.
@@ -1110,7 +1110,7 @@ TEST(RdfParserTest, noGetlineInMultifileParsers) {
 // _____________________________________________________________________________
 TEST(RdfParserTest, multifileParser) {
   auto impl = [](auto t, bool useParallelParser) {
-    using Parser = decltype(t)::type;
+    using Parser = typename decltype(t)::type;
     std::vector<TurtleTriple> expected;
     std::string ttl = "<x> <y> <z>. <x> <y> <z2>.";
     expected.push_back(TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"),

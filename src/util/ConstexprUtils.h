@@ -136,7 +136,7 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
   size_t index = 0;
 
   auto l = [&index](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     if constexpr (checkFunction.template operator()<T>()) {
       return true;
     } else {

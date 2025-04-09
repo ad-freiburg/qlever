@@ -38,7 +38,7 @@ static void doForTypeInResultTableEntryType(Function function) {
   ad_utility::forEachTypeInTemplateTypeWithTI(
       ad_utility::use_type_identity::ti<ad_benchmark::ResultTable::EntryType>,
       [&function](auto t) {
-        using IndexType = decltype(t)::type;
+        using IndexType = typename decltype(t)::type;
         // `std::monostate` is not important for these kinds of tests.
         if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
           function(ad_utility::use_type_identity::ti<IndexType>);

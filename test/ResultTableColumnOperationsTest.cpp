@@ -102,7 +102,7 @@ static void generalExceptionTestTwoInputColumns(
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
 
   doForTypeInResultTableEntryType([&callTransform](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     // A call with a `ResultTable`, who has no rows, is valid.
     auto table{createTestTable(0, 3, ColumnNumWithType<T>{0},
                                ColumnNumWithType<T>{1})};
@@ -121,7 +121,7 @@ static void generalExceptionTestTwoInputColumns(
     // A column contains more than 1 type.
     table = createTestTable(std::variant_size_v<ResultTable::EntryType> - 1, 3);
     doForTypeInResultTableEntryType([row = 0, &table](auto t2) mutable {
-      using T2 = decltype(t2)::type;
+      using T2 = typename decltype(t2)::type;
       table.setEntry(row++, 0, createDummyValueEntryType<T2>());
     });
     ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<T>{1},
@@ -132,7 +132,7 @@ static void generalExceptionTestTwoInputColumns(
     table = createTestTable(NUM_ROWS, 3, ColumnNumWithType<T>{0},
                             ColumnNumWithType<T>{1});
     doForTypeInResultTableEntryType([&table, &callTransform](auto wt) {
-      using WrongType = decltype(wt)::type;
+      using WrongType = typename decltype(wt)::type;
       if constexpr (!ad_utility::isSimilar<WrongType, T>) {
         ASSERT_ANY_THROW(callTransform(&table, ColumnNumWithType<WrongType>{2},
                                        ColumnNumWithType<WrongType>{1},
@@ -183,7 +183,7 @@ static void generalExceptionTestUnlimitedInputColumns(
   generalExceptionTestTwoInputColumns(callTransform);
 
   doForTypeInResultTableEntryType([&callTransform](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     // Column is outside boundaries.
     ResultTable table{createTestTable(
         NUM_ROWS, 4, ColumnNumWithType<T>{0}, ColumnNumWithType<T>{1},
@@ -211,7 +211,7 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
   auto columnCopyLambda = [](const auto& d) { return d; };
 
   doForTypeInResultTableEntryType([&NUM_ROWS, &columnCopyLambda](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     // Single parameter operators.
     // Two columns. Transcribe column 0 into column 1.
     ResultTable table{createTestTable(NUM_ROWS, 2, ColumnNumWithType<T>{0})};
@@ -263,7 +263,7 @@ TEST(ResultTableColumnOperations, generateColumnWithColumnInput) {
 TEST(ResultTableColumnOperations, SumUpColumns) {
   // Normal tests.
   doForTypeInResultTableEntryType([](auto t) {
-    using T = decltype(t)::type;
+    using T = typename decltype(t)::type;
     // We only do tests on types, that support addition.
     if constexpr (SupportsAddition<T>) {
       // Minimal amount of columns.

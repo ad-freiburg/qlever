@@ -2102,7 +2102,7 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   }
 
   auto make = [&](auto t) {
-    using Expr = decltype(t)::type;
+    using Expr = typename decltype(t)::type;
     return createExpression<Expr>(std::move(children[0]),
                                   std::move(children[1]));
   };
@@ -2594,7 +2594,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   }
   auto childExpression = visit(ctx->expression());
   auto makePtr = [&](auto t, auto&&... additionalArgs) {
-    using ExpressionType = decltype(t)::type;
+    using ExpressionType = typename decltype(t)::type;
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
