@@ -107,7 +107,27 @@ class ExportQueryExecutionTrees {
   // The function resolves a given `ValueId` to a `LiteralOrIri` object. Unlike
   // `idToLiteral` no further processing is applied to the string content.
   static std::optional<LiteralOrIri> idToLiteralOrIri(
-      const Index& index, Id id, const LocalVocab& localVocab);
+      const Index& index, Id id, const LocalVocab& localVocab,
+      bool skipEncodedValues = false);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal from
+  // a value encoded in the given ValueId.
+  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
+  // a word in the vocabulary.
+  static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
+      const Index& index, Id id);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
+  // a word in the text index.
+  static std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
+      const Index& index, Id id);
+
+  // Helper for the `idToLiteral` function: get only literals from the
+  // `LiteralOrIri` object.
+  static std::optional<Literal> getLiteralOrNullopt(
+      std::optional<LiteralOrIri>& litOrIri);
 
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.

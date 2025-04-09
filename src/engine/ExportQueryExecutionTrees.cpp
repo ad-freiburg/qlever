@@ -502,50 +502,86 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   auto datatype = id.getDatatype();
 
   switch (datatype) {
-    case WordVocabIndex:
-      return ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.indexToString(id.getWordVocabIndex()));
+    case WordVocabIndex: {
+      auto lit = getLiteralOrIriFromWordVocabIndex(index, id);
+      return getLiteralOrNullopt(lit);
+    }
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
-    case TextRecordIndex:
-      return ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()));
+    case TextRecordIndex: {
+      auto lit = getLiteralOrIriFromTextRecordIndex(index, id);
+      return getLiteralOrNullopt(lit);
+    }
     default:
       return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
   }
 }
 
 // _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::getLiteralOrNullopt(
+    std::optional<LiteralOrIri>& litOrIri) {
+  if (litOrIri.has_value() && litOrIri.value().isLiteral()) {
+    return litOrIri.value().getLiteral();
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
+  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
+  if (idLiteralAndType.has_value()) {
+    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        idLiteralAndType.value().first);
+    lit.addDatatype(
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            idLiteralAndType.value().second));
+    return LiteralOrIri{lit};
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
+                                                             Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()))};
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
+    const Index& index, Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.getTextExcerpt(id.getTextRecordIndex()))};
+};
+
+// _____________________________________________________________________________
 std::optional<ad_utility::triple_component::LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
-                                            const LocalVocab& localVocab) {
+                                            const LocalVocab& localVocab,
+                                            bool skipEncodedValues) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case WordVocabIndex:
-      return LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithoutQuotes(
-              index.indexToString(id.getWordVocabIndex()))};
+      return getLiteralOrIriFromWordVocabIndex(index, id);
     case VocabIndex:
     case LocalVocabIndex:
       return getLiteralOrIriFromVocabIndex(index, id, localVocab);
     case TextRecordIndex:
-      return LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithoutQuotes(
-              index.getTextExcerpt(id.getTextRecordIndex()))};
+      return getLiteralOrIriFromTextRecordIndex(index, id);
     default:
-      auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
-      if (idLiteralAndType.has_value()) {
-        auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
-            idLiteralAndType.value().first);
-        lit.addDatatype(
-            ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-                idLiteralAndType.value().second));
-        return LiteralOrIri{lit};
+      if (skipEncodedValues) {
+        return std::nullopt;
       }
-      return std::nullopt;
+      return idToLiteralOrIriForEncodedValue(id);
   }
 }
 

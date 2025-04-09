@@ -326,7 +326,7 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
       id, [&context](const ValueId& value) -> UnitOfMeasurement {
         // Get string content of ValueId
         auto str = ExportQueryExecutionTrees::idToLiteralOrIri(
-            context->_qec.getIndex(), value, context->_localVocab);
+            context->_qec.getIndex(), value, context->_localVocab, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
           return UnitOfMeasurementValueGetter{}(str.value(), context);

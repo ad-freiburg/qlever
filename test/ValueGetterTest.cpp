@@ -9,6 +9,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "parser/GeoPoint.h"
 #include "parser/LiteralOrIri.h"
 
 // Common things used in multiple tests.
@@ -136,6 +137,14 @@ void checkUnitValueGetterFromId(
       getter(testContext.getId(fullLiteralOrIri), &testContext.context);
   ASSERT_EQ(actualResult, expectedResult);
 };
+
+// Helper to test UnitOfMeasurementValueGetter using ValueId input where the
+// ValueId represents an encoded value
+void checkUnitValueGetterFromIdEncodedValue(
+    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+  TestContextWithGivenTTl testContext{unitTtl};
+  ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
+}
 
 // Helper to test UnitOfMeasurementValueGetter using ValueId input
 void checkUnitValueGetterFromLiteralOrIri(
@@ -283,6 +292,18 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithId) {
                              UnitOfMeasurement::UNKNOWN, unitValueGetter);
   checkUnitValueGetterFromId("\"http://qudt.org/vocab/unit/MI\"",
                              UnitOfMeasurement::UNKNOWN, unitValueGetter);
+}
+
+TEST(UnitOfMeasurementValueGetter, OperatorWithIdSkipEncodedValue) {
+  sparqlExpression::detail::UnitOfMeasurementValueGetter getter;
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(1000), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromDouble(1000.5),
+                                         getter);
+  checkUnitValueGetterFromIdEncodedValue(
+      ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
 }
 
 TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
