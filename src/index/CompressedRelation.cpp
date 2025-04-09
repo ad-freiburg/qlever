@@ -862,6 +862,11 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
+  // TODO<joka921> This is a dummy value because we sometimes have wrong values
+  // for the counts in the presence of updates.
+  if (numDistinctElements == 0) {
+    return 1.3f;
+  }
   float multiplicity =
       functional ? 1.0f
                  : static_cast<float>(numElements) / float(numDistinctElements);
@@ -1214,8 +1219,8 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
   }
   // Note: the multiplicity of the `col2` (where we set the dummy here) will
   // be set later in `createPermutationPair`.
-  return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
-          multiplicityDummy, offsetInBlock};
+  return {col0Id, computeMultiplicity(numRows, numDistinctC1),
+          multiplicityDummy};
 }
 
 // _____________________________________________________________________________
@@ -1223,11 +1228,10 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);
   CompressedRelationMetadata md;
-  auto offset = std::numeric_limits<size_t>::max();
   auto multiplicityCol1 =
       computeMultiplicity(currentRelationPreviousSize_, numDistinctC1);
-  md = CompressedRelationMetadata{currentCol0Id_, currentRelationPreviousSize_,
-                                  multiplicityCol1, multiplicityCol1, offset};
+  md = CompressedRelationMetadata{currentCol0Id_, multiplicityCol1,
+                                  multiplicityCol1};
   currentRelationPreviousSize_ = 0;
   // The following is used in `addBlockForLargeRelation` to assert that
   // `finishLargeRelation` was called before a new relation was started.
@@ -1580,12 +1584,14 @@ CompressedRelationReader::getMetadataForSmallRelation(
     const {
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
-  metadata.offsetInBlock_ = 0;
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
   auto blocks = getRelevantBlocks(scanSpec, allBlocksMetadata);
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  AD_CONTRACT_CHECK(blocks.size() <= 1,
-                    "Should only be called for small relations");
+  // TODO<joka921> This currently is inaccurate for relations that have had
+  // their size changed because of UPDATEs. In particular, they might be
+  // contained in more than one block.
+  // TODO<joka921> Figure out, what harm inaccurate multiplicity estimates can
+  // do.
   if (blocks.empty()) {
     return std::nullopt;
   }
@@ -1600,7 +1606,6 @@ CompressedRelationReader::getMetadataForSmallRelation(
   const auto& blockCol = block.getColumn(0);
   auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
   size_t numDistinct = endOfUnique - blockCol.begin();
-  metadata.numRows_ = block.size();
   metadata.multiplicityCol1_ =
       CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);
 

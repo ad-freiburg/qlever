@@ -20,7 +20,8 @@ template <bool isPersistentMetaData>
 void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
   if constexpr (!isPersistentMetaData) {
-    totalElements_ += addedValue.getNofElements();
+    // TODO<joka921> The total elements are never used, remove them.
+    totalElements_ += 0;
     data_.set(addedValue.col0Id_, addedValue);
   }
 }

@@ -1577,12 +1577,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
-      meta.has_value()) {
-    return meta.value().numRows_;
-  }
-  return 0;
+  return getPermutation(permutation)
+      .getResultSizeOfScan(ScanSpecification{id, std::nullopt, std::nullopt},
+                           locatedTriplesSnapshot);
 }
 
 // ___________________________________________________________________________

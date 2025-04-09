@@ -25,7 +25,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
                                 std::vector{V(85)},
                                 true},
                                1039};
-  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
+  CompressedRelationMetadata rmdF{V(1), 2.0, 42.0};
 
   ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
   f << rmdF;
@@ -62,8 +62,8 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
                                         {},
                                         false},
                                        18});
-  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
-  CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
+  CompressedRelationMetadata rmdF{V(1), 2.0, 42.0};
+  CompressedRelationMetadata rmdF2{V(2), 3.0, 43.0};
   // The index MetaData does not have an explicit clear, so we
   // force destruction to close and reopen the mmap-File
   {

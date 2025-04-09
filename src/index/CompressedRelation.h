@@ -173,19 +173,9 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
 // permutation).
 struct CompressedRelationMetadata {
   Id col0Id_;
-  // TODO: Is this still needed? Same for `offsetInBlock_`.
-  size_t numRows_;
+
   float multiplicityCol1_;  // E.g., in PSO this is the multiplicity of "S".
   float multiplicityCol2_;  // E.g., in PSO this is the multiplicity of "O".
-  // If this "relation" is contained in a block together with other "relations",
-  // then all of these relations are contained only in this block and
-  // `offsetInBlock_` stores the offset in this block (referring to the index in
-  // the uncompressed sequence of triples).  Otherwise, this "relation" is
-  // stored in one or several blocks of its own, and we set `offsetInBlock_` to
-  // `Id(-1)`.
-  uint64_t offsetInBlock_ = std::numeric_limits<uint64_t>::max();
-
-  size_t getNofElements() const { return numRows_; }
 
   // Setters and getters for the multiplicities.
   float getCol1Multiplicity() const { return multiplicityCol1_; }
@@ -202,10 +192,8 @@ struct CompressedRelationMetadata {
 // Serialization of the compressed "relation" meta data.
 AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
   serializer | arg.col0Id_;
-  serializer | arg.numRows_;
   serializer | arg.multiplicityCol1_;
   serializer | arg.multiplicityCol2_;
-  serializer | arg.offsetInBlock_;
 }
 
 /// Manage the compression and serialization of relations during the index
