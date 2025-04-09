@@ -89,11 +89,15 @@ TEST(TypeTraits, SameAsAnyTypeIn) {
   // Unsuccessful comparison, where the underlying type is contained, but not
   // with those qualifiers.
   auto testNotIncludedWithThoseQualifiers = [](auto t) {
-    forEachTypeInTemplateTypeWithTI(t, [](auto t) {
-      using CorrectType = typename decltype(t)::type;
-      callLambdaWithAllVariationsOfType<CorrectType>([](auto t) {
-        using T = typename decltype(t)::type;
-        if constexpr (!std::same_as<CorrectType, T>) {
+    forEachTypeInTemplateTypeWithTI(t, [](auto t2) {
+      using CorrectType = typename decltype(t2)::type;
+      callLambdaWithAllVariationsOfType<CorrectType>([&t2](auto t3) {
+        // Note: This redundant repetition is required to work around a bug in
+        // GCC.
+        using CorrectT = typename std::decay_t<decltype(t2)>::type;
+        using T = typename decltype(t3)::type;
+        (void)t2;
+        if constexpr (!std::same_as<CorrectT, T>) {
           static_assert(!SameAsAnyTypeIn<T, tup>);
         }
       });
