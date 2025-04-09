@@ -44,6 +44,9 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
+    if (spatialJoin_.has_value()) {
+      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+    }
     auto id = idTable->at(row, column);
     if (id.getDatatype() == Datatype::VocabIndex) {
       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
@@ -347,6 +350,12 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.logCb = {};
     cfg.statsCb = {};
     cfg.sweepProgressCb = {};
+    cfg.sweepCancellationCb = [this]() {
+      if (spatialJoin_.has_value()) {
+        spatialJoin_.value()
+            ->checkCancellationWrapperForSpatialJoinAlgorithms();
+      }
+    };
     return cfg;
   }();
 
@@ -388,6 +397,10 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // also add the distance for each pair of objects in the result.
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
+      if (spatialJoin_.has_value()) {
+        spatialJoin_.value()
+            ->checkCancellationWrapperForSpatialJoinAlgorithms();
+      }
       const auto& res = results[t][i];
       double dist = 0;
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {

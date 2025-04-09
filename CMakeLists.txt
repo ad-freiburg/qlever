@@ -111,7 +111,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 21be46ab71ecbc8400daa8c5a19f47853dea0ac8
+        GIT_TAG b87f3794cbc5be06f37069ce5f50e1f6a7b2aca9
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
 add_definitions("-DSPATIALJOIN_NO_BZIP2=True")
