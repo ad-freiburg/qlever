@@ -1599,7 +1599,7 @@ IdTable IndexImpl::scan(
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
                                 cancellationHandle, locatedTriplesSnapshot,
-                                limitOffset);
+                                std::nullopt, limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -1608,7 +1608,8 @@ size_t IndexImpl::getResultSizeOfScan(
     const Permutation::Enum& permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
+      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot,
+                           std::nullopt);
 }
 
 // _____________________________________________________________________________

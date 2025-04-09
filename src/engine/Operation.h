@@ -148,15 +148,15 @@ class Operation {
   }
 
   // Get an updated `QueryExecutionTree` that applies as many of the given
-  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
-  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
-  // is not changed.
-  // Note: The default implementation always returns `nullopt` while this
-  // function is currently only overridden for `IndexScan`. In the future also
-  // other operations could pass on the `PrefilterExpressions` to the
-  // `IndexScan` in their subtree.
+  // `PrefilterExpression`s over `IndexScan` as possible. The application of
+  // suitable `PrefilterExpression`s yields the corresponding `BlockRanges` set
+  // in `IndexScan`. Returns `nullopt` if no `PrefilterExpression` is applicable
+  // and thus the `QueryExecutionTree` is not changed. Note: The default
+  // implementation always returns `nullopt` while this function is currently
+  // only overridden for `IndexScan`. In the future also other operations could
+  // pass on the `PrefilterExpressions` to the `IndexScan` in their subtree.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
       [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
       const {
     return std::nullopt;

@@ -70,9 +70,9 @@ class Permutation {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {},
-               std::optional<std::vector<CompressedBlockMetadata>> blocks =
-                   std::nullopt) const;
+               const std::optional<BlockRanges>& blockRanges,
+               const LimitOffsetClause& limitOffset = {}) const;
+
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
@@ -104,6 +104,12 @@ class Permutation {
   // maintains its invariants.
   IdTableGenerator lazyScan(
       const ScanSpecification& scanSpec,
+      const std::optional<BlockRanges>& blockRanges,
+      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const LimitOffsetClause& limitOffset = {}) const;
+  IdTableGenerator lazyScanMaterialized(
+      const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
@@ -126,8 +132,7 @@ class Permutation {
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const std::optional<BlockRanges>& blockRanges) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
@@ -135,8 +140,7 @@ class Permutation {
   std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecification& scanSpec,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks =
-          std::nullopt) const;
+      const std::optional<BlockRanges>& blockRanges) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }

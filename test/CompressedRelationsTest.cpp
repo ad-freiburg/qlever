@@ -26,6 +26,16 @@ Id V(int64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 }
 
+// Convert the relevant `CompressedBlockMetadata` sections of `std::span<const
+// CompressedBlockMetadata>` to `BlockRanges` value.
+auto getRelevantBlockRanges =
+    [](const ScanSpecification& scanSpec,
+       std::span<const CompressedBlockMetadata> blocks) -> BlockRanges {
+  auto relevantBlocks =
+      CompressedRelationReader::getRelevantBlocks(scanSpec, blocks);
+  return {{relevantBlocks.begin(), relevantBlocks.end()}};
+};
+
 // A default graph IRI that is used in test cases where we don't care about the
 // graph.
 const Id g = V(1234059);
@@ -312,7 +322,8 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
 
     // Scan for all distinct `col0` and check that we get the expected result.
     ScanSpecification scanSpec{V(inputs[i].col0_), std::nullopt, std::nullopt};
-    IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+    auto blockRanges = getRelevantBlockRanges(scanSpec, blocks);
+    IdTable table = reader.scan(scanSpec, blockRanges, additionalColumns,
                                 cancellationHandle, locatedTriples);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
@@ -322,8 +333,8 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
         {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
     for (const auto& limitOffset : limitOffsetClauses) {
       IdTable table =
-          reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle,
-                      locatedTriples, limitOffset);
+          reader.scan(scanSpec, blockRanges, additionalColumns,
+                      cancellationHandle, locatedTriples, limitOffset);
       auto col1And2 = inputs[i].col1And2_;
       col1And2.resize(limitOffset.upperBound(col1And2.size()));
       col1And2.erase(
@@ -332,7 +343,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       checkThatTablesAreEqual(col1And2, table);
     }
     for (const auto& block :
-         reader.lazyScan(scanSpec, blocks, additionalColumns,
+         reader.lazyScan(scanSpec, blockRanges, additionalColumns,
                          cancellationHandle, locatedTriples)) {
       table.insertAtEnd(block);
     }
@@ -347,16 +358,18 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
     auto scanAndCheck = [&]() {
       ScanSpecification scanSpec{V(inputs[i].col0_), V(lastCol1Id),
                                  std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks, locatedTriples);
+      blockRanges = getRelevantBlockRanges(scanSpec, blocks);
+      auto size =
+          reader.getResultSizeOfScan(scanSpec, blockRanges, locatedTriples);
       IdTable tableWidthOne =
-          reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
+          reader.scan(scanSpec, blockRanges, Permutation::ColumnIndicesRef{},
                       cancellationHandle, locatedTriples);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
-           reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
+           reader.lazyScan(scanSpec, blockRanges, Permutation::ColumnIndices{},
                            cancellationHandle, locatedTriples)) {
         tableWidthOne.insertAtEnd(block);
       }
@@ -612,8 +625,8 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   source_location l = source_location::current()) {
     auto t = generateLocationTrace(l);
-    auto result = CompressedRelationReader::getBlocksForJoin(joinColumn,
-                                                             metadataAndBlocks);
+    auto result = CompressedRelationReader::getBlocksForJoin(
+        joinColumn, metadataAndBlocks, std::nullopt);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
   };
   // We have fixed the `col0Id` to be 42. The col1/2Ids of the matching blocks
@@ -841,16 +854,16 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     auto loc = generateLocationTrace(sourceLocation);
     auto& perm = impl.getPermutation(p);
     auto& reader = perm.reader();
-    auto& augmentedBlocks =
-        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot);
+    auto blockRanges = getRelevantBlockRanges(
+        scanSpec,
+        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot));
     auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
         perm.permutation());
     auto [actual_lower, actual_upper] =
-        reader.getSizeEstimateForScan(scanSpec, augmentedBlocks, ltpb);
+        reader.getSizeEstimateForScan(scanSpec, blockRanges, ltpb);
     EXPECT_THAT(actual_lower, testing::Eq(lower));
     EXPECT_THAT(actual_upper, testing::Eq(upper));
-    auto actual_exact =
-        reader.getResultSizeOfScan(scanSpec, augmentedBlocks, ltpb);
+    auto actual_exact = reader.getResultSizeOfScan(scanSpec, blockRanges, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.
@@ -932,14 +945,16 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    auto res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
+    auto blockRanges = getRelevantBlockRanges(spec, blocks);
+    auto res = reader->scan(spec, blockRanges, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {7, 4}, {8, 4}, {8, 5}}));
 
     graphs.clear();
     graphs.insert(V(1));
     spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
-    res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
+    blockRanges = getRelevantBlockRanges(spec, blocks);
+    res = reader->scan(spec, blockRanges, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }

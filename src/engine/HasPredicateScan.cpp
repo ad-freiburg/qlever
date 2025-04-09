@@ -341,7 +341,7 @@ void HasPredicateScan::computeFreeO(
           .toScanSpecification(index);
   auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
                         .scan(std::move(scanSpec), {}, cancellationHandle_,
-                              locatedTriplesSnapshot());
+                              locatedTriplesSnapshot(), std::nullopt);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

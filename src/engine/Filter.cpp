@@ -52,8 +52,9 @@ string Filter::getDescriptor() const {
 void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
       _expression.getPrefilterExpressionForMetadata();
-  auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
-      std::move(prefilterPairs));
+  auto optNewSubTree =
+      _subtree->setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
+          std::move(prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }
