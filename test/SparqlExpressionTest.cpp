@@ -1462,6 +1462,16 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
+
+  // Datatype or language tag
+  checkReplace(
+      IdOrLiteralOrIriVec{
+          lit("Eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("zwEi", "@en")},
+      std::tuple{IdOrLiteralOrIriVec{
+                     lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("zwei", "@en")},
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
 }
 
 // ______________________________________________________________________________

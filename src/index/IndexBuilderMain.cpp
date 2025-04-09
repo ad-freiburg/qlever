@@ -362,14 +362,12 @@ int main(int argc, char** argv) {
           "has to be true. For details see --help."));
     }
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      index.storeTextScoringParamsInConfiguration(
-          getTextScoringMetricFromString(scoringMetric), bScoringParam,
-          kScoringParam);
       index.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
-          addWordsFromLiterals);
+          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
+          {bScoringParam, kScoringParam});
     }
 
     if (!docsfile.empty()) {
