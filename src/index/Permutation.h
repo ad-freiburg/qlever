@@ -71,7 +71,7 @@ class Permutation {
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {},
-               std::optional<std::vector<CompressedBlockMetadata>> blocks =
+               std::optional<std::vector<CompressedBlockMetadata>> optBlocks =
                    std::nullopt) const;
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
@@ -104,7 +104,7 @@ class Permutation {
   // maintains its invariants.
   IdTableGenerator lazyScan(
       const ScanSpecification& scanSpec,
-      std::optional<std::vector<CompressedBlockMetadata>> blocks,
+      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
@@ -169,8 +169,7 @@ class Permutation {
 
   // From the given snapshot, get the augmented block metadata for this
   // permutation.
-  const std::vector<CompressedBlockMetadata>&
-  getAugmentedMetadataForPermutation(
+  BlockMetadataRanges getAugmentedMetadataForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }

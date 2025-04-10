@@ -206,14 +206,15 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 
 // _____________________________________________________________________________
 Result::Generator IndexScan::chunkedIndexScan() const {
-  auto optBlockSpan = getBlockMetadata();
-  if (!optBlockSpan.has_value()) {
+  auto optBlockMetadata = getBlockMetadata();
+  if (!optBlockMetadata.has_value()) {
     co_return;
   }
-  const auto& blockSpan = optBlockSpan.value();
+  auto blockMetadata = optBlockMetadata.value();
   // Note: Given a `PrefilterIndexPair` is available, the corresponding
   // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable : getLazyScan({blockSpan.begin(), blockSpan.end()})) {
+  for (IdTable& idTable :
+       getLazyScan({blockMetadata.begin(), blockMetadata.end()})) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
@@ -332,7 +333,11 @@ std::optional<std::span<const CompressedBlockMetadata>>
 IndexScan::getBlockMetadata() const {
   auto metadata = getMetadataForScan();
   if (metadata.has_value()) {
-    return CompressedRelationReader::getBlocksFromMetadata(metadata.value());
+    const auto& blockMetadata = metadata.value().blockMetadata_;
+    AD_CORRECTNESS_CHECK(blockMetadata.size() == 1);
+    const auto& contigousBlockRange = blockMetadata.front();
+    AD_CORRECTNESS_CHECK(ql::ranges::contiguous_range<BlockMetadataRange>);
+    return std::span(contigousBlockRange.begin(), contigousBlockRange.end());
   }
   return std::nullopt;
 }
@@ -396,6 +401,7 @@ std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
+  using CRR = CompressedRelationReader;
 
   // This function only works for single column joins. This means that the first
   // variable of both scans must be equal, but all other variables of the scans
@@ -431,12 +437,12 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
     return {{}};
   }
-  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
-      metaBlocks1.value(), metaBlocks2.value());
+  auto [blocks1, blocks2] =
+      CRR::getBlocksForJoin(metaBlocks1.value(), metaBlocks2.value());
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
-  result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
-  result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
+  result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
+  result[1].details().numBlocksAll_ = metaBlocks2.value().sizeBlockMetadata_;
   return result;
 }
 
@@ -446,17 +452,15 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());
+  using CRR = CompressedRelationReader;
 
   auto metaBlocks = getMetadataForScan();
-
   if (!metaBlocks.has_value()) {
     return {};
   }
-  auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
-                                                           metaBlocks.value());
-
+  auto blocks = CRR::getBlocksForJoin(joinColumn, metaBlocks.value());
   auto result = getLazyScan(blocks);
-  result.details().numBlocksAll_ = metaBlocks.value().blockMetadata_.size();
+  result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
 }
 
@@ -630,7 +634,7 @@ Result::Generator IndexScan::createPrefilteredIndexScanSide(
   while (true) {
     if (pendingBlocks.empty()) {
       if (innerState->doneFetching_) {
-        metadata.numBlocksAll_ = innerState->metaBlocks_.blockMetadata_.size();
+        metadata.numBlocksAll_ = innerState->metaBlocks_.sizeBlockMetadata_;
         updateRuntimeInfoForLazyScan(metadata);
         co_return;
       }
