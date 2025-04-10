@@ -4023,3 +4023,24 @@ TEST(QueryPlanner, negatedPaths) {
                          h::IndexScanFromStrings(
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, transitivePathWithoutVariables) {
+  TransitivePathSide left{std::nullopt, 1, Id::makeFromInt(1), 0};
+  TransitivePathSide right{std::nullopt, 0, Id::makeFromInt(1), 1};
+  h::expect(
+      "SELECT * { 1 <a>* 1 }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { 1 <a>* 1 . 1 <a> 1 }",
+      h::CartesianProductJoin(
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<a>"), 1),
+          h::TransitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1"))));
+}
