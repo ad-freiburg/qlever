@@ -60,7 +60,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             bool useTextIndex = false) {
   ad_utility::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
-  auto qec = ad_utility::testing::getQec();
+  auto qec = ad_utility::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();

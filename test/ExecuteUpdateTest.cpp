@@ -200,7 +200,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     ad_utility::testing::TestIndexConfig config{
         "<a> <a> <a> <a> . <b> <b> <b> <b> . <c> <c> <c> <c> . <d> <d> <d> ."};
     config.indexType = qlever::Filetype::NQuad;
-    auto qec = ad_utility::testing::getQec(std::move(config));
+    qec = ad_utility::testing::getQec(std::move(config));
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
     auto QuadFrom = [&IdTriple](const ::Id& id) {
       return IdTriple(id, id, id, id);

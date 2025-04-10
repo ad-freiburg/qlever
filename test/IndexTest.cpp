@@ -339,7 +339,10 @@ TEST(IndexTest, scanTest) {
          "<c> <is-a> <2> . \n";
 
     {
-      const auto& qec = *qecPtr;
+      TestIndexConfig config{kb};
+      config.usePrefixCompression = useCompression;
+      const auto& qec = *getQec(std::move(config));
+      const IndexImpl& index = qec.getIndex().getImpl();
 
       auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
       Id a = getId("<a>");
