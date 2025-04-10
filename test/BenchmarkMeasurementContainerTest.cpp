@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (April of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
@@ -94,7 +96,10 @@ static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
                                 const auto&... wantedContent) {
   // Calls the correct assert function based on type.
-  auto assertEqual = []<typename T>(const T& a, const T& b) {
+  auto assertEqual = [](const auto& a, const auto& b) {
+    static_assert(std::is_same_v<decltype(a), decltype(b)>,
+                  "Arguments shall be of the same type");
+    using T = std::decay_t<decltype(a)>;
     if constexpr (std::is_floating_point_v<T>) {
       ASSERT_NEAR(a, b, 0.01);
     } else {
@@ -104,19 +109,19 @@ static void checkResultTableRow(const ResultTable& table,
 
   size_t column = 0;
   auto check = [&table, &rowNumber, &column,
-                &assertEqual]<typename T>(const T& wantedContent) mutable {
+                &assertEqual](const auto& wantedContent) mutable {
+    using T = decltype(wantedContent);
     // `getEntry` should ONLY work with `T`
-    doForTypeInResultTableEntryType(
-        [&table, &rowNumber, &column, &assertEqual,
-         &wantedContent]<typename PossiblyWrongType>() {
-          if constexpr (ad_utility::isSimilar<PossiblyWrongType, T>) {
-            assertEqual(wantedContent,
-                        table.getEntry<std::decay_t<T>>(rowNumber, column));
-          } else {
-            ASSERT_ANY_THROW(
-                table.getEntry<PossiblyWrongType>(rowNumber, column));
-          }
-        });
+    doForTypeInResultTableEntryType([&table, &rowNumber, &column, &assertEqual,
+                                     &wantedContent](auto t) {
+      using PossiblyWrongType = typename decltype(t)::type;
+      if constexpr (ad_utility::isSimilar<PossiblyWrongType, T>) {
+        assertEqual(wantedContent,
+                    table.getEntry<std::decay_t<T>>(rowNumber, column));
+      } else {
+        ASSERT_ANY_THROW(table.getEntry<PossiblyWrongType>(rowNumber, column));
+      }
+    });
     column++;
   };
   ((check(wantedContent)), ...);
@@ -148,7 +153,8 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
         table.entries_.at(row).at(column)));
 
     // Does trying to access it anyway cause an error?
-    doForTypeInResultTableEntryType([&table, &row, &column]<typename T>() {
+    doForTypeInResultTableEntryType([&table, &row, &column](auto t) {
+      using T = typename decltype(t)::type;
       ASSERT_ANY_THROW(table.getEntry<T>(row, column));
     });
   };
@@ -182,8 +188,11 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.addMeasurement(0, 1, createWaitLambda(10ms));
 
   // Check, if it works with custom entries.
-  doForTypeInResultTableEntryType([&table, &checkNeverSet]<typename T1>() {
-    doForTypeInResultTableEntryType([&table, &checkNeverSet]<typename T2>() {
+  doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t1) {
+    using T1 = typename decltype(t1)::type;
+    doForTypeInResultTableEntryType([&table, &checkNeverSet](auto t2) {
+      using T2 = typename decltype(t2)::type;
+
       // Set custom entries.
       table.setEntry(0, 2, createDummyValueEntryType<T1>());
       table.setEntry(1, 1, createDummyValueEntryType<T2>());
@@ -200,8 +209,9 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   std::vector<std::string> addRowRowNames(rowNames);
   // Testing `addRow`.
   doForTypeInResultTableEntryType([&table, &checkNeverSet, &checkForm,
-                                   &columnNames,
-                                   &addRowRowNames]<typename T>() {
+                                   &columnNames, &addRowRowNames](auto t) {
+    using T = typename decltype(t)::type;
+
     // What is the index of the new row?
     const size_t indexNewRow = table.numRows();
 

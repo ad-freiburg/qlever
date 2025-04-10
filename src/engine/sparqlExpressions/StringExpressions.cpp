@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/url.hpp>
 
@@ -168,7 +170,8 @@ class SubstrImpl {
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.
-  static constexpr auto round = []<typename T>(const T& value) -> int64_t {
+  static constexpr auto round = [](const auto& value) -> int64_t {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (ad_utility::FloatingPoint<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
