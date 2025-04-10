@@ -136,6 +136,7 @@ SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIsGeoLiteralExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
 namespace detail {

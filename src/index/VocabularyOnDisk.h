@@ -53,8 +53,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
     explicit WordWriter(const std::string& filename);
-    // Add the next word to the vocabulary.
-    void operator()(std::string_view word);
+    // Add the next word to the vocabulary and return its index.
+    uint64_t operator()(std::string_view word);
     // Finish the writing. After this no more calls to `operator()` are allowed.
     void finish();
     // Destructor. Implicitly calls `finish` if it hasn't been called before.
