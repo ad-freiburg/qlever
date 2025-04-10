@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/url.hpp>
 
@@ -17,11 +19,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       const std::optional<std::variant<Iri, std::string>>& descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -165,7 +170,8 @@ class SubstrImpl {
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.
-  static constexpr auto round = []<typename T>(const T& value) -> int64_t {
+  static constexpr auto round = [](const auto& value) -> int64_t {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (ad_utility::FloatingPoint<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
@@ -310,33 +316,46 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string_view text, std::string_view pattern) {
-      // Required by the SPARQL standard.
-      if (pattern.empty()) {
-        return toLiteral(text);
-      }
-      auto pos = text.find(pattern);
-      if (pos >= text.size()) {
-        return toLiteral("");
-      }
-      if constexpr (isStrAfter) {
-        return toLiteral(text.substr(pos + pattern.size()));
-      } else {
-        // STRBEFORE
-        return toLiteral(text.substr(0, pos));
-      }
-    };
+    [](std::optional<ad_utility::triple_component::Literal> literal,
+       std::optional<ad_utility::triple_component::Literal> optPattern)
+    -> IdOrLiteralOrIri {
+  if (!optPattern.has_value() || !literal.has_value()) {
+    return Id::makeUndefined();
+  }
+  const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
+  //  Required by the SPARQL standard.
+  if (pattern.empty()) {
+    if (isStrAfter) {
+      return LiteralOrIri(std::move(literal.value()));
+    } else {
+      literal.value().setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal.value()));
+    }
+  }
+  auto literalContent = literal.value().getContent();
+  auto pos = asStringViewUnsafe(literalContent).find(pattern);
+  if (pos >= literalContent.size()) {
+    return toLiteral("");
+  }
+  if constexpr (isStrAfter) {
+    literal.value().setSubstr(pos + pattern.size(),
+                              literalContent.size() - pos - pattern.size());
+  } else {
+    // STRBEFORE
+    literal.value().setSubstr(0, pos);
+  }
+  return LiteralOrIri(std::move(literal.value()));
+};
 
 auto strAfter = strAfterOrBeforeImpl<true>;
-
 using StrAfterExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strAfter),
+                          LiteralValueGetterWithoutStrFunction>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strBefore),
+                          LiteralValueGetterWithoutStrFunction>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
@@ -361,12 +380,13 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
+    [](std::optional<ad_utility::triple_component::Literal> s,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  std::string in(asStringViewUnsafe(s.value().getContent()));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
@@ -374,12 +394,13 @@ using MergeRegexPatternAndFlagsExpression =
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
-  return toLiteral(in);
+  s.value().replaceContent(in);
+  return LiteralOrIri(std::move(s.value()));
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {

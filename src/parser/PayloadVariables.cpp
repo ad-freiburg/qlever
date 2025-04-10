@@ -1,6 +1,8 @@
 // Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/PayloadVariables.h"
 
@@ -19,7 +21,8 @@ PayloadVariables PayloadVariables::all() {
 void PayloadVariables::addVariable(const Variable& variable) {
   // Helper visitor to check if the payload variables has not been set to all
   // and a variable can be added. If yes, add it.
-  auto addVarVisitor = [&]<typename T>(T& value) {
+  auto addVarVisitor = [&](auto& value) {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, std::vector<Variable>>) {
       value.push_back(variable);
     }
@@ -36,7 +39,8 @@ void PayloadVariables::setToAll() {
 // ____________________________________________________________________________
 bool PayloadVariables::empty() const {
   // Helper visitor to check if the payload variables are empty
-  auto emptyVisitor = []<typename T>(const T& value) -> bool {
+  auto emptyVisitor = [](const auto& value) -> bool {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, detail::PayloadAllVariables>) {
       return false;
     } else {
@@ -57,8 +61,8 @@ bool PayloadVariables::isAll() const {
 const std::vector<Variable>& PayloadVariables::getVariables() const {
   // Helper visitor to check if the payload variables has been set to all: then
   // throw, otherwise return the vector
-  auto getVarVisitor =
-      []<typename T>(const T& value) -> const std::vector<Variable>& {
+  auto getVarVisitor = [](const auto& value) -> const std::vector<Variable>& {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, std::vector<Variable>>) {
       return value;
     } else {
