@@ -362,3 +362,48 @@ TEST(LiteralTest, replaceContent) {
   literal.getLiteral().replaceContent("Hello World!");
   EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
 }
+// _______________________________________________________________________
+TEST(LiteralTest, concat) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello ");
+  LiteralOrIri literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello ", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literalOther = LiteralOrIri::literalWithoutQuotes(
+      "World!", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_TRUE(literal.hasDatatype());
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
+              asStringViewUnsafe(literal.getDatatype()));
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", "@en");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_THAT("en", asStringViewUnsafe(literal.getLanguageTag()));
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello ", Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!Bye!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Thüss!", "@de");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_THAT("Hello World!Thüss!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+}
