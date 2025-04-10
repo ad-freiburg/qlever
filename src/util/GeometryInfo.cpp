@@ -4,7 +4,6 @@
 
 #include "util/GeometryInfo.h"
 
-#include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 
 #include <cstdint>
@@ -12,7 +11,11 @@
 #include "parser/GeoPoint.h"
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/geo/Point.h"
+
+namespace ad_utility {
+namespace detail {
 
 using namespace ::util::geo;
 using CoordType = double;
@@ -21,15 +24,8 @@ using ParsedWkt =
                  MultiPoint<CoordType>, MultiLine<CoordType>,
                  MultiPolygon<CoordType>, Collection<CoordType>>;
 
-// ____________________________________________________________________________
-GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
-  // TODO<ullingerc> Remove unneccessary string copying
-  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string(wkt));
-  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
-
-  ParsedWkt parsed;
-
+std::pair<WKTType, std::optional<ParsedWkt>> parseWkt(std::string wktLiteral) {
+  std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
   switch (type) {
     case WKTType::POINT: {
@@ -64,8 +60,46 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
       break;
   }
 
-  auto x = std::visit([]<typename T>(T& val) { return centroid(val); }, parsed);
-  auto centroid = GeoPoint(x.getY(), x.getX()).toBitRepresentation();
-
-  return GeometryInfo{type, centroid};
+  return {type, parsed};
 }
+
+GeoPoint utilPointToGeoPoint(Point<CoordType>& point) {
+  return GeoPoint(point.getY(), point.getX());
+}
+
+GeoPoint centroidAsGeoPoint(ParsedWkt& geometry) {
+  auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
+  return utilPointToGeoPoint(uPoint);
+};
+
+std::pair<GeoPoint, GeoPoint> boundingBoxAsGeoPoints(ParsedWkt& geometry) {
+  auto bb = std::visit([]<typename T>(T& val) { return getBoundingBox(val); },
+                       geometry);
+  auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
+  auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
+  return {lowerLeft, upperRight};
+}
+
+}  // namespace detail
+
+// ____________________________________________________________________________
+GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
+  // TODO<ullingerc> Remove unneccessary string copying
+  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
+      std::string(wkt));
+  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
+
+  // Parse WKT and compute info
+  using namespace detail;
+  auto [type, parsed] = parseWkt(wktLiteral);
+  auto [p1, p2] = boundingBoxAsGeoPoints(parsed.value());
+  auto c = centroidAsGeoPoint(parsed.value());
+  // ... further precomputations ...
+
+  return GeometryInfo{type,
+                      {p1.toBitRepresentation(), p2.toBitRepresentation()},
+                      c.toBitRepresentation()};
+  // Also return "parsed" for further use (eg. saving to special vocab)?
+}
+
+}  // namespace ad_utility

@@ -13,6 +13,8 @@
 #include "util/File.h"
 #include "util/GeometryInfo.h"
 
+using GeometryInfo = ad_utility::GeometryInfo;
+
 // A GeoVocabulary holds Well-Known Text literals. In contrast to the regular
 // vocabulary classes it does not only store the strings. Instead it stores both
 // preprocessed and original forms of its input words. Preprocessing includes

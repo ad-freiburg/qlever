@@ -9,20 +9,22 @@
 #include <cstdio>
 #include <string>
 
+namespace ad_utility {
+
 // A geometry info object holds precomputed details on WKT literals.
 struct GeometryInfo {
   uint8_t geometryType_;
-
-  // TODO<ullingerc> Implement actual precomputation, f.ex.
-  // WKTType type_;
-  // std::pair<uint64_t, uint64_t> boundingBox_;
+  std::pair<uint64_t, uint64_t> boundingBox_;
   uint64_t centroid_;
+
   // double metricLength_;
   // double metricArea_;
-  // uint64_t libspatialjoinOffset_;
+  // std::optional<uint64_t> parsedVocabOffset_ = std::nullopt;
 
   // Parse a WKT literal and precompute all attributes.
   static GeometryInfo fromWktLiteral(const std::string_view& wkt);
 };
+
+}  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_GEOMETRYINFO_H
