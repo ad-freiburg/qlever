@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -55,8 +57,8 @@ int main(int argc, char** argv) {
       &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
-  auto add = [&options]<typename... Args>(Args&&... args) {
-    options.add_options()(std::forward<Args>(args)...);
+  auto add = [&options](auto&&... args) {
+    options.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   // TODO<joka921> Can we output the "required" automatically?
