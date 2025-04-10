@@ -40,8 +40,7 @@ class GeoVocabulary {
  public:
   // Constructor
   template <typename... Args>
-  explicit GeoVocabulary(Args&&... args)
-      : literals_{std::forward<Args>(args)...} {};
+  explicit GeoVocabulary(Args&&... args) : literals_{AD_FWD(args)...} {};
 
   // Retrieve the geometry info object stored for the literal with a given
   // index.
@@ -49,7 +48,7 @@ class GeoVocabulary {
 
   // Forward all the standard operations to the underlying literal vocabulary.
 
-  auto operator[](uint64_t id) const { return literals_[id]; }
+  decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 
