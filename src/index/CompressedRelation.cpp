@@ -1,6 +1,8 @@
 // Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "CompressedRelation.h"
 
@@ -412,6 +414,14 @@ auto getRelevantIdFromTriple(
                                maxId)
       .value_or(triple.col2Id_);
 }
+
+// `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
+// fulfill a concept for the `ql::ranges` algorithms.
+struct BlockLessThanBlock {
+  template <typename T = void>
+  bool operator()(const CompressedBlockMetadata&,
+                  const CompressedBlockMetadata&) const;
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -432,17 +442,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
 
-  // `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
-  // fulfill a concept for the `ql::ranges` algorithms.
-  auto blockLessThanBlock =
-      []<typename T = void>(const CompressedBlockMetadata&,
-                            const CompressedBlockMetadata&)
-          ->bool {
-    static_assert(ad_utility::alwaysFalse<T>);
-    AD_FAIL();
-  };
   auto lessThan = ad_utility::OverloadCallOperator{
-      idLessThanBlock, blockLessThanId, blockLessThanBlock, std::less<Id>{}};
+      idLessThanBlock, blockLessThanId, BlockLessThanBlock{}, std::less<Id>{}};
 
   // Find the matching blocks by performing binary search on the `joinColumn`.
   // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
