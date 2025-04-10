@@ -459,14 +459,14 @@ class ConcatExpression : public detail::VariadicExpression {
         // All previous children were constants, and the current child also is
         // a constant.
         auto visitLiteralConcat =
-            [&concatOrSetLitFromConst](std::optional<Literal> literalSoFar) {
+            [&concatOrSetLitFromConst](std::optional<Literal>&& literalSoFar) {
               concatOrSetLitFromConst(literalSoFar);
             };
 
         // One of the previous children was not a constant, so we already
         // store a vector.
         auto visitLiteralVecConcat =
-            [&concatOrSetLitFromConst](LiteralVec& literalVec) {
+            [&concatOrSetLitFromConst](LiteralVec&& literalVec) {
               ql::ranges::for_each(literalVec, [&](auto& literalSoFar) {
                 concatOrSetLitFromConst(literalSoFar);
               });
@@ -520,7 +520,7 @@ class ConcatExpression : public detail::VariadicExpression {
     };
 
     auto visitLiteralVecResult =
-        [&](consr LiteralVec& literalVec) -> ExpressionResult {
+        [&](const LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(literalVec.size());
       ql::ranges::copy(literalVec | ql::views::transform(convertLiteral),
