@@ -10,15 +10,15 @@
 using namespace qlever;
 using namespace testing;
 // _____________________________________________________________________________
-TEST(KeyOrder, keyOrder) {
+TEST(KeyOrder, Constructor) {
   AD_EXPECT_THROW_WITH_MESSAGE(KeyOrder(0, 1, 2, 4), HasSubstr("out of range"));
   AD_EXPECT_THROW_WITH_MESSAGE(KeyOrder(0, 1, 2, 2), HasSubstr("not unique"));
-  KeyOrder keyOrder{3, 0, 1, 2};
+  auto keyOrder = KeyOrder{3, 0, 1, 2};
   EXPECT_THAT(keyOrder.keys(), ElementsAre(3, 0, 1, 2));
 }
 
 // _____________________________________________________________________________
-TEST(KeyOrder, permute) {
+TEST(KeyOrder, Permute) {
   KeyOrder keyOrder{2, 3, 1, 0};
   std::array a{0, 1, 2, 3};
   EXPECT_THAT(keyOrder.permute(a), ElementsAre(2, 3, 1, 0));

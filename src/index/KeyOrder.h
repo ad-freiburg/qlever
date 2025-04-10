@@ -20,7 +20,7 @@ class KeyOrder {
  public:
   using T = uint8_t;
   static constexpr size_t NumKeys = 4;
-  using Array = std::array<uint8_t, NumKeys>;
+  using Array = std::array<T, NumKeys>;
 
  private:
   Array keys_;
@@ -30,8 +30,8 @@ class KeyOrder {
   // numbers `[0...4]`, then an `AD_CONTRACT_CHECK` will fail.
   KeyOrder(T a, T b, T c, T d) : keys_{a, b, c, d} { validate(); }
 
-  // Get access to the permutation.
-  const Array& keys() const { return keys_; }
+  // Get access to the keys.
+  const auto& keys() const { return keys_; }
 
   // Apply the permutation specified by this `KeyOrder` to the `input`.
   // The elements of the input are copied into the result.
@@ -47,7 +47,7 @@ class KeyOrder {
   // in the future when we have more proper support for named graphs.
   template <typename T>
   std::array<T, 3> permuteSPOOnly(const std::array<T, 3>& input) const {
-    AD_CONTRACT_CHECK(keys()[3] == 3);
+    AD_CONTRACT_CHECK(keys_[3] == 3);
     return permuteImpl(input, std::make_index_sequence<3>());
   }
 
@@ -69,7 +69,7 @@ class KeyOrder {
       N)) auto permuteImpl(const std::array<T, N>& input,
                            std::integer_sequence<size_t, Indexes...>) const
       -> std::array<T, N> {
-    return {input[std::get<Indexes>(keys())]...};
+    return {input[std::get<Indexes>(keys_)]...};
   }
 };
 }  // namespace qlever

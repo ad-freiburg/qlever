@@ -22,9 +22,9 @@ struct IdTriple {
 
   // For the case of no payload we use an empty struct which is stored at the
   // end of a tuple. That way it will consume no additional space in the struct.
-  struct EmptyPayload : ql::ranges::empty_view<Id> {};
   static constexpr size_t PayloadSize = N;
-  using Payload = std::conditional_t<(N > 0), std::array<Id, N>, EmptyPayload>;
+  using Payload = std::conditional_t<(N > 0), std::array<Id, N>,
+                                     ql::ranges::empty_view<Id>>;
 
   // The IDs that define the triple plus some optional payload.
   std::tuple<std::array<Id, NumCols>, Payload> data_;
@@ -55,9 +55,15 @@ struct IdTriple {
   // Note: The payload is not part of the value representation and therefore not
   // compared.
   std::strong_ordering operator<=>(const IdTriple& other) const {
-    return std::lexicographical_compare_three_way(
-        ids().begin(), ids().end(), other.ids().begin(), other.ids().end());
+    // Note: Libc++ in our clang build neither has three-way comparisons for
+    // `std::array`, nor the `lexicographical_compare_three_way` function.
+    static_assert(NumCols == 4);
+    auto tie = [](const auto& ids) {
+      return std::tie(ids[0], ids[1], ids[2], ids[3]);
+    };
+    return tie(ids()) <=> tie(other.ids());
   }
+
   bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
 
   template <typename H>
