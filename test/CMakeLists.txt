@@ -141,7 +141,7 @@ addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-# We currently always use a file *.text-index-disk for all indices, which
+# We currently always use static file names for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)

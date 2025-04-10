@@ -609,7 +609,7 @@ class IndexImpl {
 
   void addContextToVector(TextVec& vec, TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities);
+                          const ad_utility::HashMap<Id, Score>& entities) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like

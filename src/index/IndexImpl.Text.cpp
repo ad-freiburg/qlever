@@ -169,8 +169,6 @@ void IndexImpl::buildTextIndexFile(
   TextVec vec{indexFilename + ".tmp", memoryLimitIndexBuilding() / 3,
               allocator_};
   processWordsForInvertedLists(wordsFile, addWordsFromLiterals, vec);
-  LOG(DEBUG) << "Sorting text index, #elements = " << vec.size() << std::endl;
-  LOG(DEBUG) << "Sort done" << std::endl;
   createTextIndex(indexFilename, vec);
   openTextFileHandle();
 }
@@ -324,17 +322,17 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
 void IndexImpl::addContextToVector(
     TextVec& vec, TextRecordIndex context,
     const ad_utility::HashMap<WordIndex, Score>& words,
-    const ad_utility::HashMap<Id, Score>& entities) {
+    const ad_utility::HashMap<Id, Score>& entities) const {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<TextBlockIndex> touchedBlocks;
   for (auto it = words.begin(); it != words.end(); ++it) {
     TextBlockIndex blockId = getWordBlockId(it->first);
     touchedBlocks.insert(blockId);
-    vec.push(
-        std::array{Id::makeFromInt(blockId), Id::makeFromInt(context.get()),
-                   Id::makeFromInt(it->first), Id::makeFromDouble(it->second),
-                   Id::makeFromBool(false)});
+    vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(false),
+                        Id::makeFromInt(context.get()),
+                        Id::makeFromInt(it->first),
+                        Id::makeFromDouble(it->second)});
   }
 
   // All entities have to be written in the entity list part for each block.
@@ -345,10 +343,10 @@ void IndexImpl::addContextToVector(
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-      vec.push(
-          std::array{Id::makeFromInt(blockId), Id::makeFromInt(context.get()),
-                     Id::makeFromInt(it->first.getVocabIndex().get()),
-                     Id::makeFromDouble(it->second), Id::makeFromBool(true)});
+      vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
+                          Id::makeFromInt(context.get()),
+                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromDouble(it->second)});
     }
   }
 }
@@ -367,10 +365,10 @@ void IndexImpl::createTextIndex(const string& filename, TextVec& vec) {
   vector<Posting> entityPostings;
   for (const auto& value : vec.sortedView()) {
     TextBlockIndex textBlockIndex = value[0].getInt();
-    TextRecordIndex textRecordIndex = TextRecordIndex::make(value[1].getInt());
-    WordOrEntityIndex wordOrEntityIndex = value[2].getInt();
-    Score score = value[3].getDouble();
-    bool flag = value[4].getBool();
+    bool flag = value[1].getBool();
+    TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
+    WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
+    Score score = value[4].getDouble();
     if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;

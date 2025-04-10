@@ -55,13 +55,12 @@ using SortBySPO = SortTriple<0, 1, 2>;
 using SortByOSP = SortTriple<2, 0, 1>;
 
 struct SortText {
-  using Row = IdTableStatic<5>::row_type;
-  // comparison function
-  bool operator()(const Row& a, const Row& b) const {
-    auto permute = [](const Row& x) {
-      return std::tie(x[0], x[4], x[1], x[2], x[3]);
-    };
-    return permute(a) < permute(b);
+  // < comparator
+  bool operator()(const auto& a, const auto& b) const {
+    return ql::ranges::lexicographical_compare(
+        a, b, [](const Id& x, const Id& y) {
+          return x.compareWithoutLocalVocab(y) < 0;
+        });
   }
 };
 
