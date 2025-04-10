@@ -3,6 +3,8 @@
 // Authors: Jonathan Zeller github@Jonathan24680
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 //          Patrick Brosi <brosi@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/SpatialJoin.h"
 
@@ -74,7 +76,7 @@ bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxDist() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
+  auto visitor = [](const auto& config) -> std::optional<size_t> {
     return config.maxDist_;
   };
   return std::visit(visitor, config_.task_);
@@ -82,7 +84,8 @@ std::optional<size_t> SpatialJoin::getMaxDist() const {
 
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxResults() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
+  auto visitor = [](const auto& config) -> std::optional<size_t> {
+    using T = std::decay_t<decltype(config)>;
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
@@ -165,7 +168,8 @@ string SpatialJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
-  auto visitor = [this]<typename T>(const T& config) -> std::string {
+  auto visitor = [this](const auto& config) -> std::string {
+    using T = std::decay_t<decltype(config)>;
     // Joined Variables
     auto left = config_.left_.name();
     auto right = config_.right_.name();
