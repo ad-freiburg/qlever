@@ -3,7 +3,9 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
+#define QLEVER_SRC_INDEX_INDEXIMPL_H
 
 #include <array>
 #include <memory>
@@ -255,7 +257,8 @@ class IndexImpl {
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
   // Adds a text index to a complete KB index. Reads words from the given
   // wordsfile and calculates bm25 scores with the docsfile if given.
@@ -263,8 +266,9 @@ class IndexImpl {
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
   void buildTextIndexFile(
-      std::optional<std::pair<string, string>> wordsAndDocsFile,
-      bool addWordsFromLiterals);
+      const std::optional<std::pair<string, string>>& wordsAndDocsFile,
+      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+      std::pair<float, float> bAndKForBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -440,13 +444,9 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
-
   const string& getTextName() const { return textMeta_.getName(); }
-
   const string& getKbName() const { return pso_.getKbName(); }
-
+  const string& getOnDiskBase() const { return onDiskBase_; }
   const string& getIndexId() const { return indexId_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
@@ -553,8 +553,8 @@ class IndexImpl {
       ad_utility::HashMap<WordIndex, Score>& wordsInContext,
       ScoreData& scoreData) const;
 
-  void logEntityNotFound(const string& word,
-                         size_t& entityNotFoundErrorMsgCount) const;
+  static void logEntityNotFound(const string& word,
+                                size_t& entityNotFoundErrorMsgCount);
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
@@ -799,4 +799,9 @@ class IndexImpl {
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
+
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 };
+
+#endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

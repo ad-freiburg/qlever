@@ -3,7 +3,8 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
 #include <functional>
 #include <memory>
@@ -218,9 +219,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
-                   size_t outputRow, size_t skipCol) const;
+  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
+                          size_t inputRow, size_t outputRow, size_t skipCol);
 
   // A small helper function: Insert the `value` to the set at `map[key]`.
   // As the sets all have an allocator with memory limit, this construction is a
@@ -246,6 +247,11 @@ class TransitivePathBase : public Operation {
                                           size_t startSideCol,
                                           size_t targetSideCol, bool yieldOnce,
                                           size_t skipCol = 0) const;
+
+  // Return an execution tree that represents one side of an empty path. This is
+  // used as a starting point for evaluating the empty path.
+  static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
+      QueryExecutionContext* qec, Graphs activeGraphs);
 
  public:
   size_t getCostEstimate() override;
@@ -313,3 +319,5 @@ class TransitivePathBase : public Operation {
     return {};
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H

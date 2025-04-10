@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SERVER_H
+#define QLEVER_SRC_ENGINE_SERVER_H
 
 #include <util/http/websocket/MessageSender.h>
 
@@ -51,13 +52,14 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool loadAllPermutations = true);
+                  bool usePatterns = true, bool loadAllPermutations = true,
+                  bool persistUpdates = false);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
   void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool loadAllPermutations = true);
+           bool loadAllPermutations = true, bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -283,3 +285,5 @@ class Server {
           const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
           SharedCancellationHandle cancellationHandle) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_SERVER_H

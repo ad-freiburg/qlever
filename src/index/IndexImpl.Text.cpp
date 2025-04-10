@@ -15,11 +15,10 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/Conversions.h"
+#include "util/MmapVector.h"
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
@@ -105,7 +104,7 @@ void IndexImpl::processWordCaseDuringInvertedListProcessing(
 
 // _____________________________________________________________________________
 void IndexImpl::logEntityNotFound(const string& word,
-                                  size_t& entityNotFoundErrorMsgCount) const {
+                                  size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "Entity from text not in KB: " << word << '\n';
     if (++entityNotFoundErrorMsgCount == 20) {
@@ -119,8 +118,9 @@ void IndexImpl::logEntityNotFound(const string& word,
 
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(
-    std::optional<std::pair<string, string>> wordsAndDocsFile,
-    bool addWordsFromLiterals) {
+    const std::optional<std::pair<string, string>>& wordsAndDocsFile,
+    bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+    std::pair<float, float> bAndKForBM25) {
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
@@ -150,6 +150,10 @@ void IndexImpl::buildTextIndexFile(
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
+  {
+    auto [b, k] = bAndKForBM25;
+    storeTextScoringParamsInConfiguration(textScoringMetric, b, k);
+  }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
@@ -178,10 +182,10 @@ void IndexImpl::buildTextIndexFile(
 void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);
+  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
-  // we write the offsets to and stxxl:vector first;
-  stxxl::vector<off_t> offsets;
+  // we write the offsets to and `ad_utility::MmapVector` first;
+  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   string line;
@@ -204,15 +208,8 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     currentOffset += static_cast<off_t>(lineView.size());
   }
   offsets.push_back(currentOffset);
-
-  ofs.close();
-  // Now append the tmp file to the docsDB file.
-  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    off_t cur = offsets[i];
-    out.write(&cur, sizeof(cur));
-  }
-  out.close();
+  ofs.write(reinterpret_cast<const char*>(offsets.data()),
+            sizeof(off_t) * offsets.size());
   LOG(INFO) << "DocsDB done.\n";
 }
 
@@ -605,7 +602,7 @@ IdTable IndexImpl::readContextListHelper(
       });
 
   // Helper lambda to read wordIndexList
-  auto wordIndexToId = [&](auto wordIndex) -> Id {
+  auto wordIndexToId = [isWordCl](auto wordIndex) {
     if (isWordCl) {
       return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
     }
@@ -619,8 +616,8 @@ IdTable IndexImpl::readContextListHelper(
       textIndexFile_, wordIndexToId);
 
   // Helper lambdas to read scoreList
-  auto scoreToId = [](auto score) -> Id {
-    if constexpr (std::is_same_v<decltype(score), uint16_t>) {
+  auto scoreToId = []<typename T>(T score) {
+    if constexpr (std::is_same_v<T, uint16_t>) {
       return Id::makeFromInt(static_cast<uint64_t>(score));
     } else {
       return Id::makeFromDouble(static_cast<double>(score));
@@ -804,12 +801,20 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 void IndexImpl::storeTextScoringParamsInConfiguration(
     TextScoringMetric scoringMetric, float b, float k) {
   configurationJson_["text-scoring-metric"] = scoringMetric;
-  if (0 <= b && b <= 1 && 0 <= k) {
-    configurationJson_["b-and-k-parameter-for-text-scoring"] =
-        std::make_pair(b, k);
-  } else {
-    configurationJson_["b-and-k-parameter-for-text-scoring"] =
-        std::make_pair(0.75, 1.75);
-  }
+  textScoringMetric_ = scoringMetric;
+  auto bAndK = [b, k, this]() {
+    if (0 <= b && b <= 1 && 0 <= k) {
+      return std::pair{b, k};
+    } else {
+      if (textScoringMetric_ == TextScoringMetric::BM25) {
+        throw std::runtime_error{absl::StrCat(
+            "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
+            "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
+      }
+      return std::pair{0.75f, 1.75f};
+    }
+  }();
+  bAndKParamForTextScoring_ = bAndK;
+  configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;
   writeConfiguration();
 }

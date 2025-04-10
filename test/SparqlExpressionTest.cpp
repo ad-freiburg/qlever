@@ -703,8 +703,22 @@ auto checkLcase = testUnaryExpression<&makeLowercaseExpression>;
 TEST(SparqlExpression, uppercaseAndLowercase) {
   checkLcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("one"), lit("twö"), U, U});
+  checkLcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("one", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
+  checkUcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("ONE", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("ONE", "@en"), U, U});
 }
 
 // _____________________________________________________________________________________
@@ -1409,7 +1423,8 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{lit(R"("\\$1 \\2 $1 \\")")}});
 
-  checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
+  // Only simple literals should be replaced.
+  checkReplace(idOrLitOrStringVec({U, U}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{Id::makeFromBool(true)}});
@@ -1426,6 +1441,13 @@ TEST(SparqlExpression, ReplaceExpression) {
       std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
                  IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
                  IdOrLiteralOrIri{lit("i")}});
+
+  // Matching using the all the flags
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("imsU")}});
   // Empty flag
   checkReplaceWithFlags(
       idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),
@@ -1473,6 +1495,16 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
+
+  // Datatype or language tag
+  checkReplace(
+      IdOrLiteralOrIriVec{
+          lit("Eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("zwEi", "@en")},
+      std::tuple{IdOrLiteralOrIriVec{
+                     lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("zwei", "@en")},
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
 }
 
 // ______________________________________________________________________________

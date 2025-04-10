@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_PERMUTATION_H
+#define QLEVER_SRC_INDEX_PERMUTATION_H
 
 #include <array>
 #include <string>
@@ -150,7 +151,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const array<size_t, 3>& keyOrder() const { return keyOrder_; };
+  const std::array<size_t, 3>& keyOrder() const { return keyOrder_; };
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -183,7 +184,7 @@ class Permutation {
   std::string fileSuffix_;
   // The order of the three components (S=0, P=1, O=2) in this permutation,
   // e.g., `{1, 0, 2}` for `PSO`.
-  array<size_t, 3> keyOrder_;
+  std::array<size_t, 3> keyOrder_;
   // The metadata for this permutation.
   MetaData meta_;
 
@@ -201,3 +202,5 @@ class Permutation {
 
   bool isInternalPermutation_ = false;
 };
+
+#endif  // QLEVER_SRC_INDEX_PERMUTATION_H
