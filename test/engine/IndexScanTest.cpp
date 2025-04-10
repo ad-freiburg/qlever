@@ -103,7 +103,9 @@ void testLazyScanForJoinOfTwoScans(
   // blocks.
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
-    auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
+    TestIndexConfig config{kgTurtle};
+    config.blocksizePermutations = blocksizePermutations;
+    auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.setLimit(limit);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
@@ -513,10 +515,19 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
+namespace {
+auto qecWithoutPatterns = []() {
+  TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
+  config.usePatterns = false;
+  return getQec(std::move(config));
+}();
+}  // namespace
 // _____________________________________________________________________________
 TEST(IndexScan, computeResultCanBeConsumedLazily) {
   using V = Variable;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
+  config.usePatterns = false;
+  auto qec = qecWithoutPatterns;
   auto getId = makeGetId(qec->getIndex());
   auto x = getId("<x>");
   auto p = getId("<p>");
@@ -544,7 +555,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   using V = Variable;
   using I = TripleComponent::Iri;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = qecWithoutPatterns;
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
@@ -563,7 +574,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using V = Variable;
   using I = TripleComponent::Iri;
   using enum Permutation::Enum;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = qecWithoutPatterns;
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
   auto p2 = I::fromIriref("<p2>");

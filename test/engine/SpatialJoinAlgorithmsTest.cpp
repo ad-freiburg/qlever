@@ -284,9 +284,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    ad_utility::MemorySize blocksizePermutations = 128_MB;
-    auto qec = ad_utility::testing::getQec(kg, true, true, false,
-                                           blocksizePermutations, false);
+    auto qec = SpatialJoinTestHelpers::detail::buildQecHelper(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -1540,8 +1538,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   addRow(kg, "5", multiLinestring);
   addRow(kg, "6", multiPolygon);
 
-  auto qec = ad_utility::testing::getQec(kg, true, true, false, 16_MB, false,
-                                         true, std::nullopt, 10_kB);
+  auto qec = SpatialJoinTestHelpers::detail::buildQecHelper(kg);
   return qec;
 }
 

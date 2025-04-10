@@ -138,6 +138,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 }  // namespace
 
 // ______________________________________________________________
+/*
 Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
@@ -158,6 +159,7 @@ Index makeTestIndex(const std::string& indexBasename,
                       contentsOfWordsFileAndDocsFile, parserBufferSize,
                       scoringMetric, bAndKParam, indexType});
 }
+*/
 
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
@@ -215,21 +217,21 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
               c.bAndKParam.value().second);
         }
       }
-      if (c.contentsOfWordsFileAndDocsFile.has_value()) {
+      if (c.contentsOfWordsFileAndDocsfile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(c.contentsOfWordsFileAndDocsFile.value().first.c_str(),
-                        c.contentsOfWordsFileAndDocsFile.value().first.size());
-        docsFile.write(contentsOfWordsFileAndDocsFile.value().second.c_str(),
-                       contentsOfWordsFileAndDocsFile.value().second.size());
+        wordsFile.write(c.contentsOfWordsFileAndDocsfile.value().first.c_str(),
+                        c.contentsOfWordsFileAndDocsfile.value().first.size());
+        docsFile.write(c.contentsOfWordsFileAndDocsfile.value().second.c_str(),
+                       c.contentsOfWordsFileAndDocsfile.value().second.size());
         wordsFile.close();
         docsFile.close();
         index.setKbName(indexBasename);
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
-        if (addWordsFromLiterals) {
+        if (c.addWordsFromLiterals) {
           index.buildTextIndexFile(
               std::pair<std::string, std::string>{indexBasename + ".wordsfile",
                                                   indexBasename + ".docsfile"},
@@ -241,12 +243,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
               false);
         }
         index.buildDocsDB(indexBasename + ".docsfile");
-      } else if (addWordsFromLiterals) {
+      } else if (c.addWordsFromLiterals) {
         index.buildTextIndexFile(std::nullopt, true);
       }
     }
   }
-  if (!usePatterns || !loadAllPermutations) {
+  if (!c.usePatterns || !c.loadAllPermutations) {
     // If we have no patterns, or only two permutations, then check the graceful
     // fallback even if the options were not explicitly specified during the
     // loading of the server.
@@ -254,26 +256,27 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = true;
     index.loadAllPermutations() = true;
     EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename, false));
-    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
-    EXPECT_EQ(index.usePatterns(), usePatterns);
+    EXPECT_EQ(index.loadAllPermutations(), c.loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), c.usePatterns);
   }
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.usePatterns() = usePatterns;
-  index.loadAllPermutations() = loadAllPermutations;
+  index.usePatterns() = c.usePatterns;
+  index.loadAllPermutations() = c.loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename, false);
-  if (createTextIndex) {
+  if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
   ad_utility::setGlobalLoggingStream(&std::cout);
 
-  if (usePatterns && loadAllPermutations) {
+  if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
   }
   return index;
 }
-
-// ________________________________________________________________________________
+/*
+//
+________________________________________________________________________________
 QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool loadAllPermutations, bool usePatterns,
                               bool usePrefixCompression,
@@ -285,6 +288,15 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               std::optional<TextScoringMetric> scoringMetric,
                               std::optional<std::pair<float, float>> bAndKParam,
                               qlever::Filetype indexType) {
+  return getQec(TestIndexConfig{turtleInput, loadAllPermutations, usePatterns,
+usePrefixCompression, blocksizePermutations, createTextIndex,
+addWordsFromLiterals, contentsOfWordsFileAndDocsFile, parserBufferSize,
+scoringMetric, bAndKParam, indexType});
+}
+*/
+
+// ________________________________________________________________________________
+QueryExecutionContext* getQec(TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -320,40 +332,25 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
             SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<
-      std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
-      std::optional<std::pair<std::string, std::string>>,
-      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
-  static ad_utility::HashMap<Key, Context> contextMap;
+  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
-  auto key = Key{turtleInput,           loadAllPermutations,
-                 usePatterns,           usePrefixCompression,
-                 blocksizePermutations, contentsOfWordsFileAndDocsFile,
-                 scoringMetric,         bAndKParam};
-
-  if (!contextMap.contains(key)) {
+  if (!contextMap.contains(c)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key,
-        Context{TypeErasedCleanup{[testIndexBasename]() {
-                  for (const std::string& indexFilename :
-                       getAllIndexFilenames(testIndexBasename)) {
-                    // Don't log when a file can't be deleted,
-                    // because the logging might already be
-                    // destroyed.
-                    ad_utility::deleteFile(indexFilename, false);
-                  }
-                }},
-                std::make_unique<Index>(makeTestIndex(
-                    testIndexBasename, turtleInput, loadAllPermutations,
-                    usePatterns, usePrefixCompression, blocksizePermutations,
-                    createTextIndex, addWordsFromLiterals,
-                    contentsOfWordsFileAndDocsFile, parserBufferSize,
-                    scoringMetric, bAndKParam, indexType)),
-                std::make_unique<QueryResultCache>()});
+        c, Context{TypeErasedCleanup{[testIndexBasename]() {
+                     for (const std::string& indexFilename :
+                          getAllIndexFilenames(testIndexBasename)) {
+                       // Don't log when a file can't be deleted,
+                       // because the logging might already be
+                       // destroyed.
+                       ad_utility::deleteFile(indexFilename, false);
+                     }
+                   }},
+                   std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
+                   std::make_unique<QueryResultCache>()});
   }
-  auto* qec = contextMap.at(key).qec_.get();
+  auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
   return qec;
 }

@@ -335,24 +335,24 @@ inline std::string createTrueDistanceDataset() {
   return kg;
 }
 
+namespace detail {
+inline auto buildQecHelper(std::string turtleKg) {
+  ad_utility::testing::TestIndexConfig config{turtleKg};
+  config.blocksizePermutations = 16_MB;
+  config.parserBufferSize = 10_kB;
+  return ad_utility::testing::getQec(std::move(config));
+}
+}  // namespace detail
+
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  std::string kg = createSmallDataset(useAreas);
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10_kB);
-  return qec;
+  return detail::buildQecHelper(createSmallDataset(useAreas));
 }
 
 inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10_kB);
-  return qec;
+  return detail::buildQecHelper(kg);
 }
 
 // Create `QueryExecutionContext` with a dataset that contains an additional
@@ -365,11 +365,7 @@ inline QueryExecutionContext* buildNonSelfJoinDataset() {
       "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
       "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
       "<geometryInvalidAdded> <asWKT> 42 .\n");
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10_kB);
-  return qec;
+  return detail::buildQecHelper(kg);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildIndexScan(

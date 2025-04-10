@@ -58,8 +58,27 @@ struct TestIndexConfig {
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
+
+  // A very typical use case is to only specify the turtle input, and leave all
+  // the other members as the default. We therefore have a dedicated constructor
+  // for this case.
+  TestIndexConfig() = default;
+  explicit TestIndexConfig(std::string turtleKgInput)
+      : turtleInput{std::move(turtleKgInput)} {}
+
+  // Hashing.
+  template <typename H>
+  friend H AbslHashValue(H h, const TestIndexConfig& c) {
+    return H::combine(
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
+        c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
+        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
+        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType);
+  }
+  bool operator==(const TestIndexConfig&) const = default;
 };
 
+/*
 Index makeTestIndex(
     const std::string& indexBasename,
     std::optional<std::string> turtleInput = std::nullopt,
@@ -73,8 +92,14 @@ Index makeTestIndex(
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
     qlever::Filetype indexType = qlever::Filetype::Turtle);
+    */
 
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig config);
+
+inline Index makeTestIndex(const std::string& indexBasename,
+                           std::string turtle) {
+  return makeTestIndex(indexBasename, TestIndexConfig{std::move(turtle)});
+}
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -82,6 +107,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig config);
 // relevant for these tests, so the other members are defaulted. Using
 // the parameter parserBufferSize the buffer size can be increased, when needed
 // for larger tests (like polygon testing in Spatial Joins).
+/*
 QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
@@ -94,6 +120,16 @@ QueryExecutionContext* getQec(
     std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
     qlever::Filetype indexType = qlever::Filetype::Turtle);
+    */
+
+QueryExecutionContext* getQec(TestIndexConfig config);
+
+inline QueryExecutionContext* getQec(
+    std::optional<std::string> turtleInput = std::nullopt) {
+  TestIndexConfig config;
+  config.turtleInput = std::move(turtleInput);
+  return getQec(std::move(config));
+}
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

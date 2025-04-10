@@ -30,8 +30,9 @@ std::string runQueryStreamableResult(
     const std::string& kg, const std::string& query,
     ad_utility::MediaType mediaType, bool useTextIndex = false,
     std::optional<size_t> exportLimit = std::nullopt) {
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.createTextIndex = useTextIndex;
+  auto qec = ad_utility::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -57,8 +58,9 @@ std::string runQueryStreamableResult(
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType,
                             bool useTextIndex = false) {
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
+  ad_utility::testing::TestIndexConfig config{kg};
+  config.createTextIndex = useTextIndex;
+  auto qec = ad_utility::testing::getQec(std::move(config));
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
