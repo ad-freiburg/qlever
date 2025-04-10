@@ -13,8 +13,7 @@ template <typename V>
 void GeoVocabulary<V>::open(const std::string& filename) {
   literals_.open(filename);
 
-  auto geoInfoFilename = filename + std::string(geoInfoSuffix);
-  geoInfoFile_.open(geoInfoFilename.c_str(), "r");
+  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
 };
 
 // ____________________________________________________________________________
@@ -87,13 +86,18 @@ template <typename V>
 void GeoVocabulary<V>::build(const std::vector<std::string>& v,
                              const std::string& filename) {
   // Build text literal vocabulary
+  literals_.close();
   literals_.build(v, filename);
 
   // Build and precompute geometry info
+  geoInfoFile_.close();
+  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "w");
   for (const auto& word : v) {
     auto info = GeometryInfo::fromWktLiteral(word);
     geoInfoFile_.write(&info, geoInfoOffset);
   }
+  geoInfoFile_.close();
+  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
 }
 
 // ____________________________________________________________________________

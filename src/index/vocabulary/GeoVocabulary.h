@@ -46,6 +46,10 @@ class GeoVocabulary {
   // index.
   GeometryInfo getGeoInfo(uint64_t index) const;
 
+  std::string getGeoInfoFilename(const std::string& filename) {
+    return filename + std::string(geoInfoSuffix);
+  }
+
   // Forward all the standard operations to the underlying literal vocabulary.
 
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
