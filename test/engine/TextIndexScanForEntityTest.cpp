@@ -27,7 +27,7 @@ auto qecWithTextIndex = []() {
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   return getQec(std::move(config));
-}();
+};
 
 TEST(TextIndexScanForEntity, EntityScanBasic) {
   TestIndexConfig config{kg};
@@ -63,7 +63,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = qecWithTextIndex;
+  auto qec = qecWithTextIndex();
 
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
@@ -94,7 +94,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = qecWithTextIndex;
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -138,7 +138,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = qecWithTextIndex;
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};
