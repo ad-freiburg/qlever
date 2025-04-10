@@ -45,34 +45,48 @@ TransitivePathBase::TransitivePathBase(
   }
   if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
     emptyPathBound_ = true;
-    auto makeInternalVariable = [](std::string_view string) {
-      return Variable{
-          absl::StrCat("?internal_property_path_variable_", string)};
-    };
-    // Dummy variables to get a full scan of the index.
-    auto x = makeInternalVariable("x");
-    auto y = makeInternalVariable("y");
-    auto z = makeInternalVariable("z");
-    auto allValues = ad_utility::makeExecutionTree<Union>(
-        qec,
-        ad_utility::makeExecutionTree<IndexScan>(
-            qec, Permutation::Enum::SPO,
-            SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                         TripleComponent{z}},
-            activeGraphs),
-        ad_utility::makeExecutionTree<IndexScan>(
-            qec, Permutation::Enum::OPS,
-            SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                         TripleComponent{x}},
-            activeGraphs));
-    auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
-        qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
-        std::vector<ColumnIndex>{0});
-    lhs_.treeAndCol_.emplace(uniqueValues, 0);
+    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
+                             0);
   }
 
   lhs_.outputCol_ = 0;
   rhs_.outputCol_ = 1;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
+    QueryExecutionContext* qec, Graphs activeGraphs) {
+  auto makeInternalVariable = [](std::string_view string) {
+    return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+  };
+  // Dummy variables to get a full scan of the index.
+  auto x = makeInternalVariable("x");
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+  // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
+  // and ?z in the first place.
+  // We don't need to materialize the extra variables y and z in the union.
+  auto selectXVariable =
+      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
+        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
+        return executionTree;
+      };
+  auto allValues = ad_utility::makeExecutionTree<Union>(
+      qec,
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
+                       TripleComponent{z}},
+          activeGraphs)),
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
+                       TripleComponent{x}},
+          activeGraphs)));
+  auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
+      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
+      std::vector<ColumnIndex>{0});
+  return uniqueValues;
 }
 
 // _____________________________________________________________________________
@@ -432,13 +446,11 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow,
-                                     size_t skipCol) const {
+                                     size_t skipCol) {
   size_t inCol = 0;
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 ==
-                           outputTable.numColumns() ||
-                       emptyPathBound_);
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
     if (skipCol == inCol) {
       inCol++;

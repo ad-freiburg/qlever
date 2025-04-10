@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_AGGREGATEEXPRESSION_H
@@ -25,11 +27,11 @@ namespace detail {
 // This is needed for aggregation together with the `DISTINCT` keyword. For
 // example, `COUNT(DISTINCT ?x)` should count the number of distinct values for
 // `?x`.
-inline auto getUniqueElements = []<typename OperandGenerator>(
-                                    const EvaluationContext* context,
-                                    size_t inputSize,
-                                    OperandGenerator operandGenerator)
-    -> cppcoro::generator<ql::ranges::range_value_t<OperandGenerator>> {
+inline auto getUniqueElements = [](const EvaluationContext* context,
+                                   size_t inputSize, auto operandGenerator)
+    -> cppcoro::generator<
+        ql::ranges::range_value_t<decltype(operandGenerator)>> {
+  using OperandGenerator = decltype(operandGenerator);
   ad_utility::HashSetWithMemoryLimit<
       ql::ranges::range_value_t<OperandGenerator>>
       uniqueHashSet(inputSize, context->_allocator);
@@ -105,11 +107,13 @@ using AGG_EXP = AggregateExpression<
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
-  return []<typename... Args>(const Args&... args)
+  return [](const auto&... args)
              -> CPP_ret(NumericValue)(
-                 requires(concepts::same_as<Args, NumericValue>&&...)) {
-    auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
-      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+                 requires(concepts::same_as<std::decay_t<decltype(args)>,
+                                            NumericValue>&&...)) {
+    auto visitor = [](const auto&... t) -> NumericValue {
+      if constexpr ((... ||
+                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return NotNumeric{};
       } else {
         return (NumericOperation{}(t...));
@@ -170,9 +174,8 @@ class AvgExpression : public AvgExpressionBase {
 // IRI). This always returns a `bool`, see `ValueIdComparators.h` for details.
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(
-        const T& a, const U& b,
-        const EvaluationContext* ctx) -> IdOrLiteralOrIri {
+    [](const auto& a, const auto& b,
+       const EvaluationContext* ctx) -> IdOrLiteralOrIri {
   // TODO<joka921> moveTheStrings.
   return toBoolNotUndef(
              sparqlExpression::compareIdsOrStrings<
