@@ -30,4 +30,11 @@ GeometryInfo GeometryInfo::fromWktLiteral(
   return GeometryInfo{1};
 }
 
+// ____________________________________________________________________________
+GeometryInfo GeometryInfo::fromGeoPoint(
+    [[maybe_unused]] const GeoPoint& point) {
+  // TODO<ullingerc> Computation of GeometryInfo is a separate PR
+  return GeometryInfo{1};
+}
+
 }  // namespace ad_utility

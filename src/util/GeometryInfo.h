@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <string>
 
+#include "parser/GeoPoint.h"
+
 namespace ad_utility {
 
 // A geometry info object holds precomputed details on WKT literals.
@@ -16,8 +18,11 @@ struct GeometryInfo {
   // TODO<ullingerc> Computation of GeometryInfo is a separate PR
   uint64_t dummy_;
 
-  // Parse a WKT literal and precompute all attributes.
+  // Parse a WKT literal and compute all attributes.
   static GeometryInfo fromWktLiteral(const std::string_view& wkt);
+
+  // Create geometry info from a GeoPoint object.
+  static GeometryInfo fromGeoPoint(const GeoPoint& point);
 };
 
 }  // namespace ad_utility
