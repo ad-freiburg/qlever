@@ -36,25 +36,21 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
 }
 
 // _____________________________________________________________________________
+template <bool PrefilterExpressionIsApplicable>
 void checkSetPrefilterExpressionVariablePair(
     QueryExecutionContext* qec, const Permutation::Enum& permutation,
     SparqlTriple triple,
-    std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
-    std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
-    ColumnIndex columnIdx, bool prefilterIsApplicable) {
+    std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr) {
   Filter filter{
       qec,
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
       {std::move(sparqlExpr), "Expression ?x"}};
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *prefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
-  if (prefilterIsApplicable) {
-    EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(os.str()));
+  const std::string desc = "IndexScan contains prefiltered BlockRanges.";
+  if constexpr (PrefilterExpressionIsApplicable) {
+    EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(desc));
   } else {
     EXPECT_THAT(filter.getCacheKey(),
-                ::testing::Not(::testing::HasSubstr(os.str())));
+                ::testing::Not(::testing::HasSubstr(desc)));
   }
 }
 
@@ -172,27 +168,26 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   // For the following tests a <PrefilterExpression, Variable> pair should be
   // assigned to the IndexScan child (prefiltering is possible) with Filter
   // construction.
-  checkSetPrefilterExpressionVariablePair(
+  checkSetPrefilterExpressionVariablePair<true>(
       qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
-  checkSetPrefilterExpressionVariablePair(
+      ltSprql(Variable{"?z"}, IntId(10)));
+  checkSetPrefilterExpressionVariablePair<true>(
       qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
       andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
-                   gtSprql(Variable{"?y"}, DoubleId(0))),
-      neq(IntId(10)), 1, true);
-  checkSetPrefilterExpressionVariablePair(
+                   gtSprql(Variable{"?y"}, DoubleId(0))));
+  checkSetPrefilterExpressionVariablePair<true>(
       qec, Permutation::PSO,
       {makeSparqlExpression::Iri::fromIriref("<a>"), "<p>", Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
+      eqSprql(Variable{"?z"}, DoubleId(22.5)));
 
   // We expect that no <PrefilterExpression, Variable> pair is assigned
   // (no prefilter procedure applicable) with Filter construction.
-  checkSetPrefilterExpressionVariablePair(
+  checkSetPrefilterExpressionVariablePair<false>(
       qec, Permutation::PSO, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 1, false);
-  checkSetPrefilterExpressionVariablePair(
+      eqSprql(Variable{"?z"}, DoubleId(22.5)));
+  checkSetPrefilterExpressionVariablePair<false>(
       qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
-      gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
+      gtSprql(Variable{"?x"}, VocabId(10)));
 }
 
 // _____________________________________________________________________________
