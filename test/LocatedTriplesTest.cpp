@@ -901,7 +901,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     for (size_t i = 30; i < 30 + 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
          ++i) {
       auto tr = T3;
-      tr.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
+      tr.ids().at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
       triples.push_back(tr);
     }
 

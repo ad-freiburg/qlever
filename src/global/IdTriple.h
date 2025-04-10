@@ -10,6 +10,7 @@
 #include <array>
 #include <ostream>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
@@ -18,56 +19,66 @@ template <size_t N = 0>
 struct IdTriple {
   // A triple has four components: subject, predicate, object, and graph.
   static constexpr size_t NumCols = 4;
-  // The three IDs that define the triple.
-  std::array<Id, NumCols> ids_;
-  // Some additional payload of the triple, e.g. which graph it belongs to.
-  std::array<Id, N> payload_;
 
-  explicit IdTriple(const std::array<Id, NumCols>& ids) requires(N == 0)
-      : ids_(ids), payload_(){};
+  // For the case of no payload we use an empty struct which is stored at the
+  // end of a tuple. That way it will consume no additional space in the struct.
+  struct EmptyPayload : ql::ranges::empty_view<Id> {};
+  static constexpr size_t PayloadSize = N;
+  using Payload = std::conditional_t<(N > 0), std::array<Id, N>, EmptyPayload>;
 
-  explicit IdTriple(const std::array<Id, NumCols>& ids,
-                    const std::array<Id, N>& payload) requires(N != 0)
-      : ids_(ids), payload_(payload){};
+  // The IDs that define the triple plus some optional payload.
+  std::tuple<std::array<Id, NumCols>, Payload> data_;
+
+  // Getters for the IDs and the payload.
+  const auto& ids() const { return std::get<0>(data_); }
+  auto& ids() { return std::get<0>(data_); }
+  const auto& payload() const { return std::get<1>(data_); }
+  auto& payload() { return std::get<1>(data_); }
+
+  explicit IdTriple(const std::array<Id, NumCols>& idsIn) requires(N == 0)
+      : data_{idsIn, {}} {};
+
+  explicit IdTriple(const std::array<Id, NumCols>& idsIn,
+                    const Payload& payload)
+      : data_{idsIn, payload} {};
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";
-    ql::ranges::copy(triple.ids_, std::ostream_iterator<Id>(os, ", "));
-    ql::ranges::copy(triple.payload_, std::ostream_iterator<Id>(os, ", "));
+    ql::ranges::copy(triple.ids(), std::ostream_iterator<Id>(os, ", "));
+    if constexpr (N > 0) {
+      ql::ranges::copy(triple.payload(), std::ostream_iterator<Id>(os, ", "));
+    }
     os << ")";
     return os;
   }
 
-  // TODO: use `= default` once we drop Clang 16 with `libc++16`.
+  // Note: The payload is not part of the value representation and therefore not
+  // compared.
   std::strong_ordering operator<=>(const IdTriple& other) const {
-    static_assert(NumCols == 4);
-    return std::tie(ids_[0], ids_[1], ids_[2], ids_[3]) <=>
-           std::tie(other.ids_[0], other.ids_[1], other.ids_[2], other.ids_[3]);
+    return std::lexicographical_compare_three_way(
+        ids().begin(), ids().end(), other.ids().begin(), other.ids().end());
   }
-  bool operator==(const IdTriple& other) const = default;
+  bool operator==(const IdTriple& other) const { return ids() == other.ids(); }
 
   template <typename H>
   friend H AbslHashValue(H h, const IdTriple& c) {
-    return H::combine(std::move(h), c.ids_, c.payload_);
+    return H::combine(std::move(h), c.ids());
   }
 
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
   IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
-    const auto& [a, b, c, d] = keyOrder.keys();
-    std::array<Id, NumCols> newIds{ids_[a], ids_[b], ids_[c], ids_[d]};
-    if constexpr (N == 0) {
-      return IdTriple<N>(newIds);
-    } else {
-      return IdTriple<N>(newIds, payload_);
-    }
+    return IdTriple{keyOrder.permute(ids()), payload()};
   }
 
   CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
       requires(N == 0) {
     static_assert(NumCols == 4);
-    return {ids_[0], ids_[1], ids_[2], ids_[3]};
+    return {ids()[0], ids()[1], ids()[2], ids()[3]};
   }
 };
+
+// Assert that empty payloads don't make the struct larger
+static_assert(sizeof(IdTriple<0>) == IdTriple<0>::NumCols * sizeof(Id));
 
 #endif  // QLEVER_SRC_GLOBAL_IDTRIPLE_H

@@ -21,15 +21,15 @@ TEST(IdTripleTest, constructors) {
   {
     auto idTriple = IdTriple(ids);
     EXPECT_THAT(idTriple,
-                AD_FIELD(IdTriple<>, ids_, testing::ElementsAreArray(ids)));
+                AD_PROPERTY(IdTriple<>, ids, testing::ElementsAreArray(ids)));
   }
 
   {
-    auto idTriple = IdTriple(ids, payload);
+    auto idTriple = IdTriple<2>(ids, payload);
     EXPECT_THAT(idTriple,
-                AD_FIELD(IdTriple<2>, ids_, testing::ElementsAreArray(ids)));
-    EXPECT_THAT(idTriple, AD_FIELD(IdTriple<2>, payload_,
-                                   testing::ElementsAreArray(payload)));
+                AD_PROPERTY(IdTriple<2>, ids, testing::ElementsAreArray(ids)));
+    EXPECT_THAT(idTriple, AD_PROPERTY(IdTriple<2>, payload,
+                                      testing::ElementsAreArray(payload)));
   }
 }
 

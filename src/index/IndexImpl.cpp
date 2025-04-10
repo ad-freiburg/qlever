@@ -1572,14 +1572,11 @@ vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array<float, 3> m{numTriples / numDistinctSubjects().normal,
-                         numTriples / numDistinctPredicates().normal,
-                         numTriples / numDistinctObjects().normal};
-  auto [a, b, c, d] = p.keyOrder().keys();
-  // TODO<joka921> could we update this once we have the number of distinct
-  // graphs stored and therefore also a multiplicity for the graph column?
-  AD_CORRECTNESS_CHECK(d == ADDITIONAL_COLUMN_GRAPH_ID);
-  return {m[a], m[b], m[c]};
+  std::array m{numTriples / numDistinctSubjects().normal,
+               numTriples / numDistinctPredicates().normal,
+               numTriples / numDistinctObjects().normal};
+  auto permuted = p.keyOrder().permuteSPOOnly(m);
+  return {permuted.begin(), permuted.end()};
 }
 
 // _____________________________________________________________________________
