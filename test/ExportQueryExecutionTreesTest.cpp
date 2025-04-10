@@ -60,7 +60,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             bool useTextIndex = false) {
   ad_utility::testing::TestIndexConfig config{kg};
   config.createTextIndex = useTextIndex;
-  auto qec = ad_utility::testing::getQec(std::move(config));
+  auto qec = ad_utility::testing::getQec();
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -159,7 +159,7 @@ void runSelectQueryTestCase(
   // limit (the value of the `send` parameter).
   for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
     auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
-        testCase.kg, testCase.query, qleverJson, false, exportLimit));
+        testCase.kg, testCase.query, qleverJson, useTextIndex, exportLimit));
     ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSize);
     ASSERT_EQ(resultJson["resultSizeExported"],
               std::min(exportLimit, testCase.resultSize));

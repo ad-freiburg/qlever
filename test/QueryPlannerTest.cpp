@@ -2714,12 +2714,12 @@ auto qecWithTestIndex = []() {
       "<a> <p> \"testing and picking\""};
   config.createTextIndex = true;
   return ad_utility::testing::getQec(std::move(config));
-}();
+};
 }  // namespace
 
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForEntity) {
-  auto qec = qecWithTestIndex;
+  auto qec = qecWithTestIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -3053,7 +3053,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = qecWithTestIndex;
+  auto qec = qecWithTestIndex();
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3236,7 +3236,7 @@ TEST(QueryPlanner, TextSearchService) {
 }
 
 TEST(QueryPlanner, TextLimit) {
-  auto qec = qecWithTestIndex;
+  auto qec = qecWithTestIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;

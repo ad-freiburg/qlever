@@ -520,14 +520,14 @@ auto qecWithoutPatterns = []() {
   TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
   config.usePatterns = false;
   return getQec(std::move(config));
-}();
+};
 }  // namespace
 // _____________________________________________________________________________
 TEST(IndexScan, computeResultCanBeConsumedLazily) {
   using V = Variable;
   TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
   config.usePatterns = false;
-  auto qec = qecWithoutPatterns;
+  auto qec = qecWithoutPatterns();
   auto getId = makeGetId(qec->getIndex());
   auto x = getId("<x>");
   auto p = getId("<p>");
@@ -555,7 +555,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   using V = Variable;
   using I = TripleComponent::Iri;
-  auto qec = qecWithoutPatterns;
+  auto qec = qecWithoutPatterns();
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
@@ -574,7 +574,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using V = Variable;
   using I = TripleComponent::Iri;
   using enum Permutation::Enum;
-  auto qec = qecWithoutPatterns;
+  auto qec = qecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
   auto p2 = I::fromIriref("<p2>");
