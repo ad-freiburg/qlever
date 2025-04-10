@@ -216,6 +216,9 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
         std::move(idTables()),
         [varColMap = varColMap, performCheck = std::move(performCheck)](
             Result::IdTableVocabPair& pair) {
+          // The lambda capture is only required when expensive checks are
+          // enabled.
+          (void)performCheck;
           AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
           return std::move(pair);
         }};

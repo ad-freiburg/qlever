@@ -102,7 +102,9 @@ class Index {
   void buildTextIndexFile(
       const std::optional<std::pair<std::string, std::string>>&
           wordsAndDocsFile,
-      bool addWordsFromLiterals);
+      bool addWordsFromLiterals,
+      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
+      std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);
@@ -212,9 +214,6 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
-
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
 
   const std::string& getTextName() const;
   const std::string& getKbName() const;
