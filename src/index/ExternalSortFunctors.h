@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H
-#define QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H
+#ifndef QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
+#define QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
 
 #include <array>
 #include <tuple>
@@ -47,12 +47,6 @@ struct SortTriple {
       return cGraph < 0;
     }
   }
-
-  // Value that is strictly smaller than any input element.
-  static T min_value() { return {Id::min(), Id::min(), Id::min()}; }
-
-  // Value that is strictly larger than any input element.
-  static T max_value() { return {Id::max(), Id::max(), Id::max()}; }
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
@@ -60,28 +54,14 @@ using SortByPSONoGraphColumn = SortTriple<1, 0, 2, false>;
 using SortBySPO = SortTriple<0, 1, 2>;
 using SortByOSP = SortTriple<2, 0, 1>;
 
-// TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
-  using T = std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
-                       Score, bool>;
-  // comparison function
-  bool operator()(const T& a, const T& b) const {
-    auto permute = [](const T& x) {
-      using namespace std;
-      return tie(get<0>(x), get<4>(x), get<1>(x), get<2>(x), get<3>(x));
-    };
-    return permute(a) < permute(b);
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static T min_value() { return {0, TextRecordIndex::min(), 0, 0, false}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static T max_value() {
-    return {std::numeric_limits<TextBlockIndex>::max(), TextRecordIndex::max(),
-            std::numeric_limits<WordOrEntityIndex>::max(),
-            std::numeric_limits<Score>::max(), true};
+  // < comparator
+  bool operator()(const auto& a, const auto& b) const {
+    return ql::ranges::lexicographical_compare(
+        a, b, [](const Id& x, const Id& y) {
+          return x.compareWithoutLocalVocab(y) < 0;
+        });
   }
 };
 
-#endif  // QLEVER_SRC_INDEX_STXXLSORTFUNCTORS_H
+#endif  // QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
