@@ -640,6 +640,15 @@ uint64_t Operation::getSizeEstimate() {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
+
+  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
+    // Make sure previously hidden variables remain hidden.
+    std::vector<Variable> visibleVariables;
+    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                     std::back_inserter(visibleVariables));
+    result->setSelectedVariablesForSubquery(visibleVariables);
+  }
+
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
     return typeid(*this) == typeid(reference);

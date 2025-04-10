@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/ConfigManager/ConfigManager.h"
 
@@ -598,8 +600,9 @@ nlohmann::ordered_json ConfigManager::generateConfigurationDocJson(
   nlohmann::ordered_json configurationDocJson;
 
   visitHashMapEntries(
-      [&configurationDocJson, &pathPrefix]<typename T>(std::string_view path,
-                                                       T& optionOrSubManager) {
+      [&configurationDocJson, &pathPrefix](std::string_view path,
+                                           auto& optionOrSubManager) {
+        using T = std::decay_t<decltype(optionOrSubManager)>;
         /*
         Pointer to the position of this option, or sub manager, in
         `configurationDocJson`.
@@ -680,8 +683,10 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
 
   visitHashMapEntries(
       [&pathPrefix, &stringRepresentations, &assignment,
-       &generateValidatorListString]<typename T>(std::string_view path,
-                                                 T& optionOrSubManager) {
+       &generateValidatorListString](std::string_view path,
+                                     auto& optionOrSubManager) {
+        using T = std::decay_t<decltype(optionOrSubManager)>;
+
         // Getting rid of the first `/` for printing, based on user feedback.
         std::string_view adjustedPath = path.substr(1, path.length());
 
