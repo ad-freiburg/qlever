@@ -13,6 +13,7 @@
 #include <string>
 
 #include "CompilationInfo.h"
+#include "IndexImpl.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -166,6 +167,7 @@ int main(int argc, char** argv) {
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
+  bool noGraphPermutations = false;
   bool addWordsFromLiterals = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
@@ -240,6 +242,10 @@ int main(int argc, char** argv) {
   add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
+  add("no-graph-permutations", po::bool_switch(&noGraphPermutations),
+      "Don't build the GPSO and GPOS permutations. This makes the index build "
+      "faster and the resulting index smaller, but queries with GRAPH and FROM "
+      "(NAMED) clauses are less efficient");
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&stxxlMemory),
@@ -313,6 +319,7 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
+    index.getImpl().useGraphPermutations() = !noGraphPermutations;
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

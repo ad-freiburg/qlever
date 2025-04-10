@@ -28,8 +28,11 @@ struct LocatedTriplesSnapshot;
 // STXXL.
 class Permutation {
  public:
+  // TODO<joka921> comment
+  // TODO<joka921> Make this a strong type, s.t. the invariants are met...
+  using KeyOrder = std::array<size_t, 4>;
   /// Identifiers for the six possible permutations.
-  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP, GPSO, GPOS };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
@@ -38,8 +41,10 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
-  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
-                               Enum::SOP, Enum::OPS, Enum::OSP};
+  static constexpr auto GPOS = Enum::GPOS;
+  static constexpr auto GPSO = Enum::GPSO;
+  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,  Enum::SOP,
+                               Enum::OPS, Enum::OSP, Enum::GPSO, Enum::GPOS};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -53,7 +58,7 @@ class Permutation {
 
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
-  static std::array<size_t, 3> toKeyOrder(Enum permutation);
+  static KeyOrder toKeyOrder(Enum permutation);
 
   explicit Permutation(Enum permutation, Allocator allocator);
 
@@ -151,7 +156,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const std::array<size_t, 3>& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; };
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -184,7 +189,7 @@ class Permutation {
   std::string fileSuffix_;
   // The order of the three components (S=0, P=1, O=2) in this permutation,
   // e.g., `{1, 0, 2}` for `PSO`.
-  std::array<size_t, 3> keyOrder_;
+  KeyOrder keyOrder_;
   // The metadata for this permutation.
   MetaData meta_;
 

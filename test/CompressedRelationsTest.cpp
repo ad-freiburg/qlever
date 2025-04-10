@@ -272,7 +272,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
   auto locatedTriples = LocatedTriplesPerBlock{};
   auto loc = LocatedTriple::locateTriplesInPermutation(
-      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+      locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();
@@ -303,11 +303,14 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
     if (locatedTriplesProbability == 0) {
       const auto& m = getMetadata(i);
       ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
-      ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
       //  The number of distinct elements in `col1` was passed in as `i + 1` for
       //  testing purposes, so this is the expected multiplicity.
+      // TODO<joka921> We don't have the numRows_ anymore, figure out how to
+      // test them...
+      /*
       ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                       m.multiplicityCol1_);
+                      */
     }
 
     // Scan for all distinct `col0` and check that we get the expected result.
@@ -584,8 +587,6 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   ASSERT_FALSE(m.isFunctional());
   m.setCol1Multiplicity(1.0f);
   ASSERT_TRUE(m.isFunctional());
-  m.numRows_ = 43;
-  ASSERT_EQ(43, m.numRows_);
 }
 
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
@@ -847,8 +848,10 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
         perm.permutation());
     auto [actual_lower, actual_upper] =
         reader.getSizeEstimateForScan(scanSpec, augmentedBlocks, ltpb);
-    EXPECT_THAT(actual_lower, testing::Eq(lower));
-    EXPECT_THAT(actual_upper, testing::Eq(upper));
+    EXPECT_THAT(actual_lower, testing::Eq(lower))
+        << "Permutation: " << static_cast<int>(p);
+    EXPECT_THAT(actual_upper, testing::Eq(upper))
+        << "Permutation: " << static_cast<int>(p);
     auto actual_exact =
         reader.getResultSizeOfScan(scanSpec, augmentedBlocks, ltpb);
     EXPECT_THAT(actual_exact, testing::Eq(exact));

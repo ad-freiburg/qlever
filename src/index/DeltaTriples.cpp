@@ -33,12 +33,13 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   bool shouldExist) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : loadedPermutations_) {
     auto& perm = index_.getPermutation(permutation);
+    auto keyOrder = perm.keyOrder();
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
         //  is done
-        idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
+        idTriples, perm.metaData().blockData(), keyOrder, shouldExist,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[static_cast<size_t>(permutation)] =
@@ -47,7 +48,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     cancellationHandle->throwIfCancelled();
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : loadedPermutations_) {
     for (size_t i = 0; i < idTriples.size(); i++) {
       handles[i].forPermutation(permutation) =
           intermediateHandles[static_cast<size_t>(permutation)][i];
@@ -59,7 +60,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
 // ____________________________________________________________________________
 void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
   // Erase for all permutations.
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : loadedPermutations_) {
     auto ltIter = handles.forPermutation(permutation);
     locatedTriples()[static_cast<int>(permutation)].erase(ltIter->blockIndex_,
                                                           ltIter);
@@ -211,6 +212,21 @@ DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
 // ____________________________________________________________________________
 DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
+
+// ____________________________________________________________________________
+DeltaTriples::DeltaTriples(const IndexImpl& index) : index_{index} {
+  setLoadedPermutations();
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::setLoadedPermutations() {
+  loadedPermutations_.clear();
+  for (const auto& p : Permutation::ALL) {
+    if (index_.getPermutation(p).isLoaded()) {
+      loadedPermutations_.push_back(p);
+    }
+  }
+}
 
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)

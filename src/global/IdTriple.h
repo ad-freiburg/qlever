@@ -52,9 +52,9 @@ struct IdTriple {
 
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
-  IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
-    std::array<Id, NumCols> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
-                                   ids_[keyOrder[2]], ids_[3]};
+  IdTriple permute(const std::array<size_t, NumCols>& keyOrder) const {
+    std::array newIds{ids_[keyOrder[0]], ids_[keyOrder[1]], ids_[keyOrder[2]],
+                      ids_[keyOrder[3]]};
     if constexpr (N == 0) {
       return IdTriple<N>(newIds);
     } else {

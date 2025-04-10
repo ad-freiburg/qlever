@@ -39,17 +39,24 @@ TEST(IdTripleTest, permute) {
   // Without a payload
   {
     IdTriple<0> idTriple{ids};
-    EXPECT_THAT(idTriple.permute({1, 0, 2}),
+    EXPECT_THAT(idTriple.permute({1, 0, 2, 3}),
                 testing::Eq(IdTriple{std::array<Id, 4>{
                     VocabId(1), VocabId(0), VocabId(2), VocabId(3)}}));
+    EXPECT_THAT(idTriple.permute({3, 2, 1, 0}),
+                testing::Eq(IdTriple{std::array<Id, 4>{
+                    VocabId(3), VocabId(2), VocabId(1), VocabId(0)}}));
   }
 
   // With a payload
   {
     IdTriple<2> idTriple(ids, {IntId(10), IntId(5)});
-    EXPECT_THAT(idTriple.permute({1, 0, 2}),
+    EXPECT_THAT(idTriple.permute({1, 0, 2, 3}),
                 testing::Eq(IdTriple<2>(
                     {VocabId(1), VocabId(0), VocabId(2), VocabId(3)},
+                    {IntId(10), IntId(5)})));
+    EXPECT_THAT(idTriple.permute({3, 2, 1, 0}),
+                testing::Eq(IdTriple<2>(
+                    {VocabId(3), VocabId(2), VocabId(1), VocabId(0)},
                     {IntId(10), IntId(5)})));
   }
 }

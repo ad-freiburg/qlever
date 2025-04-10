@@ -8,6 +8,7 @@
 
 #include <ranges>
 
+#include "Permutation.h"
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
@@ -862,6 +863,11 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
+  // TODO<joka921> This is a dummy value because we sometimes have wrong values
+  // for the counts in the presence of updates.
+  if (numDistinctElements == 0) {
+    return 1.3f;
+  }
   float multiplicity =
       functional ? 1.0f
                  : static_cast<float>(numElements) / float(numDistinctElements);
@@ -1214,8 +1220,8 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
   }
   // Note: the multiplicity of the `col2` (where we set the dummy here) will
   // be set later in `createPermutationPair`.
-  return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
-          multiplicityDummy, offsetInBlock};
+  return {col0Id, computeMultiplicity(numRows, numDistinctC1),
+          multiplicityDummy};
 }
 
 // _____________________________________________________________________________
@@ -1223,11 +1229,10 @@ CompressedRelationMetadata CompressedRelationWriter::finishLargeRelation(
     size_t numDistinctC1) {
   AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ != 0);
   CompressedRelationMetadata md;
-  auto offset = std::numeric_limits<size_t>::max();
   auto multiplicityCol1 =
       computeMultiplicity(currentRelationPreviousSize_, numDistinctC1);
-  md = CompressedRelationMetadata{currentCol0Id_, currentRelationPreviousSize_,
-                                  multiplicityCol1, multiplicityCol1, offset};
+  md = CompressedRelationMetadata{currentCol0Id_, multiplicityCol1,
+                                  multiplicityCol1};
   currentRelationPreviousSize_ = 0;
   // The following is used in `addBlockForLargeRelation` to assert that
   // `finishLargeRelation` was called before a new relation was started.
@@ -1339,14 +1344,15 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 }
 
 // _____________________________________________________________________________
+template <std::array<size_t, 2> swapIndices>
 auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     cppcoro::generator<IdTableStatic<0>> sortedTriples,
-    std::array<size_t, 3> permutation,
+    Permutation::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) -> PermutationPairResult {
-  auto [c0, c1, c2] = permutation;
+  auto c0 = permutation.at(0);
   size_t numDistinctCol0 = 0;
   auto& writer1 = writerAndCallback1.writer_;
   auto& writer2 = writerAndCallback2.writer_;
@@ -1357,9 +1363,6 @@ auto CompressedRelationWriter::createPermutationPair(
   MetadataWriter writeMetadata{std::move(writerAndCallback1.callback_),
                                std::move(writerAndCallback2.callback_),
                                writer1.blocksize()};
-
-  static constexpr size_t c1Idx = 1;
-  static constexpr size_t c2Idx = 2;
 
   // A queue for the callbacks that have to be applied for each triple.
   // The second argument is the number of threads. It is crucial that this
@@ -1380,8 +1383,10 @@ auto CompressedRelationWriter::createPermutationPair(
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
-           std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
+    // The first column is constant, compare only the remaining three columns
+    // (including the Graph column), but not the additional payloads.
+    auto tie = [](const auto& x) { return std::tie(x[1], x[2], x[3]); };
+    return tie(a) < tie(b);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
@@ -1396,7 +1401,7 @@ auto CompressedRelationWriter::createPermutationPair(
       return;
     }
     auto twinRelation = relation.asStaticView<0>();
-    twinRelation.swapColumns(c1Idx, c2Idx);
+    twinRelation.swapColumns(swapIndices[0], swapIndices[1]);
     for (const auto& row : twinRelation) {
       twinRelationSorter.push(row);
     }
@@ -1417,7 +1422,7 @@ auto CompressedRelationWriter::createPermutationPair(
         auto& relation = *relationPtr;
         // We don't use the parallel twinRelationSorter to create the twin
         // relation as its overhead is far too high for small relations.
-        relation.swapColumns(c1Idx, c2Idx);
+        relation.swapColumns(swapIndices[0], swapIndices[1]);
 
         // We only need to sort by the columns of the triple + the graph
         // column, not the additional payload. Note: We could also use
@@ -1468,8 +1473,9 @@ auto CompressedRelationWriter::createPermutationPair(
   };
   // All columns n the order in which they have to be added to
   // the relation.
-  std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
-  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
+  std::vector<ColumnIndex> permutedColIndices{permutation.begin(),
+                                              permutation.end()};
+  for (size_t colIdx = permutation.size(); colIdx < numColumns; ++colIdx) {
     permutedColIndices.push_back(colIdx);
   }
   inputWaitTimer.cont();
@@ -1495,7 +1501,9 @@ auto CompressedRelationWriter::createPermutationPair(
         finishRelation();
         col0IdCurrentRelation = col0Id;
       }
-      distinctCol1Counter(curRemainingCols[c1Idx]);
+      // TODO<joka921> What do we do with the multiplicity estimates in the
+      // graph columns?
+      distinctCol1Counter(curRemainingCols[1]);
       relation.push_back(curRemainingCols);
       if (relation.size() >= blocksize) {
         addBlockForLargeRelation();
@@ -1550,6 +1558,24 @@ auto CompressedRelationWriter::createPermutationPair(
   return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
           std::move(writer2).getFinishedBlocks()};
 }
+// _____________________________________________________________________________
+// template <std::array<size_t, 2> swapIndices>
+template auto
+CompressedRelationWriter::createPermutationPair<std::array<size_t, 2>{1, 2}>(
+    const std::string& basename, WriterAndCallback writerAndCallback1,
+    WriterAndCallback writerAndCallback2,
+    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    Permutation::KeyOrder permutation,
+    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+        perBlockCallbacks) -> PermutationPairResult;
+template auto
+CompressedRelationWriter::createPermutationPair<std::array<size_t, 2>{2, 3}>(
+    const std::string& basename, WriterAndCallback writerAndCallback1,
+    WriterAndCallback writerAndCallback2,
+    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    Permutation::KeyOrder permutation,
+    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+        perBlockCallbacks) -> PermutationPairResult;
 
 // _____________________________________________________________________________
 std::optional<CompressedRelationMetadata>
@@ -1559,12 +1585,14 @@ CompressedRelationReader::getMetadataForSmallRelation(
     const {
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
-  metadata.offsetInBlock_ = 0;
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
   auto blocks = getRelevantBlocks(scanSpec, allBlocksMetadata);
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  AD_CONTRACT_CHECK(blocks.size() <= 1,
-                    "Should only be called for small relations");
+  // TODO<joka921> This currently is inaccurate for relations that have had
+  // their size changed because of UPDATEs. In particular, they might be
+  // contained in more than one block.
+  // TODO<joka921> Figure out, what harm inaccurate multiplicity estimates can
+  // do.
   if (blocks.empty()) {
     return std::nullopt;
   }
@@ -1579,7 +1607,6 @@ CompressedRelationReader::getMetadataForSmallRelation(
   const auto& blockCol = block.getColumn(0);
   auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
   size_t numDistinct = endOfUnique - blockCol.begin();
-  metadata.numRows_ = block.size();
   metadata.multiplicityCol1_ =
       CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);
 

@@ -148,6 +148,7 @@ class IndexImpl {
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
+  bool useGraphPermutations_ = true;
 
   // Pattern trick data
   bool usePatterns_ = false;
@@ -193,6 +194,8 @@ class IndexImpl {
   Permutation spo_{Permutation::Enum::SPO, allocator_};
   Permutation ops_{Permutation::Enum::OPS, allocator_};
   Permutation osp_{Permutation::Enum::OSP, allocator_};
+  Permutation gpso_{Permutation::Enum::GPSO, allocator_};
+  Permutation gpos_{Permutation::Enum::GPOS, allocator_};
 
   // During the index building, store the IDs of the `ql:has-pattern` predicate
   // and of `ql:default-graph` as they are required to add additional triples
@@ -418,6 +421,9 @@ class IndexImpl {
 
   bool& loadAllPermutations();
 
+  bool& useGraphPermutations();
+  bool useGraphPermutations() const;
+
   void setKeepTempFiles(bool keepTempFiles);
 
   ad_utility::MemorySize& memoryLimitIndexBuilding() {
@@ -568,7 +574,7 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
-                            std::array<size_t, 3> permutation,
+                            Permutation::KeyOrder permutation,
                             auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________
@@ -720,6 +726,13 @@ class IndexImpl {
                                             BlocksOfTriples sortedTriples,
                                             bool doWriteConfiguration,
                                             NextSorter&&... nextSorter);
+  // _____________________________________________________________________________
+  // TODO<joka921> This is heavily misplaced here.
+  CPP_template(typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createGPSOAndGPOS(size_t numColumns,
+                                          BlocksOfTriples sortedTriples,
+                                          NextSorter&&... nextSorter);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
   CPP_template(typename... NextSorter)(requires(

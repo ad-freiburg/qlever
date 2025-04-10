@@ -9,6 +9,7 @@
 #include "engine/QueryPlanner.h"
 
 #include <absl/strings/str_split.h>
+#include <index/IndexImpl.h>
 
 #include <memory>
 #include <optional>
@@ -847,6 +848,22 @@ auto QueryPlanner::seedWithScansAndText(
 
           pushPlan(makeSubtreePlan<IndexScan>(
               _qec, permutation, std::move(triple.value()), relevantGraphs));
+
+          // If we only have a single graph, also consider the GPxx permutations
+          if (!_qec->getIndex().getImpl().useGraphPermutations()) {
+            return;
+          }
+          if (permutation == PSO && relevantGraphs.has_value() &&
+              relevantGraphs->size() == 1) {
+            pushPlan(makeSubtreePlan<IndexScan>(
+                _qec, GPSO, std::move(triple.value()), relevantGraphs));
+          }
+          // TODO<joka921> Code duplication.
+          if (permutation == POS && relevantGraphs.has_value() &&
+              relevantGraphs->size() == 1) {
+            pushPlan(makeSubtreePlan<IndexScan>(
+                _qec, GPOS, std::move(triple.value()), relevantGraphs));
+          }
         };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {

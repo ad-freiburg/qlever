@@ -373,13 +373,24 @@ void IndexImpl::createFromFiles(
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
+  configurationJson_["has-graph-permutations"] = useGraphPermutations_;
+  configurationJson_["has-all-permutations"] = loadAllPermutations_;
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
-    configurationJson_["has-all-permutations"] = false;
+
+    if (useGraphPermutations_) {
+      auto gpsoSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
+      createFirstPermutationPair(NumColumnsIndexBuilding,
+                                 std::move(firstSorterWithUnique), gpsoSorter);
+      createGPSOAndGPOS(NumColumnsIndexBuilding,
+                        gpsoSorter.getSortedBlocks<0>());
+    } else {
+      createFirstPermutationPair(NumColumnsIndexBuilding,
+                                 std::move(firstSorterWithUnique));
+    }
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
     // Without patterns, we explicitly have to pass in the next sorters to all
@@ -393,9 +404,20 @@ void IndexImpl::createFromFiles(
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
-    configurationJson_["has-all-permutations"] = true;
+    if (useGraphPermutations_) {
+      auto fourthSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
+      createThirdPermutationPair(NumColumnsIndexBuilding,
+                                 thirdSorter.getSortedBlocks<0>(),
+                                 fourthSorter);
+
+      createGPSOAndGPOS(NumColumnsIndexBuilding,
+                        fourthSorter.getSortedBlocks<0>());
+    } else {
+      createThirdPermutationPair(NumColumnsIndexBuilding,
+                                 thirdSorter.getSortedBlocks<0>());
+    }
+
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
@@ -407,10 +429,21 @@ void IndexImpl::createFromFiles(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-
-                               thirdSorterPtr->template getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
+    if (useGraphPermutations_) {
+      auto fourthSorter =
+          makeSorter<SortByGPSO, NumColumnsIndexBuilding + 2>("gpos-sorter");
+      createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+
+                                 thirdSorterPtr->template getSortedBlocks<0>(),
+                                 fourthSorter);
+      createGPSOAndGPOS(NumColumnsIndexBuilding + 2,
+                        fourthSorter.getSortedBlocks<0>());
+    } else {
+      createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+
+                                 thirdSorterPtr->template getSortedBlocks<0>());
+    }
   }
 
   configurationJson_["num-blank-nodes-total"] =
@@ -418,6 +451,7 @@ void IndexImpl::createFromFiles(
 
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
+  writeConfiguration();
   AD_LOG_INFO << "Index build completed" << std::endl;
 }
 
@@ -774,7 +808,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
+                                     Permutation::KeyOrder permutation,
                                      auto&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -802,10 +836,18 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto [numDistinctCol0, blockData1, blockData2] =
-      CompressedRelationWriter::createPermutationPair(
+  auto [numDistinctCol0, blockData1, blockData2] = [&]() {
+    if (permutation[0] != ADDITIONAL_COLUMN_GRAPH_ID) {
+      return CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    } else {
+      return CompressedRelationWriter::createPermutationPair<
+          std::array<size_t, 2>{2, 3}>(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    }
+  }();
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -925,10 +967,18 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
     load(spo_);
     load(sop_);
   } else {
-    AD_LOG_INFO
-        << "Only the PSO and POS permutation were loaded, SPARQL queries "
-           "with predicate variables will therefore not work"
-        << std::endl;
+    AD_LOG_INFO << "No Oxx and Sxx permutations were loaded, SPARQL queries "
+                   "with predicate variables will therefore not work"
+                << std::endl;
+  }
+
+  if (useGraphPermutations_) {
+    load(gpos_);
+    load(gpso_);
+  } else {
+    AD_LOG_INFO << "No GPSO and GPOS permutations were loaded. Queries with "
+                   "GRAPH and FROM (NAMED) clauses might be less efficient"
+                << std::endl;
   }
 
   // We have to load the patterns first to figure out if the patterns were built
@@ -950,6 +1000,11 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
       usePatterns_ = false;
     }
   }
+
+  // As it would be wrong to write the delta triples to disk at this point
+  // (because they haven't even been loaded), the second argument is `false`.
+  deltaTriples_.value().modify<void>(&DeltaTriples::setLoadedPermutations,
+                                     false);
   if (persistUpdatesOnDisk) {
     deltaTriples_.value().setFilenameForPersistentUpdatesAndReadFromDisk(
         onDiskBase + ".update-triples");
@@ -1018,6 +1073,12 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 
 // _____________________________________________________________________________
 bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
+
+// _____________________________________________________________________________
+bool& IndexImpl::useGraphPermutations() { return useGraphPermutations_; }
+
+// _____________________________________________________________________________
+bool IndexImpl::useGraphPermutations() const { return useGraphPermutations_; }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
@@ -1141,6 +1202,7 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
+  loadDataMember("has-graph-permutations", useGraphPermutations_, false);
   loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});
@@ -1459,6 +1521,10 @@ Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
       return osp_;
     case OPS:
       return ops_;
+    case GPOS:
+      return gpos_;
+    case GPSO:
+      return gpso_;
   }
   AD_FAIL();
 }
@@ -1515,12 +1581,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
-      meta.has_value()) {
-    return meta.value().numRows_;
-  }
-  return 0;
+  return getPermutation(permutation)
+      .getResultSizeOfScan(ScanSpecification{id, std::nullopt, std::nullopt},
+                           locatedTriplesSnapshot);
 }
 
 // ___________________________________________________________________________
@@ -1671,6 +1734,18 @@ CPP_template_def(typename... NextSorter)(requires(
   if (doWriteConfiguration) {
     writeConfiguration();
   }
+};
+
+// _____________________________________________________________________________
+CPP_template_def(typename... NextSorter)(requires(
+    sizeof...(NextSorter) <=
+    1)) void IndexImpl::createGPSOAndGPOS(size_t numColumns,
+                                          BlocksOfTriples sortedTriples,
+                                          NextSorter&&... nextSorter) {
+  // TODO<joka921> What metadata do we want in the `configurationJson_`?
+  [[maybe_unused]] size_t numSomethingTotal =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), gpso_, gpos_,
+                            nextSorter.makePushCallback()...);
 };
 
 // _____________________________________________________________________________
