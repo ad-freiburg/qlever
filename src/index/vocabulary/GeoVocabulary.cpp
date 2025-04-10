@@ -7,6 +7,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/Exception.h"
 
 // ____________________________________________________________________________
 template <typename V>
@@ -103,6 +104,7 @@ void GeoVocabulary<V>::build(const std::vector<std::string>& v,
 // ____________________________________________________________________________
 template <typename V>
 GeometryInfo GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
+  AD_CONTRACT_CHECK(index < size());
   GeometryInfo info;
   geoInfoFile_.read(&info, geoInfoOffset, index * geoInfoOffset);
   return info;

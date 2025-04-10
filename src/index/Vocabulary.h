@@ -1,10 +1,11 @@
-// Copyright 2011 - 2024
+// Copyright 2011 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
@@ -31,6 +32,7 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
+#include "util/GeometryInfo.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -180,6 +182,11 @@ class Vocabulary {
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(std::string_view word, IndexType* idx) const;
+
+  // Retrieve a `GeometryInfo` object from the underlying `GeoVocabulary`. The
+  // index parameter is expected to have the geo literal marker bit, otherwise
+  // `std::nullopt` is returned.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
