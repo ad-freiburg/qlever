@@ -12,6 +12,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
+#include "index/KeyOrder.h"
 #include "util/HashMap.h"
 
 class Permutation;
@@ -42,7 +43,7 @@ struct LocatedTriple {
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       std::span<const IdTriple<0>> triples,
       std::span<const CompressedBlockMetadata> blockMetadata,
-      const std::array<size_t, 3>& keyOrder, bool shouldExist,
+      const qlever::KeyOrder& keyOrder, bool shouldExist,
       ad_utility::SharedCancellationHandle cancellationHandle);
   bool operator==(const LocatedTriple&) const = default;
 

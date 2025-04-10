@@ -565,7 +565,7 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
-                            std::array<size_t, 3> permutation,
+                            Permutation::KeyOrder permutation,
                             auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________

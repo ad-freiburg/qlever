@@ -1343,10 +1343,13 @@ auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     cppcoro::generator<IdTableStatic<0>> sortedTriples,
-    std::array<size_t, 3> permutation,
+    qlever::KeyOrder permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
         perBlockCallbacks) -> PermutationPairResult {
-  auto [c0, c1, c2] = permutation;
+  auto [c0, c1, c2, c3] = permutation.keys();
+  // This logic only works for permutations that have the graph as the fourth
+  // column.
+  AD_CORRECTNESS_CHECK(c3 == 3);
   size_t numDistinctCol0 = 0;
   auto& writer1 = writerAndCallback1.writer_;
   auto& writer2 = writerAndCallback2.writer_;

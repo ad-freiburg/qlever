@@ -141,8 +141,8 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 
   // Convert all local vocab and blank node `Id`s in all `triples`.
   ql::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
-    ql::ranges::for_each(triple.ids_, convertId);
-    ql::ranges::for_each(triple.payload_, convertId);
+    ql::ranges::for_each(triple.ids(), convertId);
+    ql::ranges::for_each(triple.payload(), convertId);
   });
 }
 
@@ -291,7 +291,7 @@ void DeltaTriples::writeToDisk() const {
     return map | ql::views::keys |
            ql::views::transform(
                [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
-                 return triple.ids_;
+                 return triple.ids();
                }) |
            ql::views::join;
   };
@@ -317,9 +317,7 @@ void DeltaTriples::readFromDisk() {
   AD_CORRECTNESS_CHECK(idRanges.size() == 2);
   auto toTriples = [](const std::vector<Id>& ids) {
     Triples triples;
-    static_assert(std::tuple_size_v<
-                      decltype(std::declval<Triples::value_type>().payload_)> ==
-                  0);
+    static_assert(Triples::value_type::PayloadSize == 0);
     constexpr size_t cols = Triples::value_type::NumCols;
     AD_CORRECTNESS_CHECK(ids.size() % cols == 0);
     triples.reserve(ids.size() / cols);

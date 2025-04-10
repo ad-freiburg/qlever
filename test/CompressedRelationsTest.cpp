@@ -272,7 +272,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
   auto locatedTriples = LocatedTriplesPerBlock{};
   auto loc = LocatedTriple::locateTriplesInPermutation(
-      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+      locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();

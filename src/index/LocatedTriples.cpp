@@ -16,7 +16,7 @@
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     std::span<const IdTriple<0>> triples,
     std::span<const CompressedBlockMetadata> blockMetadata,
-    const std::array<size_t, 3>& keyOrder, bool shouldExist,
+    const qlever::KeyOrder& keyOrder, bool shouldExist,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   std::vector<LocatedTriple> out;
   out.reserve(triples.size());
@@ -91,7 +91,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
     }
     return a;
   }();
-  auto& ids = lt->triple_.ids_;
+  auto& ids = lt->triple_.ids();
   return [&ids]<size_t... I>(ad_utility::ValueSequence<size_t, I...>) {
     return std::tie(ids[I]...);
   }(ad_utility::toIntegerSequence<indices>());
@@ -136,7 +136,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     static constexpr auto plusOneIfGraph =
         static_cast<size_t>(includeGraphColumn);
     for (size_t i = 0; i < numIndexColumns + plusOneIfGraph; i++) {
-      (*resultIt)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
+      (*resultIt)[i] = locatedTriple.triple_.ids()[3 - numIndexColumns + i];
     }
     // If the input `block` has payload columns (which located triples don't
     // have), set their values to UNDEF.
@@ -276,7 +276,7 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
       // Don't update the graph info for triples that are deleted.
       continue;
     }
-    newGraphs.insert(lt.triple_.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID));
+    newGraphs.insert(lt.triple_.ids().at(ADDITIONAL_COLUMN_GRAPH_ID));
     // Handle the case that with the newly added triples we have too many
     // distinct graphs to store them in the graph info.
     if (newGraphs.size() > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
