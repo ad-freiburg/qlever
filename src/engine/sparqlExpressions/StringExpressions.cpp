@@ -472,7 +472,7 @@ class ConcatExpression : public detail::VariadicExpression {
 
         std::visit(ad_utility::OverloadCallOperator{visitLiteralConcat,
                                                     visitLiteralVecConcat},
-                   result);
+                   std::move(result));
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
@@ -511,117 +511,114 @@ class ConcatExpression : public detail::VariadicExpression {
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    using ReturnVariant =
-        std::variant<IdOrLiteralOrIri,
-                     sparqlExpression::VectorWithMemoryLimit<IdOrLiteralOrIri>>;
 
     auto visitLiteralResult =
-        [&](std::optional<Literal> literalSoFar) -> ReturnVariant {
+        [&](const std::optional<Literal>& literalSoFar) -> ExpressionResult {
       return convertLiteral(literalSoFar);
     };
 
-    auto visitLiteralVecResult = [&](LiteralVec& literalVec) -> ReturnVariant {
+    auto visitLiteralVecResult =
+        [&](consr LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(literalVec.size());
       ql::ranges::copy(literalVec | ql::views::transform(convertLiteral),
                        std::back_inserter(resultAsVec));
       return resultAsVec;
     };
-    auto finalResult =
-        std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
-                                                    visitLiteralVecResult},
-                   result);
-  };
+    return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
+                                                       visitLiteralVecResult},
+                      std::move(result));
+  }
+};
 
-  // ENCODE_FOR_URI
-  [[maybe_unused]] auto encodeForUriImpl =
-      [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-    if (!input.has_value()) {
-      return Id::makeUndefined();
-    } else {
-      std::string_view value{input.value()};
+// ENCODE_FOR_URI
+[[maybe_unused]] auto encodeForUriImpl =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    std::string_view value{input.value()};
 
-      return toLiteral(
-          boost::urls::encode(value, boost::urls::unreserved_chars));
-    }
-  };
-  using EncodeForUriExpression =
-      StringExpressionImpl<1, decltype(encodeForUriImpl)>;
+    return toLiteral(boost::urls::encode(value, boost::urls::unreserved_chars));
+  }
+};
+using EncodeForUriExpression =
+    StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
-  // LANGMATCHES
-  [[maybe_unused]] inline auto langMatching =
-      [](std::optional<std::string> languageTag,
-         std::optional<std::string> languageRange) {
-        if (!languageTag.has_value() || !languageRange.has_value()) {
-          return Id::makeUndefined();
-        } else {
-          return Id::makeFromBool(ad_utility::isLanguageMatch(
-              languageTag.value(), languageRange.value()));
-        }
-      };
+// LANGMATCHES
+[[maybe_unused]] inline auto langMatching =
+    [](std::optional<std::string> languageTag,
+       std::optional<std::string> languageRange) {
+      if (!languageTag.has_value() || !languageRange.has_value()) {
+        return Id::makeUndefined();
+      } else {
+        return Id::makeFromBool(ad_utility::isLanguageMatch(
+            languageTag.value(), languageRange.value()));
+      }
+    };
 
-  using LangMatches =
-      StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+using LangMatches =
+    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
 
-  // STRING WITH LANGUAGE TAG
-  [[maybe_unused]] inline auto strLangTag =
-      [](std::optional<std::string> input,
-         std::optional<std::string> langTag) -> IdOrLiteralOrIri {
-    if (!input.has_value() || !langTag.has_value()) {
-      return Id::makeUndefined();
-    } else if (!ad_utility::strIsLangTag(langTag.value())) {
-      return Id::makeUndefined();
-    } else {
-      auto lit =
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(input.value()),
-              std::move(langTag.value()));
-      return LiteralOrIri{lit};
-    }
-  };
+// STRING WITH LANGUAGE TAG
+[[maybe_unused]] inline auto strLangTag =
+    [](std::optional<std::string> input,
+       std::optional<std::string> langTag) -> IdOrLiteralOrIri {
+  if (!input.has_value() || !langTag.has_value()) {
+    return Id::makeUndefined();
+  } else if (!ad_utility::strIsLangTag(langTag.value())) {
+    return Id::makeUndefined();
+  } else {
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(input.value()),
+            std::move(langTag.value()));
+    return LiteralOrIri{lit};
+  }
+};
 
-  using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
+using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
 
-  // STRING WITH DATATYPE IRI
-  [[maybe_unused]] inline auto strIriDtTag =
-      [](std::optional<std::string> inputStr,
-         OptIri inputIri) -> IdOrLiteralOrIri {
-    if (!inputStr.has_value() || !inputIri.has_value()) {
-      return Id::makeUndefined();
-    } else {
-      auto lit =
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
-      return LiteralOrIri{lit};
-    }
-  };
+// STRING WITH DATATYPE IRI
+[[maybe_unused]] inline auto strIriDtTag =
+    [](std::optional<std::string> inputStr,
+       OptIri inputIri) -> IdOrLiteralOrIri {
+  if (!inputStr.has_value() || !inputIri.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
+    return LiteralOrIri{lit};
+  }
+};
 
-  using StrIriTagged =
-      StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+using StrIriTagged =
+    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
 
-  // HASH
-  template <auto HashFunc>
-  [[maybe_unused]] inline constexpr auto hash =
-      [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-    if (!input.has_value()) {
-      return Id::makeUndefined();
-    } else {
-      std::vector<unsigned char> hashed = HashFunc(input.value());
-      auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
-      return toLiteral(std::move(hexStr));
-    }
-  };
+// HASH
+template <auto HashFunc>
+[[maybe_unused]] inline constexpr auto hash =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    std::vector<unsigned char> hashed = HashFunc(input.value());
+    auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
+    return toLiteral(std::move(hexStr));
+  }
+};
 
-  using MD5Expression =
-      StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
-  using SHA1Expression =
-      StringExpressionImpl<1, decltype(hash<ad_utility::hashSha1>)>;
-  using SHA256Expression =
-      StringExpressionImpl<1, decltype(hash<ad_utility::hashSha256>)>;
-  using SHA384Expression =
-      StringExpressionImpl<1, decltype(hash<ad_utility::hashSha384>)>;
-  using SHA512Expression =
-      StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
+using MD5Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
+using SHA1Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha1>)>;
+using SHA256Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha256>)>;
+using SHA384Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha384>)>;
+using SHA512Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
