@@ -8,6 +8,8 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+#include <absl/functional/bind_front.h>
+
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -158,12 +160,12 @@ CPP_template(typename Operation, typename... Operands)(requires(
 
   // Function that takes a single operand and a single value getter and computes
   // the corresponding generator.
-  auto getValue = std::bind_front(valueGetterGenerator, numElements, context);
+  auto getValue = absl::bind_front(valueGetterGenerator, numElements, context);
 
   // Function that takes all the generators as a parameter pack and computes the
   // generator for the operation result;
   auto getResultFromGenerators =
-      std::bind_front(applyFunction, Function{}, numElements);
+      absl::bind_front(applyFunction, Function{}, numElements);
 
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual

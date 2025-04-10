@@ -8,6 +8,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
 #include <ranges>
+#include <absl/functional/bind_front.h>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -171,7 +172,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
-  auto evaluateOnChildrenResults = std::bind_front(
+  auto evaluateOnChildrenResults = absl::bind_front(
       ad_utility::visitWithVariantsAndParameters,
       evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
 

@@ -1,9 +1,13 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_PARALLELMULTIWAYMERGE_H
 #define QLEVER_PARALLELMULTIWAYMERGE_H
+
+#include <absl/functional/bind_front.h>
 
 #include "util/AsyncStream.h"
 #include "util/Generator.h"
@@ -86,7 +90,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
   };
 
   auto pushToBuffer =
-      std::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
+      absl::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
                       std::ref(buffer), std::ref(sizeOfCurrentBlock));
 
   auto isBufferLargeEnough = [&] {

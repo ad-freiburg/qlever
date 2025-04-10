@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Server.h"
 
@@ -10,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <absl/functional/bind_front.h>
 
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
@@ -300,7 +303,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
+  auto checkParameter = absl::bind_front(&ad_utility::url_parser::checkParameter,
                                         std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,

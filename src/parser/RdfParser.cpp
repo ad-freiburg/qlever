@@ -2,10 +2,13 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
+#include <absl/functional/bind_front.h>
 
 #include <cstring>
 #include <exception>
@@ -1333,7 +1336,7 @@ RdfMultifileParser::RdfMultifileParser(
     for (const auto& file : files) {
       numActiveParsers_++;
       bool active =
-          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
+          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.
