@@ -76,6 +76,24 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
+PreconditionAction Sort::createSortedClone(
+    const vector<ColumnIndex>& sortColumns) const {
+  auto result = Operation::createSortedClone(sortColumns);
+  if (result.isAlreadySatisfied()) {
+    return result;
+  }
+  AD_CORRECTNESS_CHECK(result.isNotSatisfiable());
+  AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
+                  "with `Sort` with a different sort order. This is "
+                  "indicates a flaw during query planning."
+               << std::endl;
+  auto* qec = getExecutionContext();
+  auto sort = std::make_shared<Sort>(qec, subtree_, sortColumns);
+  return PreconditionAction{
+      std::make_shared<QueryExecutionTree>(qec, std::move(sort))};
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
                                 sortColumnIndices_);

@@ -148,9 +148,6 @@ TEST(Sort, SimpleMemberFunctions) {
     ASSERT_EQ(0u, varColMap.at(Variable{"?0"}).columnIndex_);
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
-
-    EXPECT_THAT(s.getSubtree()->getRootOperation()->getCacheKey(),
-                ::testing::StartsWith("Values for testing with"));
   }
 
   {
@@ -172,6 +169,39 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Sort, checkSortedCloneIsProperlyHandled) {
+  {
+    VectorTable input{{0},   {1},       {-1},  {3},
+                      {-17}, {1230957}, {123}, {-1249867132}};
+    auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+    Sort sort = makeSort(std::move(inputTable), {0});
+    EXPECT_TRUE(sort.createSortedClone({0}).isAlreadySatisfied());
+    EXPECT_TRUE(sort.createSortedClone({}).isAlreadySatisfied());
+    auto clone = sort.createSortedClone({0, 1});
+    EXPECT_FALSE(clone.isAlreadySatisfied());
+    EXPECT_FALSE(clone.isNotSatisfiable());
+    // Check that we don't double sort
+    auto operation = std::move(clone).getTree();
+    const auto& childReference =
+        *operation->getRootOperation()->getChildren().at(0);
+    EXPECT_NE(typeid(childReference), typeid(Sort));
+  }
+  {
+    VectorTable input{{0, 0}, {1, 1}};
+    auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+    Sort sort = makeSort(std::move(inputTable), {0, 1});
+    auto clone = sort.createSortedClone({1, 0});
+    EXPECT_FALSE(clone.isAlreadySatisfied());
+    EXPECT_FALSE(clone.isNotSatisfiable());
+    // Check that we don't double sort
+    auto operation = std::move(clone).getTree();
+    const auto& childReference =
+        *operation->getRootOperation()->getChildren().at(0);
+    EXPECT_NE(typeid(childReference), typeid(Sort));
   }
 }
 
