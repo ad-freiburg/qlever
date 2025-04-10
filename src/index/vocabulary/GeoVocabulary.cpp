@@ -7,7 +7,6 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
-#include "parser/GeoInfo.h"
 
 // ____________________________________________________________________________
 template <typename V>

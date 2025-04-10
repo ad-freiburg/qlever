@@ -9,9 +9,9 @@
 #include <string>
 
 #include "index/vocabulary/VocabularyTypes.h"
-#include "parser/GeoInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
+#include "util/GeometryInfo.h"
 
 // A GeoVocabulary holds Well-Known Text literals. In contrast to the regular
 // vocabulary classes it does not only store the strings. Instead it stores both
