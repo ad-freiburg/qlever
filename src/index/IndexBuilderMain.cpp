@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -147,8 +149,8 @@ int main(int argc, char** argv) {
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
-  auto add = [&boostOptions]<typename... Args>(Args&&... args) {
-    boostOptions.add_options()(std::forward<Args>(args)...);
+  auto add = [&boostOptions](auto&&... args) {
+    boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&baseName)->required(),
@@ -330,14 +332,12 @@ int main(int argc, char** argv) {
           "has to be true. For details see --help."));
     }
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      index.storeTextScoringParamsInConfiguration(
-          getTextScoringMetricFromString(scoringMetric), bScoringParam,
-          kScoringParam);
       index.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
-          addWordsFromLiterals);
+          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
+          {bScoringParam, kScoringParam});
     }
 
     if (!docsfile.empty()) {
