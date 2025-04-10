@@ -4,14 +4,23 @@
 
 #include <gtest/gtest.h>
 
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/File.h"
 
-// TODO<ullingerc> Unit tests
+namespace {
 
-TEST(GeoVocabularyTest, GeoVocabInMem) {
-  GeoVocabulary<VocabularyInMemory> geoVocab;
+// A function to test that a GeoVocabulary can correctly insert and
+// lookup literals and precompute geometry information. This function is generic
+// because the GeoVocabulary should behave exactly the same no matter which
+// underlying vocabulary implementation is used: see the following uses of this
+// function in the TEST(...) blocks.
+template <typename T>
+void testGeoVocabulary() {
+  using GV = GeoVocabulary<T>;
+  GV geoVocab;
   const std::string fn = "geovocab-test1.dat";
   auto ww = geoVocab.makeWordWriter(fn);
   ww.readableName() = "test";
@@ -35,7 +44,7 @@ TEST(GeoVocabularyTest, GeoVocabInMem) {
 
   geoVocab.open(fn);
 
-  auto checkGeoVocabContents = [&testLiterals, &geoVocab]() {
+  auto checkGeoVocabContents = [&testLiterals](GV& geoVocab) {
     ASSERT_EQ(geoVocab.size(), testLiterals.size());
     for (size_t i = 0; i < testLiterals.size(); i++) {
       ASSERT_EQ(geoVocab[i], testLiterals[i]);
@@ -47,19 +56,25 @@ TEST(GeoVocabularyTest, GeoVocabInMem) {
     }
   };
 
-  checkGeoVocabContents();
+  checkGeoVocabContents(geoVocab);
 
   const std::string fn2 = "geovocab-test2.dat";
   geoVocab.close();
-  geoVocab.build(testLiterals, fn2);
-  geoVocab.open(fn2);
 
-  checkGeoVocabContents();
+  GV geoVocab2;
+  geoVocab2.build(testLiterals, fn2);
 
-  geoVocab.close();
+  checkGeoVocabContents(geoVocab2);
 
-  ad_utility::deleteFile(fn);
-  ad_utility::deleteFile(fn + ".geoinfo");
-  ad_utility::deleteFile(fn2);
-  ad_utility::deleteFile(fn2 + ".geoinfo");
+  geoVocab2.close();
+};
+
+TEST(GeoVocabularyTest, GeoVocabInMem) {
+  testGeoVocabulary<VocabularyInMemory>();
 }
+
+TEST(GeoVocabularyTest, GeoVocabInternalExternal) {
+  testGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>();
+}
+
+}  // namespace
