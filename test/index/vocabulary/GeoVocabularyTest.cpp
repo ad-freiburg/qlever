@@ -52,7 +52,7 @@ void testGeoVocabulary() {
 
       auto gi = geoVocab.getGeoInfo(i);
       // TODO<ullingerc> In PR #1957 actually test content of GeometryInfo
-      ASSERT_EQ(gi.dummy_, 1);
+      ASSERT_TRUE(gi.geometryType_ != 0);
     }
   };
 
