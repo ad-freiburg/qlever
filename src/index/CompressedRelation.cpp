@@ -493,8 +493,7 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
         auto result = ql::views::transform(
-            ql::views::join(
-                ql::views::all(getBlocksFromMetadata(metadataAndBlocks))),
+            ql::views::join(getBlocksFromMetadata(metadataAndBlocks)),
             getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
@@ -659,7 +658,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   auto relevantBlocks =
-      ql::views::join(ql::views::all(getRelevantBlocks(scanSpec, blockRanges)));
+      ql::views::join(getRelevantBlocks(scanSpec, blockRanges));
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
 
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
