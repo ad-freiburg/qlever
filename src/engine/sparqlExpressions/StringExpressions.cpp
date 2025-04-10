@@ -39,8 +39,10 @@ static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(s, &isUtf8CodepointStart);
 }
 
-// Initialize or concat a literal. If `literalSoFarOpt` is set, concat
-// `nextLiteral` to it; otherwise, initialize it with `nextLiteral`
+// Initialize or append a Literal. If both literals are valid and initialized,
+// concatenate nextLiteral into literalSoFar. If not initialized yet, set
+// literalSoFar to nextLiteral. If either is UNDEF, set literalSoFar to nullopt
+// to indicate an undefined result.
 void concatOrSetLiteral(
     std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
     const std::optional<ad_utility::triple_component::Literal>& nextLiteral,
@@ -420,7 +422,7 @@ class ConcatExpression : public detail::VariadicExpression {
     // have constant results (in which case, we need to evaluate the whole
     // expression only once).
 
-    // We store the (intermediate) result either as single string or a vector.
+    // We store the (intermediate) result either as single literal or a vector.
     // If the result is a Literal, then all the previously evaluated children
     // were constants (see above).
 
@@ -431,13 +433,13 @@ class ConcatExpression : public detail::VariadicExpression {
     // mismatch (in which case the final suffix will be empty).
 
     auto valueGetter =
-        sparqlExpression::detail::LiteralValueGetterWithStrFunction{};
+        sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{};
     std::variant<std::optional<Literal>, LiteralVec> result =
         Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
     char isInitializedFlag = 0;
 
     auto convertLiteral =
-        [&](const std::optional<Literal>& literal) -> IdOrLiteralOrIri {
+        [](const std::optional<Literal>& literal) -> IdOrLiteralOrIri {
       if (!literal.has_value()) {
         return Id::makeUndefined();
       }
@@ -451,7 +453,7 @@ class ConcatExpression : public detail::VariadicExpression {
         auto literalFromConstant = valueGetter(std::move(s), ctx);
 
         auto concatOrSetLitFromConst =
-            [&](std::optional<Literal> literalSoFar) {
+            [&](std::optional<Literal>& literalSoFar) {
               concatOrSetLiteral(literalSoFar, literalFromConstant,
                                  isInitializedFlag);
             };
