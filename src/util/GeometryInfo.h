@@ -14,6 +14,8 @@
 namespace ad_utility {
 
 // A geometry info object holds precomputed details on WKT literals.
+// IMPORTANT: Every change to the attributes of this struct is an index-breaking
+// change. Please update the index version accordingly.
 struct GeometryInfo {
   // TODO<ullingerc> Computation of GeometryInfo is a separate PR
   uint64_t dummy_;
