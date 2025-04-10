@@ -1,10 +1,11 @@
-// Copyright 2011 - 2024
+// Copyright 2011 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
