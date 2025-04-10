@@ -150,13 +150,23 @@ Index makeTestIndex(const std::string& indexBasename,
                     std::optional<TextScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam,
                     qlever::Filetype indexType) {
+  return makeTestIndex(
+      indexBasename,
+      TestIndexConfig{turtleInput, loadAllPermutations, usePatterns,
+                      usePrefixCompression, blocksizePermutations,
+                      createTextIndex, addWordsFromLiterals,
+                      contentsOfWordsFileAndDocsFile, parserBufferSize,
+                      scoringMetric, bAndKParam, indexType});
+}
+
+Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   std::string inputFilename = indexBasename + ".ttl";
-  if (!turtleInput.has_value()) {
-    turtleInput =
+  if (!c.turtleInput.has_value()) {
+    c.turtleInput =
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
@@ -166,51 +176,52 @@ Index makeTestIndex(const std::string& indexBasename,
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
-    f << turtleInput.value();
+    f << c.turtleInput.value();
     f.close();
   }
   {
     std::fstream settingsFile(inputFilename + ".settings.json",
                               std::ios_base::out);
     nlohmann::json settingsJson;
-    if (!createTextIndex) {
+    if (!c.createTextIndex) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
     settingsFile << settingsJson.dump();
   }
   {
-    Index index = makeIndexWithTestSettings(parserBufferSize);
+    Index index = makeIndexWithTestSettings(c.parserBufferSize);
     // This is enough for 2 triples per block. This is deliberately chosen as a
     // small value, s.t. the tiny knowledge graphs from unit tests also contain
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutationsPerColumn() = blocksizePermutations;
+    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.usePatterns() = usePatterns;
+    index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
-    index.loadAllPermutations() = loadAllPermutations;
-    qlever::InputFileSpecification spec{inputFilename, indexType, std::nullopt};
+    index.loadAllPermutations() = c.loadAllPermutations;
+    qlever::InputFileSpecification spec{inputFilename, c.indexType,
+                                        std::nullopt};
     index.createFromFiles({spec});
-    if (createTextIndex) {
-      if (scoringMetric.has_value()) {
-        if (!bAndKParam.has_value()) {
-          index.storeTextScoringParamsInConfiguration(scoringMetric.value(),
+    if (c.createTextIndex) {
+      if (c.scoringMetric.has_value()) {
+        if (!c.bAndKParam.has_value()) {
+          index.storeTextScoringParamsInConfiguration(c.scoringMetric.value(),
                                                       0.75, 1.75);
         } else {
           index.storeTextScoringParamsInConfiguration(
-              scoringMetric.value(), bAndKParam.value().first,
-              bAndKParam.value().second);
+              c.scoringMetric.value(), c.bAndKParam.value().first,
+              c.bAndKParam.value().second);
         }
       }
-      if (contentsOfWordsFileAndDocsFile.has_value()) {
+      if (c.contentsOfWordsFileAndDocsFile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(contentsOfWordsFileAndDocsFile.value().first.c_str(),
-                        contentsOfWordsFileAndDocsFile.value().first.size());
+        wordsFile.write(c.contentsOfWordsFileAndDocsFile.value().first.c_str(),
+                        c.contentsOfWordsFileAndDocsFile.value().first.size());
         docsFile.write(contentsOfWordsFileAndDocsFile.value().second.c_str(),
                        contentsOfWordsFileAndDocsFile.value().second.size());
         wordsFile.close();
