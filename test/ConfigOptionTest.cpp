@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (May of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -93,81 +95,96 @@ ConversionTestCase<T> getConversionTestCase() {
 }
 
 /*
-Check if the creation of configuration options, their direct setting and the
-getter works as intended.
-*/
-TEST(ConfigOptionTest, CreateSetAndTest) {
-  /*
   Checks, if the `ConfigOption::getValue` only works with the actual type
   of the value in the configuration option. All the other types should cause an
   exception.
   */
-  auto otherGettersDontWork =
-      []<typename WorkingType>(const ConfigOption& option) {
-        doForTypeInConfigOptionValueType([&option]<typename CurrentType>() {
-          if (option.wasSet()) {
-            if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
-              ASSERT_THROW((option.getValue<CurrentType>()),
-                           ad_utility::ConfigOptionGetWrongTypeException);
-            } else {
-              ASSERT_NO_THROW((option.getValue<CurrentType>()));
-            }
+struct OtherGettersDontWork {
+  template <typename WorkingType>
+  struct CheckCurrentType {
+    const ConfigOption& option;
 
-            ASSERT_NO_THROW(option.getValueAsJson());
-            ASSERT_NO_THROW(option.getValueAsString());
+    template <typename CurrentType>
+    void operator()() const {
+      if (option.wasSet()) {
+        if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
+          ASSERT_THROW((option.getValue<CurrentType>()),
+                       ad_utility::ConfigOptionGetWrongTypeException);
+        } else {
+          ASSERT_NO_THROW((option.getValue<CurrentType>()));
+        }
 
-          } else {
-            ASSERT_THROW((option.getValue<CurrentType>()),
-                         ad_utility::ConfigOptionValueNotSetException);
-            ASSERT_ANY_THROW(option.getValueAsJson());
-            ASSERT_ANY_THROW(option.getValueAsString());
-          }
+        ASSERT_NO_THROW(option.getValueAsJson());
+        ASSERT_NO_THROW(option.getValueAsString());
 
-          if (option.hasDefaultValue()) {
-            if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
-              ASSERT_THROW((option.getDefaultValue<CurrentType>()),
-                           ad_utility::ConfigOptionGetWrongTypeException);
-            } else {
-              ASSERT_NO_THROW((option.getDefaultValue<CurrentType>()));
-            }
+      } else {
+        ASSERT_THROW((option.getValue<CurrentType>()),
+                     ad_utility::ConfigOptionValueNotSetException);
+        ASSERT_ANY_THROW(option.getValueAsJson());
+        ASSERT_ANY_THROW(option.getValueAsString());
+      }
 
-            ASSERT_FALSE(option.getDefaultValueAsJson().is_null());
-            ASSERT_NE("None", option.getDefaultValueAsString());
-          } else {
-            ASSERT_THROW((option.getDefaultValue<CurrentType>()),
-                         ad_utility::ConfigOptionValueNotSetException);
-            ASSERT_TRUE(option.getDefaultValueAsJson().is_null());
-            ASSERT_EQ("None", option.getDefaultValueAsString());
-          }
-        });
-      };
+      if (option.hasDefaultValue()) {
+        if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
+          ASSERT_THROW((option.getDefaultValue<CurrentType>()),
+                       ad_utility::ConfigOptionGetWrongTypeException);
+        } else {
+          ASSERT_NO_THROW((option.getDefaultValue<CurrentType>()));
+        }
 
+        ASSERT_FALSE(option.getDefaultValueAsJson().is_null());
+        ASSERT_NE("None", option.getDefaultValueAsString());
+      } else {
+        ASSERT_THROW((option.getDefaultValue<CurrentType>()),
+                     ad_utility::ConfigOptionValueNotSetException);
+        ASSERT_TRUE(option.getDefaultValueAsJson().is_null());
+        ASSERT_EQ("None", option.getDefaultValueAsString());
+      }
+    }
+  };
+
+  template <typename WorkingType>
+  void operator()(const ConfigOption& option) const {
+    doForTypeInConfigOptionValueType(CheckCurrentType<WorkingType>{option});
+  }
+};
+
+/*
+Check if the creation of configuration options, their direct setting and the
+getter works as intended.
+*/
+TEST(ConfigOptionTest, CreateSetAndTest) {
+  OtherGettersDontWork otherGettersDontWork{};
   /*
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto setAndTest = [&otherGettersDontWork]<typename Type>(
-                        ConfigOption& option, Type* variablePointer,
-                        const ConversionTestCase<Type>& toSetTo) {
-    ASSERT_FALSE(option.wasSetAtRuntime());
+  auto setAndTest =
+      [&otherGettersDontWork](
+          ConfigOption& option, auto* variablePointer,
+          const ConversionTestCase<
+              std::remove_pointer_t<decltype(variablePointer)>>& toSetTo) {
+        using Type = std::remove_pointer_t<decltype(variablePointer)>;
+        ASSERT_FALSE(option.wasSetAtRuntime());
 
-    option.setValue(toSetTo.value);
+        option.setValue(toSetTo.value);
 
-    ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
-    ASSERT_EQ(toSetTo.value, option.getValue<Type>());
-    ASSERT_EQ(toSetTo.value, *variablePointer);
+        ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
+        ASSERT_EQ(toSetTo.value, option.getValue<Type>());
+        ASSERT_EQ(toSetTo.value, *variablePointer);
 
-    // Make sure, that the other getters don't work.
-    otherGettersDontWork.template operator()<Type>(option);
-  };
+        // Make sure, that the other getters don't work.
+        otherGettersDontWork.template operator()<Type>(option);
+      };
 
   /*
   Run a normal test case of creating a configuration option, checking it and
   setting it. With or without a default value.
   */
   auto testCaseWithDefault = [&setAndTest,
-                              &otherGettersDontWork]<typename Type>(
-                                 const ConversionTestCase<Type>& toSetTo) {
+                              &otherGettersDontWork](const auto& toSetTo) {
+    using Type = std::decay_t<decltype(toSetTo.value)>;
+
     // Every configuration option keeps updating an external variable with
     // the value, that it itself holds. This is the one.
     Type configurationOptionValue;
@@ -195,34 +212,35 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
   };
 
-  auto testCaseWithoutDefault =
-      [&otherGettersDontWork,
-       &setAndTest]<typename Type>(const ConversionTestCase<Type>& toSetTo) {
-        // Every configuration option keeps updating an external variable with
-        // the value, that it itself holds. This is the one.
-        Type configurationOptionValue;
+  auto testCaseWithoutDefault = [&otherGettersDontWork,
+                                 &setAndTest](const auto& toSetTo) {
+    using Type = std::decay_t<decltype(toSetTo.value)>;
 
-        ConfigOption option{
-            ConfigOption("Without_default", "", &configurationOptionValue)};
+    // Every configuration option keeps updating an external variable with
+    // the value, that it itself holds. This is the one.
+    Type configurationOptionValue;
 
-        // Make sure, that we truly don't have a default value, that can be
-        // gotten.
-        ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(),
-                     ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        otherGettersDontWork.template operator()<Type>(option);
+    ConfigOption option{
+        ConfigOption("Without_default", "", &configurationOptionValue)};
 
-        setAndTest.template operator()<Type>(option, &configurationOptionValue,
-                                             toSetTo);
+    // Make sure, that we truly don't have a default value, that can be
+    // gotten.
+    ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    otherGettersDontWork.template operator()<Type>(option);
 
-        // Is it still the case, that we don't have a default value?
-        ASSERT_TRUE(!option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(),
-                     ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        ASSERT_EQ("None", option.getDefaultValueAsString());
-      };
+    setAndTest.template operator()<Type>(option, &configurationOptionValue,
+                                         toSetTo);
+
+    // Is it still the case, that we don't have a default value?
+    ASSERT_TRUE(!option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    ASSERT_EQ("None", option.getDefaultValueAsString());
+  };
 
   // Do a test case for every possible type.
   testCaseWithDefault(
@@ -287,35 +305,67 @@ TEST(ConfigOptionTest, ExceptionOnCreation) {
                , ad_utility::NotValidShortHandNameException);
 }
 
-// Test, if a config option can only be set to values of the same type, as it is
-// meant to hold.
-TEST(ConfigOptionTest, SetValueException) {
-  // Try every type combination.
-  doForTypeInConfigOptionValueType([]<typename WorkingType>() {
-    WorkingType notUsed{getConversionTestCase<WorkingType>().value};
-    ConfigOption option("option", "", &notUsed);
+struct TrySetConfigOptionToAllTypes {
+  template <typename WorkingType>
+  struct TrySet {
+    ConfigOption& option;
+    WorkingType& notUsed;
 
-    doForTypeInConfigOptionValueType([&option, &notUsed]<typename T>() {
+    template <typename T>
+    void operator()() const {
       if constexpr (std::is_same_v<T, WorkingType>) {
         ASSERT_NO_THROW(option.setValue(notUsed));
       } else {
         ASSERT_THROW(option.setValue(getConversionTestCase<T>().value),
                      ad_utility::ConfigOptionSetWrongTypeException);
       }
-    });
-  });
+    }
+  };
+
+  template <typename WorkingType>
+  void operator()() const {
+    WorkingType notUsed{getConversionTestCase<WorkingType>().value};
+    ConfigOption option("option", "", &notUsed);
+
+    doForTypeInConfigOptionValueType(TrySet<WorkingType>{option, notUsed});
+  }
+};
+
+// Test, if a config option can only be set to values of the same type, as it is
+// meant to hold.
+TEST(ConfigOptionTest, SetValueException) {
+  // Try every type combination.
+  doForTypeInConfigOptionValueType(TrySetConfigOptionToAllTypes{});
 }
 
 /*
-`ConfigOption::setValueWithJson` interprets the given json as the type of
-the configuration option. This tests, if this works correctly.
-*/
-TEST(ConfigOptionTest, SetValueWithJson) {
-  /*
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto doTestCase = []<typename Type>() {
+struct CheckConfigOptionSetValue {
+  template <typename Type>
+  struct CheckIfThrows {
+    ConfigOption& option;
+
+    template <typename CurrentType>
+    void operator()() const {
+      if constexpr (!std::is_same_v<Type, CurrentType> &&
+                    !(std::is_same_v<Type, int> &&
+                      std::is_same_v<
+                          CurrentType,
+                          size_t>)&&!(std::is_same_v<Type, std::vector<int>> &&
+                                      std::is_same_v<CurrentType,
+                                                     std::vector<size_t>>)) {
+        ASSERT_THROW(
+            option.setValueWithJson(
+                getConversionTestCase<CurrentType>().jsonRepresentation),
+            ad_utility::ConfigOptionSetWrongJsonTypeException);
+      }
+    }
+  };
+
+  template <typename Type>
+  void operator()() const {
     // Every configuration option keeps updating an external variable with the
     // value, that it itself holds. This is the one.
     Type configurationOptionValue;
@@ -333,45 +383,50 @@ TEST(ConfigOptionTest, SetValueWithJson) {
 
     // Does the setter cause an exception, when given any json, that can't be
     // interpreted as the wanted type?
-    doForTypeInConfigOptionValueType([&option]<typename CurrentType>() {
-      if constexpr (!std::is_same_v<Type, CurrentType> &&
-                    !(std::is_same_v<Type, int> &&
-                      std::is_same_v<
-                          CurrentType,
-                          size_t>)&&!(std::is_same_v<Type, std::vector<int>> &&
-                                      std::is_same_v<CurrentType,
-                                                     std::vector<size_t>>)) {
-        ASSERT_THROW(option.setValueWithJson(
-            getConversionTestCase<CurrentType>().jsonRepresentation);
-                     , ad_utility::ConfigOptionSetWrongJsonTypeException);
-      }
-    });
+    doForTypeInConfigOptionValueType(CheckIfThrows<Type>{option});
 
     ASSERT_ANY_THROW(option.setValueWithJson(nlohmann::json::parse(
         R"--("the value is in here " : [true, 4, 4.2])--")));
-  };
+  }
+};
 
+/*
+`ConfigOption::setValueWithJson` interprets the given json as the type of
+the configuration option. This tests, if this works correctly.
+*/
+TEST(ConfigOptionTest, SetValueWithJson) {
   // Do the test case for every possible type.
-  doForTypeInConfigOptionValueType(doTestCase);
+  doForTypeInConfigOptionValueType(CheckConfigOptionSetValue{});
 }
 
-TEST(ConfigOptionTest, HoldsType) {
-  // Test for `configOption` with the given type.
-  auto doTest = []<typename CorrectType>() {
+// Test for `configOption` with the given type.
+struct CheckConfigOptionHoldsType {
+  template <typename CorrectType>
+  struct CheckType {
+    const ConfigOption& opt;
+
+    template <typename WrongType>
+    void operator()() const {
+      if constexpr (!std::is_same_v<CorrectType, WrongType>) {
+        ASSERT_FALSE(opt.holdsType<WrongType>());
+      }
+    }
+  };
+
+  template <typename CorrectType>
+  void operator()() const {
     // Correct type.
     CorrectType var;
     const ConfigOption opt("testOption", "", &var);
     ASSERT_TRUE(opt.holdsType<CorrectType>());
 
     // Wrong type.
-    doForTypeInConfigOptionValueType([&opt]<typename WrongType>() {
-      if constexpr (!std::is_same_v<CorrectType, WrongType>) {
-        ASSERT_FALSE(opt.holdsType<WrongType>());
-      }
-    });
-  };
+    doForTypeInConfigOptionValueType(CheckType<CorrectType>{opt});
+  }
+};
 
-  doForTypeInConfigOptionValueType(doTest);
+TEST(ConfigOptionTest, HoldsType) {
+  doForTypeInConfigOptionValueType(CheckConfigOptionHoldsType{});
 }
 
 }  // namespace ad_utility

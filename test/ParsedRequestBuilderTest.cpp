@@ -1,6 +1,8 @@
 // Copyright 2024-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <engine/ParsedRequestBuilder.h>
 #include <gmock/gmock.h>
@@ -70,10 +72,11 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractDatasetClause) {
-  auto expect = []<typename T>(const auto& request, TI<T>,
-                               const std::vector<DatasetClause>& expected,
-                               const ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+  auto expect = [](const auto& request, auto ti,
+                   const std::vector<DatasetClause>& expected,
+                   const ad_utility::source_location l =
+                       ad_utility::source_location::current()) {
+    using T = typename decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     // Initialize an empty operation with no dataset clauses set.
@@ -100,11 +103,11 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
-  auto expect = []<typename T>(const auto& request, TI<T>,
-                               std::string_view paramName,
-                               const Operation& expected,
-                               const ad_utility::source_location l =
-                                   ad_utility::source_location::current()) {
+  auto expect = [](const auto& request, auto ti, std::string_view paramName,
+                   const Operation& expected,
+                   const ad_utility::source_location l =
+                       ad_utility::source_location::current()) {
+    using T = typename decltype(ti)::type;
     auto t = generateLocationTrace(l);
     auto builder = ParsedRequestBuilder(request);
     EXPECT_THAT(builder.parsedRequest_.operation_,

@@ -119,7 +119,8 @@ void IndexImpl::logEntityNotFound(const string& word,
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(
     const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-    bool addWordsFromLiterals) {
+    bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+    std::pair<float, float> bAndKForBM25) {
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
@@ -149,6 +150,10 @@ void IndexImpl::buildTextIndexFile(
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
+  {
+    auto [b, k] = bAndKForBM25;
+    storeTextScoringParamsInConfiguration(textScoringMetric, b, k);
+  }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
@@ -796,12 +801,20 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 void IndexImpl::storeTextScoringParamsInConfiguration(
     TextScoringMetric scoringMetric, float b, float k) {
   configurationJson_["text-scoring-metric"] = scoringMetric;
-  if (0 <= b && b <= 1 && 0 <= k) {
-    configurationJson_["b-and-k-parameter-for-text-scoring"] =
-        std::make_pair(b, k);
-  } else {
-    configurationJson_["b-and-k-parameter-for-text-scoring"] =
-        std::make_pair(0.75, 1.75);
-  }
+  textScoringMetric_ = scoringMetric;
+  auto bAndK = [b, k, this]() {
+    if (0 <= b && b <= 1 && 0 <= k) {
+      return std::pair{b, k};
+    } else {
+      if (textScoringMetric_ == TextScoringMetric::BM25) {
+        throw std::runtime_error{absl::StrCat(
+            "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
+            "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
+      }
+      return std::pair{0.75f, 1.75f};
+    }
+  }();
+  bAndKParamForTextScoring_ = bAndK;
+  configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;
   writeConfiguration();
 }

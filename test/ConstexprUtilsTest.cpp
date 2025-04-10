@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <utility>
 
@@ -173,15 +175,11 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
-/*
-@brief Create a lambda, that adds the string representation of a (supported)
-type to a given vector.
+struct PushToVector {
+  std::vector<std::string>* typeToStringVector;
 
-@returns A lambda, that takes an explicit template type parameter and adds the
-string representation at the end of `*typeToStringVector`.
-*/
-auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
-  return [typeToStringVector]<typename T>() {
+  template <typename T>
+  void operator()() const {
     if constexpr (ad_utility::isSimilar<T, int>) {
       typeToStringVector->emplace_back("int");
     } else if constexpr (ad_utility::isSimilar<T, bool>) {
@@ -191,7 +189,39 @@ auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
     } else {
       AD_FAIL();
     }
-  };
+  }
+};
+
+struct PushToVectorWithTI {
+  std::vector<std::string>* typeToStringVector;
+
+  void operator()(auto t) const {
+    using T = typename decltype(t)::type;
+    if constexpr (ad_utility::isSimilar<T, int>) {
+      typeToStringVector->emplace_back("int");
+    } else if constexpr (ad_utility::isSimilar<T, bool>) {
+      typeToStringVector->emplace_back("bool");
+    } else if constexpr (ad_utility::isSimilar<T, std::string>) {
+      typeToStringVector->emplace_back("std::string");
+    } else {
+      AD_FAIL();
+    }
+  }
+};
+
+/*
+@brief Create a lambda, that adds the string representation of a (supported)
+type to a given vector.
+
+@returns A lambda, that takes an explicit template type parameter and adds the
+string representation at the end of `*typeToStringVector`.
+*/
+auto typeToStringFactory(std::vector<std::string>* typeToStringVector) {
+  return PushToVector{typeToStringVector};
+}
+
+auto typeToStringFactoryWithTI(std::vector<std::string>* typeToStringVector) {
+  return PushToVectorWithTI{typeToStringVector};
 }
 
 /*
@@ -202,13 +232,13 @@ parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
 void testConstExprForEachNormalCall(
-    const auto& callToForEachWrapper,
+    const auto& callToForEachWrapper, auto callToTypeToStringFactory,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
 
   std::vector<std::string> typeToStringVector{};
-  auto typeToString = typeToStringFactory(&typeToStringVector);
+  auto typeToString = callToTypeToStringFactory(&typeToStringVector);
 
   // Normal call.
   callToForEachWrapper.template
@@ -224,11 +254,17 @@ void testConstExprForEachNormalCall(
   ASSERT_STREQ(typeToStringVector.at(7).c_str(), "int");
 }
 
+struct TestForEachTypeInParameterPack {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInParameterPack<Ts...>(func);
+  }
+};
+
 TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   // Normal call.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInParameterPack<Ts...>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPack{},
+                                 typeToStringFactory);
 
   // No types given should end in nothing happening.
   std::vector<std::string> typeToStringVector{};
@@ -237,14 +273,71 @@ TEST(ConstexprUtils, ForEachTypeInParameterPack) {
   ASSERT_TRUE(typeToStringVector.empty());
 }
 
+struct TestForEachTypeInParameterPackWithTI {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInParameterPackWithTI<Ts...>(func);
+  }
+};
+
+TEST(ConstexprUtils, ForEachTypeInParameterPackWithTI) {
+  // Normal call.
+  testConstExprForEachNormalCall(TestForEachTypeInParameterPackWithTI{},
+                                 typeToStringFactoryWithTI);
+
+  // No types given should end in nothing happening.
+  std::vector<std::string> typeToStringVector{};
+  auto typeToString = typeToStringFactoryWithTI(&typeToStringVector);
+  forEachTypeInParameterPackWithTI<>(typeToString);
+  ASSERT_TRUE(typeToStringVector.empty());
+}
+
+struct TestForEachTypeInTemplateTypeOfVariant {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInTemplateType<std::variant<Ts...>>(func);
+  }
+};
+
+struct TestForEachTypeInTemplateTypeOfTuple {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
+  }
+};
+
 TEST(ConstexprUtils, forEachTypeInTemplateType) {
   // Normal call with `std::variant`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::variant<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfVariant{},
+                                 typeToStringFactory);
 
   // Normal call with `std::tuple`.
-  testConstExprForEachNormalCall([]<typename... Ts>(const auto& func) {
-    forEachTypeInTemplateType<std::tuple<Ts...>>(func);
-  });
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeOfTuple{},
+                                 typeToStringFactory);
+}
+
+struct TestForEachTypeInTemplateTypeWithTIOfVariant {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::variant<Ts...>>, func);
+  }
+};
+
+struct TestForEachTypeInTemplateTypeWithTIOfTuple {
+  template <typename... Ts>
+  void operator()(const auto& func) const {
+    using use_type_identity::ti;
+    forEachTypeInTemplateTypeWithTI(ti<std::tuple<Ts...>>, func);
+  }
+};
+
+TEST(ConstexprUtils, forEachTypeInTemplateTypeWithTI) {
+  // Normal call with `std::variant`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfVariant{},
+                                 typeToStringFactoryWithTI);
+
+  // Normal call with `std::tuple`.
+  testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfTuple{},
+                                 typeToStringFactoryWithTI);
 }

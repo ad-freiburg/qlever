@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (October of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_UTIL_VALIDATORHELPERS_H
 #define QLEVER_TEST_UTIL_VALIDATORHELPERS_H
@@ -55,8 +57,11 @@ auto generateDummyNonExceptionValidatorFunction(size_t variant) {
              const ParameterTypes&... args) {
     // Special handling for `args` of type bool is needed. For the reasoning:
     // See the doc string.
-    auto compare = []<typename T>(const T& arg,
-                                  const T& dummyValueToCompareTo) {
+    auto compare = [](const auto& arg, const auto& dummyValueToCompareTo) {
+      static_assert(
+          std::is_same_v<decltype(arg), decltype(dummyValueToCompareTo)>,
+          "Arguments shall be of the same type");
+      using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, bool>) {
         return arg == false;
       } else {
