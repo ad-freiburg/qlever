@@ -191,7 +191,7 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.clone(), snapshotIndex)};
+      locatedTriples(), localVocab_.getLifetimeExtender(), snapshotIndex)};
 }
 
 // ____________________________________________________________________________
@@ -238,6 +238,8 @@ ReturnType DeltaTriplesManager::modify(
         auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
                                        writeToDiskAfterRequest]() {
           if (writeToDiskAfterRequest) {
+            // TODO<RobinTF> Find a good way to track the time it takes to write
+            // this and store it into the corresponding metadata object.
             deltaTriples.writeToDisk();
           }
           updateSnapshot();
@@ -286,12 +288,12 @@ void DeltaTriples::writeToDisk() const {
     return;
   }
   auto toRange = [](const TriplesToHandlesMap& map) {
-    return ad_utility::SizedJoinView{
-        map | ql::views::keys |
-        ql::views::transform(
-            [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
-              return triple.ids_;
-            })};
+    return map | ql::views::keys |
+           ql::views::transform(
+               [](const IdTriple<0>& triple) -> const std::array<Id, 4>& {
+                 return triple.ids_;
+               }) |
+           ql::views::join;
   };
   std::filesystem::path tempPath = filenameForPersisting_.value();
   tempPath += ".tmp";

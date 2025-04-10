@@ -702,8 +702,22 @@ auto checkLcase = testUnaryExpression<&makeLowercaseExpression>;
 TEST(SparqlExpression, uppercaseAndLowercase) {
   checkLcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("one"), lit("twö"), U, U});
+  checkLcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("one", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
+  checkUcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("ONE", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("ONE", "@en"), U, U});
 }
 
 // _____________________________________________________________________________________
@@ -1448,6 +1462,16 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
+
+  // Datatype or language tag
+  checkReplace(
+      IdOrLiteralOrIriVec{
+          lit("Eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("zwEi", "@en")},
+      std::tuple{IdOrLiteralOrIriVec{
+                     lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("zwei", "@en")},
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
 }
 
 // ______________________________________________________________________________

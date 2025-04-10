@@ -17,11 +17,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       const std::optional<std::variant<Iri, std::string>>& descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -135,35 +138,26 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
-// LCASE
-[[maybe_unused]] auto lowercaseImpl =
-    [](std::optional<ad_utility::triple_component::Literal> input)
-    -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    auto new_content =
-        ad_utility::utf8ToLower(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
-    return LiteralOrIri(std::move(input.value()));
-  }
-};
-using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
-// UCASE
-[[maybe_unused]] auto uppercaseImpl =
+// UCase and LCase
+template <auto toLowerOrToUpper>
+auto upperOrLowerCaseImpl =
     [](std::optional<ad_utility::triple_component::Literal> input)
     -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
-  } else {
-    auto new_content =
-        ad_utility::utf8ToUpper(asStringViewUnsafe(input.value().getContent()));
-    input.value().replaceContentWithSameLength(new_content);
-    return LiteralOrIri(std::move(input.value()));
   }
+  auto& literal = input.value();
+  auto newContent =
+      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+  literal.replaceContent(newContent);
+  return LiteralOrIri(std::move(literal));
 };
+auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
+auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
+
 using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
+using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -372,12 +366,13 @@ using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input, const std::shared_ptr<RE2>& pattern,
+    [](std::optional<ad_utility::triple_component::Literal> s,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  std::string in(asStringViewUnsafe(s.value().getContent()));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
@@ -385,12 +380,13 @@ using MergeRegexPatternAndFlagsExpression =
   }
   const auto& repl = replacement.value();
   RE2::GlobalReplace(&in, pat, repl);
-  return toLiteral(in);
+  s.value().replaceContent(in);
+  return LiteralOrIri(std::move(s.value()));
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {

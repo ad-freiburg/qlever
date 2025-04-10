@@ -2,11 +2,13 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG
 
 #include "parser/GraphPatternOperation.h"
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -72,14 +74,6 @@ const ParsedQuery& Subquery::get() const { return *_subquery; }
 // _____________________________________________________________________________
 void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
   ad_utility::appendVector(_triples, std::move(other._triples));
-}
-
-// ____________________________________________________________________________
-cppcoro::generator<const Variable> Bind::containedVariables() const {
-  for (const auto* ptr : _expression.containedVariables()) {
-    co_yield *ptr;
-  }
-  co_yield _target;
 }
 
 // ____________________________________________________________________________

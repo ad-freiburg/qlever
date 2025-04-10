@@ -19,7 +19,7 @@
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
+#include "util/ReadableNumberFacet.h"
 
 using std::string;
 
@@ -362,14 +362,12 @@ int main(int argc, char** argv) {
           "has to be true. For details see --help."));
     }
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      index.storeTextScoringParamsInConfiguration(
-          getTextScoringMetricFromString(scoringMetric), bScoringParam,
-          kScoringParam);
       index.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
-          addWordsFromLiterals);
+          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
+          {bScoringParam, kScoringParam});
     }
 
     if (!docsfile.empty()) {
