@@ -166,8 +166,8 @@ void IndexImpl::buildTextIndexFile(
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
-  TextVec vec{indexFilename + ".tmp", memoryLimitIndexBuilding() / 3,
-              allocator_};
+  TextVec vec{indexFilename + ".text-vec-sorter.tmp",
+              memoryLimitIndexBuilding() / 3, allocator_};
   processWordsForInvertedLists(wordsFile, addWordsFromLiterals, vec);
   createTextIndex(indexFilename, vec);
   openTextFileHandle();
