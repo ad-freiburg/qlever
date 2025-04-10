@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Type traits for template metaprogramming
 
@@ -230,17 +232,16 @@ using TupleCat =
 /// inherit from std::variant, or treat a parameter that is a std::variant as an
 /// "ordinary" parameter to the `Function`, you cannot use this function.
 inline auto visitWithVariantsAndParameters =
-    []<typename Function, typename... ParametersOrVariants>(
-        Function&& f, ParametersOrVariants&&... parametersOrVariants) {
-      auto liftToVariant = []<typename T>(T&& t) {
+    [](auto&& f, auto&&... parametersOrVariants) {
+      auto liftToVariant = [](auto&& t) {
+        using T = decltype(t);
         if constexpr (isVariant<std::decay_t<T>>) {
           return AD_FWD(t);
         } else {
           return std::variant<std::decay_t<T>>{AD_FWD(t)};
         }
       };
-      return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(
-                               parametersOrVariants))...);
+      return std::visit(f, liftToVariant(AD_FWD(parametersOrVariants))...);
     };
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
@@ -249,10 +250,9 @@ inline auto visitWithVariantsAndParameters =
 ///       2. The order in which the function is called is unspecified.
 template <typename Function, typename Tuple>
 auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
-  auto transformer =
-      [f = std::forward<Function>(f)]<typename... Args>(Args&&... args) {
-        return std::tuple{f(std::forward<Args>(args))...};
-      };
+  auto transformer = [f = std::forward<Function>(f)](auto&&... args) {
+    return std::tuple{f(AD_FWD(args))...};
+  };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
 
