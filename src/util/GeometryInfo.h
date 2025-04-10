@@ -16,7 +16,7 @@ struct GeometryInfo {
   // TODO<ullingerc> Implement actual precomputation, f.ex.
   // WKTType type_;
   // std::pair<uint64_t, uint64_t> boundingBox_;
-  // uint64_t centroid_;
+  uint64_t centroid_;
   // double metricLength_;
   // double metricArea_;
   // uint64_t libspatialjoinOffset_;

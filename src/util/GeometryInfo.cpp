@@ -9,6 +9,7 @@
 
 #include <cstdint>
 
+#include "parser/GeoPoint.h"
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/geo/Point.h"
@@ -64,7 +65,7 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
   }
 
   auto x = std::visit([]<typename T>(T& val) { return centroid(val); }, parsed);
-  std::cout << "Centroid:" << x.getX() << " " << x.getY() << std::endl;
+  auto centroid = GeoPoint(x.getY(), x.getX()).toBitRepresentation();
 
-  return GeometryInfo{type};
+  return GeometryInfo{type, centroid};
 }
