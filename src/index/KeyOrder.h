@@ -13,9 +13,10 @@
 #include "util/Exception.h"
 
 namespace qlever {
-// A strong type for a permutation of the integers `0, 1, 2, 3` that is used to
-// determine a permutation of triples (0 = S, 1 = P, 2 = O, 3 = G), so
-// `1 0 2 3` represents the `PSOG` permutation.
+
+// A strong type for a permutation of the integers `0, 1, 2, 3`. This is used
+// to determine the permutation of a quad (0 = S, 1 = P, 2 = O, 3 = G). For
+// example, `1, 0, 2, 3` represents the permutation `PSOG`.
 class KeyOrder {
  public:
   using T = uint8_t;
@@ -27,7 +28,7 @@ class KeyOrder {
 
  public:
   // Construct from four numbers. If `(a b c d)` is not a permutation of the
-  // numbers `[0...4]`, then an `AD_CONTRACT_CHECK` will fail.
+  // numbers `0, 1, 2, 3`, then an `AD_CONTRACT_CHECK` will fail.
   KeyOrder(T a, T b, T c, T d) : keys_{a, b, c, d} { validate(); }
 
   // Get access to the keys.
@@ -36,7 +37,8 @@ class KeyOrder {
   // Apply the permutation specified by this `KeyOrder` to the `input`.
   // The elements of the input are copied into the result.
   template <typename T>
-  std::array<T, NumKeys> permute(const std::array<T, NumKeys>& input) const {
+  std::array<T, NumKeys> permuteTuple(
+      const std::array<T, NumKeys>& input) const {
     return permuteImpl(input, std::make_index_sequence<NumKeys>());
   }
 
@@ -46,7 +48,7 @@ class KeyOrder {
   // for permutations where the graph is the last variable. It will be removed
   // in the future when we have more proper support for named graphs.
   template <typename T>
-  std::array<T, 3> permuteSPOOnly(const std::array<T, 3>& input) const {
+  std::array<T, 3> permuteTriple(const std::array<T, 3>& input) const {
     AD_CONTRACT_CHECK(keys_[3] == 3);
     return permuteImpl(input, std::make_index_sequence<3>());
   }

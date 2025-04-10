@@ -1,8 +1,8 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_GLOBAL_IDTRIPLE_H
 #define QLEVER_SRC_GLOBAL_IDTRIPLE_H
@@ -18,10 +18,14 @@
 template <size_t N = 0>
 struct IdTriple {
   // A triple has four components: subject, predicate, object, and graph.
+  //
+  // NOTE: This used to be `NumCols = 3` and at that time the `triple` was an
+  // appropriate name. Now it should rather be called `quad`.
   static constexpr size_t NumCols = 4;
 
-  // For the case of no payload we use an empty struct which is stored at the
-  // end of a tuple. That way it will consume no additional space in the struct.
+  // For a triple without payload, we use an empty struct as payload, which
+  // does not consume any additional space. That way, we can always iterate
+  // over the payload, even if it is empty.
   static constexpr size_t PayloadSize = N;
   using Payload = std::conditional_t<(N > 0), std::array<Id, N>,
                                      ql::ranges::empty_view<Id>>;
@@ -74,7 +78,7 @@ struct IdTriple {
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
   IdTriple<N> permute(const qlever::KeyOrder& keyOrder) const {
-    return IdTriple{keyOrder.permute(ids()), payload()};
+    return IdTriple{keyOrder.permuteTuple(ids()), payload()};
   }
 
   CompressedBlockMetadata::PermutedTriple toPermutedTriple() const

@@ -1,10 +1,7 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Copyright 2014 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "./IndexImpl.h"
 
@@ -1571,15 +1568,15 @@ vector<float> IndexImpl::getMultiplicities(
   return {1.0f, 1.0f};
 }
 
-// ___________________________________________________________________
+// _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array m{numTriples / numDistinctSubjects().normal,
-               numTriples / numDistinctPredicates().normal,
-               numTriples / numDistinctObjects().normal};
-  auto permuted = p.keyOrder().permuteSPOOnly(m);
+  std::array multiplicities{numTriples / numDistinctSubjects().normal,
+                            numTriples / numDistinctPredicates().normal,
+                            numTriples / numDistinctObjects().normal};
+  auto permuted = p.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }
 

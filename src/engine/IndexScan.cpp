@@ -297,9 +297,9 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
   std::array<const TripleComponent* const, 3> triple{&subject_, &predicate_,
                                                      &object_};
-  // TODO<joka921> This place has to be changed once we have a graph
-  // permutation.
-  return Permutation::toKeyOrder(permutation_).permuteSPOOnly(triple);
+  // TODO<joka921> This place has to be changed once we have a permutation
+  // that is primarily sorted by G (the graph id).
+  return Permutation::toKeyOrder(permutation_).permuteTriple(triple);
 }
 
 // _____________________________________________________________________________

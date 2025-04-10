@@ -21,13 +21,13 @@ TEST(KeyOrder, Constructor) {
 TEST(KeyOrder, Permute) {
   KeyOrder keyOrder{2, 3, 1, 0};
   std::array a{0, 1, 2, 3};
-  EXPECT_THAT(keyOrder.permute(a), ElementsAre(2, 3, 1, 0));
+  EXPECT_THAT(keyOrder.permuteTuple(a), ElementsAre(2, 3, 1, 0));
 
   std::array b{0, 1, 2};
   // Not supported, as the permutation doesn't have the graph in the last
   // column.
-  EXPECT_ANY_THROW(keyOrder.permuteSPOOnly(b));
+  EXPECT_ANY_THROW(keyOrder.permuteTriple(b));
 
   keyOrder = KeyOrder{2, 0, 1, 3};
-  EXPECT_THAT(keyOrder.permuteSPOOnly(b), ElementsAre(2, 0, 1));
+  EXPECT_THAT(keyOrder.permuteTriple(b), ElementsAre(2, 0, 1));
 }
