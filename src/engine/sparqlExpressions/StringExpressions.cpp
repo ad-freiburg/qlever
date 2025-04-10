@@ -381,18 +381,7 @@ template <bool isStrAfter>
   if (!optPattern.has_value() || !literal.has_value()) {
     return Id::makeUndefined();
   }
-  //  If the pattern has a language tag and the literal does not have the same
-  //  language tag, then throw an error.
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
-  if ((optPattern.value().hasLanguageTag() &&
-       !literal.value().hasLanguageTag()) ||
-      (optPattern.value().hasLanguageTag() &&
-       literal.value().hasLanguageTag() &&
-       literal.value().getLanguageTag() !=
-           optPattern.value().getLanguageTag())) {
-    AD_THROW(
-        "The language tags of the literal and the pattern are incompatible.");
-  }
   //  Required by the SPARQL standard.
   if (pattern.empty()) {
     if (isStrAfter) {
