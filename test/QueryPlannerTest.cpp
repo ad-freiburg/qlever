@@ -753,13 +753,12 @@ TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using ad_utility::triple_component::Iri;
 
-  TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
+  TransitivePathSide left{std::nullopt, 0, Iri::fromIriref("<s>"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
-      "SELECT ?y WHERE {"
-      "<s> <p>+ ?y }",
+      "SELECT ?y WHERE { <s> <p>+ ?y }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                         scan(internalVar(0), "<p>", internalVar(1))),
       qec);
@@ -769,13 +768,12 @@ TEST(QueryPlanner, TransitivePathRightId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using ad_utility::triple_component::Iri;
 
   TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 0, getId("<o>"), 1};
+  TransitivePathSide right{std::nullopt, 0, Iri::fromIriref("<o>"), 1};
   h::expect(
-      "SELECT ?y WHERE {"
-      "?x <p>+ <o> }",
+      "SELECT ?y WHERE { ?x <p>+ <o> }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                         scan(internalVar(0), "<p>", internalVar(1))),
       qec);
@@ -4026,21 +4024,21 @@ TEST(QueryPlanner, negatedPaths) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, transitivePathWithoutVariables) {
-  TransitivePathSide left{std::nullopt, 1, Id::makeFromInt(1), 0};
-  TransitivePathSide right{std::nullopt, 0, Id::makeFromInt(1), 1};
+  TransitivePathSide left{std::nullopt, 1, 1, 0};
+  TransitivePathSide right{std::nullopt, 0, 1, 1};
   h::expect(
-      "SELECT * { 1 <a>* 1 }",
+      "SELECT * { 1 <a>+ 1 }",
       h::TransitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
+          left, right, 1, std::numeric_limits<size_t>::max(),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
   h::expect(
-      "SELECT * { 1 <a>* 1 . 1 <a> 1 }",
+      "SELECT * { 1 <a>+ 1 . 1 <a> 1 }",
       h::CartesianProductJoin(
           h::IndexScan(1, TripleComponent::Iri::fromIriref("<a>"), 1),
           h::TransitivePath(
-              left, right, 0, std::numeric_limits<size_t>::max(),
+              left, right, 1, std::numeric_limits<size_t>::max(),
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1"))));
 }

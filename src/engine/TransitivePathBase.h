@@ -20,12 +20,12 @@ struct TransitivePathSide {
   std::optional<TreeAndCol> treeAndCol_;
   // Column of the sub table where the Ids of this side are located
   size_t subCol_;
-  std::variant<Id, Variable> value_;
+  TripleComponent value_;
   // The column in the output table where this side Ids are written to.
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value_); }
+  bool isVariable() const { return value_.isVariable(); }
 
   bool isBoundVariable() const { return treeAndCol_.has_value(); }
 
@@ -34,7 +34,7 @@ struct TransitivePathSide {
   std::string getCacheKey() const {
     std::ostringstream os;
     if (!isVariable()) {
-      os << "Id: " << std::get<Id>(value_);
+      os << "Value " << value_;
     }
 
     os << ", subColumn: " << subCol_ << "to " << outputCol_;
@@ -123,7 +123,9 @@ class TransitivePathBase : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
-  bool emptyPathBound_ = false;
+  // Indicate that the variable is only bound because the path is empty, not
+  // because `bindLeftOrRightSide` was called.
+  bool boundVariableIsForEmptyPath_ = false;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
@@ -247,6 +249,10 @@ class TransitivePathBase : public Operation {
                                           size_t startSideCol,
                                           size_t targetSideCol, bool yieldOnce,
                                           size_t skipCol = 0) const;
+
+  static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
   // used as a starting point for evaluating the empty path.

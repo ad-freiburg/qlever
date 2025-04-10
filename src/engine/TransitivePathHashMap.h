@@ -41,6 +41,17 @@ struct HashMapWrapper {
     }
     return iterator->second;
   }
+
+  // Retreive pointer to equal id from `map_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto iterator = map_.find(node);
+    if (iterator == map_.end()) {
+      return nullptr;
+    }
+    return &iterator->first;
+  }
 };
 
 /**
