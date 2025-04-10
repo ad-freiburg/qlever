@@ -117,7 +117,6 @@ void IndexImpl::logEntityNotFound(const string& word,
 
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(
-    const std::string& temporaryStorageFile,
     const std::optional<std::pair<string, string>>& wordsAndDocsFile,
     bool addWordsFromLiterals) {
   AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
@@ -162,7 +161,8 @@ void IndexImpl::buildTextIndexFile(
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
-  TextVec vec{temporaryStorageFile, memoryLimitIndexBuilding() / 3, allocator_};
+  TextVec vec{indexFilename + ".tmp", memoryLimitIndexBuilding() / 3,
+              allocator_};
   processWordsForInvertedLists(wordsFile, addWordsFromLiterals, vec);
   LOG(DEBUG) << "Sorting text index, #elements = " << vec.size() << std::endl;
   LOG(DEBUG) << "Sort done" << std::endl;

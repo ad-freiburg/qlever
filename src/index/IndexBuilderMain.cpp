@@ -25,10 +25,6 @@ using std::string;
 
 namespace po = boost::program_options;
 
-string getTextIndexFileName(const string& location, const string& tail) {
-  return absl::StrCat(location, tail, ".text-index-disk");
-}
-
 // Check that `values` has exactly one or `numFiles` many entries. An empty
 // vector will also be accepted. If this condition is violated, throw an
 // exception. This is used to validate the parameters for file types and default
@@ -275,7 +271,6 @@ int main(int argc, char** argv) {
     size_t posOfLastSlash = baseName.rfind('/');
     string location = baseName.substr(0, posOfLastSlash + 1);
     string tail = baseName.substr(posOfLastSlash + 1);
-    string textIndexFileName = getTextIndexFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
 
     index.setKbName(kbIndexName);
@@ -338,14 +333,11 @@ int main(int argc, char** argv) {
       index.storeTextScoringParamsInConfiguration(
           getTextScoringMetricFromString(scoringMetric), bScoringParam,
           kScoringParam);
-      index.buildTextIndexFile(textIndexFileName,
-                               wordsAndDocsFileSpecified
-                                   ? std::optional{std::pair{
-                                         std::move(wordsfile),
-                                         docsfile,
-                                     }}
-                                   : std::nullopt,
-                               addWordsFromLiterals);
+      index.buildTextIndexFile(
+          wordsAndDocsFileSpecified
+              ? std::optional{std::pair{wordsfile, docsfile}}
+              : std::nullopt,
+          addWordsFromLiterals);
     }
 
     if (!docsfile.empty()) {

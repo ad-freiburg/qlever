@@ -263,7 +263,6 @@ class IndexImpl {
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
   void buildTextIndexFile(
-      const std::string& temporaryStorageFile,
       const std::optional<std::pair<string, string>>& wordsAndDocsFile,
       bool addWordsFromLiterals);
 
