@@ -69,10 +69,7 @@ class GeoVocabulary {
     return literals_;
   }
 
-  void open(const std::string& filename) {
-    literals_.open(filename);
-    geoInfoFile_.open((filename + std::string(geoInfoSuffix)).c_str(), "r");
-  };
+  void open(const std::string& filename);
 
   class WordWriter {
    private:
@@ -105,10 +102,7 @@ class GeoVocabulary {
 
   void build(const std::vector<std::string>& v, const std::string& filename);
 
-  void close() {
-    literals_.close();
-    geoInfoFile_.close();
-  }
+  void close();
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H

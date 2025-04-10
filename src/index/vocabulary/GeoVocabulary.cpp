@@ -11,6 +11,22 @@
 
 // ____________________________________________________________________________
 template <typename V>
+void GeoVocabulary<V>::open(const std::string& filename) {
+  literals_.open(filename);
+
+  auto geoInfoFilename = filename + std::string(geoInfoSuffix);
+  geoInfoFile_.open(geoInfoFilename.c_str(), "r");
+};
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::close() {
+  literals_.close();
+  geoInfoFile_.close();
+}
+
+// ____________________________________________________________________________
+template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
     : underlyingWordWriter_{vocabulary.makeDiskWriter(filename)},
@@ -23,6 +39,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   uint64_t index;
 
   // Store the WKT literal
+  // TODO<ullingerc> Remove this "if" after merge of #1740
   if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
     index = underlyingWordWriter_(word, isExternal);
   } else {
@@ -70,8 +87,14 @@ std::string& GeoVocabulary<V>::WordWriter::readableName() {
 template <typename V>
 void GeoVocabulary<V>::build(const std::vector<std::string>& v,
                              const std::string& filename) {
+  // Build text literal vocabulary
   literals_.build(v, filename);
-  // TODO<ullingerc> Write geoInfoFile
+
+  // Build and precompute geometry info
+  for (const auto& word : v) {
+    auto info = GeometryInfo::fromWktLiteral(word);
+    geoInfoFile_.write(&info, geoInfoOffset);
+  }
 }
 
 // ____________________________________________________________________________
