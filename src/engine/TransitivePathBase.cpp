@@ -398,9 +398,13 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   auto rhs = rhs_;
   if (isLeft) {
     lhs.treeAndCol_ = {leftOrRightOp, inputCol};
+    // Remove placeholder tree if binding actual tree.
+    if (!rhs.isVariable()) {
+      rhs.treeAndCol_ = std::nullopt;
+    }
   } else {
     // Remove placeholder tree if binding actual tree.
-    if (boundVariableIsForEmptyPath_) {
+    if (boundVariableIsForEmptyPath_ || !lhs.isVariable()) {
       lhs.treeAndCol_ = std::nullopt;
     }
     rhs.treeAndCol_ = {leftOrRightOp, inputCol};

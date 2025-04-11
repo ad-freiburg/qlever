@@ -4042,3 +4042,125 @@ TEST(QueryPlanner, transitivePathWithoutVariables) {
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1"))));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithLiterals) {
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { 1 <a>* ?var }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Distinct(
+                      {0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z"),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x"))),
+                  h::Sort(h::ValuesClause(
+                      "VALUES (?internal_property_path_variable_x) { (1) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  TransitivePathSide left2{std::nullopt, 1, 1, 0};
+  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  h::expect(
+      "SELECT * { 1 <a>* 1 }",
+      h::TransitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Distinct(
+                      {0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z"),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x"))),
+                  h::Sort(h::ValuesClause(
+                      "VALUES (?internal_property_path_variable_x) { (1) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+  h::expect(
+      R"(PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * { 1 <a>* "1"^^xsd:integer })",
+      h::TransitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Distinct(
+                      {0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z"),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x"))),
+                  h::Sort(h::ValuesClause(
+                      "VALUES (?internal_property_path_variable_x) { (1) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithMismatchingLiterals) {
+  TransitivePathSide left{std::nullopt, 1, 1, 0};
+  TransitivePathSide right{std::nullopt, 0, 2, 1};
+  // If the literals mismatch, we don't need to evaluate the empty path!
+  h::expect(
+      "SELECT * { 1 <a>* 2 }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithLiteralsBound) {
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { 1 <a>* ?var . VALUES ?var { 2 } }",
+      h::Join(
+          h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
+          h::Sort(h::TransitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::Join(
+                  h::Distinct(
+                      {0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z"),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x"))),
+                  h::Sort(h::ValuesClause(
+                      "VALUES (?internal_property_path_variable_x) { (1) }"))),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1")))));
+
+  TransitivePathSide left2{std::nullopt, 1, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  h::expect(
+      "SELECT * { ?var <a>* 1 . VALUES ?var { 2 } }",
+      h::Join(
+          h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
+          h::Sort(h::TransitivePath(
+              left2, right2, 0, std::numeric_limits<size_t>::max(),
+              h::Join(
+                  h::Distinct(
+                      {0}, h::Union(h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_x",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_z"),
+                                    h::IndexScanFromStrings(
+                                        "?internal_property_path_variable_z",
+                                        "?internal_property_path_variable_y",
+                                        "?internal_property_path_variable_x"))),
+                  h::Sort(h::ValuesClause(
+                      "VALUES (?internal_property_path_variable_x) { (1) }"))),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1")))));
+}
