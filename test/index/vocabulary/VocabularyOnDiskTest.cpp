@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
-#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Forward.h"
 
 namespace {

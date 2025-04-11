@@ -192,6 +192,8 @@ Index makeTestIndex(const std::string& indexBasename,
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
     qlever::InputFileSpecification spec{inputFilename, indexType, std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(VocabularyType::random());
     index.createFromFiles({spec});
     if (createTextIndex) {
       // First test the case of invalid b and k parameters for BM25, it should

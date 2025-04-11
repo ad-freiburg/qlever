@@ -54,6 +54,10 @@ class File {
     open(filename, mode);
   }
 
+  // Files are move-only types.
+  File(const File&) = delete;
+  File& operator=(const File&) = delete;
+
   File& operator=(File&& rhs) noexcept {
     if (isOpen()) {
       close();
@@ -65,7 +69,7 @@ class File {
     return *this;
   }
 
-  File(File&& rhs) : name_{std::move(rhs.name_)}, file_{rhs.file_} {
+  File(File&& rhs) noexcept : name_{std::move(rhs.name_)}, file_{rhs.file_} {
     rhs.file_ = nullptr;
   }
 
