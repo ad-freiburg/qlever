@@ -347,7 +347,7 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
   if (idx.get() & geoVocabMarker) {
     // The requested word is stored in the geometry vocabulary
     uint64_t unmarkedIdx = idx.get() & geoVocabIndexMask;
-    AD_CONTRACT_CHECK(idx.get() < geoVocabulary_.size());
+    AD_CONTRACT_CHECK(unmarkedIdx < geoVocabulary_.size());
     return geoVocabulary_[unmarkedIdx];
   } else {
     // The requested word is stored in the vocabulary for normal words
