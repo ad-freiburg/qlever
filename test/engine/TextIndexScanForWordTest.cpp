@@ -87,6 +87,10 @@ std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};
 
+// Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
+// text index that contains the literals from the `kg` as well as the
+// `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
+// scores can be specified.
 auto getQecWithTextIndex(
     std::optional<TextScoringMetric> textScoring = std::nullopt) {
   using namespace ad_utility::testing;

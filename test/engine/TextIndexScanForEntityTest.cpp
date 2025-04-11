@@ -23,6 +23,8 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
+// Return a `QueryExecutionContext` from the given `kg`(see above) that has a
+// text index for the literals in the `kg`.
 auto qecWithTextIndex = []() {
   TestIndexConfig config{kg};
   config.createTextIndex = true;
@@ -30,9 +32,7 @@ auto qecWithTextIndex = []() {
 };
 
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  TestIndexConfig config{kg};
-  config.createTextIndex = true;
-  auto qec = getQec(std::move(config));
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
