@@ -14,12 +14,12 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
+using namespace std::string_literals;
 
 using ::testing::UnorderedElementsAre;
 

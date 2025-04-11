@@ -23,6 +23,8 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -70,18 +72,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  auto makeRdfParserImpl =
-      [this, &files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
-    using TokenizerT =
-        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    return std::make_unique<RdfMultifileParser<TokenizerT>>(
-        files, this->parserBufferSize());
-  };
-
-  // `callFixedSize` litfts runtime integers to compile time integers. We use it
-  // here to create the correct combinations of template arguments.
-  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
-                                   makeRdfParserImpl);
+  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
