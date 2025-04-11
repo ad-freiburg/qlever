@@ -28,9 +28,7 @@
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
-#include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
 using std::array;
@@ -438,7 +436,7 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 // _____________________________________________________________________________
-IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
+IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
@@ -571,7 +569,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         memoryLimitIndexBuilding());
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
-  IndexBuilderDataAsStxxlVector res;
+  IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
@@ -1411,7 +1409,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                             }),
                 vec.end());
     }
-    // The writing to the STXXL vector has to be done in order, to
+    // The writing to the external vector has to be done in order, to
     // make the update from local to global ids work.
 
     auto writeTriplesFuture = std::async(

@@ -14,7 +14,7 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/StxxlSortFunctors.h"
+#include "index/ExternalSortFunctors.h"
 #include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
 #include "util/HashMap.h"
@@ -66,8 +66,8 @@ struct PatternStatistics {
 /// but is also performed implicitly by the destructor.
 /// The mapping from subjects to pattern indices (has-pattern) and the full
 /// mapping from subjects to predicates (has-predicate) is not written to disk,
-/// but stored in a STXXL sorter which then has to be used to build an index for
-/// these predicates.
+/// but stored in an external sorter which then has to be used to build an index
+/// for these predicates.
 class PatternCreator {
  public:
   using PSOSorter =

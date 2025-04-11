@@ -20,7 +20,6 @@ using namespace ad_utility::memory_literals;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
-constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
