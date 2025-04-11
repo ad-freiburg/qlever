@@ -24,8 +24,8 @@ std::unique_ptr<PrefilterExpression> make(Args&&... args) {
 
 //______________________________________________________________________________
 // Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
-static Id getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
-                               size_t columnIndex) {
+static Id getIdFromColumnIndex(
+    const CompressedBlockMetadata::PermutedTriple& triple, size_t columnIndex) {
   switch (columnIndex) {
     case 0:
       return triple.col0Id_;
@@ -44,8 +44,9 @@ static Id getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
 // position (column index) defined by `ignoreIndex`. The ignored positions are
 // filled with Ids `Id::min()`. `Id::min()` is guaranteed
 // to be smaller than Ids of all other types.
-static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
-                            size_t ignoreIndex = 3) {
+static auto getMaskedTriple(
+    const CompressedBlockMetadata::PermutedTriple& triple,
+    size_t ignoreIndex = 3) {
   const Id& undefined = Id::min();
   switch (ignoreIndex) {
     case 3:
@@ -64,7 +65,7 @@ static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
 
 //______________________________________________________________________________
 // Check for constant values in all columns `< evaluationColumn`
-static bool checkBlockIsInconsistent(const BlockMetadata& block,
+static bool checkBlockIsInconsistent(const CompressedBlockMetadata& block,
                                      size_t evaluationColumn) {
   return getMaskedTriple(block.firstTriple_, evaluationColumn) !=
          getMaskedTriple(block.lastTriple_, evaluationColumn);
@@ -72,12 +73,12 @@ static bool checkBlockIsInconsistent(const BlockMetadata& block,
 
 //______________________________________________________________________________
 // Check for the following conditions.
-// (1) All `BlockMetadata` values in `input` must be unique.
-// (2) `input` must contain those `BlockMetadata` values in sorted order.
-// (3) Columns with `column index < evaluationColumn` must contain equal
+// (1) All `CompressedBlockMetadata` values in `input` must be unique.
+// (2) `input` must contain those `CompressedBlockMetadata` values in sorted
+// order. (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
-static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
-                                           size_t evaluationColumn) {
+static void checkRequirementsBlockMetadata(
+    std::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
   const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
   };
@@ -87,7 +88,8 @@ static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
   }
   // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
   // satisfied.
-  const auto checkOrder = [](const BlockMetadata& b1, const BlockMetadata& b2) {
+  const auto checkOrder = [](const CompressedBlockMetadata& b1,
+                             const CompressedBlockMetadata& b2) {
     if (b1.blockIndex_ < b2.blockIndex_) {
       AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) <=
                            getMaskedTriple(b2.lastTriple_));
@@ -109,13 +111,14 @@ static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
   }
   // Helper to check for column consistency. Returns `true` if the columns for
   // `b1` and `b2` up to the evaluation are inconsistent.
-  const auto checkColumnConsistency =
-      [evaluationColumn](const BlockMetadata& b1, const BlockMetadata& b2) {
-        return checkBlockIsInconsistent(b1, evaluationColumn) ||
-               getMaskedTriple(b1.lastTriple_, evaluationColumn) !=
-                   getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
-               checkBlockIsInconsistent(b2, evaluationColumn);
-      };
+  const auto checkColumnConsistency = [evaluationColumn](
+                                          const CompressedBlockMetadata& b1,
+                                          const CompressedBlockMetadata& b2) {
+    return checkBlockIsInconsistent(b1, evaluationColumn) ||
+           getMaskedTriple(b1.lastTriple_, evaluationColumn) !=
+               getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
+           checkBlockIsInconsistent(b2, evaluationColumn);
+  };
   if (auto it = ql::ranges::adjacent_find(input, checkColumnConsistency);
       it != input.end()) {
     throwRuntimeError(
@@ -125,9 +128,9 @@ static void checkRequirementsBlockMetadata(std::span<const BlockMetadata> input,
 };
 
 //______________________________________________________________________________
-static std::vector<BlockMetadata> getRelevantBlocks(
-    const BlockSubranges& relevantBlockRanges) {
-  std::vector<BlockMetadata> relevantBlocks;
+static std::vector<CompressedBlockMetadata> getRelevantBlocks(
+    const BlockMetadataRanges& relevantBlockRanges) {
+  std::vector<CompressedBlockMetadata> relevantBlocks;
   relevantBlocks.reserve(std::transform_reduce(relevantBlockRanges.begin(),
                                                relevantBlockRanges.end(), 0ULL,
                                                std::plus{}, ql::ranges::size));
@@ -139,10 +142,10 @@ static std::vector<BlockMetadata> getRelevantBlocks(
 namespace detail {
 
 //______________________________________________________________________________
-// Merge `BlockSubrange blockRange` with the previous (relevant)
-// `BlockSubrange`s.
-static void mergeBlockRangeWithRanges(BlockSubranges& blockRanges,
-                                      const BlockSubrange& blockRange) {
+// Merge `BlockMetadataRange blockRange` with the previous (relevant)
+// `BlockMetadataRange`s.
+static void mergeBlockRangeWithRanges(BlockMetadataRanges& blockRanges,
+                                      const BlockMetadataRange& blockRange) {
   if (blockRange.empty()) {
     return;
   }
@@ -151,13 +154,13 @@ static void mergeBlockRangeWithRanges(BlockSubranges& blockRanges,
     return;
   }
   auto blockRangeBegin = blockRange.begin();
-  BlockSubrange& lastBlockRange = blockRanges.back();
+  BlockMetadataRange& lastBlockRange = blockRanges.back();
   AD_CORRECTNESS_CHECK(blockRangeBegin >= lastBlockRange.begin());
   if (lastBlockRange.end() >= blockRangeBegin) {
     // The blockRange intersects with previous blockRange(s).
     lastBlockRange =
-        BlockSubrange{lastBlockRange.begin(),
-                      std::max(lastBlockRange.end(), blockRange.end())};
+        BlockMetadataRange{lastBlockRange.begin(),
+                           std::max(lastBlockRange.end(), blockRange.end())};
   } else {
     // The new blockRange doesn't intersect with previous blockRange(s).
     blockRanges.push_back(blockRange);
@@ -167,27 +170,28 @@ static void mergeBlockRangeWithRanges(BlockSubranges& blockRanges,
 namespace mapping {
 //______________________________________________________________________________
 // Map the given `ValueIdIt beginIdIt` and `ValueIdIt endIdIt` to their
-// corresponding `BlockIdIt` values and return them as `BlockSubrange`.
-static BlockSubrange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
-                                                  const ValueIdIt& beginIdIt,
-                                                  const ValueIdIt& endIdIt,
-                                                  BlockSpan blockRange) {
+// corresponding `BlockIdIt` values and return them as `BlockMetadataRange`.
+static BlockMetadataRange mapValueIdItPairToBlockRange(
+    const ValueIdIt& idRangeBegin, const ValueIdIt& beginIdIt,
+    const ValueIdIt& endIdIt, BlockMetadataSpan blockRange) {
   AD_CORRECTNESS_CHECK(beginIdIt <= endIdIt);
   auto blockRangeBegin = blockRange.begin();
-  // Each `BlockMetadata` value contains two bounding `ValueId`s, one for
-  // `firstTriple_` and `lastTriple_` respectively.
-  // `ValueIdIt idRangeBegin` is the first valid iterator on our flattened
-  // `std::span<const BlockMetadata> blockRange` with respect to the contained
+  // Each `CompressedBlockMetadata` value contains two bounding `ValueId`s, one
+  // for `firstTriple_` and `lastTriple_` respectively. `ValueIdIt idRangeBegin`
+  // is the first valid iterator on our flattened `std::span<const
+  // CompressedBlockMetadata> blockRange` with respect to the contained
   // `ValueId`s.
   // `blockRange.begin()` represents the first valid iterator on our original
-  // `std::span<const BlockMetadata> blockRange`.
+  // `std::span<const CompressedBlockMetadata> blockRange`.
   //
   //  EXAMPLE
-  // `BlockMetadata` view on `std::span<const BlockMetadata> blockRange`:
+  // `CompressedBlockMetadata` view on `std::span<const CompressedBlockMetadata>
+  // blockRange`:
   // `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150,
-  // 1158]}`. Range for `BlockIt` values.
+  // 1158]}`. Range for `BlockMetadataIt` values.
   //
-  // `ValueId` view on (flat) `std::span<const BlockMetadata> blockRange`:
+  // `ValueId` view on (flat) `std::span<const CompressedBlockMetadata>
+  // blockRange`:
   //`{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`.
   // Range for `ValueIdIt` values.
   //
@@ -204,14 +208,14 @@ static BlockSubrange mapValueIdItPairToBlockRange(const ValueIdIt& idRangeBegin,
 
 //______________________________________________________________________________
 // Map the complement on the given `ValueIdItPairs`s to their corresponding
-// `BlockSubrange`s.
+// `BlockMetadataRange`s.
 // The actual mapping is implemented by `mapValueIdItPairToBlockRange`.
-BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
+BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdSubrange& idRange, BlockSpan blockRange) {
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   auto idRangeBegin = idRange.begin();
   // Vector containing the `BlockRange` mapped indices.
-  BlockSubranges blockRanges;
+  BlockMetadataRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   auto addRange =
       absl::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
@@ -230,17 +234,17 @@ BlockSubranges mapValueIdItRangesToBlockItRangesComplemented(
 }
 
 //______________________________________________________________________________
-// Map the given `ValueIdItPair`s to their corresponding `BlockSubrange`s.
+// Map the given `ValueIdItPair`s to their corresponding `BlockMetadataRange`s.
 // The actual mapping is implemented by `mapValueIdItPairToBlockRange`.
-BlockSubranges mapValueIdItRangesToBlockItRanges(
+BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
-    const ValueIdSubrange& idRange, BlockSpan blockRange) {
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   if (relevantIdRanges.empty()) {
     return {};
   }
   auto idRangeBegin = idRange.begin();
   // Vector containing the `BlockRange` mapped iterators.
-  BlockSubranges blockRanges;
+  BlockMetadataRanges blockRanges;
   blockRanges.reserve(relevantIdRanges.size());
   auto addRange =
       absl::bind_front(mergeBlockRangeWithRanges, std::ref(blockRanges));
@@ -261,32 +265,32 @@ namespace logicalOps {
 
 //______________________________________________________________________________
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
-// (||)`) of `BlockSubranges r1` and `BlockSubranges r2`.
+// (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
 // (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`
 // (`logical-and
-// (&&)`) of `BlockSubranges r1` and `BlockSubranges r2`.
+// (&&)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
 //
 // EXAMPLE UNION
 // Given input `r1` and `r2`
-// `BlockSubranges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
-// `BlockSubranges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// `BlockMetadataRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `BlockMetadataRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is `RelevantBlocksRanges result`: `[<2, 10>, <15, 23>]`
 //
 // EXAMPLE INTERSECTION
 // Given input `r1` and `r2`
-// `BlockSubranges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
-// `BlockSubranges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
+// `BlockMetadataRanges r1`: `[<2, 10>, <15, 16>, <20, 23>]`
+// `BlockMetadataRanges r2`: `[<4, 6>, <8, 9>, <15, 22>]`
 // The result is
 // `RelevantBlocksRanges result`: `[<4, 6>, <8, 9>, <15, 16>, <20, 22>]`
 template <bool GetUnion>
-BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
-                                          const BlockSubranges& r2) {
+BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
+                                               const BlockMetadataRanges& r2) {
   if constexpr (GetUnion) {
     if (r1.empty() && r2.empty()) return {};
   } else {
     if (r1.empty() || r2.empty()) return {};
   }
-  BlockSubranges mergedRanges;
+  BlockMetadataRanges mergedRanges;
   mergedRanges.reserve(r1.size() + r2.size());
   auto addRange =
       absl::bind_front(mergeBlockRangeWithRanges, std::ref(mergedRanges));
@@ -309,14 +313,14 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
       // Handle overlapping ranges.
       if constexpr (GetUnion) {
         // Add the union of r1 and r2.
-        addRange(BlockSubrange{std::min(idx1Begin, idx2Begin),
-                               std::max(idx1End, idx2End)});
+        addRange(BlockMetadataRange{std::min(idx1Begin, idx2Begin),
+                                    std::max(idx1End, idx2End)});
         idx1++;
         idx2++;
       } else {
         // Add the intersection of r1 and r2.
-        addRange(BlockSubrange{std::max(idx1Begin, idx2Begin),
-                               std::min(idx1End, idx2End)});
+        addRange(BlockMetadataRange{std::max(idx1Begin, idx2Begin),
+                                    std::min(idx1End, idx2End)});
         idx1End < idx2End ? idx1++ : idx2++;
       }
     }
@@ -333,10 +337,10 @@ BlockSubranges mergeRelevantBlockItRanges(const BlockSubranges& r1,
 }  // namespace detail
 
 //______________________________________________________________________________
-// This function retrieves the `BlockRange`s for `BlockMetadata` values that
-// contain bounding `ValueId`s with different underlying datatypes.
-static BlockSubranges getRangesMixedDatatypeBlocks(
-    const ValueIdSubrange& idRange, BlockSpan blockRange) {
+// This function retrieves the `BlockRange`s for `CompressedBlockMetadata`
+// values that contain bounding `ValueId`s with different underlying datatypes.
+static BlockMetadataRanges getRangesMixedDatatypeBlocks(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   if (idRange.empty()) {
     return {};
   }
@@ -416,14 +420,14 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // CUSTOM VALUE-ID ACCESS (STRUCT) OPERATOR
 //______________________________________________________________________________
 // Enables access to the i-th `ValueId` regarding our containerized
-// `std::span<const BlockMetadata> inputSpan`.
-// Each `BlockMetadata` value holds exactly two bound `ValueId`s (one in
-// `firstTriple_` and `lastTriple_` respectively) over the specified column
+// `std::span<const CompressedBlockMetadata> inputSpan`.
+// Each `CompressedBlockMetadata` value holds exactly two bound `ValueId`s (one
+// in `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.
 // Thus, the valid index range over `i` is `[0, 2 * inputSpan.size())`.
 ValueId AccessValueIdFromBlockMetadata::operator()(
-    BlockSpan randomAccessContainer, uint64_t i) const {
-  const BlockMetadata& block = randomAccessContainer[i / 2];
+    BlockMetadataSpan randomAccessContainer, uint64_t i) const {
+  const CompressedBlockMetadata& block = randomAccessContainer[i / 2];
   return i % 2 == 0
              ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
              : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);
@@ -431,14 +435,15 @@ ValueId AccessValueIdFromBlockMetadata::operator()(
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
-std::vector<BlockMetadata> PrefilterExpression::evaluate(
-    BlockSpan blockRange, size_t evaluationColumn) const {
+std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
+    BlockMetadataSpan blockRange, size_t evaluationColumn) const {
   if (blockRange.size() < 3) {
-    return std::vector<BlockMetadata>(blockRange.begin(), blockRange.end());
+    return std::vector<CompressedBlockMetadata>(blockRange.begin(),
+                                                blockRange.end());
   }
 
-  std::optional<BlockMetadata> firstBlock = std::nullopt;
-  std::optional<BlockMetadata> lastBlock = std::nullopt;
+  std::optional<CompressedBlockMetadata> firstBlock = std::nullopt;
+  std::optional<CompressedBlockMetadata> lastBlock = std::nullopt;
   if (checkBlockIsInconsistent(blockRange.front(), evaluationColumn)) {
     firstBlock = blockRange.front();
     blockRange = blockRange.subspan(1);
@@ -448,7 +453,7 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     blockRange = blockRange.subspan(0, blockRange.size() - 1);
   }
 
-  std::vector<BlockMetadata> result;
+  std::vector<CompressedBlockMetadata> result;
   if (!blockRange.empty()) {
     checkRequirementsBlockMetadata(blockRange, evaluationColumn);
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
@@ -508,9 +513,9 @@ RelationalExpression<Comparison>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-BlockSubranges
+BlockMetadataRanges
 RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange,
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     bool getComplementOverAllDatatypes) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
@@ -539,8 +544,8 @@ RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-BlockSubranges RelationalExpression<Comparison>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
+BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
   return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
 };
 
@@ -628,8 +633,8 @@ std::string IsDatatypeExpression<Datatype>::asString(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-static BlockSubranges evaluateIsIriOrIsLiteralImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange,
+static BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     const bool isNegated) {
   using enum IsDatatype;
   static_assert(Datatype == IRI || Datatype == LITERAL);
@@ -651,8 +656,8 @@ static BlockSubranges evaluateIsIriOrIsLiteralImpl(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-static BlockSubranges evaluateIsBlankOrIsNumericImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange,
+static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
     const bool isNegated) {
   using enum IsDatatype;
   static_assert(Datatype == BLANK || Datatype == NUMERIC);
@@ -700,8 +705,8 @@ static BlockSubranges evaluateIsBlankOrIsNumericImpl(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-BlockSubranges IsDatatypeExpression<Datatype>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
+BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
   using enum IsDatatype;
   if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
     return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
@@ -735,8 +740,8 @@ LogicalExpression<Operation>::logicalComplement() const {
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
-BlockSubranges LogicalExpression<Operation>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockSpan blockRange) const {
+BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
@@ -795,8 +800,8 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-BlockSubranges NotExpression::evaluateImpl(const ValueIdSubrange& idRange,
-                                           BlockSpan blockRange) const {
+BlockMetadataRanges NotExpression::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
   return child_->evaluateImpl(idRange, blockRange);
 };
 
