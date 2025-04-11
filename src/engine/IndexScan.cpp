@@ -210,7 +210,7 @@ Result::Generator IndexScan::chunkedIndexScan() const {
   if (!optBlockMetadata.has_value()) {
     co_return;
   }
-  auto blockMetadata = optBlockMetadata.value();
+  const auto& blockMetadata = optBlockMetadata.value();
   // Note: Given a `PrefilterIndexPair` is available, the corresponding
   // prefiltering will be applied in `getLazyScan`.
   for (IdTable& idTable :
@@ -401,8 +401,6 @@ std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
-  using CRR = CompressedRelationReader;
-
   // This function only works for single column joins. This means that the first
   // variable of both scans must be equal, but all other variables of the scans
   // (if present) must be different.
@@ -437,8 +435,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
     return {{}};
   }
-  auto [blocks1, blocks2] =
-      CRR::getBlocksForJoin(metaBlocks1.value(), metaBlocks2.value());
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
 
   std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
   result[0].details().numBlocksAll_ = metaBlocks1.value().sizeBlockMetadata_;
@@ -452,13 +450,13 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());
-  using CRR = CompressedRelationReader;
 
   auto metaBlocks = getMetadataForScan();
   if (!metaBlocks.has_value()) {
     return {};
   }
-  auto blocks = CRR::getBlocksForJoin(joinColumn, metaBlocks.value());
+  auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                           metaBlocks.value());
   auto result = getLazyScan(blocks);
   result.details().numBlocksAll_ = metaBlocks.value().sizeBlockMetadata_;
   return result;
