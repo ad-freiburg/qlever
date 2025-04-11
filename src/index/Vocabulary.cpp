@@ -1,8 +1,9 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "index/Vocabulary.h"
 
@@ -16,6 +17,7 @@
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
 #include "util/Exception.h"
+#include "util/GeometryInfo.h"
 #include "util/HashSet.h"
 #include "util/json.h"
 
@@ -345,13 +347,27 @@ auto Vocabulary<S, C, I>::operator[](IndexType idx) const
   if (idx.get() & geoVocabMarker) {
     // The requested word is stored in the geometry vocabulary
     uint64_t unmarkedIdx = idx.get() & geoVocabIndexMask;
+    AD_CONTRACT_CHECK(unmarkedIdx < geoVocabulary_.size());
     return geoVocabulary_[unmarkedIdx];
   } else {
     // The requested word is stored in the vocabulary for normal words
-    AD_CONTRACT_CHECK(idx.get() <= maxWordIndex);
+    AD_CONTRACT_CHECK(idx.get() < vocabulary_.size());
     return vocabulary_[idx.get()];
   }
 }
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+    IndexType idx) const {
+  // Check marker bit
+  if ((idx.get() & geoVocabMarker) == 0) {
+    return std::nullopt;
+  }
+  // Get geometry info by using the unmarked index
+  return geoVocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get() &
+                                                             geoVocabIndexMask);
+};
 
 // _____________________________________________________________________________
 template <class S, class C, typename I>

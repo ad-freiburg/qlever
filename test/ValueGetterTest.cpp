@@ -178,3 +178,23 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
                                                  std::nullopt, std::nullopt,
                                                  literalValueGetter);
 }
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdLocalVocab) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoVocab) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithLiteralOrIri) {
+  // TODO<ullingerc> test
+  ;
+}

@@ -102,4 +102,11 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
   // Also return "parsed" for further use (eg. saving to special vocab)?
 }
 
+// ____________________________________________________________________________
+GeometryInfo GeometryInfo::fromGeoPoint(
+    [[maybe_unused]] const GeoPoint& point) {
+  // TODO<ullingerc> Computation of GeometryInfo is a separate PR
+  return GeometryInfo{1};
+}
+
 }  // namespace ad_utility
