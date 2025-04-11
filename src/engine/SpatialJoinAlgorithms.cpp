@@ -44,9 +44,8 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
   for (size_t row = 0; row < idTable->size(); row++) {
-    if (spatialJoin_.has_value()) {
-      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
-    }
+    throwIfCancelled();
+
     auto id = idTable->at(row, column);
     if (id.getDatatype() == Datatype::VocabIndex) {
       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
@@ -357,12 +356,7 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
     cfg.logCb = {};
     cfg.statsCb = {};
     cfg.sweepProgressCb = {};
-    cfg.sweepCancellationCb = [this]() {
-      if (spatialJoin_.has_value()) {
-        spatialJoin_.value()
-            ->checkCancellationWrapperForSpatialJoinAlgorithms();
-      }
-    };
+    cfg.sweepCancellationCb = [this]() { throwIfCancelled(); };
     return cfg;
   }();
 
@@ -404,10 +398,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   // also add the distance for each pair of objects in the result.
   for (size_t t = 0; t < NUM_THREADS; t++) {
     for (size_t i = 0; i < results[t].size(); i++) {
-      if (spatialJoin_.has_value()) {
-        spatialJoin_.value()
-            ->checkCancellationWrapperForSpatialJoinAlgorithms();
-      }
+      throwIfCancelled();
+
       const auto& res = results[t][i];
       double dist = 0;
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
@@ -799,9 +791,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
-    if (spatialJoin_.has_value()) {
-      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
-    }
+    throwIfCancelled();
+
     // add every box together with the additional information into the rtree
     std::optional<RtreeEntry> entry =
         getRtreeEntry(smallerResult, i, smallerResJoinCol);
@@ -819,9 +810,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
       qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
-    if (spatialJoin_.has_value()) {
-      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
-    }
+    throwIfCancelled();
+
     std::optional<RtreeEntry> entry =
         getRtreeEntry(otherResult, i, otherResJoinCol);
     if (!entry) {
@@ -865,4 +855,11 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       Result(std::move(result), std::vector<ColumnIndex>{},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
+}
+
+// ____________________________________________________________________________
+void SpatialJoinAlgorithms::throwIfCancelled() const {
+  if (spatialJoin_.has_value()) {
+    spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+  }
 }
