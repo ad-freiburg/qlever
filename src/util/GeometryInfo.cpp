@@ -105,8 +105,10 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 // ____________________________________________________________________________
 GeometryInfo GeometryInfo::fromGeoPoint(
     [[maybe_unused]] const GeoPoint& point) {
-  // TODO<ullingerc> Computation of GeometryInfo is a separate PR
-  return GeometryInfo{1};
+  return GeometryInfo{
+      util::geo::WKTType::POINT,
+      {point.toBitRepresentation(), point.toBitRepresentation()},
+      point.toBitRepresentation()};
 }
 
 }  // namespace ad_utility
