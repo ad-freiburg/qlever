@@ -44,16 +44,17 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 //______________________________________________________________________________
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
-// Convert `IdxPairRanges` to `BlockSubranges` with respect to `BlockIt
-// beginBlockSpan` (first possible `std::span<const BlockMetadata>::iterator`).
-static BlockSubranges convertFromSpanIdxToSpanBlockItRanges(
-    const BlockIt& beginBlockSpan, const IdxPairRanges idxRanges) {
-  BlockSubranges blockItRanges;
+// Convert `IdxPairRanges` to `BlockMetadataRanges` with respect to
+// `BlockMetadataIt beginBlockSpan` (first possible `std::span<const
+// CompressedBlockMetadata>::iterator`).
+static BlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
+    const BlockMetadataIt& beginBlockSpan, const IdxPairRanges idxRanges) {
+  BlockMetadataRanges blockItRanges;
   blockItRanges.reserve(idxRanges.size());
   ql::ranges::for_each(idxRanges, [&](const IdxPair& idxPair) {
     const auto& [beginIdx, endIdx] = idxPair;
-    blockItRanges.emplace_back(BlockIt{beginBlockSpan + beginIdx},
-                               BlockIt{beginBlockSpan + endIdx});
+    blockItRanges.emplace_back(BlockMetadataIt{beginBlockSpan + beginIdx},
+                               BlockMetadataIt{beginBlockSpan + endIdx});
   });
   return blockItRanges;
 }
@@ -126,157 +127,165 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idIri5 = getId(iri5, vocab);
   const Id iriStart = getId(iriBegin, vocab);
 
-  // Define BlockMetadata
-  const BlockMetadata b1 = makeBlock(undef, undef);
-  const BlockMetadata bFirstIncomplete =
+  // Define CompressedBlockMetadata
+  const CompressedBlockMetadata b1 = makeBlock(undef, undef);
+  const CompressedBlockMetadata bFirstIncomplete =
       makeBlock(undef, undef, IntId(10), IntId(10), IntId(10), IntId(11));
-  const BlockMetadata b2 = makeBlock(undef, falseId);
-  const BlockMetadata b3 = makeBlock(falseId, falseId);
-  const BlockMetadata b4 = makeBlock(trueId, IntId(0));
-  const BlockMetadata b4GapNumeric = makeBlock(trueId, idBerlin);
-  const BlockMetadata b4Incomplete = makeBlock(
+  const CompressedBlockMetadata b2 = makeBlock(undef, falseId);
+  const CompressedBlockMetadata b3 = makeBlock(falseId, falseId);
+  const CompressedBlockMetadata b4 = makeBlock(trueId, IntId(0));
+  const CompressedBlockMetadata b4GapNumeric = makeBlock(trueId, idBerlin);
+  const CompressedBlockMetadata b4Incomplete = makeBlock(
       trueId, IntId(0), VocabId(10), DoubleId(33), VocabId(11), DoubleId(33));
-  const BlockMetadata b5 = makeBlock(IntId(0), IntId(0));
-  const BlockMetadata b5Incomplete = makeBlock(
+  const CompressedBlockMetadata b5 = makeBlock(IntId(0), IntId(0));
+  const CompressedBlockMetadata b5Incomplete = makeBlock(
       IntId(0), IntId(0), VocabId(10), DoubleId(33), VocabId(10), DoubleId(34));
-  const BlockMetadata b6 = makeBlock(IntId(0), IntId(5));
-  const BlockMetadata b7 = makeBlock(IntId(5), IntId(6));
-  const BlockMetadata b8 = makeBlock(IntId(8), IntId(9));
-  const BlockMetadata b9 = makeBlock(IntId(-10), IntId(-8));
-  const BlockMetadata b10 = makeBlock(IntId(-4), IntId(-4));
-  const BlockMetadata b11 = makeBlock(IntId(-4), DoubleId(2));
-  const BlockMetadata b12 = makeBlock(DoubleId(2), DoubleId(2));
-  const BlockMetadata b13 = makeBlock(DoubleId(4), DoubleId(4));
-  const BlockMetadata b14 = makeBlock(DoubleId(4), DoubleId(10));
-  const BlockMetadata b15 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
-  const BlockMetadata b16 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
-  const BlockMetadata b17 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
-  const BlockMetadata b18 = makeBlock(DoubleId(-14.01), idAugsburg);
-  const BlockMetadata b18GapIriAndLiteral =
+  const CompressedBlockMetadata b6 = makeBlock(IntId(0), IntId(5));
+  const CompressedBlockMetadata b7 = makeBlock(IntId(5), IntId(6));
+  const CompressedBlockMetadata b8 = makeBlock(IntId(8), IntId(9));
+  const CompressedBlockMetadata b9 = makeBlock(IntId(-10), IntId(-8));
+  const CompressedBlockMetadata b10 = makeBlock(IntId(-4), IntId(-4));
+  const CompressedBlockMetadata b11 = makeBlock(IntId(-4), DoubleId(2));
+  const CompressedBlockMetadata b12 = makeBlock(DoubleId(2), DoubleId(2));
+  const CompressedBlockMetadata b13 = makeBlock(DoubleId(4), DoubleId(4));
+  const CompressedBlockMetadata b14 = makeBlock(DoubleId(4), DoubleId(10));
+  const CompressedBlockMetadata b15 =
+      makeBlock(DoubleId(-1.23), DoubleId(-6.25));
+  const CompressedBlockMetadata b16 =
+      makeBlock(DoubleId(-6.25), DoubleId(-6.25));
+  const CompressedBlockMetadata b17 =
+      makeBlock(DoubleId(-10.42), DoubleId(-12.00));
+  const CompressedBlockMetadata b18 = makeBlock(DoubleId(-14.01), idAugsburg);
+  const CompressedBlockMetadata b18GapIriAndLiteral =
       makeBlock(DoubleId(-14.01), DateId(DateParser, "1999-01-01"));
-  const BlockMetadata b19 = makeBlock(idDüsseldorf, idHamburg);
-  const BlockMetadata b20 = makeBlock(idHamburg, idHamburg);
-  const BlockMetadata b21 = makeBlock(idHamburg, idMünchen);
-  const BlockMetadata b22 = makeBlock(idStuttgart, idIri0);
-  const BlockMetadata b23 = makeBlock(idIri1, idIri2);
-  const BlockMetadata b24 = makeBlock(idIri3, idIri4);
-  const BlockMetadata b25 = makeBlock(idIri5, DateId(DateParser, "1999-01-01"));
-  const BlockMetadata b26 =
+  const CompressedBlockMetadata b19 = makeBlock(idDüsseldorf, idHamburg);
+  const CompressedBlockMetadata b20 = makeBlock(idHamburg, idHamburg);
+  const CompressedBlockMetadata b21 = makeBlock(idHamburg, idMünchen);
+  const CompressedBlockMetadata b22 = makeBlock(idStuttgart, idIri0);
+  const CompressedBlockMetadata b23 = makeBlock(idIri1, idIri2);
+  const CompressedBlockMetadata b24 = makeBlock(idIri3, idIri4);
+  const CompressedBlockMetadata b25 =
+      makeBlock(idIri5, DateId(DateParser, "1999-01-01"));
+  const CompressedBlockMetadata b26 =
       makeBlock(idStuttgart, DateId(DateParser, "1999-12-12"));
-  const BlockMetadata b27 = makeBlock(DateId(DateParser, "2000-01-01"),
-                                      DateId(DateParser, "2000-01-01"));
-  const BlockMetadata b28 =
+  const CompressedBlockMetadata b27 = makeBlock(
+      DateId(DateParser, "2000-01-01"), DateId(DateParser, "2000-01-01"));
+  const CompressedBlockMetadata b28 =
       makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
-  const BlockMetadata bLastIncomplete = makeBlock(
+  const CompressedBlockMetadata bLastIncomplete = makeBlock(
       DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
       VocabId(0), VocabId(0), VocabId(1), VocabId(0));
 
   // Date related blocks.
-  const BlockMetadata b1Date =
+  const CompressedBlockMetadata b1Date =
       makeBlock(makeIdForLYearDate(-17546), makeIdForLYearDate(-17545));
-  const BlockMetadata b2Date =
+  const CompressedBlockMetadata b2Date =
       makeBlock(makeIdForLYearDate(-16300), makeIdForLYearDate(-16099));
-  const BlockMetadata b3Date =
+  const CompressedBlockMetadata b3Date =
       makeBlock(makeIdForLYearDate(-15345), makeIdForLYearDate(-10001));
-  const BlockMetadata b4Date =
+  const CompressedBlockMetadata b4Date =
       makeBlock(makeIdForLYearDate(-10001), makeIdForDate(2000, 1, 2));
-  const BlockMetadata b5Date = makeBlock(
+  const CompressedBlockMetadata b5Date = makeBlock(
       makeIdForDate(2000, 8, 9), makeIdForDate(2010, 2, 2, 3, 5, 59.99));
-  const BlockMetadata b6Date = makeBlock(
+  const CompressedBlockMetadata b6Date = makeBlock(
       makeIdForDate(2015, 5, 10), makeIdForDate(2020, 7, 25, 12, 30, 45));
-  const BlockMetadata b7Date = makeBlock(makeIdForDate(2025, 3, 15, 8, 0, 0),
-                                         makeIdForDate(2030, 6, 5, 14, 15, 30));
-  const BlockMetadata b8Date =
+  const CompressedBlockMetadata b7Date =
+      makeBlock(makeIdForDate(2025, 3, 15, 8, 0, 0),
+                makeIdForDate(2030, 6, 5, 14, 15, 30));
+  const CompressedBlockMetadata b8Date =
       makeBlock(makeIdForDate(2040, 1, 1, 3, 33, 22.35),
                 makeIdForDate(2040, 4, 18, 22, 45, 10.5));
-  const BlockMetadata b9Date =
+  const CompressedBlockMetadata b9Date =
       makeBlock(makeIdForDate(2041, 9, 30, 6, 20, 0.001),
                 makeIdForDate(2050, 12, 31, 23, 59, 59.99));
-  const BlockMetadata b10Date =
+  const CompressedBlockMetadata b10Date =
       makeBlock(makeIdForLYearDate(10001), makeIdForLYearDate(10033));
-  const BlockMetadata b11Date =
+  const CompressedBlockMetadata b11Date =
       makeBlock(makeIdForLYearDate(10033), makeIdForLYearDate(12000));
-  const BlockMetadata b12Date =
+  const CompressedBlockMetadata b12Date =
       makeBlock(makeIdForLYearDate(14579), makeIdForLYearDate(38263));
 
   // All blocks that contain mixed (ValueId) types over column 2,
   // or possibly incomplete ones.
-  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b26, b28};
+  const std::vector<CompressedBlockMetadata> mixedBlocks = {b2,  b4,  b11,
+                                                            b18, b26, b28};
 
   // All blocks that contain mixed types over column 2 + the first and last
   // incomplete block.
-  const std::vector<BlockMetadata> mixedAndIncompleteBlocks = {
+  const std::vector<CompressedBlockMetadata> mixedAndIncompleteBlocks = {
       bFirstIncomplete, b2, b4, b11, b18, b26, bLastIncomplete};
 
-  // Vector containing unique and ordered BlockMetadata values.
-  const std::vector<BlockMetadata> blocks = {
+  // Vector containing unique and ordered CompressedBlockMetadata values.
+  const std::vector<CompressedBlockMetadata> blocks = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28};
 
-  // Vector containing unique and ordered BlockMetadata values.
-  const std::vector<BlockMetadata> allTestBlocksIsDatatype = {
+  // Vector containing unique and ordered CompressedBlockMetadata values.
+  const std::vector<CompressedBlockMetadata> allTestBlocksIsDatatype = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13, b14,
       b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b25, b27, b28};
 
-  const std::vector<BlockMetadata> mixedBlocksTestIsDatatype = {b2,  b4,  b11,
-                                                                b18, b25, b28};
+  const std::vector<CompressedBlockMetadata> mixedBlocksTestIsDatatype = {
+      b2, b4, b11, b18, b25, b28};
 
   // Selection of date related blocks.
-  const std::vector<BlockMetadata> dateBlocks = {
+  const std::vector<CompressedBlockMetadata> dateBlocks = {
       b1Date, b2Date, b3Date, b4Date,  b5Date,  b6Date,
       b7Date, b8Date, b9Date, b10Date, b11Date, b12Date};
 
-  const std::vector<BlockMetadata> blocksIncomplete = {bFirstIncomplete,
-                                                       b2,
-                                                       b3,
-                                                       b4,
-                                                       b5,
-                                                       b6,
-                                                       b7,
-                                                       b8,
-                                                       b9,
-                                                       b10,
-                                                       b11,
-                                                       b12,
-                                                       b13,
-                                                       b14,
-                                                       b15,
-                                                       b16,
-                                                       b17,
-                                                       b18,
-                                                       b19,
-                                                       b20,
-                                                       b21,
-                                                       b26,
-                                                       b27,
-                                                       bLastIncomplete};
+  const std::vector<CompressedBlockMetadata> blocksIncomplete = {
+      bFirstIncomplete,
+      b2,
+      b3,
+      b4,
+      b5,
+      b6,
+      b7,
+      b8,
+      b9,
+      b10,
+      b11,
+      b12,
+      b13,
+      b14,
+      b15,
+      b16,
+      b17,
+      b18,
+      b19,
+      b20,
+      b21,
+      b26,
+      b27,
+      bLastIncomplete};
 
-  const std::vector<BlockMetadata> blocksInvalidOrder1 = {
+  const std::vector<CompressedBlockMetadata> blocksInvalidOrder1 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b28, b27};
 
-  const std::vector<BlockMetadata> blocksInvalidOrder2 = {
+  const std::vector<CompressedBlockMetadata> blocksInvalidOrder2 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b14, b10, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28};
 
-  const std::vector<BlockMetadata> blocksWithDuplicate1 = {b1, b1, b2,
-                                                           b3, b4, b5};
+  const std::vector<CompressedBlockMetadata> blocksWithDuplicate1 = {
+      b1, b1, b2, b3, b4, b5};
 
-  const std::vector<BlockMetadata> blocksWithDuplicate2 = {b1,  b2,  b3,
-                                                           b27, b28, b28};
+  const std::vector<CompressedBlockMetadata> blocksWithDuplicate2 = {
+      b1, b2, b3, b27, b28, b28};
 
-  const std::vector<BlockMetadata> blocksInconsistent1 = {
+  const std::vector<CompressedBlockMetadata> blocksInconsistent1 = {
       b1, b2, b3, b4Incomplete, b5, b6, b7};
 
-  const std::vector<BlockMetadata> blocksInconsistent2 = {
+  const std::vector<CompressedBlockMetadata> blocksInconsistent2 = {
       b1, b2, b3, b4, b5Incomplete, b6, b7};
 
-  // Function to create BlockMetadata
-  const BlockMetadata makeBlock(const ValueId& first2Id, const ValueId& last2Id,
-                                const ValueId& first0Id = VocabId10,
-                                const ValueId& first1Id = DoubleId33,
-                                const ValueId& last0Id = VocabId10,
-                                const ValueId& last1Id = DoubleId33) {
+  // Function to create CompressedBlockMetadata
+  const CompressedBlockMetadata makeBlock(const ValueId& first2Id,
+                                          const ValueId& last2Id,
+                                          const ValueId& first0Id = VocabId10,
+                                          const ValueId& first1Id = DoubleId33,
+                                          const ValueId& last0Id = VocabId10,
+                                          const ValueId& last1Id = DoubleId33) {
     assert(first2Id <= last2Id);
     static size_t blockIdx = 0;
     ++blockIdx;
@@ -291,12 +300,14 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   }
 
   // Helper function for adding blocks containing mixed datatypes.
-  auto addBlocksMixedDatatype(const std::vector<BlockMetadata> expected,
-                              const std::vector<BlockMetadata> mixedBlocks) {
-    std::vector<BlockMetadata> expectedAdjusted;
+  auto addBlocksMixedDatatype(
+      const std::vector<CompressedBlockMetadata> expected,
+      const std::vector<CompressedBlockMetadata> mixedBlocks) {
+    std::vector<CompressedBlockMetadata> expectedAdjusted;
     ql::ranges::set_union(expected, mixedBlocks,
                           std::back_inserter(expectedAdjusted),
-                          [](const BlockMetadata& b1, const BlockMetadata& b2) {
+                          [](const CompressedBlockMetadata& b1,
+                             const CompressedBlockMetadata& b2) {
                             return b1.blockIndex_ < b2.blockIndex_;
                           });
     return expectedAdjusted;
@@ -304,10 +315,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Check if expected error is thrown.
   auto makeTestErrorCheck(std::unique_ptr<PrefilterExpression> expr,
-                          const std::vector<BlockMetadata>& input,
+                          const std::vector<CompressedBlockMetadata>& input,
                           const std::string& expected,
                           size_t evaluationColumn = 2) {
-    std::vector<BlockMetadata> testBlocks = input;
+    std::vector<CompressedBlockMetadata> testBlocks = input;
     AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(testBlocks, evaluationColumn),
                                  ::testing::HasSubstr(expected));
   }
@@ -320,9 +331,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
-                std::vector<BlockMetadata>&& expected,
+                std::vector<CompressedBlockMetadata>&& expected,
                 bool useBlocksIncomplete = false, bool addMixedBlocks = true) {
-    std::vector<BlockMetadata> expectedAdjusted;
+    std::vector<CompressedBlockMetadata> expectedAdjusted;
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
     if (addMixedBlocks) {
@@ -330,7 +341,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
           expected,
           useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks);
     }
-    std::vector<BlockMetadata> testBlocks =
+    std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
     ASSERT_EQ(expr->evaluate(testBlocks, 2),
               addMixedBlocks ? expectedAdjusted : expected);
@@ -338,18 +349,19 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Helper for testing `isLiteral`, `isIri`, `isNum` and `isBlank`.
   // We define this additional test-helper-function for convenience given that
-  // we had to extend `blocks` by `BlockMetadata` values containing `LITERAL`
-  // and `IRI` datatypes. `allTestBlocksIsDatatype` contains exactly this
-  // necessary wider range of `BlockMetadata` values (compared to `blocks`)
-  // which are relevant for testing the expressions `isIri` and `isLiteral`.
+  // we had to extend `blocks` by `CompressedBlockMetadata` values containing
+  // `LITERAL` and `IRI` datatypes. `allTestBlocksIsDatatype` contains exactly
+  // this necessary wider range of `CompressedBlockMetadata` values (compared to
+  // `blocks`) which are relevant for testing the expressions `isIri` and
+  // `isLiteral`.
   auto makeTestIsDatatype(std::unique_ptr<PrefilterExpression> expr,
-                          std::vector<BlockMetadata>&& expected,
+                          std::vector<CompressedBlockMetadata>&& expected,
                           bool testIsIriOrIsLit = false,
-                          std::vector<BlockMetadata>&& input = {}) {
+                          std::vector<CompressedBlockMetadata>&& input = {}) {
     // The evaluation implementation of `isLiteral()` and `isIri()` uses two
     // conjuncted relational `PrefilterExpression`s. Thus we have to add all
-    // BlockMetadata values containing mixed datatypes.
-    std::vector<BlockMetadata> adjustedExpected =
+    // CompressedBlockMetadata values containing mixed datatypes.
+    std::vector<CompressedBlockMetadata> adjustedExpected =
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
@@ -358,10 +370,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         adjustedExpected);
   }
 
-  // Check if `BlockSubranges r1` and `BlockSubranges r2` contain
+  // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
   // equivalent sub-ranges.
-  bool assertEqRelevantBlockItRanges(const BlockSubranges& r1,
-                                     const BlockSubranges& r2) {
+  bool assertEqRelevantBlockItRanges(const BlockMetadataRanges& r1,
+                                     const BlockMetadataRanges& r2) {
     return ql::ranges::equal(r1, r2, ql::ranges::equal);
   }
 
@@ -369,15 +381,16 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // `testComplement = true`) or `mapValueIdItRangesToBlockItRanges` helper
   // function of `PrefilterExpression`s. We assert that the retrieved
   // relevant iterators with respect to the containerized `std::span<const
-  // BlockMetadata> evalBlocks` are correctly mapped back to
+  // CompressedBlockMetadata> evalBlocks` are correctly mapped back to
   // `RelevantBlockRange`s (index values regarding `evalBlocks`).
   auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
                                   IdxPairRanges&& relevantIdxRanges,
                                   bool testComplement) {
-    std::span<const BlockMetadata> evalBlocks(allTestBlocksIsDatatype);
+    std::span<const CompressedBlockMetadata> evalBlocks(
+        allTestBlocksIsDatatype);
     // Make `ValueId`s of `evalBlocks` accessible by iterators.
-    // For the defined `BlockMetadata` values above, evaluation column at index
-    // 2 is relevant.
+    // For the defined `CompressedBlockMetadata` values above, evaluation column
+    // at index 2 is relevant.
     AccessValueIdFromBlockMetadata accessValueIdOp(2);
     ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
@@ -396,21 +409,21 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
-                    std::vector<BlockMetadata>&& expected) {
+                    std::vector<CompressedBlockMetadata>&& expected) {
     ASSERT_EQ(expr->evaluate(dateBlocks, 2), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
   // The `IdxPairRanges` will be mapped to their corresponding
-  // `BlockSubranges`.
+  // `BlockMetadataRanges`.
   // (1) Set `TestUnion = true`: test logical union (`OR(||)`) on
-  // `BlockSubrange`s.
+  // `BlockMetadataRange`s.
   // (2) Set `TestUnion = false`: test logical intersection (`AND(&&)`) on
   // `BlockItRanges`s.
   template <bool TestUnion>
   auto makeTestAndOrOrMergeBlocks(IdxPairRanges&& r1, IdxPairRanges&& r2,
                                   IdxPairRanges&& rExpected) {
-    std::span<const BlockMetadata> blockSpan(allTestBlocksIsDatatype);
+    std::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
     auto mergedBlockItRanges =
         prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<
@@ -436,19 +449,20 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
     return ::testing::ResultOf(toString, ::testing::HasSubstr(substring));
   };
   EXPECT_THAT(
-      b5, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:0 "
-                  "V:0\n(last) Triple: V:10 D:33.000000 I:0 V:0\nnum. rows: "
-                  "0.\n"));
+      b5,
+      matcher("#CompressedBlockMetadata\n(first) Triple: V:10 D:33.000000 I:0 "
+              "V:0\n(last) Triple: V:10 D:33.000000 I:0 V:0\nnum. rows: "
+              "0.\n"));
   EXPECT_THAT(
       b11,
-      matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4 "
+      matcher("#CompressedBlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4 "
               "V:0\n(last) Triple: V:10 D:33.000000 D:2.000000 V:0\nnum. rows: "
               "0.\n"));
   EXPECT_THAT(
-      b21,
-      matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 L:\"Hamburg\" "
-              "V:0\n(last) Triple: V:10 D:33.000000 L:\"M\xC3\xBCnchen\" "
-              "V:0\nnum. rows: 0.\n"));
+      b21, matcher("#CompressedBlockMetadata\n(first) Triple: V:10 D:33.000000 "
+                   "L:\"Hamburg\" "
+                   "V:0\n(last) Triple: V:10 D:33.000000 L:\"M\xC3\xBCnchen\" "
+                   "V:0\nnum. rows: 0.\n"));
 
   auto blockWithGraphInfo = b21;
   blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
@@ -498,7 +512,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testValueIdItToBlockItRangeMapping) {
   makeTestDetailIndexMapping(CompOp::EQ, falseId, {{1, 3}}, false);
   makeTestDetailIndexMapping(CompOp::NE, falseId, {{3, 4}}, false);
   makeTestDetailIndexMapping(CompOp::EQ, falseId, {{0, 2}, {3, 27}}, true);
-  // Test corner case regarding last ValueId of last BlockMetadata value.
+  // Test corner case regarding last ValueId of last CompressedBlockMetadata
+  // value.
   makeTestDetailIndexMapping(CompOp::LT, BlankNodeId(10), {{0, 27}}, true);
   makeTestDetailIndexMapping(CompOp::NE, BlankNodeId(10), {{0, 27}}, true);
   makeTestDetailIndexMapping(CompOp::GT, BlankNodeId(0), {{26, 27}}, false);
@@ -733,9 +748,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 
   // Test !isBlank.
   // All blocks are relevant given that even b28 is partially relevant here.
-  makeTestIsDatatype(notExpr(isBlank()),
-                     std::vector<BlockMetadata>(allTestBlocksIsDatatype),
-                     false);
+  makeTestIsDatatype(
+      notExpr(isBlank()),
+      std::vector<CompressedBlockMetadata>(allTestBlocksIsDatatype), false);
 
   // Test !isNum
   makeTestIsDatatype(notExpr(isNum()),
@@ -986,18 +1001,20 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 }
 
 //______________________________________________________________________________
-// Check for correctness given only one BlockMetadata value is provided.
+// Check for correctness given only one CompressedBlockMetadata value is
+// provided.
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
-  std::vector<BlockMetadata> input = {b16};
+  std::vector<CompressedBlockMetadata> input = {b16};
   EXPECT_EQ(expr->evaluate(input, 0), input);
   EXPECT_EQ(expr->evaluate(input, 1), input);
   EXPECT_EQ(expr->evaluate(input, 2), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(expr->evaluate(input, 2), (std::vector<BlockMetadata>{b15, b16}));
-  EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(input, 0), std::vector<BlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(input, 2),
+            (std::vector<CompressedBlockMetadata>{b15, b16}));
+  EXPECT_EQ(expr->evaluate(input, 1), std::vector<CompressedBlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(input, 0), std::vector<CompressedBlockMetadata>{});
 }
 
 //______________________________________________________________________________
@@ -1066,7 +1083,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<true>` over `BlockSubrange` values.
+// Test `mergeRelevantBlockItRanges<true>` over `BlockMetadataRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
   // r1 UNION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<true>({}, {}, {});
@@ -1086,7 +1103,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<false>` over `BlockSubrange` values.
+// Test `mergeRelevantBlockItRanges<false>` over `BlockMetadataRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
   // r1 INTERSECTION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<false>({}, {}, {});
