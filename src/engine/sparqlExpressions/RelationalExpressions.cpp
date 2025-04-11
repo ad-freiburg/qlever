@@ -533,3 +533,54 @@ template class RelationalExpression<Comparison::NE>;
 template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
+
+//
+namespace sparqlExpression {
+
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, size_t>>
+getGeoDistanceFilter(const SparqlExpression& expr) {
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * geof:distance() < constant
+  // * constant > geof:distance()
+  // * constant >= geof:distance()
+
+  // Supported comparison operator
+  auto compareExpr =
+      dynamic_cast<const sparqlExpression::LessEqualExpression*>(&expr);
+  if (compareExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Left child must be distance function
+  auto children = compareExpr->children();
+  const auto& leftChild = *children[0];
+
+  // Right child must be constant
+  auto rightChild = children[1].get();
+  auto literalExpr =
+      dynamic_cast<sparqlExpression::detail::LiteralExpression<ValueId>*>(
+          rightChild);
+  if (literalExpr == nullptr) {
+    return std::nullopt;
+  }
+  ValueId constant = literalExpr->value();
+  // TODO<ullingerc> After merge of #1938 handle distance unit
+  size_t maxDist = 0;
+  if (constant.getDatatype() == Datatype::Double) {
+    maxDist = static_cast<size_t>(round(constant.getDouble() * 1000));
+  } else if (constant.getDatatype() == Datatype::Int) {
+    maxDist = constant.getInt() * 1000;
+  } else {
+    return std::nullopt;
+  }
+
+  auto geoFuncCall = getGeoFunctionExpressionParameters(leftChild);
+  if (!geoFuncCall.has_value()) {
+    return std::nullopt;
+  }
+
+  return std::pair<sparqlExpression::GeoFunctionCall, size_t>{
+      geoFuncCall.value(), maxDist};
+}
+
+}  // namespace sparqlExpression
