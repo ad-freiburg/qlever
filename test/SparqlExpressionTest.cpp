@@ -21,6 +21,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -762,13 +763,44 @@ TEST(SparqlExpression, binaryStringOperations) {
                 S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
                 S({"", "x", "", "ullo", "ll", "Hällo", "Hällox"}));
   checkStrAfter(
-      S({"", "", "Hällo", "", "o", "", "", "lo"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "Hällo", "", "o", "", "", "lo"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrAfter(
+      IdOrLiteralOrIriVec{
+          lit("bc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("c", "@en"), lit(""), lit("abc", "@en"), lit("abc", "@en"),
+          lit(""), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
+          lit("z", "@en"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+
   checkStrBefore(
-      S({"", "", "Hällo", "", "Hä", "", "", "Hä"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrBefore(
+      IdOrLiteralOrIriVec{
+          lit("a", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit(""), lit("", "@en"), lit("", "@en"), lit(""),
+          lit("", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("bc"), lit(""), lit("bc"), lit("z"), lit(""), lit("", "@en"),
+          lit("z", "@en"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
 }
 
 // ______________________________________________________________________________

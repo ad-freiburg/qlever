@@ -86,16 +86,3 @@ disk space as is actually used.
 With some systems such as Docker on Mac or when using unsupported file
 systems such as NTFS or APFS, this may lead to problems as these do not
 properly support sparse files.
-
-One possible error may be the following:
-
-    open() error on path=/index/scientists-stxxl.disk flags=16450, retrying without O_DIRECT.
-    Disk '/index/scientists-stxxl.disk' is allocated, space: 500000 MiB, I/O implementation: syscall queue=0 devid=0
-    terminate called after throwing an instance of 'foxxll::io_error'
-      what():  Error in void foxxll::ufs_file_base::_set_size(foxxll::file::offset_type) : ftruncate() path=/index/scientists-stxxl.disk fd=4 : No space left on device: iostream error
-    Aborted
-
-While macOS including Docker on Mac is not supported there are some workarounds.
-You can manually change the constant `static const size_t STXXL_DISK_SIZE_INDEX_BUILDER` 
-in [file](../src/global/Constants.h) or 
-you can try using a named volume instead of a path on the host.
