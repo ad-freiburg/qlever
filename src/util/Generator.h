@@ -1,6 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Copyright (c) Lewis Baker, Johannes Kalmbach (functionality to add details).
 // Licenced under MIT license. See LICENSE.txt for details.
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 ///////////////////////////////////////////////////////////////////////////////
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
@@ -293,6 +294,16 @@ T getSingleElement(generator<T, Details> g) {
   auto it = g.begin();
   AD_CORRECTNESS_CHECK(it != g.end());
   T t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == g.end());
+  return t;
+}
+
+// Get the first element of a generator and verify that it's the only one.
+template <typename ReturnType, typename GeneratorType>
+ReturnType getSingleElement(GeneratorType g) {
+  auto it = g.begin();
+  AD_CORRECTNESS_CHECK(it != g.end());
+  ReturnType t = std::move(*it);
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
 }
