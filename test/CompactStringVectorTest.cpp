@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -45,7 +47,9 @@ TEST(CompactVectorOfStrings, Build) {
 }
 
 TEST(CompactVectorOfStrings, Iterator) {
-  auto testIterator = []<typename V>(const V&, const auto& input) {
+  auto testIterator = [](const auto& v, const auto& input) {
+    using V = std::decay_t<decltype(v)>;
+
     V s;
     s.build(input);
 
@@ -85,7 +89,9 @@ TEST(CompactVectorOfStrings, IteratorCategory) {
 }
 
 TEST(CompactVectorOfStrings, Serialization) {
-  auto testSerialization = []<typename V>(const V&, auto& input) {
+  auto testSerialization = [](const auto& v, auto& input) {
+    using V = std::decay_t<decltype(v)>;
+
     const std::string filename = "_writerTest1.dat";
     {
       V vector;
@@ -108,7 +114,9 @@ TEST(CompactVectorOfStrings, Serialization) {
 }
 
 TEST(CompactVectorOfStrings, SerializationWithPush) {
-  auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
+  auto testSerializationWithPush = [](const auto& v, auto& inputVector) {
+    using V = std::decay_t<decltype(v)>;
+
     const std::string filename = "_writerTest2.dat";
     {
       typename V::Writer writer{filename};
@@ -130,7 +138,9 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
 }
 
 TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
-  auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
+  auto testSerializationWithPush = [](const auto& v, auto& inputVector) {
+    using V = std::decay_t<decltype(v)>;
+
     const std::string filename = "_writerTest3.dat";
     {
       ad_utility::serialization::FileWriteSerializer fileWriter{filename};
@@ -162,7 +172,9 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
 }
 
 TEST(CompactVectorOfStrings, DiskIterator) {
-  auto testDiskIterator = []<typename V>(const V&, auto& inputVector) {
+  auto testDiskIterator = [](const auto& v, auto& inputVector) {
+    using V = std::decay_t<decltype(v)>;
+
     const std::string filename = "_writerTest4.dat";
     {
       typename V::Writer writer{filename};
