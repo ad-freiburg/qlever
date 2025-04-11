@@ -492,9 +492,10 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-        auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
-        auto result = ql::views::transform(relevantBlocks | ql::views::join,
-                                           getSingleBlock);
+
+        auto result = ql::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks) | ql::views::join,
+            getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
       };
@@ -541,7 +542,7 @@ IdTable CompressedRelationReader::scan(
   // Compute an upper bound for the size and reserve enough space in the
   // result.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto sizes = relevantBlocks | ql::views::join |
+  auto sizes = ql::views::join(relevantBlocks) |
                ql::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
@@ -780,7 +781,7 @@ CPP_template_def(typename IdGetter)(
   };
 
   // Get the blocks needed for the scan.
-  auto relevantBlocksMetadata = getRelevantBlocks(scanSpec, allBlocksMetadata);
+  auto relevantBlockMetadata = getRelevantBlocks(scanSpec, allBlocksMetadata);
 
   // TODO<joka921> We have to read the other columns for the merging of the
   // located triples. We could skip this for blocks with no updates, but that
@@ -790,7 +791,7 @@ CPP_template_def(typename IdGetter)(
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
   size_t i = 0;
-  for (const auto& blockMetadata : relevantBlocksMetadata | ql::views::join) {
+  for (const auto& blockMetadata : ql::views::join(relevantBlockMetadata)) {
     Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
     Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
     if (firstColId == lastColId) {
