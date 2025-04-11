@@ -2,6 +2,8 @@
 // Structures.
 // Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
 //         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_EXCEPTION_H
 #define QLEVER_SRC_UTIL_EXCEPTION_H
@@ -114,7 +116,8 @@ CPP_template(typename T)(
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
 // etc. Return "<concatenation of `getMessageImpl(messages)...`>" followed by
 // a full stop and space if there is at least one message.
-std::string concatMessages(auto&&... messages) {
+template <typename... Args>
+std::string concatMessages(Args&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
     return "";
   } else {

@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/RdfParser.h"
 
@@ -20,7 +22,6 @@
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
-using namespace std::chrono_literals;
 // _______________________________________________________________
 template <class T>
 bool TurtleParser<T>::statement() {
@@ -954,74 +955,6 @@ void RdfParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
     tripleCollector_.finish();
   }
 }
-
-// __________________________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
-                                                auto batch) {
-  try {
-    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
-    parser.prefixMap_ = this->prefixMap_;
-    parser.setPositionOffset(parsePosition);
-    parser.setInputStream(std::move(batch));
-    // TODO: raise error message if a prefix parsing fails;
-    std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
-
-    tripleCollector_.push([triples = std::move(triples), this]() mutable {
-      triples_ = std::move(triples);
-    });
-    finishTripleCollectorIfLastBatch();
-  } catch (std::exception& e) {
-    tripleCollector_.pushException(std::current_exception());
-    parallelParser_.finish();
-  }
-};
-
-// _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
-    auto remainingBatchFromInitialization) {
-  bool first = true;
-  size_t parsePosition = 0;
-  auto cleanup =
-      ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([this] {
-        // Wait until everything has been parsed and then also finish the
-        // triple collector.
-        parallelParser_.push([this] { finishTripleCollectorIfLastBatch(); });
-        parallelParser_.finish();
-      });
-  decltype(remainingBatchFromInitialization) inputBatch;
-  try {
-    while (true) {
-      if (first) {
-        inputBatch = std::move(remainingBatchFromInitialization);
-        first = false;
-      } else {
-        auto nextOptional = fileBuffer_->getNextBlock();
-        if (!nextOptional) {
-          return;
-        }
-        inputBatch = std::move(nextOptional.value());
-      }
-      auto batchSize = inputBatch.size();
-      auto parseThisBatch = [this, parsePosition,
-                             batch = std::move(inputBatch)]() mutable {
-        return parseBatch(parsePosition, std::move(batch));
-      };
-      parsePosition += batchSize;
-      numBatchesTotal_.fetch_add(1);
-      if (sleepTimeForTesting_ > 0ms) {
-        std::this_thread::sleep_for(sleepTimeForTesting_);
-      }
-      bool stillActive = parallelParser_.push(parseThisBatch);
-      if (!stillActive) {
-        return;
-      }
-    }
-  } catch (std::exception& e) {
-    tripleCollector_.pushException(std::current_exception());
-  }
-};
 
 // _______________________________________________________________________
 template <typename Tokenizer_T>

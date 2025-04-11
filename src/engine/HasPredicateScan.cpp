@@ -2,6 +2,8 @@
 //                 Chair of Algorithms and Data Structures.
 // Authors: (2018 - 2019) Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          (2024 -     ) Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/HasPredicateScan.h"
 
@@ -306,30 +308,6 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ___________________________________________________________________________
-void HasPredicateScan::computeFreeS(
-    IdTable* resultTable, Id objectId, auto& hasPattern,
-    const CompactVectorOfStrings<Id>& patterns) {
-  IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
-  // TODO<joka921> This can be a much simpler and cheaper implementation that
-  // does a lazy scan on the specified predicate and then simply performs a
-  // DISTINCT on the result.
-  for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        if (predicate == objectId) {
-          result.push_back({subjects[i]});
-          break;
-        }
-      }
-    }
-  }
-  *resultTable = std::move(result).toDynamic();
-}
-
-// ___________________________________________________________________________
 void HasPredicateScan::computeFreeO(
     IdTable* resultTable, Id subjectAsId,
     const CompactVectorOfStrings<Id>& patterns) const {
@@ -348,25 +326,6 @@ void HasPredicateScan::computeFreeO(
     resultTable->resize(pattern.size());
     ql::ranges::copy(pattern, resultTable->getColumn(0).begin());
   }
-}
-
-// ___________________________________________________________________________
-void HasPredicateScan::computeFullScan(
-    IdTable* resultTable, auto& hasPattern,
-    const CompactVectorOfStrings<Id>& patterns, size_t resultSize) {
-  IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
-  result.reserve(resultSize);
-  for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        result.push_back({subjects[i], predicate});
-      }
-    }
-  }
-  *resultTable = std::move(result).toDynamic();
 }
 
 // ___________________________________________________________________________

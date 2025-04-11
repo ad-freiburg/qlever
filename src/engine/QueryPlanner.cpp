@@ -31,7 +31,6 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
-#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -58,21 +57,9 @@
 namespace p = parsedQuery;
 namespace {
 
+using namespace detail;
+
 using ad_utility::makeExecutionTree;
-using SubtreePlan = QueryPlanner::SubtreePlan;
-
-template <typename Operation>
-SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, auto&&... args) {
-  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
-}
-
-// Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
-// inheriting from `Operation`.
-template <typename Op>
-SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
-  auto* qec = operation->getExecutionContext();
-  return {qec, std::move(operation)};
-}
 
 // Update the `target` query plan such that it knows that it includes all the
 // nodes and filters from `a` and `b`. NOTE: This does not actually merge
@@ -84,15 +71,6 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
-}
-
-// Helper function that assigns the node, filter and text limit ids from
-// `source` to `target`.
-void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
-                                      const QueryPlanner::SubtreePlan& source) {
-  target._idsOfIncludedNodes = source._idsOfIncludedNodes;
-  target._idsOfIncludedFilters = source._idsOfIncludedFilters;
-  target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
 }
 }  // namespace
 
@@ -393,7 +371,7 @@ vector<SubtreePlan> QueryPlanner::getGroupByRow(
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    assignNodesFilterAndTextLimitIds(groupByPlan, parent);
+    detail::assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
@@ -425,7 +403,7 @@ vector<SubtreePlan> QueryPlanner::getOrderByRow(
   for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
     auto& tree = plan._qet;
-    assignNodesFilterAndTextLimitIds(plan, parent);
+    detail::assignNodesFilterAndTextLimitIds(plan, parent);
     vector<std::pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
@@ -549,59 +527,6 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   return tg;
 }
 
-namespace {
-// A `TriplePosition` is a function that takes a triple and returns a
-// `TripleComponent`, typically the subject, predicate, or object of the triple,
-// hence the name.
-template <typename Function>
-CPP_concept TriplePosition =
-    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
-                                             SparqlTripleSimple&>;
-
-// Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
-// Used as a helper function below.
-SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
-  std::string filterString =
-      absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-  return sparqlParserHelpers::ParserAndVisitor{filterString}
-      .parseTypesafe(&SparqlAutomaticParser::filterR)
-      .resultOfParse_;
-};
-
-// Helper function for `handleRepeatedVariables` below. Replace a single
-// position of the `scanTriple`, denoted by the `rewritePosition` by a new
-// variable, and add a filter, that checks the old and the new value for
-// equality.
-constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
-    T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
-    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
-  Variable filterVar = generateUniqueVarName();
-  auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-  addFilter(createEqualFilter(filterVar, target));
-  target = filterVar;
-};
-
-// Replace the positions of the `triple` that are specified by the
-// `rewritePositions` with a new variable, and add a filter, which checks the
-// old and the new value for equality for each of these rewrites. Then also
-// add an index scan for the rewritten triple.
-constexpr auto handleRepeatedVariablesImpl =
-    [](const auto& triple, auto& addIndexScan,
-       const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       auto... rewritePositions)
-    -> CPP_ret(void)(
-        requires(TriplePosition<decltype(rewritePositions)>&&...)) {
-  auto scanTriple = triple;
-  (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                      generateUniqueVarName));
-  for (const auto& permutation : permutations) {
-    addIndexScan(permutation, scanTriple);
-  }
-};
-
-}  // namespace
-
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
@@ -615,108 +540,6 @@ void QueryPlanner::indexScanSingleVarCase(
     addIndexScan(SOP);
   } else {
     addIndexScan(PSO);
-  }
-}
-
-// _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
-void QueryPlanner::indexScanTwoVarsCase(
-    const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
-  using enum Permutation::Enum;
-
-  // Replace the position of the `triple` that is specified by the
-  // `rewritePosition` with a new variable, and add a filter, that checks the
-  // old and the new value for equality for this rewrite. Then also
-  // add an index scan for the rewritten triple.
-  auto generate = [this]() { return generateUniqueVarName(); };
-  auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
-          auto... rewritePositions)
-      -> CPP_ret(void)(
-          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
-    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
-                                       rewritePositions...);
-  };
-
-  const auto& [s, p, o, _] = triple;
-
-  using Tr = SparqlTripleSimple;
-  if (!isVariable(s)) {
-    if (p == o) {
-      handleRepeatedVariables({{SPO}}, &Tr::o_);
-    } else {
-      addIndexScan(SPO);
-      addIndexScan(SOP);
-    }
-  } else if (!isVariable(p)) {
-    if (s == o) {
-      handleRepeatedVariables({{PSO}}, &Tr::o_);
-    } else {
-      addIndexScan(PSO);
-      addIndexScan(POS);
-    }
-  } else {
-    AD_CORRECTNESS_CHECK(!isVariable(o));
-    if (s == p) {
-      handleRepeatedVariables({{OPS}}, &Tr::s_);
-    } else {
-      addIndexScan(OSP);
-      addIndexScan(OPS);
-    }
-  }
-}
-
-// _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
-void QueryPlanner::indexScanThreeVarsCase(
-    const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
-  using enum Permutation::Enum;
-  AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
-                    "With only 2 permutations registered (no -a option), "
-                    "triples should have at most two variables.");
-  auto generate = [this]() { return generateUniqueVarName(); };
-
-  // Replace the position of the `triple` that is specified by the
-  // `rewritePosition` with a new variable, and add a filter, that checks the
-  // old and the new value for equality for this rewrite. Then also
-  // add an index scan for the rewritten triple.
-  auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
-          auto... rewritePositions)
-      -> CPP_ret(void)(
-          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
-    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
-                                       rewritePositions...);
-  };
-
-  using Tr = SparqlTripleSimple;
-  const auto& [s, p, o, _] = triple;
-
-  if (s == o) {
-    if (s == p) {
-      handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
-    } else {
-      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
-    }
-  } else if (s == p) {
-    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
-  } else if (o == p) {
-    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
-  } else {
-    // Three distinct variables
-    // Add plans for all six permutations.
-    addIndexScan(OPS);
-    addIndexScan(OSP);
-    addIndexScan(PSO);
-    addIndexScan(POS);
-    addIndexScan(SPO);
-    addIndexScan(SOP);
   }
 }
 
@@ -2534,37 +2357,6 @@ std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
 void QueryPlanner::checkCancellation(
     ad_utility::source_location location) const {
   cancellationHandle_->throwIfCancelled(location);
-}
-
-// _____________________________________________________________________________
-bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const auto& variables) {
-  using enum SubtreePlan::Type;
-  bool areVariablesUnconnected = ql::ranges::all_of(
-      variables,
-      [this](const Variable& var) { return !boundVariables_.contains(var); });
-  if (!areVariablesUnconnected) {
-    return false;
-  }
-  // A MINUS clause that doesn't share any variable with the preceding
-  // patterns behaves as if it isn't there.
-  auto type = candidates[0].type;
-  if (type == MINUS) {
-    return true;
-  }
-  // An OPTIONAL clause that doesn't share any variable with the preceding
-  // patterns behaves as if it is joined with the neutral element.
-  if (type == OPTIONAL) {
-    auto& newPlans = candidatePlans_.emplace_back();
-    ql::ranges::for_each(
-        candidates, [this, &newPlans](const SubtreePlan& plan) {
-          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
-          newPlans.push_back(std::move(joinedPlan));
-        });
-    return true;
-  }
-  return false;
 }
 
 // _____________________________________________________________________________

@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./Distinct.h"
 
@@ -84,12 +86,6 @@ Result Distinct::computeResult(bool requestLaziness) {
              ? Result{std::move(generator), resultSortedOn()}
              : Result{cppcoro::getSingleElement(std::move(generator)),
                       resultSortedOn()};
-}
-
-// _____________________________________________________________________________
-bool Distinct::matchesRow(const auto& a, const auto& b) const {
-  return ql::ranges::all_of(keepIndices_,
-                            [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }
 
 // _____________________________________________________________________________

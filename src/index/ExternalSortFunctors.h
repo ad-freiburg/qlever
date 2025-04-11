@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
 #define QLEVER_SRC_INDEX_EXTERNALSORTFUNCTORS_H
@@ -14,7 +16,8 @@ template <int i0, int i1, int i2, bool hasGraphColumn = true>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
-  bool operator()(const auto& a, const auto& b) const {
+  template <typename T1, typename T2>
+  bool operator()(const T1& a, const T2& b) const {
     if constexpr (!hasGraphColumn) {
       AD_EXPENSIVE_CHECK(a.size() >= 3 && b.size() >= 3);
     } else {

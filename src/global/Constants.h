@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
 #define QLEVER_SRC_GLOBAL_CONSTANTS_H
@@ -47,7 +49,8 @@ constexpr std::string_view makeQleverInternalIriConst() {
   return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
                                      suffixes..., ">">();
 }
-inline std::string makeQleverInternalIri(const auto&... suffixes) {
+template <typename... T>
+inline std::string makeQleverInternalIri(const T&... suffixes) {
   return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
                       suffixes..., ">");
 }

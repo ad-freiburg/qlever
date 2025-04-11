@@ -8,7 +8,6 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
-#include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 
 #include <string>
@@ -38,7 +37,6 @@
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/Variable.h"
-#include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
@@ -229,19 +227,15 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
+template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
-                                       auto objectList) {
+                                       List objectList) {
   PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
     tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
-}
-
-// ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
-  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -1451,24 +1445,6 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-void Visitor::warnOrThrowIfUnboundVariables(
-    auto* ctx, const SparqlExpressionPimpl& expression,
-    std::string_view clauseName) {
-  for (const auto& var : expression.containedVariables()) {
-    if (!ad_utility::contains(visibleVariables_, *var)) {
-      auto message = absl::StrCat(
-          "The variable ", var->name(), " was used in the expression of a ",
-          clauseName, " clause but was not previously bound in the query");
-      if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
-        reportError(ctx, message);
-      } else {
-        parsedQuery_.addWarning(std::move(message));
-      }
-    }
-  }
-}
-
-// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
@@ -1613,49 +1589,6 @@ ObjectsAndTriples Visitor::visit(Parser::ObjectListContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
-}
-
-// ____________________________________________________________________________________
-void Visitor::setMatchingWordAndScoreVisibleIfPresent(
-    // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
-    // <entity>` is contained in the query, then the variable
-    // `?ql_textscore_var` is implicitly created and visible in the query body.
-    // Similarly, if a triple `?var ql:contains-word "words"` is contained in
-    // the query, then the variable `ql_matchingword_var` is implicitly created
-    // and visible in the query body.
-    auto* ctx, const TripleWithPropertyPath& triple) {
-  const auto& [subject, predicate, object] = triple;
-
-  auto* var = std::get_if<Variable>(&subject);
-  auto* propertyPath = std::get_if<PropertyPath>(&predicate);
-
-  if (!var || !propertyPath) {
-    return;
-  }
-
-  if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-    string name = object.toSparql();
-    if (!((name.starts_with('"') && name.ends_with('"')) ||
-          (name.starts_with('\'') && name.ends_with('\'')))) {
-      reportError(ctx,
-                  "ql:contains-word has to be followed by a string in quotes");
-    }
-    for (std::string_view s : std::vector<std::string>(
-             absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-      addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
-      if (!s.ends_with('*')) {
-        continue;
-      }
-      addVisibleVariable(var->getMatchingWordVariable(
-          ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
-    }
-  } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-    if (const auto* entVar = std::get_if<Variable>(&object)) {
-      addVisibleVariable(var->getEntityScoreVariable(*entVar));
-    } else {
-      addVisibleVariable(var->getEntityScoreVariable(object.toSparql()));
-    }
-  }
 }
 
 // ___________________________________________________________________________

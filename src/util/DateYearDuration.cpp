@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/DateYearDuration.h"
 
@@ -52,7 +54,8 @@ std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
 }
 
 // _____________________________________________________________________________
-static Date::TimeZone parseTimeZone(const auto& match) {
+template <typename T>
+static Date::TimeZone parseTimeZone(const T& match) {
   if (match.template get<"tzZ">() == "Z") {
     return Date::TimeZoneZ{};
   } else if (!match.template get<"tzHours">()) {

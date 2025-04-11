@@ -3,6 +3,8 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_QUERYPLANNER_H
 #define QLEVER_SRC_ENGINE_QUERYPLANNER_H
@@ -11,10 +13,36 @@
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
+#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
+#include "parser/SparqlParserHelpers.h"
+
+namespace detail {
+// A `TriplePosition` is a function that takes a triple and returns a
+// `TripleComponent`, typically the subject, predicate, or object of the triple,
+// hence the name.
+template <typename Function>
+CPP_concept TriplePosition =
+    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
+                                             SparqlTripleSimple&>;
+
+// Replace the positions of the `triple` that are specified by the
+// `rewritePositions` with a new variable, and add a filter, which checks the
+// old and the new value for equality for each of these rewrites. Then also
+// add an index scan for the rewritten triple.
+template <typename Triple, typename AddIndexScan,
+          typename GenerateUniqueVarName, typename AddFilter,
+          typename... Positions>
+constexpr auto handleRepeatedVariablesImpl(
+    const Triple& triple, AddIndexScan& addIndexScan,
+    const GenerateUniqueVarName& generateUniqueVarName,
+    const AddFilter& addFilter, std::span<const Permutation::Enum> permutations,
+    Positions... rewritePositions)
+    -> CPP_ret(void)(requires(TriplePosition<Positions>&&...));
+}  // namespace detail
 
 class QueryPlanner {
   using TextLimitMap =
@@ -269,16 +297,61 @@ class QueryPlanner {
                               const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanTwoVarsCase(const SparqlTripleSimple& triple,
                             const AddedIndexScanFunction& addIndexScan,
-                            const auto& addFilter);
+                            const AddedFilter& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanThreeVarsCase(const SparqlTripleSimple& triple,
                               const AddedIndexScanFunction& addIndexScan,
-                              const auto& addFilter);
+                              const AddedFilter& addFilter) {
+    using enum Permutation::Enum;
+    AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
+                      "With only 2 permutations registered (no -a option), "
+                      "triples should have at most two variables.");
+    auto generate = [this]() { return generateUniqueVarName(); };
+
+    // Replace the position of the `triple` that is specified by the
+    // `rewritePosition` with a new variable, and add a filter, that checks the
+    // old and the new value for equality for this rewrite. Then also
+    // add an index scan for the rewritten triple.
+    auto handleRepeatedVariables =
+        [&triple, &addIndexScan, &addFilter, &generate](
+            std::span<const Permutation::Enum> permutations,
+            auto... rewritePositions)
+        -> CPP_ret(void)(
+            requires(detail::TriplePosition<decltype(rewritePositions)>&&...)) {
+      return detail::handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                                 addFilter, permutations,
+                                                 rewritePositions...);
+    };
+
+    using Tr = SparqlTripleSimple;
+    const auto& [s, p, o, _] = triple;
+
+    if (s == o) {
+      if (s == p) {
+        handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
+      } else {
+        handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
+      }
+    } else if (s == p) {
+      handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
+    } else if (o == p) {
+      handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
+    } else {
+      // Three distinct variables
+      // Add plans for all six permutations.
+      addIndexScan(OPS);
+      addIndexScan(OSP);
+      addIndexScan(PSO);
+      addIndexScan(POS);
+      addIndexScan(SPO);
+      addIndexScan(SOP);
+    }
+  }
 
   /**
    * @brief Fills children with all operations that are associated with a single
@@ -586,8 +659,9 @@ class QueryPlanner {
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    template <typename Variables>
     bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const auto& variables);
+                                          const Variables& variables);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
@@ -606,7 +680,8 @@ class QueryPlanner {
     void optimizeCommutatively();
 
     // Find a single best candidate for a given graph pattern.
-    SubtreePlan optimizeSingle(const auto& pattern) {
+    template <typename Pattern>
+    SubtreePlan optimizeSingle(const Pattern& pattern) {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);
@@ -636,5 +711,160 @@ class QueryPlanner {
   void checkCancellation(ad_utility::source_location location =
                              ad_utility::source_location::current()) const;
 };
+
+namespace detail {
+using SubtreePlan = QueryPlanner::SubtreePlan;
+
+template <typename Operation, typename... Args>
+SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
+  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+}
+
+// Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
+// inheriting from `Operation`.
+template <typename Op>
+SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
+  auto* qec = operation->getExecutionContext();
+  return {qec, std::move(operation)};
+}
+
+// Helper function that assigns the node, filter and text limit ids from
+// `source` to `target`.
+inline void assignNodesFilterAndTextLimitIds(
+    QueryPlanner::SubtreePlan& target,
+    const QueryPlanner::SubtreePlan& source) {
+  target._idsOfIncludedNodes = source._idsOfIncludedNodes;
+  target._idsOfIncludedFilters = source._idsOfIncludedFilters;
+  target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
+}
+
+// Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
+// Used as a helper function below.
+inline SparqlFilter createEqualFilter(const Variable& var1,
+                                      const Variable& var2) {
+  std::string filterString =
+      absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
+  return sparqlParserHelpers::ParserAndVisitor{filterString}
+      .parseTypesafe(&SparqlAutomaticParser::filterR)
+      .resultOfParse_;
+};
+
+// Helper function for `handleRepeatedVariables` below. Replace a single
+// position of the `scanTriple`, denoted by the `rewritePosition` by a new
+// variable, and add a filter, that checks the old and the new value for
+// equality.
+constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
+    T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
+    const auto& generateUniqueVarName)(requires detail::TriplePosition<T>) {
+  Variable filterVar = generateUniqueVarName();
+  auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+  addFilter(createEqualFilter(filterVar, target));
+  target = filterVar;
+};
+
+// Replace the positions of the `triple` that are specified by the
+// `rewritePositions` with a new variable, and add a filter, which checks the
+// old and the new value for equality for each of these rewrites. Then also
+// add an index scan for the rewritten triple.
+template <typename Triple, typename AddIndexScan,
+          typename GenerateUniqueVarName, typename AddFilter,
+          typename... Positions>
+constexpr auto handleRepeatedVariablesImpl(
+    const Triple& triple, AddIndexScan& addIndexScan,
+    const GenerateUniqueVarName& generateUniqueVarName,
+    const AddFilter& addFilter, std::span<const Permutation::Enum> permutations,
+    Positions... rewritePositions)
+    -> CPP_ret(void)(requires(TriplePosition<Positions>&&...)) {
+  auto scanTriple = triple;
+  (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
+                      generateUniqueVarName));
+  for (const auto& permutation : permutations) {
+    addIndexScan(permutation, scanTriple);
+  }
+}
+
+}  // namespace detail
+
+template <typename AddedIndexScanFunction, typename AddedFilter>
+void QueryPlanner::indexScanTwoVarsCase(
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
+  using enum Permutation::Enum;
+
+  // Replace the position of the `triple` that is specified by the
+  // `rewritePosition` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for this rewrite. Then also
+  // add an index scan for the rewritten triple.
+  auto generate = [this]() { return generateUniqueVarName(); };
+  auto handleRepeatedVariables =
+      [&triple, &addIndexScan, &addFilter, &generate](
+          std::span<const Permutation::Enum> permutations,
+          auto... rewritePositions)
+      -> CPP_ret(void)(
+          requires(detail::TriplePosition<decltype(rewritePositions)>&&...)) {
+    return detail::handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                               addFilter, permutations,
+                                               rewritePositions...);
+  };
+
+  const auto& [s, p, o, _] = triple;
+
+  using Tr = SparqlTripleSimple;
+  if (!isVariable(s)) {
+    if (p == o) {
+      handleRepeatedVariables({{SPO}}, &Tr::o_);
+    } else {
+      addIndexScan(SPO);
+      addIndexScan(SOP);
+    }
+  } else if (!isVariable(p)) {
+    if (s == o) {
+      handleRepeatedVariables({{PSO}}, &Tr::o_);
+    } else {
+      addIndexScan(PSO);
+      addIndexScan(POS);
+    }
+  } else {
+    AD_CORRECTNESS_CHECK(!isVariable(o));
+    if (s == p) {
+      handleRepeatedVariables({{OPS}}, &Tr::s_);
+    } else {
+      addIndexScan(OSP);
+      addIndexScan(OPS);
+    }
+  }
+}
+
+template <typename Variables>
+bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
+    std::vector<SubtreePlan>& candidates, const Variables& variables) {
+  using enum SubtreePlan::Type;
+  bool areVariablesUnconnected = ql::ranges::all_of(
+      variables,
+      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  if (!areVariablesUnconnected) {
+    return false;
+  }
+  // A MINUS clause that doesn't share any variable with the preceding
+  // patterns behaves as if it isn't there.
+  auto type = candidates[0].type;
+  if (type == MINUS) {
+    return true;
+  }
+  // An OPTIONAL clause that doesn't share any variable with the preceding
+  // patterns behaves as if it is joined with the neutral element.
+  if (type == OPTIONAL) {
+    auto& newPlans = candidatePlans_.emplace_back();
+    ql::ranges::for_each(
+        candidates, [this, &newPlans](const SubtreePlan& plan) {
+          auto joinedPlan =
+              detail::makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
+          detail::assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          newPlans.push_back(std::move(joinedPlan));
+        });
+    return true;
+  }
+  return false;
+}
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNER_H

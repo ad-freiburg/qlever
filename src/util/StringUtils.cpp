@@ -2,6 +2,8 @@
 // Structures.
 // Author: Andre Schlegel (November of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/StringUtils.h"
 
@@ -94,7 +96,8 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
 namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
-std::string utf8StringTransform(std::string_view s, auto transformation) {
+template <typename F>
+std::string utf8StringTransform(std::string_view s, F transformation) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
@@ -106,20 +109,30 @@ std::string utf8StringTransform(std::string_view s, auto transformation) {
   }
   return result;
 }
+
+struct Utf8ToLower {
+  template <typename... Args>
+  auto operator()(Args&&... args) const {
+    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
+  }
+};
+
+struct Utf8ToUpper {
+  template <typename... Args>
+  auto operator()(Args&&... args) const {
+    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
+  }
+};
 }  // namespace detail
 
 // ____________________________________________________________________________
 std::string utf8ToLower(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToLower(AD_FWD(args)...);
-  });
+  return detail::utf8StringTransform(s, detail::Utf8ToLower{});
 }
 
 // ____________________________________________________________________________
 std::string utf8ToUpper(std::string_view s) {
-  return detail::utf8StringTransform(s, [](auto&&... args) {
-    return icu::CaseMap::utf8ToUpper(AD_FWD(args)...);
-  });
+  return detail::utf8StringTransform(s, detail::Utf8ToUpper{});
 }
 
 // ____________________________________________________________________________

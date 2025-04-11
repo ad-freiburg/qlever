@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
 #define QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
@@ -65,8 +67,8 @@ inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
 /// Returns a matcher that checks that a given `QueryExecutionTree`'s
 /// `rootOperation` can by dynamically cast to `OperationType`, and that
 /// `matcher` matches the result of this cast.
-template <typename OperationType>
-QetMatcher RootOperation(auto matcher) {
+template <typename OperationType, typename M>
+QetMatcher RootOperation(M matcher) {
   return RootOperationBase(WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
