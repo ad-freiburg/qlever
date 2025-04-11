@@ -282,7 +282,7 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab helperVocab;
       Id startId = TripleComponent{startSide.value_}.toValueId(
           _executionContext->getIndex().getVocab(), helperVocab);
-      // Make sure we retreive the Id from an IndexScan, so we don't have to
+      // Make sure we retrieve the Id from an IndexScan, so we don't have to
       // pass this LocalVocab around. If it's not present then no result needs
       // to be returned anyways.
       if (const Id* id = edges.getEquivalentId(startId)) {
