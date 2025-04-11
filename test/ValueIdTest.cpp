@@ -302,7 +302,7 @@ TEST_F(ValueIdTest, Hashing) {
   {
     using namespace ad_utility::triple_component;
     using namespace ad_utility::testing;
-    Index index = makeTestIndex("ValueIdTest_Hashing");
+    const Index& index = getQec()->getIndex();
     auto mkId = makeGetId(index);
     LocalVocab lv1;
     LocalVocab lv2;

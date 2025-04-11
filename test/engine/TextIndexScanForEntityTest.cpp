@@ -23,8 +23,16 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
+// Return a `QueryExecutionContext` from the given `kg`(see above) that has a
+// text index for the literals in the `kg`.
+auto qecWithTextIndex = []() {
+  TestIndexConfig config{kg};
+  config.createTextIndex = true;
+  return getQec(std::move(config));
+};
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -55,7 +63,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
@@ -86,7 +94,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -130,7 +138,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};
