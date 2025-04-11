@@ -9,6 +9,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -42,18 +43,15 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
   if (distExpr == nullptr) {
     return std::nullopt;
   }
-  auto p1 =
-      dynamic_cast<LiteralExpression<Variable>*>(distExpr->children()[0].get());
-  if (p1 == nullptr) {
+  auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
     return std::nullopt;
   }
-  auto p2 =
-      dynamic_cast<LiteralExpression<Variable>*>(distExpr->children()[1].get());
-  if (p2 == nullptr) {
+  auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
     return std::nullopt;
   }
-  return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1->value(),
-                         p2->value()};
+  return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1.value(), p2.value()};
 }
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
