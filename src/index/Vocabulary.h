@@ -1,10 +1,11 @@
-// Copyright 2011 - 2024
+// Copyright 2011 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
@@ -25,10 +26,13 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
+#include "util/GeometryInfo.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -115,6 +119,16 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
+  // The 5th highest bit of the vocabulary index is used as a marker to
+  // determine whether the word is stored in the normal vocabulary or the
+  // geometry vocabulary.
+  static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
+  static constexpr uint64_t geoVocabIndexMask =
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits - 1);
+  static constexpr uint64_t maxWordIndex = geoVocabMarker - 1;
+
+  static constexpr std::string_view geoVocabSuffix = ".geometries";
+
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
                          CompressedVocabulary<VocabularyInternalExternal>,
@@ -122,7 +136,14 @@ class Vocabulary {
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
+  using UnderlyingGeoVocabulary = GeoVocabulary<UnderlyingVocabulary>;
+  using GeoVocabularyWithUnicodeComparator =
+      UnicodeVocabulary<UnderlyingGeoVocabulary, ComparatorType>;
+
+  // The vocabulary is split into an underlying vocabulary for normal literals
+  // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
+  GeoVocabularyWithUnicodeComparator geoVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -142,8 +163,9 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  //! Read the vocabulary from files containing words and geometries
+  //! respectively.
+  void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -153,11 +175,18 @@ class Vocabulary {
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const { return vocabulary_.size(); }
+  [[nodiscard]] size_t size() const {
+    return vocabulary_.size() + geoVocabulary_.size();
+  }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(std::string_view word, IndexType* idx) const;
+
+  // Retrieve a `GeometryInfo` object from the underlying `GeoVocabulary`. The
+  // index parameter is expected to have the geo literal marker bit, otherwise
+  // `std::nullopt` is returned.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
@@ -178,9 +207,18 @@ class Vocabulary {
 
   static bool stringIsLiteral(std::string_view s);
 
+  static constexpr std::string_view geoLiteralSuffix =
+      ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
+  static bool stringIsGeoLiteral(std::string_view s);
+
+  static uint64_t makeGeoVocabIndex(uint64_t vocabIndex);
+
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
+  }
+  bool isGeoLiteral(IndexT index) const {
+    return static_cast<bool>(index.get() & geoVocabMarker);
   }
 
   bool shouldBeExternalized(std::string_view word) const;
@@ -233,13 +271,35 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
-  // Get a writer for the vocab that has an `operator()` method to
+  // This word writer writes words to different vocabularies depending on their
+  // content.
+  class WordWriter {
+   private:
+    UnderlyingVocabulary::WordWriter underlyingWordWriter_;
+    UnderlyingGeoVocabulary::WordWriter underlyingGeoWordWriter_;
+
+   public:
+    WordWriter(const VocabularyWithUnicodeComparator& vocabulary,
+               const GeoVocabularyWithUnicodeComparator& geoVocabulary,
+               const std::string& filename);
+
+    // Add the next word to the vocabulary and return its index.
+    uint64_t operator()(std::string_view word, bool isExternal);
+
+    // Finish the writing on both underlying word writers. After this no more
+    // calls to `operator()` are allowed.
+    void finish();
+
+    std::string& readableName();
+  };
+
+  // Get a writer for each underlying vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
-  // the internal vocabulary  have to be pushed one by one to add words to the
-  // vocabulary.
-  UnderlyingVocabulary::WordWriter makeWordWriter(
-      const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
+  // the internal vocabulary have to be pushed one by one to add words to the
+  // vocabulary. This writer internally splits the words into a generic
+  // vocabulary and a geometry vocabulary.
+  WordWriter makeWordWriter(const std::string& filename) const {
+    return {vocabulary_, geoVocabulary_, filename};
   }
 };
 

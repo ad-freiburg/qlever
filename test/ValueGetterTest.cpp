@@ -1,11 +1,17 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2022 - 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author:
+//  Authors: @DuDaAG
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "index/LocalVocabEntry.h"
+// #include "index/vocabulary/GeoVocabulary.h"
+#include "parser/Literal.h"
+#include "util/GeometryInfo.h"
 
 // Common things used in multiple tests.
 namespace {
@@ -106,6 +112,20 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
   return checkLiteralContentAndDatatype(literal, expectedContent,
                                         expectedDatatype);
 };
+
+//
+void checkGeoInfoFromLocalVocab(
+    std::string wktInput, ad_utility::GeometryInfo expected,
+    sparqlExpression::detail::GeometryInfoValueGetter getter) {
+  TestContextWithGivenTTl testContext{ttl};
+
+  // LocalVocab lV;
+  // TODO add to vocab
+  // auto idx = lV.getIndexOrNullopt(LocalVocabEntry{
+  //     ad_utility::triple_component::Literal::fromStringRepresentation(
+  //         wktInput)});
+  // auto res = getter(, &testContext.context);
+}
 };  // namespace
 
 // namespace
@@ -177,4 +197,24 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
   checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
                                                  std::nullopt, std::nullopt,
                                                  literalValueGetter);
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdLocalVocab) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoVocab) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
+  // TODO<ullingerc> test
+  ;
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithLiteralOrIri) {
+  // TODO<ullingerc> test
+  ;
 }
