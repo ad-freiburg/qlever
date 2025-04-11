@@ -98,7 +98,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
       auto getIndex = [&]() -> decltype(auto) {
         auto qec = makeQec(kb, loadAllPermutations, loadPatterns);
-        [[maybe_unused]] decltype(auto) ref = qec->getIndex().getImpl();
+        decltype(auto) ref = qec->getIndex().getImpl();
         return std::tie(ref, *qec);
       };
 
