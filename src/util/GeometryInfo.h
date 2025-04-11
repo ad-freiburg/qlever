@@ -17,8 +17,13 @@ namespace ad_utility {
 // IMPORTANT: Every change to the attributes of this struct is an index-breaking
 // change. Please update the index version accordingly.
 struct GeometryInfo {
-  // TODO<ullingerc> Computation of GeometryInfo is a separate PR
-  uint64_t dummy_;
+  uint8_t geometryType_;
+  std::pair<uint64_t, uint64_t> boundingBox_;
+  uint64_t centroid_;
+
+  // double metricLength_;
+  // double metricArea_;
+  // std::optional<uint64_t> parsedVocabOffset_ = std::nullopt;
 
   // Parse a WKT literal and compute all attributes.
   static GeometryInfo fromWktLiteral(const std::string_view& wkt);

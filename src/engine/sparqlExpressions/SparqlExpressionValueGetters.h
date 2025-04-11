@@ -16,6 +16,7 @@
 #include "index/vocabulary/GeoVocabulary.h"
 #include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
+#include "util/GeometryInfo.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
 
@@ -391,9 +392,9 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // computed ad hoc.
 struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter> {
   using Mixin<GeometryInfoValueGetter>::operator();
-  std::optional<GeometryInfo> operator()(
+  std::optional<ad_utility::GeometryInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
-  std::optional<GeometryInfo> operator()(
+  std::optional<ad_utility::GeometryInfo> operator()(
       const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
 };
 
