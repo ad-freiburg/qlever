@@ -193,8 +193,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
-             : Result{cppcoro::getSingleElement<Result::IdTableVocabPair>(
-                          std::move(generator)),
+             : Result{ad_utility::getSingleElement(std::move(generator)),
                       resultSortedOn()};
 }
 
@@ -244,25 +243,27 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 
 // ____________________________________________________________________________
 Result::LazyResult Service::computeResultLazily(
-    const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
-  auto sharedBody =
-      std::make_shared<ad_utility::LazyJsonParser::Generator>(std::move(body));
+    std::vector<std::string> vars, ad_utility::LazyJsonParser::Generator body,
+    bool singleIdTable) {
   auto inputRange = ad_utility::CachingTransformInputRange(
-      *sharedBody, [](auto& input) { return std::move(input); });
+      std::move(body), [](auto& input) { return std::move(input); });
   auto get = [service = this, vars = std::move(vars),
-              singleIdTable = singleIdTable, sharedBody = std::move(sharedBody),
-              inputRange = std::move(inputRange), localVocab = LocalVocab{},
+              singleIdTable = singleIdTable, inputRange = std::move(inputRange),
+              localVocab = LocalVocab{},
               idTable = IdTable{getResultWidth(),
                                 getExecutionContext()->getAllocator()},
               rowIdx = size_t{0}, varsChecked = false, resultExists = false,
               singleIdTableReturned =
                   false]() mutable -> std::optional<Result::IdTableVocabPair> {
+    if (singleIdTableReturned) {
+      return std::nullopt;
+    }
     try {
       for (const nlohmann::json& partJson : inputRange) {
         if (partJson.contains("head")) {
           AD_CORRECTNESS_CHECK(!varsChecked);
-          service->verifyVariables(partJson["head"], sharedBody->details());
+          service->verifyVariables(partJson["head"],
+                                   inputRange.view().base().details());
           varsChecked = true;
         }
 
@@ -281,7 +282,8 @@ Result::LazyResult Service::computeResultLazily(
     } catch (const ad_utility::LazyJsonParser::Error& e) {
       service->throwErrorWithContext(
           absl::StrCat("Parser failed with error: '", e.what(), "'"),
-          sharedBody->details().first100_, sharedBody->details().last100_);
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
     }
 
     // As the LazyJsonParser only passes parts of the result that match
@@ -292,7 +294,8 @@ Result::LazyResult Service::computeResultLazily(
           "JSON result does not have the expected structure (results "
           "section "
           "missing)",
-          sharedBody->details().first100_, sharedBody->details().last100_);
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
     }
 
     if (!varsChecked) {
@@ -300,10 +303,11 @@ Result::LazyResult Service::computeResultLazily(
           "JSON result does not have the expected structure (head "
           "section "
           "missing)",
-          sharedBody->details().first100_, sharedBody->details().last100_);
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
     }
 
-    if (singleIdTable && !singleIdTableReturned) {
+    if (singleIdTable) {
       singleIdTableReturned = true;
       return Result::IdTableVocabPair(std::move(idTable),
                                       std::move(localVocab));

@@ -80,6 +80,25 @@ TEST(CachingTransformInputRange, BasicTests) {
                                                             firstPlusTwo);
 }
 
+// Test for iterating past the end of a CachingTransformInput range
+TEST(CachingTransformInputRange, IteratePastEnd) {
+  // This test ensures that nullopt is returned repeatedly after all elements
+  // have already been iterated
+  std::vector<int> view{42};
+  auto simpleMove = [](auto& p) { return std::move(p); };
+  ad_utility::CachingTransformInputRange range{view, simpleMove};
+  std::optional<int> element = range.get();
+
+  // The first element shall be returned
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(42, element.value());
+
+  // Subsequent calls shall return nullopt
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+}
+
 // Tests for the generator with additional control flow.
 TEST(CachingContinuableTransformInputRange, BreakAndContinue) {
   // This function will move the vector if possible (i.e. if it is not const)

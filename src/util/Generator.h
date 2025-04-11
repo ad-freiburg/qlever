@@ -297,16 +297,6 @@ T getSingleElement(generator<T, Details> g) {
   AD_CORRECTNESS_CHECK(++it == g.end());
   return t;
 }
-
-// Get the first element of a generator and verify that it's the only one.
-template <typename ReturnType, typename GeneratorType>
-ReturnType getSingleElement(GeneratorType g) {
-  auto it = g.begin();
-  AD_CORRECTNESS_CHECK(it != g.end());
-  ReturnType t = std::move(*it);
-  AD_CORRECTNESS_CHECK(++it == g.end());
-  return t;
-}
 }  // namespace cppcoro
 
 #endif
