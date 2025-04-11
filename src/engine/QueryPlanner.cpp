@@ -2785,24 +2785,11 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
   for (auto& sub : candidatesIn) {
     TransitivePathSide left;
     TransitivePathSide right;
-    auto getSideValue =
-        [this](const TripleComponent& side) -> std::variant<Id, Variable> {
-      if (isVariable(side)) {
-        return side.getVariable();
-      } else {
-        if (auto opt = side.toValueId(planner_._qec->getIndex().getVocab());
-            opt.has_value()) {
-          return opt.value();
-        } else {
-          AD_THROW("No vocabulary entry for " + side.toString());
-        }
-      }
-    };
 
     left.subCol_ = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-    left.value_ = getSideValue(arg._left);
+    left.value_ = arg._left;
     right.subCol_ = sub._qet->getVariableColumn(arg._innerRight.getVariable());
-    right.value_ = getSideValue(arg._right);
+    right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
     if (planner_.activeGraphVariable_.has_value()) {
