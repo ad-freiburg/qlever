@@ -335,24 +335,25 @@ inline std::string createTrueDistanceDataset() {
   return kg;
 }
 
-namespace detail {
-inline auto buildQecHelper(std::string turtleKg) {
+// Build a `QueryExecutionContext` from the given turtle, but set some memory
+// defaults to higher values to make it possible to test large geometric
+// literals.
+inline auto buildQec(std::string turtleKg) {
   ad_utility::testing::TestIndexConfig config{turtleKg};
   config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
-}  // namespace detail
 
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  return detail::buildQecHelper(createSmallDataset(useAreas));
+  return buildQec(createSmallDataset(useAreas));
 }
 
 inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
-  return detail::buildQecHelper(kg);
+  return buildQec(kg);
 }
 
 // Create `QueryExecutionContext` with a dataset that contains an additional
@@ -365,7 +366,7 @@ inline QueryExecutionContext* buildNonSelfJoinDataset() {
       "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
       "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
       "<geometryInvalidAdded> <asWKT> 42 .\n");
-  return detail::buildQecHelper(kg);
+  return buildQec(kg);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildIndexScan(

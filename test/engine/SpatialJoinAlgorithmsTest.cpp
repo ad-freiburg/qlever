@@ -11,13 +11,10 @@
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "gtest/gtest.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -284,7 +281,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    auto qec = SpatialJoinTestHelpers::detail::buildQecHelper(kg);
+    auto qec = buildQec(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -1538,7 +1535,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   addRow(kg, "5", multiLinestring);
   addRow(kg, "6", multiPolygon);
 
-  auto qec = SpatialJoinTestHelpers::detail::buildQecHelper(kg);
+  auto qec = buildQec(kg);
   return qec;
 }
 

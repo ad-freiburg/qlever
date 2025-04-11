@@ -325,8 +325,7 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
 }
 
 // _____________________________________________________________________________
-QueryExecutionContext* getQec(
-    std::optional<std::string> turtleInput = std::nullopt) {
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput) {
   TestIndexConfig config;
   config.turtleInput = std::move(turtleInput);
   return getQec(std::move(config));

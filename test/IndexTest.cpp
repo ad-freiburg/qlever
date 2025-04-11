@@ -24,13 +24,18 @@ using namespace ad_utility::testing;
 using ::testing::UnorderedElementsAre;
 
 namespace {
-auto makeQec(std::string kg, bool loadAllPermutations, bool usePatterns) {
-  TestIndexConfig config{std::move(kg)};
+// Create a `QueryExecutionContext` with the given `turtleInput`, and the given
+// settings for which permutations to load and whether to use patterns.
+auto makeQec(std::string turtleInput, bool loadAllPermutations,
+             bool usePatterns) {
+  TestIndexConfig config{std::move(turtleInput)};
   config.loadAllPermutations = loadAllPermutations;
   config.usePatterns = usePatterns;
   return getQec(config);
 }
 
+// Create a `QueryExecutionContext` with the given `turtleInput`, the vocabulary
+// of the index is only compressed if `useCompression` is set to true.
 auto makeQecWithOrWithoutCompression(std::string kg, bool useCompression) {
   TestIndexConfig config{std::move(kg)};
   config.usePrefixCompression = useCompression;
@@ -92,10 +97,7 @@ TEST(IndexTest, createFromTurtleTest) {
           "<a2> <b2> <c2> .";
 
       auto getIndex = [&]() -> decltype(auto) {
-        TestIndexConfig config{kb};
-        config.loadAllPermutations = loadAllPermutations;
-        config.usePatterns = loadPatterns;
-        auto qec = getQec(config);
+        auto qec = makeQec(kb, loadAllPermutations, loadPatterns);
         [[maybe_unused]] decltype(auto) ref = qec->getIndex().getImpl();
         return std::tie(ref, *qec);
       };
@@ -300,10 +302,9 @@ TEST(IndexTest, scanTest) {
         "<a>  <b>  <c2> . \n"
         "<a>  <b2> <c>  . \n"
         "<a2> <b2> <c2> .   ";
-    TestIndexConfig config{kb};
-    config.usePrefixCompression = useCompression;
-    auto qecPtr = getQec(std::move(config));
-    auto& index = qecPtr->getIndex().getImpl();
+    auto& index = makeQecWithOrWithoutCompression(kb, useCompression)
+                      ->getIndex()
+                      .getImpl();
     {
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());

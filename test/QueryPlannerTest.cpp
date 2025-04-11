@@ -2674,15 +2674,23 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
-// __________________________________________________________________________
-TEST(QueryPlanner, TextIndexScanForWord) {
+namespace {
+// Get a `QueryExecutionContext` with a text index. This is used in several
+// tests below.
+auto getQecWithTextIndex = []() {
   ad_utility::testing::TestIndexConfig config{
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"sentence for multiple words tests\" . "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
       "<a> <p> \"testing and picking\""};
   config.createTextIndex = true;
-  auto qec = ad_utility::testing::getQec(std::move(config));
+  return ad_utility::testing::getQec(std::move(config));
+};
+}  // namespace
+
+// __________________________________________________________________________
+TEST(QueryPlanner, TextIndexScanForWord) {
+  auto qec = getQecWithTextIndex();
   auto wordScan = h::TextIndexScanForWord;
 
   h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
@@ -2705,21 +2713,9 @@ TEST(QueryPlanner, TextIndexScanForWord) {
           "ql:contains-word has to be followed by a string in quotes"));
 }
 
-namespace {
-auto qecWithTestIndex = []() {
-  ad_utility::testing::TestIndexConfig config{
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\""};
-  config.createTextIndex = true;
-  return ad_utility::testing::getQec(std::move(config));
-};
-}  // namespace
-
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForEntity) {
-  auto qec = qecWithTestIndex();
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -3053,7 +3049,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = qecWithTestIndex();
+  auto qec = getQecWithTextIndex();
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3236,7 +3232,7 @@ TEST(QueryPlanner, TextSearchService) {
 }
 
 TEST(QueryPlanner, TextLimit) {
-  auto qec = qecWithTestIndex();
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
