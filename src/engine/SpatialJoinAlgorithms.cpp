@@ -52,6 +52,13 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
       const auto& p = id.getGeoPoint();
       parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row,
                         leftOrRightSide);
+    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      const auto& literalOrIri = *id.getLocalVocabIndex();
+      if (literalOrIri.isLiteral()) {
+        const auto& wkt =
+            asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+        parser.parseWKT(wkt, row, leftOrRightSide);
+      }
     }
   }
 

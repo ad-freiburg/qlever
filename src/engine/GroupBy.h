@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Florian Kramer [2018]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_GROUPBY_H
 #define QLEVER_SRC_ENGINE_GROUPBY_H
@@ -352,8 +354,9 @@ class GroupBy : public Operation {
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;
-          auto addIf = [this, &aggregate]<typename T>(
-                           TI<T>, HashMapAggregateType target) {
+          auto addIf = [this, &aggregate](auto ti,
+                                          HashMapAggregateType target) {
+            using T = typename decltype(ti)::type;
             if (aggregate.aggregateType_.type_ == target)
               aggregationData_.emplace_back(
                   sparqlExpression::VectorWithMemoryLimit<T>{alloc_});

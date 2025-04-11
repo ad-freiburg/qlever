@@ -21,13 +21,15 @@ function print_usage {
   echo "Options:"
   echo "  -i  Use index from the given directory (which must be the root directory of the working copy of QLever, not the e2e_data subdirectory)"
   echo "  -d  Directory of the QLever binaries (relative to the main directory), default: 'build'"
+  echo "  -t  Build the text index with a separate explicit call to `IndexBuilderMain`"
 }
 
 REBUILD_THE_INDEX="YES"
 INDEX_DIRECTORY="." #if not set, we will build the index ourselves.
 BINARY_DIRECTORY="build"
+BUILD_TEXT_INDEX_SEPARATELY="NO"
 
-while getopts ":i:d:" arg; do
+while getopts ":i:d:t" arg; do
   case ${arg} in
     i)
       echo "The index will not be rebuilt"
@@ -36,6 +38,9 @@ while getopts ":i:d:" arg; do
     ;;
     d)
       BINARY_DIRECTORY="${OPTARG}"
+    ;;
+    t)
+      BUILD_TEXT_INDEX_SEPARATELY="YES"
     ;;
   \?) echo "Invalid option: -$OPTARG exiting" >&2
       print_usage
@@ -96,14 +101,31 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
 
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
-	echo "Building index $INDEX"
-	./IndexBuilderMain -i "$INDEX" \
-	    -F ttl \
-	    -f "$INPUT.nt" \
-	    -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
-	    -w "$INPUT.wordsfile.tsv" \
-            -W \
-	    -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
+
+  if [ ${BUILD_TEXT_INDEX_SEPARATELY} == "NO" ]; then
+    echo "Building index $INDEX"
+    ./IndexBuilderMain -i "$INDEX" \
+        -F ttl \
+        -f "$INPUT.nt" \
+        -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        -w "$INPUT.wordsfile.tsv" \
+              -W \
+        -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
+	else
+    echo "Building index $INDEX without text index"
+    ./IndexBuilderMain -i "$INDEX" \
+        -F ttl \
+        -f "$INPUT.nt" \
+        -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        || bail "Building Index failed"
+    echo "Adding text index"
+    ./IndexBuilderMain -A -i "$INDEX" \
+        -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        -w "$INPUT.wordsfile.tsv" \
+              -W \
+        -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
+
+	fi
 	popd
 fi
 

@@ -1,6 +1,8 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_PARSEABLEDURATION_H
 #define QLEVER_PARSEABLEDURATION_H
@@ -13,6 +15,7 @@
 #include <iostream>
 
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -73,29 +76,32 @@ class ParseableDuration {
   // ___________________________________________________________________________
   static ParseableDuration<DurationType> fromString(std::string_view arg) {
     using namespace std::chrono;
+    using ad_utility::use_type_identity::ti;
+
     if (auto m = ctre::match<R"(\s*(-?\d+)\s*(ns|us|ms|s|min|h)\s*)">(arg)) {
       auto unit = m.template get<2>().to_view();
 
-      auto toDuration = [&m]<typename OriginalDuration>() {
+      auto toDuration = [&m](auto t) {
+        using OriginalDuration = typename decltype(t)::type;
         auto amount = m.template get<1>()
                           .template to_number<typename OriginalDuration::rep>();
         return duration_cast<DurationType>(OriginalDuration{amount});
       };
 
       if (unit == "ns") {
-        return toDuration.template operator()<nanoseconds>();
+        return toDuration(ti<nanoseconds>);
       } else if (unit == "us") {
-        return toDuration.template operator()<microseconds>();
+        return toDuration(ti<microseconds>);
       } else if (unit == "ms") {
-        return toDuration.template operator()<milliseconds>();
+        return toDuration(ti<milliseconds>);
       } else if (unit == "s") {
-        return toDuration.template operator()<seconds>();
+        return toDuration(ti<seconds>);
       } else if (unit == "min") {
-        return toDuration.template operator()<minutes>();
+        return toDuration(ti<minutes>);
       } else {
         // Verify unit was checked exhaustively
         AD_CORRECTNESS_CHECK(unit == "h");
-        return toDuration.template operator()<hours>();
+        return toDuration(ti<hours>);
       }
     }
     throw std::runtime_error{absl::StrCat(

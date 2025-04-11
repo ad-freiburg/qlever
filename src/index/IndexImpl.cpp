@@ -3,6 +3,8 @@
 // Authors:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "./IndexImpl.h"
 
@@ -28,9 +30,7 @@
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
-#include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
 
 using std::array;
@@ -96,7 +96,8 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) -> const Id& {
+  auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
+    using T = std::decay_t<decltype(rowOrId)>;
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
@@ -426,7 +427,7 @@ void IndexImpl::addInternalStatisticsToConfiguration(
 }
 
 // _____________________________________________________________________________
-IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
+IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
@@ -559,7 +560,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         memoryLimitIndexBuilding());
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
-  IndexBuilderDataAsStxxlVector res;
+  IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
@@ -1108,10 +1109,11 @@ void IndexImpl::readConfiguration() {
         configurationJson_["languages-internal"]);
   }
 
-  auto loadDataMember = [this]<typename Target>(
-                            std::string_view key, Target& target,
-                            std::optional<std::type_identity_t<Target>>
-                                defaultValue = std::nullopt) {
+  auto loadDataMember = [this](std::string_view key, auto& target,
+                               std::optional<std::type_identity_t<
+                                   std::decay_t<decltype(target)>>>
+                                   defaultValue = std::nullopt) {
+    using Target = std::decay_t<decltype(target)>;
     auto it = configurationJson_.find(key);
     if (it == configurationJson_.end()) {
       if (defaultValue.has_value()) {
@@ -1398,7 +1400,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                             }),
                 vec.end());
     }
-    // The writing to the STXXL vector has to be done in order, to
+    // The writing to the external vector has to be done in order, to
     // make the update from local to global ids work.
 
     auto writeTriplesFuture = std::async(

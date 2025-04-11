@@ -3,6 +3,8 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/QueryPlanner.h"
 
@@ -424,7 +426,7 @@ vector<SubtreePlan> QueryPlanner::getOrderByRow(
     SubtreePlan plan(_qec);
     auto& tree = plan._qet;
     assignNodesFilterAndTextLimitIds(plan, parent);
-    vector<pair<ColumnIndex, bool>> sortIndices;
+    vector<std::pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
     // SPARQL standard, they are allowed but have no effect).
@@ -584,11 +586,12 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 // old and the new value for equality for each of these rewrites. Then also
 // add an index scan for the rewritten triple.
 constexpr auto handleRepeatedVariablesImpl =
-    []<typename... T>(const auto& triple, auto& addIndexScan,
-                      const auto& generateUniqueVarName, const auto& addFilter,
-                      std::span<const Permutation::Enum> permutations,
-                      T... rewritePositions)
-    -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    [](const auto& triple, auto& addIndexScan,
+       const auto& generateUniqueVarName, const auto& addFilter,
+       std::span<const Permutation::Enum> permutations,
+       auto... rewritePositions)
+    -> CPP_ret(void)(
+        requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
                       generateUniqueVarName));
@@ -628,10 +631,11 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
+      [&triple, &addIndexScan, &addFilter, &generate](
           std::span<const Permutation::Enum> permutations,
-          T... rewritePositions)
-      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+          auto... rewritePositions)
+      -> CPP_ret(void)(
+          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);
@@ -681,10 +685,11 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
+      [&triple, &addIndexScan, &addFilter, &generate](
           std::span<const Permutation::Enum> permutations,
-          T... rewritePositions)
-      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+          auto... rewritePositions)
+      -> CPP_ret(void)(
+          requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
                                        addFilter, permutations,
                                        rewritePositions...);
@@ -1669,11 +1674,11 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
+vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
     ad_utility::HashMap<string, vector<size_t>>& contextVarToTextNodes) const {
-  vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
+  vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
   if (contextVarToTextNodes.size() == 0) {
@@ -2168,7 +2173,7 @@ mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
   rightMapping.reserve(jcs.size());
   auto mapColumns = [columnIndex, &unionOperation](
                         bool isLeft, std::array<ColumnIndex, 2> columns)
-      -> std::optional<array<ColumnIndex, 2>> {
+      -> std::optional<std::array<ColumnIndex, 2>> {
     ColumnIndex& column = columns.at(columnIndex);
     auto tmp = unionOperation.getOriginalColumn(isLeft, column);
     if (tmp.has_value()) {
@@ -2453,8 +2458,15 @@ void QueryPlanner::QueryGraph::setupGraph(
   const ad_utility::HashMap<Variable, std::vector<Node*>> varToNode = [this]() {
     ad_utility::HashMap<Variable, std::vector<Node*>> result;
     for (const auto& node : nodes_) {
-      for (const auto& var :
-           node->plan_->_qet->getVariableColumns() | ql::views::keys) {
+      const auto& variableColumns = node->plan_->_qet->getVariableColumns();
+      // Make sure plans with the same id without variables count as connected.
+      if (variableColumns.empty()) {
+        // Dummy variable that can not be created using the SPARQL grammar.
+        result[Variable{absl::StrCat("??", node->plan_->_idsOfIncludedNodes),
+                        false}]
+            .push_back(node.get());
+      }
+      for (const auto& var : variableColumns | ql::views::keys) {
         result[var].push_back(node.get());
       }
     }
@@ -2876,7 +2888,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(
     const parsedQuery::TextSearchQuery& textSearchQuery) {
-  auto visitor = [this]<typename T>(T& arg) -> SubtreePlan {
+  auto visitor = [this](auto& arg) -> SubtreePlan {
+    using T = std::decay_t<decltype(arg)>;
     static_assert(
         ad_utility::SimilarToAny<T, TextIndexScanForEntityConfiguration,
                                  TextIndexScanForWordConfiguration>);

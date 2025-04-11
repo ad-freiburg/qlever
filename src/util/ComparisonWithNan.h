@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_COMPARISONWITHNAN_H
 #define QLEVER_SRC_UTIL_COMPARISONWITHNAN_H
@@ -26,9 +28,12 @@ namespace ad_utility {
 // see the corresponding tests which contain all relevant corner cases.
 template <typename Comparator>
 inline auto makeComparatorForNans(Comparator comparator) {
-  return [comparator]<typename A, typename B>(const A& a, const B& b)
-      requires std::is_invocable_r_v<bool, Comparator, A, B> {
-    auto isNan = []<typename T>(const T& t) {
+  return [comparator](const auto& a, const auto& b)
+      requires std::is_invocable_r_v<bool, Comparator,
+                                     std::decay_t<decltype(a)>,
+                                     std::decay_t<decltype(b)>> {
+    auto isNan = [](const auto& t) {
+      using T = std::decay_t<decltype(t)>;
       if constexpr (std::is_floating_point_v<T>) {
         return std::isnan(t);
       } else {
