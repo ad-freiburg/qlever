@@ -12,6 +12,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
@@ -348,6 +349,15 @@ struct IriValueGetter : Mixin<IriValueGetter> {
     return std::nullopt;
   }
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
+};
+
+// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
+struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
+  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{5};
+  using Mixin<UnitOfMeasurementValueGetter>::operator();
+  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
+  UnitOfMeasurement operator()(const LiteralOrIri& s,
+                               const EvaluationContext*) const;
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object

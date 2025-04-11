@@ -503,18 +503,81 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
 
   switch (datatype) {
     case WordVocabIndex:
-      return ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.indexToString(id.getWordVocabIndex()));
+      return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
     case TextRecordIndex:
-      return ad_utility::triple_component::Literal::literalWithoutQuotes(
-          index.getTextExcerpt(id.getTextRecordIndex()));
+      return getLiteralOrNullopt(getLiteralOrIriFromTextRecordIndex(index, id));
     default:
       return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::getLiteralOrNullopt(
+    std::optional<LiteralOrIri> litOrIri) {
+  if (litOrIri.has_value() && litOrIri.value().isLiteral()) {
+    return std::move(litOrIri.value().getLiteral());
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
+  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
+  if (idLiteralAndType.has_value()) {
+    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        idLiteralAndType.value().first);
+    lit.addDatatype(
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            idLiteralAndType.value().second));
+    return LiteralOrIri{lit};
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
+                                                             Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()))};
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
+    const Index& index, Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.getTextExcerpt(id.getTextRecordIndex()))};
+};
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
+                                            const LocalVocab& localVocab,
+                                            bool skipEncodedValues) {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case WordVocabIndex:
+      return getLiteralOrIriFromWordVocabIndex(index, id);
+    case VocabIndex:
+    case LocalVocabIndex:
+      return getLiteralOrIriFromVocabIndex(index, id, localVocab);
+    case TextRecordIndex:
+      return getLiteralOrIriFromTextRecordIndex(index, id);
+    default:
+      if (skipEncodedValues) {
+        return std::nullopt;
+      }
+      return idToLiteralOrIriForEncodedValue(id);
   }
 }
 
