@@ -3,7 +3,7 @@
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de,
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <string>
@@ -12,6 +12,7 @@
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
+#include "util/GTestHelpers.h"
 
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktLatitude;
@@ -131,6 +132,9 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   ASSERT_NEAR(
       ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::MILES),
       0.62137119, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::UNKNOWN),
+      ::testing::HasSubstr("Unsupported unit"));
 }
 
 TEST(GeoSparqlHelpers, IriToUnit) {
