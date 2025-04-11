@@ -68,7 +68,7 @@ double kilometerToUnit(double kilometers,
     } else if (unit.value() == UnitOfMeasurement::MILES) {
       multiplicator = detail::kilometerToMile;
     } else {
-      AD_CONTRACT_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
+      AD_CORRECTNESS_CHECK(unit.value() == UnitOfMeasurement::UNKNOWN);
       AD_THROW("Unsupported unit of measurement for distance.");
     }
   }

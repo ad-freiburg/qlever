@@ -127,7 +127,7 @@ class ExportQueryExecutionTrees {
   // Helper for the `idToLiteral` function: get only literals from the
   // `LiteralOrIri` object.
   static std::optional<Literal> getLiteralOrNullopt(
-      std::optional<LiteralOrIri>& litOrIri);
+      std::optional<LiteralOrIri> litOrIri);
 
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.

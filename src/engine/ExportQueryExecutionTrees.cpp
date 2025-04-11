@@ -502,19 +502,15 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   auto datatype = id.getDatatype();
 
   switch (datatype) {
-    case WordVocabIndex: {
-      auto lit = getLiteralOrIriFromWordVocabIndex(index, id);
-      return getLiteralOrNullopt(lit);
-    }
+    case WordVocabIndex:
+      return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiteralsWithXsdString);
-    case TextRecordIndex: {
-      auto lit = getLiteralOrIriFromTextRecordIndex(index, id);
-      return getLiteralOrNullopt(lit);
-    }
+    case TextRecordIndex:
+      return getLiteralOrNullopt(getLiteralOrIriFromTextRecordIndex(index, id));
     default:
       return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
   }
@@ -523,9 +519,9 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
 // _____________________________________________________________________________
 std::optional<ad_utility::triple_component::Literal>
 ExportQueryExecutionTrees::getLiteralOrNullopt(
-    std::optional<LiteralOrIri>& litOrIri) {
+    std::optional<LiteralOrIri> litOrIri) {
   if (litOrIri.has_value() && litOrIri.value().isLiteral()) {
-    return litOrIri.value().getLiteral();
+    return std::move(litOrIri.value().getLiteral());
   }
   return std::nullopt;
 };
@@ -756,9 +752,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab_,
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
           }
