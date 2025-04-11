@@ -479,11 +479,14 @@ CompressedRelationReader::getBlocksForJoin(
     return block1.last_ < block2.first_;
   };
 
+  auto blocks1 = getBlocksFromMetadata(metadataAndBlocks1);
+  auto blocks2 = getBlocksFromMetadata(metadataAndBlocks2);
+
   // Transform all the relevant blocks from a `ScanSpecAndBlocksAndBounds` a
   // `BlockWithFirstAndLastId` struct (see above).
   auto getBlocksWithFirstAndLastId =
-      [&blockLessThanBlock](
-          const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
+      [&blockLessThanBlock](const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
+                            const BlockMetadataRanges& blockRanges) {
         auto getSingleBlock =
             [&metadataAndBlocks](const CompressedBlockMetadata& block)
             -> BlockWithFirstAndLastId {
@@ -492,18 +495,16 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-
-        auto result = ql::views::transform(
-            getBlocksFromMetadata(metadataAndBlocks) | ql::views::join,
-            getSingleBlock);
+        auto result = blockRanges | ql::views::join |
+                      ql::views::transform(getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
       };
 
   auto blocksWithFirstAndLastId1 =
-      getBlocksWithFirstAndLastId(metadataAndBlocks1);
+      getBlocksWithFirstAndLastId(metadataAndBlocks1, blocks1);
   auto blocksWithFirstAndLastId2 =
-      getBlocksWithFirstAndLastId(metadataAndBlocks2);
+      getBlocksWithFirstAndLastId(metadataAndBlocks2, blocks2);
 
   // Find the matching blocks on each side by performing binary search on the
   // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
