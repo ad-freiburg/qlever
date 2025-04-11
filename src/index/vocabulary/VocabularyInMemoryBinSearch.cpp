@@ -56,13 +56,14 @@ VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
     : writer_{filename}, offsetWriter_{filename + ".ids"} {}
 
 // _____________________________________________________________________________
-void VocabularyInMemoryBinSearch::WordWriter::operator()(std::string_view str,
-                                                         uint64_t idx) {
+uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
+    std::string_view str, uint64_t idx) {
   // Check that the indices are ascending.
   AD_CONTRACT_CHECK(!lastIndex_.has_value() || lastIndex_.value() < idx);
   lastIndex_ = idx;
   writer_.push(str.data(), str.size());
   offsetWriter_.push(idx);
+  return idx;
 }
 
 // _____________________________________________________________________________
