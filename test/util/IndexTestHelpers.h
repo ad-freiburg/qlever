@@ -36,15 +36,16 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize = 1_kB);
 // when the files were not deleted after the test).
 std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 
-// Create an `Index` from the given `turtleInput`. If the `turtleInput` is not
-// specified, a default input will be used and the resulting index will have the
-// following properties: Its vocabulary contains the literals `"alpha",
-// "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
-// for the subclasses of `SparqlExpression`.
-// The concrete triple contents are currently used in `GroupByTest.cpp`. Using
-// the parameter parserBufferSize the buffer size can be increased, when needed
-// for larger tests (like polygon testing in Spatial Joins).
+// A struct, that defines the configuration of an index, and after that,
+// a function that takes this struct and creates an index from it.
+
 struct TestIndexConfig {
+  // A turtle string, from which the index is built. If `nullopt`, a default
+  // input will be used and the resulting index will have the following
+  // properties: Its vocabulary contains the literals `"alpha", "älpha", "A",
+  // "Beta"`. These vocabulary entries are expected by the tests for the
+  // subclasses of `SparqlExpression`. The concrete triple contents are
+  // currently used in `GroupByTest.cpp`.
   std::optional<std::string> turtleInput = std::nullopt;
   bool loadAllPermutations = true;
   bool usePatterns = true;
@@ -54,6 +55,9 @@ struct TestIndexConfig {
   bool addWordsFromLiterals = true;
   std::optional<std::pair<std::string, std::string>>
       contentsOfWordsFileAndDocsfile = std::nullopt;
+  // The following buffer size can be increased, if larger triples are to be
+  // parsed
+  //(like large geometry literals for testing spatial operations).
   ad_utility::MemorySize parserBufferSize = 1_kB;
   std::optional<TextScoringMetric> scoringMetric = std::nullopt;
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
@@ -78,58 +82,23 @@ struct TestIndexConfig {
   bool operator==(const TestIndexConfig&) const = default;
 };
 
-/*
-Index makeTestIndex(
-    const std::string& indexBasename,
-    std::optional<std::string> turtleInput = std::nullopt,
-    bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
-    bool createTextIndex = false, bool addWordsFromLiterals = true,
-    std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt,
-    ad_utility::MemorySize parserBufferSize = 1_kB,
-    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
-    qlever::Filetype indexType = qlever::Filetype::Turtle);
-    */
-
+// Create a test index at the given `indexBasename` and with the given `config`.
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig config);
 
-inline Index makeTestIndex(const std::string& indexBasename,
-                           std::string turtle) {
-  return makeTestIndex(indexBasename, TestIndexConfig{std::move(turtle)});
-}
+// Create a test index at the given `indexBasename` and with the given `turtle`
+// as input, leave all other settings at the default.
+Index makeTestIndex(const std::string& indexBasename, std::string turtle);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
-// relevant for these tests, so the other members are defaulted. Using
-// the parameter parserBufferSize the buffer size can be increased, when needed
-// for larger tests (like polygon testing in Spatial Joins).
-/*
-QueryExecutionContext* getQec(
-    std::optional<std::string> turtleInput = std::nullopt,
-    bool loadAllPermutations = true, bool usePatterns = true,
-    bool usePrefixCompression = true,
-    ad_utility::MemorySize blocksizePermutations = 16_B,
-    bool createTextIndex = false, bool addWordsFromLiterals = true,
-    std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt,
-    ad_utility::MemorySize parserBufferSize = 1_kB,
-    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
-    std::optional<std::pair<float, float>> bAndKParam = std::nullopt,
-    qlever::Filetype indexType = qlever::Filetype::Turtle);
-    */
-
+// relevant for these tests, so the other members are defaulted.
 QueryExecutionContext* getQec(TestIndexConfig config);
 
-inline QueryExecutionContext* getQec(
-    std::optional<std::string> turtleInput = std::nullopt) {
-  TestIndexConfig config;
-  config.turtleInput = std::move(turtleInput);
-  return getQec(std::move(config));
-}
+// Overload of `getQec` for the simple case where we only care about the turtle
+// input. All other settings are left at their default values.
+QueryExecutionContext* getQec(
+    std::optional<std::string> turtleInput = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

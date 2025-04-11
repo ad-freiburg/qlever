@@ -201,8 +201,7 @@ class TurtleParser : public RdfParserBase {
       prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
                         {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
   ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{
-      {baseForRelativeIriKey_, TripleComponent::Iri{}},
-      {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
+      prefixMapDefault_};
 
   // Getters for the two base prefixes. Without BASE declaration, these will
   // both return the empty IRI.

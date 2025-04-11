@@ -137,30 +137,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 }
 }  // namespace
 
-// ______________________________________________________________
-/*
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput,
-                    bool loadAllPermutations, bool usePatterns,
-                    [[maybe_unused]] bool usePrefixCompression,
-                    ad_utility::MemorySize blocksizePermutations,
-                    bool createTextIndex, bool addWordsFromLiterals,
-                    std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsFile,
-                    ad_utility::MemorySize parserBufferSize,
-                    std::optional<TextScoringMetric> scoringMetric,
-                    std::optional<pair<float, float>> bAndKParam,
-                    qlever::Filetype indexType) {
-  return makeTestIndex(
-      indexBasename,
-      TestIndexConfig{turtleInput, loadAllPermutations, usePatterns,
-                      usePrefixCompression, blocksizePermutations,
-                      createTextIndex, addWordsFromLiterals,
-                      contentsOfWordsFileAndDocsFile, parserBufferSize,
-                      scoringMetric, bAndKParam, indexType});
-}
-*/
-
+// _____________________________________________________________________________
 Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
@@ -206,7 +183,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     index.createFromFiles({spec});
-    if (createTextIndex) {
+    if (c.createTextIndex) {
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
@@ -217,22 +194,21 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
           index.buildTextIndexFile(std::nullopt, true, TextScoringMetric::BM25,
                                    {0.5f, -1.0f}),
           ::testing::HasSubstr("Invalid values"));
-      scoringMetric = scoringMetric.value_or(TextScoringMetric::EXPLICIT);
-      bAndKParam = bAndKParam.value_or(std::pair{0.75f, 1.75f});
+      c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
+      c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
 
       // The following tests that garbage values for b and k work if these
       // parameters are unnecessary because we don't use `BM25`.
-      if (scoringMetric.value() != TextScoringMetric::BM25) {
-        bAndKParam = std::pair{-3.f, -3.f};
+      if (c.scoringMetric.value() != TextScoringMetric::BM25) {
+        c.bAndKParam = std::pair{-3.f, -3.f};
       }
-      auto buildTextIndex = [&index, &scoringMetric, &bAndKParam](
-                                auto wordsAndDocsfile,
-                                bool addWordsFromLiterals) {
+      auto buildTextIndex = [&index, &c](auto wordsAndDocsfile,
+                                         bool addWordsFromLiterals) {
         index.buildTextIndexFile(std::move(wordsAndDocsfile),
-                                 addWordsFromLiterals, scoringMetric.value(),
-                                 bAndKParam.value());
+                                 addWordsFromLiterals, c.scoringMetric.value(),
+                                 c.bAndKParam.value());
       };
-      if (contentsOfWordsFileAndDocsFile.has_value()) {
+      if (c.contentsOfWordsFileAndDocsfile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
@@ -249,9 +225,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         buildTextIndex(
             std::pair<std::string, std::string>{indexBasename + ".wordsfile",
                                                 indexBasename + ".docsfile"},
-            addWordsFromLiterals);
+            c.addWordsFromLiterals);
         index.buildDocsDB(indexBasename + ".docsfile");
-      } else if (addWordsFromLiterals) {
+      } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }
     }
@@ -282,26 +258,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   }
   return index;
 }
-/*
-//
-________________________________________________________________________________
-QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
-                              bool loadAllPermutations, bool usePatterns,
-                              bool usePrefixCompression,
-                              ad_utility::MemorySize blocksizePermutations,
-                              bool createTextIndex, bool addWordsFromLiterals,
-                              std::optional<std::pair<std::string, std::string>>
-                                  contentsOfWordsFileAndDocsFile,
-                              ad_utility::MemorySize parserBufferSize,
-                              std::optional<TextScoringMetric> scoringMetric,
-                              std::optional<std::pair<float, float>> bAndKParam,
-                              qlever::Filetype indexType) {
-  return getQec(TestIndexConfig{turtleInput, loadAllPermutations, usePatterns,
-usePrefixCompression, blocksizePermutations, createTextIndex,
-addWordsFromLiterals, contentsOfWordsFileAndDocsFile, parserBufferSize,
-scoringMetric, bAndKParam, indexType});
+
+// _____________________________________________________________________________
+Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
+  return makeTestIndex(indexBasename, TestIndexConfig{std::move(turtle)});
 }
-*/
 
 // ________________________________________________________________________________
 QueryExecutionContext* getQec(TestIndexConfig c) {
@@ -361,6 +322,14 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
   auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
   return qec;
+}
+
+// _____________________________________________________________________________
+QueryExecutionContext* getQec(
+    std::optional<std::string> turtleInput = std::nullopt) {
+  TestIndexConfig config;
+  config.turtleInput = std::move(turtleInput);
+  return getQec(std::move(config));
 }
 
 // ___________________________________________________________
