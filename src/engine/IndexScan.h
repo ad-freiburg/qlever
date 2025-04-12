@@ -17,8 +17,7 @@ class IndexScan final : public Operation {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   // Optional pair containing a `PrefilterExpression` with `ColumnIndex` (eval.
   // index)
-  using PrefilterIndexPair = std::optional<std::pair<
-      std::unique_ptr<prefilterExpressions::PrefilterExpression>, ColumnIndex>>;
+  using PrefilteredBlockRanges = std::optional<BlockRanges>;
 
  private:
   Permutation::Enum permutation_;
@@ -26,7 +25,7 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  PrefilterIndexPair prefilter_;
+  PrefilteredBlockRanges prefilteredBlockRanges_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -41,18 +40,18 @@ class IndexScan final : public Operation {
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
+            PrefilteredBlockRanges prefilteredBlockRanges = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
+            PrefilteredBlockRanges prefilteredBlockRanges = std::nullopt);
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
-            PrefilterIndexPair prefilter);
+            PrefilteredBlockRanges prefilteredBlockRanges);
 
   ~IndexScan() override = default;
 
@@ -64,20 +63,23 @@ class IndexScan final : public Operation {
   const std::vector<Variable>& additionalVariables() const {
     return additionalVariables_;
   }
-
+  // Get `additionalColumns_`.
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
   }
+  // Get `prefilteredBlockRanges_`.
+  PrefilteredBlockRanges getPrefilteredBlockRanges() const {
+    return prefilteredBlockRanges_;
+  }
+
   std::string getDescriptor() const override;
-
   size_t getResultWidth() const override;
-
   vector<ColumnIndex> resultSortedOn() const override;
 
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterGetUpdatedQueryExecutionTree(
+  setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
       const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
       const override;
 
@@ -198,12 +200,13 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Return an updated QueryExecutionTree containing the new IndexScan which is
-  // a copy of this (`IndexScan`), but with added corresponding
-  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
-  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
-  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
-      PrefilterIndexPair prefilter) const;
+  // Return an updated `QueryExecutionTree` containing the new `IndexScan`. This
+  // new `IndexScan` contains the previously by `PrefilterExpression` computed
+  // `BlockRanges`. The corresponding `PrefilterExpression` is passed to this
+  // `IndexScan` through
+  // `setPrefilteredBlockRangesGetUpdatedQueryExecutionTree()`.
+  std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredBlockRanges(
+      BlockRanges prefilteredBlockRanges) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
@@ -221,16 +224,6 @@ class IndexScan final : public Operation {
   // applying any additional pre-filter procedure.
   std::optional<std::span<const CompressedBlockMetadata>> getBlockMetadata()
       const;
-
-  // This method retrieves all relevant `CompressedBlockMetadata` and performs
-  // the pre-filtering procedure given a `PrefilterIndexPair` is available.
-  std::optional<std::vector<CompressedBlockMetadata>>
-  getBlockMetadataOptionallyPrefiltered() const;
-
-  // Apply the `prefilter_` to the `blocks`. May only be called if the limit is
-  // unconstrained, and a `prefilter_` exists.
-  std::vector<CompressedBlockMetadata> applyPrefilter(
-      std::span<const CompressedBlockMetadata> blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

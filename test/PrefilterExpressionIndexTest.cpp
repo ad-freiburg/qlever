@@ -44,11 +44,11 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 //______________________________________________________________________________
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
-// Convert `IdxPairRanges` to `BlockSubranges` with respect to `BlockIt
+// Convert `IdxPairRanges` to `BlockRanges` with respect to `BlockIt
 // beginBlockSpan` (first possible `std::span<const BlockMetadata>::iterator`).
-static BlockSubranges convertFromSpanIdxToSpanBlockItRanges(
+static BlockRanges convertFromSpanIdxToSpanBlockItRanges(
     const BlockIt& beginBlockSpan, const IdxPairRanges idxRanges) {
-  BlockSubranges blockItRanges;
+  BlockRanges blockItRanges;
   blockItRanges.reserve(idxRanges.size());
   ql::ranges::for_each(idxRanges, [&](const IdxPair& idxPair) {
     const auto& [beginIdx, endIdx] = idxPair;
@@ -57,6 +57,11 @@ static BlockSubranges convertFromSpanIdxToSpanBlockItRanges(
   });
   return blockItRanges;
 }
+
+//______________________________________________________________________________
+auto convertBlockRangesToVector = [](const BlockRanges& blockRanges) {
+  return ranges::to<std::vector>(blockRanges | ql::views::join);
+};
 
 //______________________________________________________________________________
 /*
@@ -332,7 +337,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<BlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(expr->evaluate(testBlocks, 2),
+    ASSERT_EQ(convertBlockRangesToVector(expr->evaluate(testBlocks, 2)),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -353,15 +358,15 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         testIsIriOrIsLit
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
-    ASSERT_EQ(
-        expr->evaluate(input.empty() ? allTestBlocksIsDatatype : input, 2),
-        adjustedExpected);
+    ASSERT_EQ(convertBlockRangesToVector(expr->evaluate(
+                  input.empty() ? allTestBlocksIsDatatype : input, 2)),
+              adjustedExpected);
   }
 
-  // Check if `BlockSubranges r1` and `BlockSubranges r2` contain
+  // Check if `BlockRanges r1` and `BlockRanges r2` contain
   // equivalent sub-ranges.
-  bool assertEqRelevantBlockItRanges(const BlockSubranges& r1,
-                                     const BlockSubranges& r2) {
+  bool assertEqRelevantBlockItRanges(const BlockRanges& r1,
+                                     const BlockRanges& r2) {
     return ql::ranges::equal(r1, r2, ql::ranges::equal);
   }
 
@@ -397,14 +402,15 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<BlockMetadata>&& expected) {
-    ASSERT_EQ(expr->evaluate(dateBlocks, 2), expected);
+    ASSERT_EQ(convertBlockRangesToVector(expr->evaluate(dateBlocks, 2)),
+              expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
   // The `IdxPairRanges` will be mapped to their corresponding
-  // `BlockSubranges`.
+  // `BlockRanges`.
   // (1) Set `TestUnion = true`: test logical union (`OR(||)`) on
-  // `BlockSubrange`s.
+  // `BlockRange`s.
   // (2) Set `TestUnion = false`: test logical intersection (`AND(&&)`) on
   // `BlockItRanges`s.
   template <bool TestUnion>
@@ -990,14 +996,17 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<BlockMetadata> input = {b16};
-  EXPECT_EQ(expr->evaluate(input, 0), input);
-  EXPECT_EQ(expr->evaluate(input, 1), input);
-  EXPECT_EQ(expr->evaluate(input, 2), input);
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 0)), input);
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 1)), input);
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 2)), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(expr->evaluate(input, 2), (std::vector<BlockMetadata>{b15, b16}));
-  EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(input, 0), std::vector<BlockMetadata>{});
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 2)),
+            (std::vector<BlockMetadata>{b15, b16}));
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 1)),
+            std::vector<BlockMetadata>{});
+  EXPECT_EQ(convertBlockRangesToVector(expr->evaluate(input, 0)),
+            std::vector<BlockMetadata>{});
 }
 
 //______________________________________________________________________________
@@ -1066,7 +1075,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<true>` over `BlockSubrange` values.
+// Test `mergeRelevantBlockItRanges<true>` over `BlockRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
   // r1 UNION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<true>({}, {}, {});
@@ -1086,7 +1095,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrMergeBlockItRanges) {
 }
 
 //______________________________________________________________________________
-// Test `mergeRelevantBlockItRanges<false>` over `BlockSubrange` values.
+// Test `mergeRelevantBlockItRanges<false>` over `BlockRange` values.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
   // r1 INTERSECTION r2 should yield rExpected.
   makeTestAndOrOrMergeBlocks<false>({}, {}, {});

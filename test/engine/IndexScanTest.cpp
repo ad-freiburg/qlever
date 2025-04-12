@@ -189,8 +189,10 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr.second;
-      auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
+      auto optUpdatedQet =
+          scan.setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
+              makeFilterExpression::filterHelper::makePrefilterVec(
+                  std::move(pr)));
       if (optUpdatedQet.has_value()) {
         auto updatedQet = optUpdatedQet.value();
         ASSERT_TRUE(prefilterCanBeSet);
@@ -618,8 +620,9 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
-    auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
-        makePrefilterVec(std::move(pair)));
+    auto optUpdatedQet =
+        indexScan.setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
+            makePrefilterVec(std::move(pair)));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
     ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
@@ -669,27 +672,22 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
-  auto updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  auto updatedQet = scan.setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
+      std::move(prefilterPairs));
   // We have a corresponding column for ?x (ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that PrefilterExpression (<
   // 5, ?x) will be set as a prefilter for this IndexScan.
-  auto setPrefilterExpr = lt(IntId(5));
-  ColumnIndex columnIdx = 1;
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *setPrefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
-  EXPECT_THAT(updatedQet.value()->getRootOperation()->getCacheKey(),
-              ::testing::HasSubstr(os.str()));
+  EXPECT_THAT(
+      updatedQet.value()->getRootOperation()->getCacheKey(),
+      ::testing::HasSubstr("IndexScan contains prefiltered BlockRanges."));
 
   // Assert that we don't set a <PrefilterExpression, ColumnIndex> pair for the
   // second Variable.
   prefilterPairs = makePrefilterVec(pr(lt(IntId(10)), V{"?a"}),
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
-  updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  updatedQet = scan.setPrefilteredBlockRangesGetUpdatedQueryExecutionTree(
+      std::move(prefilterPairs));
   // No PrefilterExpression should be set for this IndexScan, we don't expect a
   // updated QueryExecutionTree.
   EXPECT_TRUE(!updatedQet.has_value());
@@ -1098,12 +1096,7 @@ TEST(IndexScan, clone) {
   {
     using namespace makeFilterExpression;
     SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
-    IndexScan scan{
-        qec,
-        Permutation::PSO,
-        xpy,
-        std::nullopt,
-        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
+    IndexScan scan{qec, Permutation::PSO, xpy, std::nullopt, {{}}};
 
     auto clone = scan.clone();
     ASSERT_TRUE(clone);
