@@ -77,7 +77,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 // TODO @realHannes:
 // When `ScanSpecAndBlocks` is properly integrated in `IndexScan`; `scan`,
 // `getResultSizeOfScan` and `getSizeEstimate` will not have to
-// explicitly call `getScanSpecAndBlocks`. This is beacuse they get passed a
+// explicitly call `getScanSpecAndBlocks`. This is because they get passed a
 // `ScanSpecAndBlocks` object instead a simple `ScanSpecification` in the
 // future.
 // _____________________________________________________________________
