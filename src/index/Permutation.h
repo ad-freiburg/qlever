@@ -109,6 +109,14 @@ class Permutation {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
 
+  // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
+  // with relevant `BlockMetadataRanges`.
+  CompressedRelationReader::ScanSpecAndBlocks getScanSpecAndBlocks(
+      const Permutation& perm, const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      const std::optional<std::vector<CompressedBlockMetadata>>& optBlocks)
+      const;
+
   std::optional<CompressedRelationMetadata> getMetadata(
       Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 

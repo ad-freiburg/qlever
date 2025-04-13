@@ -26,6 +26,12 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+  // TODO @realHannes:
+  // Remove `PrefilterIndexPair` as a member and set instead a member of type
+  // `ScanSpecAndBlocks` (see CompressedRelation.h) with optionally prefiltered
+  // `BlockMetadataRanges`. This `ScanSpecAndBlocks` member can be passed
+  // to the scan and size-estimate functions in the future making those
+  // evaluations simpler.
   PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
