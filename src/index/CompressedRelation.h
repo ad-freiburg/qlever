@@ -474,8 +474,7 @@ class CompressedRelationReader {
   };
 
   // The specification of scan, together with the blocks on which this scan is
-  // to be performed. All members are declared `const` because they are not
-  // independent with respect to each other.
+  // to be performed.
   //
   // Brief explanation of `ScanSpecAndBlocks` constructor.
   // (1) The passed `ScanSpecification` remains as it is and is moved into
@@ -487,9 +486,10 @@ class CompressedRelationReader {
   // `CompressedBlockMetadata` values contained over all subranges in member
   // `BlockMetadataRanges_ blockMetadata_`.
   struct ScanSpecAndBlocks {
-    const ScanSpecification scanSpec_;
-    const BlockMetadataRanges blockMetadata_;
-    const size_t sizeBlockMetadata_;
+    ScanSpecification scanSpec_;
+    BlockMetadataRanges blockMetadata_;
+    size_t sizeBlockMetadata_;
+
     ScanSpecAndBlocks(ScanSpecification scanSpec,
                       const BlockMetadataRanges& blockMetadataRanges)
         : scanSpec_(std::move(scanSpec)),
