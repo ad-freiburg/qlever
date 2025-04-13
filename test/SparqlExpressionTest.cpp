@@ -1338,25 +1338,31 @@ TEST(SparqlExpression, concatExpression) {
   checkConcat(idOrLitOrStringVec({U, U, U}),
               std::tuple{Ids{U, I(0), U}, Ids{U, U, I(0)}});
 
-  checkConcat(idOrLitOrStringVec({"0null", U, U, U, U, "5.35.2"}),
-              // UNDEF evaluates to UNDEF.
-              std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
-                         idOrLitOrStringVec({"null", "eins", "zwei", U, U, ""}),
-                         idOrLitOrStringVec({"", I(1), U, U, U, D(5.2)})});
+  //  CONCAT function explicitly takes string literals according to the sparql
+  //  standard.
+  checkConcat(
+      idOrLitOrStringVec({"0null0", U, U, U, U}),
+      std::tuple{idOrLitOrStringVec({"0", I(1), "zwei", T, D(5.3)}),
+                 idOrLitOrStringVec({"null", "eins", I(2), "true", ""}),
+                 idOrLitOrStringVec({"0", "EINS", "ZWEI", "TRUE", D(5.2)})});
   // Example with some constants in the middle.
-  checkConcat(idOrLitOrStringVec({"0trueeins", U, "2trueeins", "3trueeins", U,
-                                  "12.3trueeins-2.1"}),
-              // UNDEF and the empty string are considered to be `false`.
-              std::tuple{Ids{I(0), U, I(2), I(3), I(4), D(12.3)}, T,
-                         IdOrLiteralOrIri{lit("eins")},
-                         idOrLitOrStringVec({"", "", "", "", U, D(-2.1)})});
+  checkConcat(
+      idOrLitOrStringVec(
+          {"0trueeins", U, "2trueeins", "3trueeins", U, "12.3trueeins-2.1"}),
+      std::tuple{idOrLitOrStringVec({"0", U, "2", "3", "", "12.3"}),
+                 IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("eins")},
+                 idOrLitOrStringVec({"", "", "", "", I(4), "-2.1"})});
 
   // Only constants
-  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, I(1)});
+  checkConcat(
+      IdOrLiteralOrIri{lit("trueMe1")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 IdOrLiteralOrIri{lit("1")}});
   // Constants at the beginning.
-  checkConcat(IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, Ids{I(1), I(2)}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 idOrLitOrStringVec({"1", "2"})});
 
   checkConcat(IdOrLiteralOrIri{lit("")}, std::tuple{});
   auto coalesceExpr = makeConcatExpressionVariadic(
@@ -1374,40 +1380,25 @@ TEST(SparqlExpression, concatExpression) {
                      "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
                  IdOrLiteralOrIri{lit(
                      "World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
-
   checkConcat(IdOrLiteralOrIri{lit("HelloWorld", "@en")},
               std::tuple{IdOrLiteralOrIri{lit("Hello", "@en")},
                          IdOrLiteralOrIri{lit("World", "@en")}});
-
   checkConcat(
       IdOrLiteralOrIri{lit("HelloWorld")},
       std::tuple{IdOrLiteralOrIri{lit(
                      "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
                  IdOrLiteralOrIri{lit("World")}});
-
   checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
               std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
                          IdOrLiteralOrIri{lit("World")}});
-
   checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
               std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
                          IdOrLiteralOrIri{lit("World", "@en")}});
-
   checkConcat(
       IdOrLiteralOrIri{lit("HelloWorld")},
       std::tuple{IdOrLiteralOrIri{lit(
                      "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
                  IdOrLiteralOrIri{lit("World", "@en")}});
-
-  checkConcat(
-      IdOrLiteralOrIri{lit("trueMe1")},
-      std::tuple{T,
-                 IdOrLiteralOrIri{
-                     lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-                 I(1)});
-
-  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me", "@en")}, I(1)});
 
   // Constants at beginning with datatypes or language tags.
   checkConcat(IdOrLiteralOrIriVec{lit("MeHello", "@en"), lit("MeWorld"),
@@ -1415,7 +1406,6 @@ TEST(SparqlExpression, concatExpression) {
               std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
                          IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("World"),
                                              lit("Hallo", "@de")}});
-
   checkConcat(
       IdOrLiteralOrIriVec{
           lit("MeHello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
@@ -1438,13 +1428,11 @@ TEST(SparqlExpression, concatExpression) {
               lit("Hi"), lit("Hallo", "@de")},
           IdOrLiteralOrIri{
               lit("World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
-
   checkConcat(IdOrLiteralOrIriVec{lit("HelloWorld", "@en"), lit("HiWorld"),
                                   lit("HalloWorld")},
               std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hi"),
                                              lit("Hallo", "@de")},
                          IdOrLiteralOrIri{lit("World", "@en")}});
-
   checkConcat(
       IdOrLiteralOrIriVec{lit("HelloWorld!"), lit("HalloWorld!")},
       std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hallo", "@de")},
