@@ -529,6 +529,25 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
 }
 
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultNoVariables) {
+  parsedQuery::Service parsedServiceClause{
+      {},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ <a> <b> <c> }",
+      false};
+
+  std::string_view expectedSparqlQuery = " SELECT * WHERE { <a> <b> <c> }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({}, {{}}))};
+
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
 TEST_F(ServiceTest, getCacheKey) {
   // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{
