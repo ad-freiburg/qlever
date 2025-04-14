@@ -7,6 +7,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+// #include "index/vocabulary/GeoVocabulary.h"
+#include "parser/NormalizedString.h"
 #include "util/Conversions.h"
 
 using namespace sparqlExpression::detail;
@@ -368,3 +370,55 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
                           : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
                                 litOrIri.getLiteral().getContent()))};
 }
+
+//______________________________________________________________________________
+std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case LocalVocabIndex:
+    case VocabIndex: {
+      // For the local vocabulary the geometry info is not precomputed.
+      // Therefore we have to fetch and parse the string.
+      auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return GeometryInfoValueGetter{}(lit, context);
+    }
+    // TODO<ullingerc> After merge of GeoVocabulary this can be activated
+    /*
+    case VocabIndex: {
+      // All geometry strings encountered during index build have a precomputed
+      // geometry info object.
+      return context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
+    }
+    */
+    case GeoPoint: {
+      // The geometry info of a point is trivial and therefore created ad hoc.
+      return ad_utility::GeometryInfo::fromGeoPoint(id.getGeoPoint());
+    }
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+      return std::nullopt;
+  }
+  AD_FAIL();
+};
+
+//______________________________________________________________________________
+std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  // If we receive only a literal, we have no choice but to parse it and compute
+  // the geometry info ad hoc.
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
+    return ad_utility::GeometryInfo::fromWktLiteral(
+        litOrIri.getLiteral().toStringRepresentation());
+  }
+  return std::nullopt;
+};

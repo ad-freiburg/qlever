@@ -1,11 +1,19 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2022 - 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author:
+//  Authors: @DuDaAG
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
+#include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
+#include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "index/LocalVocabEntry.h"
+// #include "index/vocabulary/GeoVocabulary.h"
+#include "parser/Literal.h"
+#include "parser/LiteralOrIri.h"
+#include "util/GeometryInfo.h"
 
 // Common things used in multiple tests.
 namespace {
@@ -106,6 +114,79 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
   return checkLiteralContentAndDatatype(literal, expectedContent,
                                         expectedDatatype);
 };
+
+// Helper that constructs a local vocab, inserts the literal and passes the
+// LocalVocabIndex as a ValueId to the GeometryInfoValueGetter
+void checkGeoInfoFromLocalVocab(
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
+  sparqlExpression::detail::GeometryInfoValueGetter getter;
+  // Not the geoInfoTtl here because the literals should not be contained
+  TestContextWithGivenTTl testContext{ttl};
+  LocalVocab localVocab;
+  auto litOrIri =
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          wktInput);
+  auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
+  auto id = ValueId::makeFromLocalVocabIndex(idx);
+  auto res = getter(id, &testContext.context);
+  checkGeoInfo(res, expected);
+}
+
+// Test knowledge graph that contains all used literals and iris.
+const std::string geoInfoTtl =
+    "<x> <y> \"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>, "
+    " \"someType\"^^<someType>,"
+    " <https://example.com/test>,"
+    " \"noType\" ,"
+    " \"LINESTRING(2 2, 4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>,"
+    " \"POLYGON(2 4, 4 4, 4 2, 2 "
+    "2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+
+// Helper that tests the GeometryInfoValueGetter using the ValueId of a
+// VocabIndex for a string in the example knowledge graph.
+void checkGeoInfoFromVocab(std::string wktInput,
+                           std::optional<ad_utility::GeometryInfo> expected) {
+  sparqlExpression::detail::GeometryInfoValueGetter getter;
+  TestContextWithGivenTTl testContext{geoInfoTtl};
+  VocabIndex idx;
+  ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
+  auto id = ValueId::makeFromVocabIndex(idx);
+  auto res = getter(id, &testContext.context);
+  checkGeoInfo(res, expected);
+}
+
+// Helper that tests the GeometryInfoValueGetter using an arbitrary ValueId
+void checkGeoInfoFromValueId(ValueId input,
+                             std::optional<ad_utility::GeometryInfo> expected) {
+  sparqlExpression::detail::GeometryInfoValueGetter getter;
+  TestContextWithGivenTTl testContext{geoInfoTtl};
+  auto res = getter(input, &testContext.context);
+  checkGeoInfo(res, expected);
+}
+
+// Helper that tests the GeometryInfoValueGetter using a string passed directly
+// as LiteralOrIri, not ValueId
+void checkGeoInfoFromLiteral(std::string wktInput,
+                             std::optional<ad_utility::GeometryInfo> expected) {
+  sparqlExpression::detail::GeometryInfoValueGetter getter;
+  TestContextWithGivenTTl testContext{geoInfoTtl};
+  auto litOrIri =
+      ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+          wktInput);
+  auto res = getter(litOrIri, &testContext.context);
+  checkGeoInfo(res, expected);
+}
+
+// Helper that runs each of the tests for GeometryInfoValueGetter using the same
+// input
+void checkGeoInfoFromLocalAndNormalVocabAndLiteral(
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
+  checkGeoInfoFromVocab(wktInput, expected);
+  checkGeoInfoFromLocalVocab(wktInput, expected);
+  checkGeoInfoFromLiteral(wktInput, expected);
+}
+
 };  // namespace
 
 // namespace
@@ -177,4 +258,46 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
   checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
                                                  std::nullopt, std::nullopt,
                                                  literalValueGetter);
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
+      "\"LINESTRING(2 2, 4 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      ad_utility::GeometryInfo(
+          2, std::pair<GeoPoint, GeoPoint>(GeoPoint(2, 2), GeoPoint(4, 4)),
+          GeoPoint(3, 3)));
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
+      "\"POLYGON(2 4, 4 4, 4 "
+      "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      ad_utility::GeometryInfo(
+          3, std::pair<GeoPoint, GeoPoint>(GeoPoint(2, 2), GeoPoint(4, 4)),
+          GeoPoint(3, 3)));
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
+                                                std::nullopt);
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral(
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      std::nullopt);
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"noType\"", std::nullopt);
+  checkGeoInfoFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
+                                                std::nullopt);
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
+  checkGeoInfoFromValueId(
+      ValueId::makeFromGeoPoint(GeoPoint(3, 2)),
+      ad_utility::GeometryInfo(
+          1, std::pair<GeoPoint, GeoPoint>(GeoPoint(3, 2), GeoPoint(3, 2)),
+          GeoPoint(3, 2)));
+  checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromDouble(42.01), std::nullopt);
+}
+
+TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
+  checkGeoInfoFromValueId(ValueId::makeUndefined(), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromBool(true), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromInt(42), std::nullopt);
+  checkGeoInfoFromValueId(ValueId::makeFromDouble(42.01), std::nullopt);
 }

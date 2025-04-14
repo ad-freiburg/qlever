@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include "parser/GeoPoint.h"
+#include "util/GeometryInfo.h"
 
 namespace ad_utility {
 
@@ -60,6 +61,17 @@ class WktDistGeoPoints {
       return std::numeric_limits<double>::quiet_NaN();
     }
     return detail::wktDistImpl(point1.value(), point2.value());
+  }
+};
+
+// Get the centroid of a geometry.
+class WktCentroid {
+ public:
+  ValueId operator()(const std::optional<GeometryInfo>& geom) const {
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromGeoPoint(geom.value().getCentroid());
   }
 };
 
