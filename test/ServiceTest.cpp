@@ -58,13 +58,16 @@ class ServiceTest : public ::testing::Test {
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "application/sparql-results+json",
-         std::exception_ptr mockException =
-             nullptr) -> Service::GetResultFunction {
+         std::exception_ptr mockException = nullptr,
+         ad_utility::source_location loc =
+             ad_utility::source_location::current())
+      -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
                std::string_view acceptHeader) {
+      auto g = generateLocationTrace(loc);
       // Check that the request parameters are as expected.
       //
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
@@ -204,11 +207,13 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false) -> Result {
-      Service s{testQec,
-                silent ? parsedServiceClauseSilent : parsedServiceClause,
-                getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
-                                         result, status, contentType)};
+            bool silent = false,
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) -> Result {
+      Service s{
+          testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
+          getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                   status, contentType, nullptr, loc)};
       return s.computeResultOnlyForTesting();
     };
 
@@ -266,7 +271,10 @@ TEST_F(ServiceTest, computeResult) {
     auto expectThrowOrSilence =
         [&](const std::string& result, std::string_view errorMsg,
             boost::beast::http::status status = boost::beast::http::status::ok,
-            std::string contentType = "application/sparql-results+json") {
+            std::string contentType = "application/sparql-results+json",
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) {
+          auto g = generateLocationTrace(loc);
           AD_EXPECT_THROW_WITH_MESSAGE(
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
