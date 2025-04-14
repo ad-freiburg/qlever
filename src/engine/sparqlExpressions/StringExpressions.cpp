@@ -46,14 +46,13 @@ static std::size_t utf8Length(std::string_view s) {
 void concatOrSetLiteral(
     std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
     const std::optional<ad_utility::triple_component::Literal>& nextLiteral,
-    char& isInitializedFlag) {
+    const bool isFirstLiteral) {
   if (!nextLiteral.has_value() || !literalSoFarOpt.has_value()) {
     literalSoFarOpt = std::nullopt;  // UNDEF
-  } else if (literalSoFarOpt.has_value() && isInitializedFlag) {
-    literalSoFarOpt.value().concat(nextLiteral.value());
-  } else {
+  } else if (isFirstLiteral) {
     literalSoFarOpt = nextLiteral.value();
-    isInitializedFlag = true;
+  } else {
+    literalSoFarOpt.value().concat(nextLiteral.value());
   }
 }
 
@@ -436,18 +435,18 @@ class ConcatExpression : public detail::VariadicExpression {
         sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{};
     std::variant<std::optional<Literal>, LiteralVec> result =
         Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
-    char isInitializedFlag = 0;
+    bool isFirstLiteral = true;
 
-    auto convertLiteral =
-        [](const std::optional<Literal>& literal) -> IdOrLiteralOrIri {
+    auto moveLiteralToResult =
+        [](std::optional<Literal>& literal) -> IdOrLiteralOrIri {
       if (!literal.has_value()) {
         return Id::makeUndefined();
       }
-      return LiteralOrIri(literal.value());
+      return LiteralOrIri(std::move(literal.value()));
     };
 
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result, &isInitializedFlag, &valueGetter)(typename T)(T && s)(
+        &ctx, &result, &isFirstLiteral, &valueGetter)(typename T)(T && s)(
         requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         auto literalFromConstant = valueGetter(std::forward<T>(s), ctx);
@@ -455,7 +454,7 @@ class ConcatExpression : public detail::VariadicExpression {
         auto concatOrSetLitFromConst =
             [&](std::optional<Literal>& literalSoFar) {
               concatOrSetLiteral(literalSoFar, literalFromConstant,
-                                 isInitializedFlag);
+                                 isFirstLiteral);
             };
 
         // All previous children were constants, and the current child also is
@@ -501,37 +500,38 @@ class ConcatExpression : public detail::VariadicExpression {
         size_t i = 0;
         for (auto& el : gen) {
           auto literal = valueGetter(std::move(el), ctx);
-          concatOrSetLiteral(resultAsVec[i], literal, isInitializedFlag);
+          concatOrSetLiteral(resultAsVec[i], literal, isFirstLiteral);
           ctx->cancellationHandle_->throwIfCancelled();
           ++i;
         }
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    ql::ranges::for_each(
-        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
-          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
-        });
+    ql::ranges::for_each(childrenVec(), [&ctx, &visitSingleExpressionResult,
+                                         &isFirstLiteral](const auto& child) {
+      std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+      isFirstLiteral = false;
+    });
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
 
     auto visitLiteralResult =
-        [&](const std::optional<Literal>& literalSoFar) -> ExpressionResult {
-      return convertLiteral(literalSoFar);
+        [&](std::optional<Literal>& literalSoFar) -> ExpressionResult {
+      return moveLiteralToResult(literalSoFar);
     };
 
     auto visitLiteralVecResult =
-        [&](const LiteralVec& literalVec) -> ExpressionResult {
+        [&](LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(literalVec.size());
-      ql::ranges::copy(literalVec | ql::views::transform(convertLiteral),
+      ql::ranges::copy(literalVec | ql::views::transform(moveLiteralToResult),
                        std::back_inserter(resultAsVec));
       return resultAsVec;
     };
     return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
                                                        visitLiteralVecResult},
-                      std::move(result));
+                      result);
   }
 };
 

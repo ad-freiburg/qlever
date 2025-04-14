@@ -172,8 +172,9 @@ void Literal::concat(const Literal& other) {
          getDatatype() == other.getDatatype()))) {
     removeDatatypeOrLanguageTag();
   }
-  content_.insert(beginOfSuffix_ - 1, asStringViewUnsafe(other.getContent()));
-  beginOfSuffix_ += other.beginOfSuffix_ - 2;
+  const auto& otherContent = asStringViewUnsafe(other.getContent());
+  content_.insert(beginOfSuffix_ - 1, otherContent);
+  beginOfSuffix_ += otherContent.size();
 }
 
 }  // namespace ad_utility::triple_component
