@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "GeometryInfoTestHelpers.h"
 #include "parser/GeoPoint.h"
 #include "util/GeometryInfo.h"
 namespace {
@@ -39,63 +40,35 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   std::string lit =
       "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g = GeometryInfo::fromWktLiteral(lit);
-  ASSERT_EQ(g.getWktType(), 1);
-  ASSERT_NEAR(g.getCentroid().getLat(), 4, 0.001);
-  ASSERT_NEAR(g.getCentroid().getLng(), 3, 0.001);
-  auto [lowerLeft, upperRight] = g.getBoundingBox();
-  ASSERT_NEAR(lowerLeft.getLat(), 4, 0.001);
-  ASSERT_NEAR(lowerLeft.getLng(), 3, 0.001);
-  ASSERT_NEAR(upperRight.getLat(), 4, 0.001);
-  ASSERT_NEAR(upperRight.getLng(), 3, 0.001);
+  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
+  checkGeoInfo(g, exp);
 
   std::string lit2 =
       "\"LINESTRING(2 2, 4 "
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g2 = GeometryInfo::fromWktLiteral(lit2);
-  ASSERT_EQ(g2.getWktType(), 2);
-  ASSERT_NEAR(g2.getCentroid().getLat(), 3, 0.001);
-  ASSERT_NEAR(g2.getCentroid().getLng(), 3, 0.001);
-  auto [lowerLeft2, upperRight2] = g2.getBoundingBox();
-  ASSERT_NEAR(lowerLeft2.getLat(), 2, 0.001);
-  ASSERT_NEAR(lowerLeft2.getLng(), 2, 0.001);
-  ASSERT_NEAR(upperRight2.getLat(), 4, 0.001);
-  ASSERT_NEAR(upperRight2.getLng(), 4, 0.001);
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}};
+  checkGeoInfo(g2, exp2);
 
   std::string lit3 =
       "\"POLYGON(2 4, 4 4, 4 "
       "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g3 = GeometryInfo::fromWktLiteral(lit3);
-  ASSERT_EQ(g3.getWktType(), 3);
-  ASSERT_NEAR(g3.getCentroid().getLat(), 3, 0.001);
-  ASSERT_NEAR(g3.getCentroid().getLng(), 3, 0.001);
-  auto [lowerLeft3, upperRight3] = g3.getBoundingBox();
-  ASSERT_NEAR(lowerLeft3.getLat(), 2, 0.001);
-  ASSERT_NEAR(lowerLeft3.getLng(), 2, 0.001);
-  ASSERT_NEAR(upperRight3.getLat(), 4, 0.001);
-  ASSERT_NEAR(upperRight3.getLng(), 4, 0.001);
+  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
+  checkGeoInfo(g3, exp3);
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  ASSERT_EQ(g.getWktType(), 1);
-  ASSERT_NEAR(g.getCentroid().getLat(), 1.234, 0.001);
-  ASSERT_NEAR(g.getCentroid().getLng(), 5.678, 0.001);
-  ASSERT_NEAR(g.getBoundingBox().first.getLat(), 1.234, 0.001);
-  ASSERT_NEAR(g.getBoundingBox().first.getLng(), 5.678, 0.001);
-  ASSERT_NEAR(g.getBoundingBox().second.getLat(), 1.234, 0.001);
-  ASSERT_NEAR(g.getBoundingBox().second.getLng(), 5.678, 0.001);
+  GeometryInfo exp{1, {p, p}, p};
+  checkGeoInfo(g, exp);
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  ASSERT_EQ(g2.getWktType(), 1);
-  ASSERT_NEAR(g2.getCentroid().getLng(), 0, 0.001);
-  ASSERT_NEAR(g2.getCentroid().getLat(), 0, 0.001);
-  ASSERT_NEAR(g2.getBoundingBox().first.getLat(), 0, 0.001);
-  ASSERT_NEAR(g2.getBoundingBox().first.getLng(), 0, 0.001);
-  ASSERT_NEAR(g2.getBoundingBox().second.getLat(), 0, 0.001);
-  ASSERT_NEAR(g2.getBoundingBox().second.getLng(), 0, 0.001);
+  GeometryInfo exp2{1, {p2, p2}, p2};
+  checkGeoInfo(g2, exp2);
 }
 
 }  // namespace

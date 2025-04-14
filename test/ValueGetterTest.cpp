@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -113,30 +114,6 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
   return checkLiteralContentAndDatatype(literal, expectedContent,
                                         expectedDatatype);
 };
-
-// Helper that asserts (approx.) equality of two GeometryInfo objects
-void checkGeoInfo(std::optional<ad_utility::GeometryInfo> actual,
-                  std::optional<ad_utility::GeometryInfo> expected) {
-  ASSERT_EQ(actual.has_value(), expected.has_value());
-  if (!actual.has_value() || !expected.has_value()) {
-    return;
-  }
-
-  auto a = actual.value();
-  auto b = expected.value();
-
-  ASSERT_EQ(a.getWktType(), b.getWktType());
-  auto aCentroid = a.getCentroid();
-  auto bCentroid = b.getCentroid();
-  ASSERT_NEAR(aCentroid.getLat(), bCentroid.getLat(), 0.001);
-  ASSERT_NEAR(aCentroid.getLng(), bCentroid.getLng(), 0.001);
-  auto [all, aur] = a.getBoundingBox();
-  auto [bll, bur] = a.getBoundingBox();
-  ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
-  ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
-  ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
-  ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
-}
 
 // Helper that constructs a local vocab, inserts the literal and passes the
 // LocalVocabIndex as a ValueId to the GeometryInfoValueGetter
