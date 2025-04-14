@@ -134,8 +134,7 @@ void checkGeoInfoFromLocalVocab(
 
 // Test knowledge graph that contains all used literals and iris.
 const std::string geoInfoTtl =
-    "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> "
-    "<x> <y> \"anXsdString\"^^xsd:string, "
+    "<x> <y> \"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>, "
     " \"someType\"^^<someType>,"
     " <https://example.com/test>,"
     " \"noType\" ,"
@@ -151,7 +150,7 @@ void checkGeoInfoFromVocab(std::string wktInput,
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
   VocabIndex idx;
-  testContext.qec->getIndex().getVocab().getId(wktInput, &idx);
+  ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
   auto id = ValueId::makeFromVocabIndex(idx);
   auto res = getter(id, &testContext.context);
   checkGeoInfo(res, expected);
@@ -277,7 +276,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithVocabIdOrLiteral) {
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"someType\"^^<someType>",
                                                 std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-      "\"someType\"^^<http://www.w3.org/2001/XMLSchema#string>", std::nullopt);
+      "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
+      std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("\"noType\"", std::nullopt);
   checkGeoInfoFromLocalAndNormalVocabAndLiteral("<https://example.com/test>",
                                                 std::nullopt);
