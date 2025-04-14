@@ -88,7 +88,7 @@ class IndexMetaData {
 
   // Public methods.
  public:
-  // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
+  // Some instantiations of `MapType` (the dense ones using mmap)
   // require additional calls to setup() before being fully initialized.
   IndexMetaData() = default;
 

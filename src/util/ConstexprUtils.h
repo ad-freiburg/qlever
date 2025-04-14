@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
 #define QLEVER_SRC_UTIL_CONSTEXPRUTILS_H
@@ -11,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 
 // Various helper functions for compile-time programming.
@@ -128,9 +131,12 @@ the check. Otherwise, returns `sizeof...(Args)`.
 */
 template <auto checkFunction, typename... Args>
 constexpr size_t getIndexOfFirstTypeToPassCheck() {
+  using ad_utility::use_type_identity::ti;
+
   size_t index = 0;
 
-  auto l = [&index]<typename T>() {
+  auto l = [&index](auto t) {
+    using T = typename decltype(t)::type;
     if constexpr (checkFunction.template operator()<T>()) {
       return true;
     } else {
@@ -139,7 +145,7 @@ constexpr size_t getIndexOfFirstTypeToPassCheck() {
     }
   };
 
-  ((l.template operator()<Args>()) || ...);
+  ((l(ti<Args>)) || ...);
 
   return index;
 }
@@ -229,6 +235,13 @@ constexpr void forEachTypeInParameterPack(const auto& lambda) {
   (lambda.template operator()<Ts>(), ...);
 }
 
+// Same as the function above, but the types are passed to the lambda as a first
+// argument `std::type_identity<T>{}`.
+template <typename... Ts>
+constexpr void forEachTypeInParameterPackWithTI(const auto& lambda) {
+  (lambda(use_type_identity::ti<Ts>), ...);
+}
+
 /*
 Implementation for `forEachTypeInTemplateType`.
 
@@ -245,6 +258,16 @@ struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };
+
+template <class T>
+struct forEachTypeInTemplateTypeWithTIImpl;
+
+template <template <typename...> typename Template, typename... Ts>
+struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
+  constexpr void operator()(const auto& lambda) const {
+    forEachTypeInParameterPackWithTI<Ts...>(lambda);
+  }
+};
 }  // namespace detail
 
 /*
@@ -254,6 +277,14 @@ template type as explicit template parameter, keeping the same order.
 template <typename TemplateType>
 constexpr void forEachTypeInTemplateType(const auto& lambda) {
   detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
+}
+
+// Same as the function above, but the template type is passed in as a
+// `std::type_identity<TemplateType>`.
+template <typename TemplateType>
+constexpr void forEachTypeInTemplateTypeWithTI(
+    use_type_identity::TI<TemplateType>, const auto& lambda) {
+  detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
 }  // namespace ad_utility
