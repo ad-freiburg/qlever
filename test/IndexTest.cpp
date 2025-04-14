@@ -24,6 +24,23 @@ using namespace std::string_literals;
 using ::testing::UnorderedElementsAre;
 
 namespace {
+// Create a `QueryExecutionContext` with the given `turtleInput`, and the given
+// settings for which permutations to load and whether to use patterns.
+auto makeQec(std::string turtleInput, bool loadAllPermutations,
+             bool usePatterns) {
+  TestIndexConfig config{std::move(turtleInput)};
+  config.loadAllPermutations = loadAllPermutations;
+  config.usePatterns = usePatterns;
+  return getQec(config);
+}
+
+// Create a `QueryExecutionContext` with the given `turtleInput`, the vocabulary
+// of the index is only compressed if `useCompression` is set to true.
+auto makeQecWithOrWithoutCompression(std::string kg, bool useCompression) {
+  TestIndexConfig config{std::move(kg)};
+  config.usePrefixCompression = useCompression;
+  return getQec(std::move(config));
+}
 using ad_utility::source_location;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
@@ -80,9 +97,8 @@ TEST(IndexTest, createFromTurtleTest) {
           "<a2> <b2> <c2> .";
 
       auto getIndex = [&]() -> decltype(auto) {
-        auto qec = getQec(kb, loadAllPermutations, loadPatterns);
-        [[maybe_unused]] decltype(auto) ref =
-            getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
+        auto qec = makeQec(kb, loadAllPermutations, loadPatterns);
+        decltype(auto) ref = qec->getIndex().getImpl();
         return std::tie(ref, *qec);
       };
 
@@ -274,7 +290,7 @@ TEST(IndexTest, indexId) {
   // Build index with all permutations (arg 2) and no patterns (arg 3). That
   // way, we get four triples, two distinct subjects, one distinct predicate
   // and two distinct objects.
-  const Index& index = getQec(kb, true, false)->getIndex();
+  const Index& index = makeQec(kb, true, false)->getIndex();
   ASSERT_EQ(index.getIndexId(), "#.4.3.1.2");
 }
 
@@ -286,10 +302,10 @@ TEST(IndexTest, scanTest) {
         "<a>  <b>  <c2> . \n"
         "<a>  <b2> <c>  . \n"
         "<a2> <b2> <c2> .   ";
+    auto& index = makeQecWithOrWithoutCompression(kb, useCompression)
+                      ->getIndex()
+                      .getImpl();
     {
-      const IndexImpl& index =
-          getQec(kb, true, true, useCompression)->getIndex().getImpl();
-
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
@@ -324,7 +340,9 @@ TEST(IndexTest, scanTest) {
          "<c> <is-a> <2> . \n";
 
     {
-      const auto& qec = *getQec(kb, true, true, useCompression);
+      TestIndexConfig config{kb};
+      config.usePrefixCompression = useCompression;
+      const auto& qec = *getQec(std::move(config));
       const IndexImpl& index = qec.getIndex().getImpl();
 
       auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
@@ -371,10 +389,10 @@ TEST(IndexTest, scanTest) {
 
 // ______________________________________________________________
 TEST(IndexTest, emptyIndex) {
-  const auto& qec = *getQec("", true, true, true);
+  const auto& qec = *makeQecWithOrWithoutCompression("", true);
   const IndexImpl& emptyIndexWithCompression = qec.getIndex().getImpl();
   const IndexImpl& emptyIndexWithoutCompression =
-      getQec("", true, true, false)->getIndex().getImpl();
+      makeQecWithOrWithoutCompression("", false)->getIndex().getImpl();
 
   EXPECT_EQ(emptyIndexWithCompression.numTriples().normal, 0u);
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal, 0u);
@@ -490,7 +508,7 @@ TEST(IndexTest, NumDistinctEntities) {
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
-  const IndexImpl& index = getQec("", false, false)->getIndex().getImpl();
+  const IndexImpl& index = makeQec("", false, false)->getIndex().getImpl();
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(),
                                ::testing::ContainsRegex("if all 6"));
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
@@ -500,7 +518,7 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
 
   const IndexImpl& indexNoPatterns =
-      getQec("", true, false)->getIndex().getImpl();
+      makeQec("", true, false)->getIndex().getImpl();
   AD_EXPECT_THROW_WITH_MESSAGE(
       indexNoPatterns.getAvgNumDistinctPredicatesPerSubject(),
       ::testing::ContainsRegex("requires a loaded patterns file"));
