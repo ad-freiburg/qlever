@@ -588,7 +588,7 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
+       absl::Span<const Permutation::Enum> permutations,
        auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -632,7 +632,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          absl::Span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -686,7 +686,7 @@ void QueryPlanner::indexScanThreeVarsCase(
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          absl::Span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -1030,7 +1030,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
     auto expression = makeNotEqualExpression(variable, iris.at(0));
     appendNotEqualString(descriptor, iris.at(0), variable);
     // Combine subsequent iris with a logical AND.
-    for (string_view iri : std::span{iris.begin() + 1, iris.end()}) {
+    for (string_view iri : absl::Span{iris.data() + 1, iris.size() - 1}) {
       expression = makeAndExpression(std::move(expression),
                                      makeNotEqualExpression(variable, iri));
       descriptor << " && ";

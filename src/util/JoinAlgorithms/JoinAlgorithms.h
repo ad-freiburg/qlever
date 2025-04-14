@@ -488,8 +488,9 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 
   // The last columns from the left and right input. Those will be dealt with
   // separately.
-  std::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
-  std::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
+  absl::Span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
+  absl::Span<const Id> lastColumnRight =
+      right.getColumn(right.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
     checkCancellation();
@@ -537,13 +538,11 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 
     // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
-    auto end = endSame1 - left.begin();
-    std::span<const Id> leftSub{lastColumnLeft.begin() + beg,
-                                lastColumnLeft.begin() + end};
+    auto subRangeSize = static_cast<size_t>(endSame1 - it1);
+    absl::Span<const Id> leftSub{lastColumnLeft.data() + beg, subRangeSize};
     beg = it2 - right.begin();
-    end = endSame2 - right.begin();
-    std::span<const Id> rightSub{lastColumnRight.begin() + beg,
-                                 lastColumnRight.begin() + end};
+    subRangeSize = static_cast<size_t>(endSame2 - it2);
+    absl::Span<const Id> rightSub{lastColumnRight.data() + beg, subRangeSize};
 
     // Set up the generator for the UNDEF values.
     // TODO<joka921> We could probably also apply this optimization if both

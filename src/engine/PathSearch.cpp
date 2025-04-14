@@ -294,10 +294,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 };
 
 // _____________________________________________________________________________
-std::pair<std::span<const Id>, std::span<const Id>>
+std::pair<absl::Span<const Id>, absl::Span<const Id>>
 PathSearch::handleSearchSides() const {
-  std::span<const Id> sourceIds;
-  std::span<const Id> targetIds;
+  absl::Span<const Id> sourceIds;
+  absl::Span<const Id> targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
@@ -387,7 +387,7 @@ PathsLimited PathSearch::findPaths(
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::allPaths(
-    std::span<const Id> sources, std::span<const Id> targets,
+    absl::Span<const Id> sources, absl::Span<const Id> targets,
     const BinSearchWrapper& binSearch, bool cartesian,
     std::optional<uint64_t> numPathsPerTarget) const {
   PathsLimited paths{allocator()};

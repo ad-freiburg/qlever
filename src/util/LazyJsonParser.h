@@ -39,7 +39,7 @@ class LazyJsonParser {
                          std::vector<std::string> arrayPath);
 
   // Convenient alternative for the function above using bytes.
-  static Generator parse(cppcoro::generator<std::span<std::byte>> partialJson,
+  static Generator parse(cppcoro::generator<absl::Span<std::byte>> partialJson,
                          std::vector<std::string> arrayPath);
 
  private:

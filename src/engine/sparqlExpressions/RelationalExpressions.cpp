@@ -288,8 +288,8 @@ string RelationalExpression<Comp>::getCacheKey(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
-  return {children_.data(), children_.size()};
+absl::Span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
+  return absl::MakeSpan(children_.data(), children_.size());
 }
 
 // _____________________________________________________________________________
@@ -502,8 +502,8 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
-  return children_;
+absl::Span<SparqlExpression::Ptr> InExpression::childrenImpl() {
+  return absl::MakeSpan(children_.data(), children_.size());
 }
 
 // _____________________________________________________________________________

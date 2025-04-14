@@ -55,7 +55,7 @@ class CompactVectorOfStrings {
   using offset_type = uint64_t;
   using value_type =
       std::conditional_t<std::is_same_v<data_type, char>, std::string_view,
-                         std::span<const data_type>>;
+                         absl::Span<const data_type>>;
   using vector_type = std::conditional_t<std::is_same_v<data_type, char>,
                                          std::string, std::vector<data_type>>;
 

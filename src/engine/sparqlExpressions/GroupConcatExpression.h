@@ -80,8 +80,8 @@ class GroupConcatExpression : public SparqlExpression {
 
  private:
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {&child_, 1};
+  absl::Span<SparqlExpression::Ptr> childrenImpl() override {
+    return absl::Span<SparqlExpression::Ptr>(&child_, 1);
   }
 };
 }  // namespace sparqlExpression

@@ -214,7 +214,8 @@ class Result {
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());
     }
-    return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
+    absl::Span<const LocalVocab*> vocabsSpan(vocabs.data(), vocabs.size());
+    return SharedLocalVocabWrapper{LocalVocab::merge(vocabsSpan)};
   }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this

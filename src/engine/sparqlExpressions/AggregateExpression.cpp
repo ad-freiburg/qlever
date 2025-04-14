@@ -154,9 +154,9 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-std::span<SparqlExpression::Ptr>
+absl::Span<SparqlExpression::Ptr>
 AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
-  return {&_child, 1};
+  return absl::Span<SparqlExpression::Ptr>(&_child, 1);
 }
 
 // __________________________________________________________________________

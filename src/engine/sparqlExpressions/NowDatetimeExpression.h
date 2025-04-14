@@ -32,7 +32,7 @@ class NowDatetimeExpression : public SparqlExpression {
   }
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  absl::Span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace sparqlExpression

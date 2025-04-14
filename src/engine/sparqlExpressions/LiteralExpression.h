@@ -78,9 +78,10 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Variables and string constants add their values.
-  std::span<const Variable> getContainedVariablesNonRecursive() const override {
+  absl::Span<const Variable> getContainedVariablesNonRecursive()
+      const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
-      return {&_value, 1};
+      return absl::Span<const Variable>(&_value, 1);
     } else {
       return {};
     }
@@ -186,7 +187,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Literal expressions don't have children
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  absl::Span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 // A simple expression that just returns an explicit result. It can only be used
@@ -214,7 +215,7 @@ struct SingleUseExpression : public SparqlExpression {
     AD_FAIL();
   }
 
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  absl::Span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace detail

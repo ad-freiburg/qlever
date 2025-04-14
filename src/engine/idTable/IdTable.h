@@ -121,7 +121,7 @@ class IdTable {
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
   using Storage = detail::VectorWithElementwiseMove<ColumnStorage>;
-  using ViewSpans = std::vector<std::span<const T>>;
+  using ViewSpans = std::vector<absl::Span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -434,7 +434,7 @@ class IdTable {
 
   // Delete all the elements, but keep the allocated memory (`capacityRows_`
   // stays the same). Runs in O(1) time. To also free the allocated memory, call
-  // `shrinkToFit()` after calling `clear()` .
+  // `shrinkToFit()` after calling `clear()`.
   CPP_template(typename = void)(requires(!isView)) void clear() {
     numRows_ = 0;
     ql::ranges::for_each(data(), [](auto& column) { column.clear(); });
@@ -595,7 +595,7 @@ class IdTable {
   // the argument `columnIndices`.
   CPP_template(typename = void)(requires isDynamic)
       IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-          std::span<const ColumnIndex> columnIndices) const {
+          absl::Span<const ColumnIndex> columnIndices) const {
     AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
@@ -617,7 +617,7 @@ class IdTable {
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
   // with three columns left by one element.
-  void setColumnSubset(std::span<const ColumnIndex> subset) {
+  void setColumnSubset(absl::Span<const ColumnIndex> subset) {
     // First check that the `subset` is indeed a subset of the column
     // indices.
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
@@ -799,15 +799,17 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  CPP_template(typename = void)(requires(!isView)) std::span<T> getColumn(
+  CPP_template(typename = void)(requires(!isView)) absl::Span<T> getColumn(
       size_t i) {
-    return {data().at(i)};
+    return absl::Span<T>(data().at(i));
   }
-  std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
+  absl::Span<const T> getColumn(size_t i) const {
+    return absl::Span<const T>(data().at(i));
+  }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `std::span<T>`
-  // or `std::span<const T>`, depending on whether `this` is const.
+  // `std::array` (else). The elements of the vector/array are `absl::Span<T>`
+  // or `absl::Span<const T>`, depending on whether `this` is const.
   auto getColumns() { return getColumnsImpl(*this); }
   auto getColumns() const { return getColumnsImpl(*this); }
 

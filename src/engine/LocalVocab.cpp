@@ -17,7 +17,7 @@ LocalVocab LocalVocab::clone() const {
 }
 
 // _____________________________________________________________________________
-LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
+LocalVocab LocalVocab::merge(absl::Span<const LocalVocab*> vocabs) {
   LocalVocab result;
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;

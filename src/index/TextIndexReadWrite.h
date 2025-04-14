@@ -104,7 +104,7 @@ namespace textIndexReadWrite {
 // Compress src using zstd and write compressed bytes to file while advancing
 // currentOffset by the nofBytes written
 template <typename T>
-void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+void compressAndWrite(absl::Span<const T> src, ad_utility::File& out,
                       off_t& currentOffset);
 
 /**
@@ -142,7 +142,7 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
  * @warning The elements of the list have to be able to be cast to uint64_t.
  */
 template <typename T>
-void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
+void encodeAndWriteSpanAndMoveOffset(absl::Span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset);
 

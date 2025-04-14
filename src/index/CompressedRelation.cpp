@@ -426,7 +426,7 @@ struct BlockLessThanBlock {
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
-    std::span<const Id> joinColumn,
+    absl::Span<const Id> joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
@@ -530,7 +530,7 @@ CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blocks,
+    absl::Span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
@@ -781,7 +781,7 @@ CPP_template_def(typename IdGetter)(
   };
 
   // Get the blocks needed for the scan.
-  std::span<const CompressedBlockMetadata> relevantBlocksMetadata =
+  absl::Span<const CompressedBlockMetadata> relevantBlocksMetadata =
       getRelevantBlocks(scanSpec, allBlocksMetadata);
 
   // TODO<joka921> We have to read the other columns for the merging of the
@@ -969,7 +969,7 @@ CompressedRelationReader::readAndDecompressBlock(
 
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
+CompressedRelationWriter::compressAndWriteColumn(absl::Span<const Id> column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
@@ -1052,10 +1052,10 @@ void CompressedRelationWriter::compressAndWriteBlock(
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
+absl::Span<const CompressedBlockMetadata>
 CompressedRelationReader::getRelevantBlocks(
     const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blockMetadata) {
+    absl::Span<const CompressedBlockMetadata> blockMetadata) {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   CompressedBlockMetadata key;
@@ -1089,7 +1089,7 @@ CompressedRelationReader::getRelevantBlocks(
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
+absl::Span<const CompressedBlockMetadata>
 CompressedRelationReader::getBlocksFromMetadata(
     const ScanSpecAndBlocks& metadata) {
   return getRelevantBlocks(metadata.scanSpec_, metadata.blockMetadata_);

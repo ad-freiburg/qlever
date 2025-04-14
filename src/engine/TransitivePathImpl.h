@@ -41,7 +41,7 @@ struct TableColumnWithVocab {
 template <typename T>
 class TransitivePathImpl : public TransitivePathBase {
   using TableColumnWithVocab =
-      detail::TableColumnWithVocab<std::span<const Id>>;
+      detail::TableColumnWithVocab<absl::Span<const Id>>;
 
  public:
   using TransitivePathBase::TransitivePathBase;
@@ -119,9 +119,13 @@ class TransitivePathImpl : public TransitivePathBase {
     detail::TableColumnWithVocab<const Set&> tableInfo{
         nullptr, nodesWithoutDuplicates, LocalVocab{}};
 
-    NodeGenerator hull =
-        transitiveHull(edges, sub->getCopyOfLocalVocab(),
-                       std::span{&tableInfo, 1}, targetSide.value_, yieldOnce);
+    NodeGenerator hull = transitiveHull(
+        edges, sub->getCopyOfLocalVocab(),
+        absl::Span<detail::TableColumnWithVocab<const Set&>>(&tableInfo, 1),
+        targetSide.isVariable()
+            ? std::nullopt
+            : std::optional{std::get<Id>(targetSide.value_)},
+        yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
@@ -268,13 +272,13 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param sub The sub table result
    * @param startSide The TransitivePathSide where the edges start
    * @param targetSide The TransitivePathSide where the edges end
-   * @return std::vector<std::span<const Id>> An vector of spans of (nodes) for
+   * @return std::vector<absl::Span<const Id>> An vector of spans of (nodes) for
    * the transitive hull computation
    */
-  std::vector<std::span<const Id>> setupNodes(
+  std::vector<absl::Span<const Id>> setupNodes(
       const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide, const T& edges) const {
-    std::vector<std::span<const Id>> result;
+      const TransitivePathSide& targetSidem, const T& edges) const {
+    std::vector<absl::Span<const Id>> result;
 
     // id -> var|id
     if (!startSide.isVariable()) {
@@ -292,10 +296,10 @@ class TransitivePathImpl : public TransitivePathBase {
       }
       // var -> var
     } else {
-      std::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
+      absl::Span<const Id> startNodes = sub.getColumn(startSide.subCol_);
       result.emplace_back(startNodes);
       if (minDist_ == 0) {
-        std::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
+        absl::Span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
         result.emplace_back(targetNodes);
       }
     }
@@ -318,14 +322,14 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
       // Bound -> var|id
-      std::span<const Id> startNodes = startSideResult->idTable().getColumn(
+      absl::Span<const Id> startNodes = startSideResult->idTable().getColumn(
           startSide.treeAndCol_.value().second);
       co_yield TableColumnWithVocab{&startSideResult->idTable(), startNodes,
                                     startSideResult->getCopyOfLocalVocab()};
     } else {
       for (auto& [idTable, localVocab] : startSideResult->idTables()) {
         // Bound -> var|id
-        std::span<const Id> startNodes =
+        absl::Span<const Id> startNodes =
             idTable.getColumn(startSide.treeAndCol_.value().second);
         co_yield TableColumnWithVocab{&idTable, startNodes,
                                       std::move(localVocab)};

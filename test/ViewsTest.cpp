@@ -198,7 +198,7 @@ TEST(Views, inPlaceTransform) {
 
 // __________________________________________________________________________
 
-std::string_view toView(std::span<char> span) {
+std::string_view toView(absl::Span<char> span) {
   return {span.data(), span.size()};
 }
 

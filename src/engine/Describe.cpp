@@ -98,7 +98,7 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
 static IdTable getNewBlankNodes(
     const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    std::span<Id> input) {
+    absl::Span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);

@@ -8,7 +8,6 @@
 #include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
-#include <absl/functional/bind_front.h>
 
 #include <cstring>
 #include <exception>

@@ -161,8 +161,8 @@ string PrefixRegexExpression::getCacheKey(
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> PrefixRegexExpression::childrenImpl() {
-  return {&child_, 1};
+absl::Span<SparqlExpression::Ptr> PrefixRegexExpression::childrenImpl() {
+  return absl::Span<SparqlExpression::Ptr>(&child_, 1);
 }
 
 // _____________________________________________________________________________

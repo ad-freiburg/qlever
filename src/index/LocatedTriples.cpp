@@ -14,8 +14,8 @@
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
-    std::span<const IdTriple<0>> triples,
-    std::span<const CompressedBlockMetadata> blockMetadata,
+    absl::Span<const IdTriple<0>> triples,
+    absl::Span<const CompressedBlockMetadata> blockMetadata,
     const qlever::KeyOrder& keyOrder, bool shouldExist,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   std::vector<LocatedTriple> out;
@@ -211,7 +211,7 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    std::span<const LocatedTriple> locatedTriples) {
+    absl::Span<const LocatedTriple> locatedTriples) {
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {

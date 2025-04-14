@@ -49,7 +49,7 @@ class RandomExpression : public SparqlExpression {
 
  private:
   // Get the direct child expressions.
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  absl::Span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace sparqlExpression

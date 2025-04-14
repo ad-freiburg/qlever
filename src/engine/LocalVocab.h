@@ -165,7 +165,7 @@ class LocalVocab {
 
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.
-  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
+  static LocalVocab merge(absl::Span<const LocalVocab*> vocabs);
 
   // Return all the words from all the word sets as a vector. This is useful
   // for testing.

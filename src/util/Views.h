@@ -128,13 +128,13 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
+  CPP_auto_member constexpr auto CPP_fun(begin) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end)()(
+  CPP_auto_member constexpr auto CPP_fun(end) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
@@ -155,12 +155,12 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto
+      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
+  CPP_auto_member constexpr auto CPP_fun(data) ()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
@@ -352,14 +352,14 @@ CPP_template(typename Range, typename Transformation)(
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<std::span<ElementType>> reChunkAtSeparator(
+    generator<absl::Span<ElementType>> reChunkAtSeparator(
         Range generator, ElementType separator) {
   std::vector<ElementType> buffer;
   for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
        generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
-        co_yield std::span{buffer.data(), buffer.size()};
+        co_yield absl::Span{buffer.data(), buffer.size()};
         buffer.clear();
       } else {
         buffer.push_back(c);
@@ -367,7 +367,7 @@ CPP_template(typename Range, typename ElementType)(
     }
   }
   if (!buffer.empty()) {
-    co_yield std::span{buffer.data(), buffer.size()};
+    co_yield absl::Span{buffer.data(), buffer.size()};
   }
 }
 }  // namespace ad_utility
