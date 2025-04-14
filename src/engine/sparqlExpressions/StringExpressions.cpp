@@ -517,12 +517,14 @@ class ConcatExpression : public detail::VariadicExpression {
     // the expression module.
 
     auto visitLiteralResult =
-        [&](std::optional<Literal>& literalSoFar) -> ExpressionResult {
+        [&moveLiteralToResult](
+            std::optional<Literal>& literalSoFar) -> ExpressionResult {
       return moveLiteralToResult(literalSoFar);
     };
 
     auto visitLiteralVecResult =
-        [&](LiteralVec& literalVec) -> ExpressionResult {
+        [&ctx,
+         &moveLiteralToResult](LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(literalVec.size());
       ql::ranges::copy(literalVec | ql::views::transform(moveLiteralToResult),
