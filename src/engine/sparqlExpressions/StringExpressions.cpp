@@ -450,7 +450,7 @@ class ConcatExpression : public detail::VariadicExpression {
         &ctx, &result, &isInitializedFlag, &valueGetter)(typename T)(T && s)(
         requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
-        auto literalFromConstant = valueGetter(std::move(s), ctx);
+        auto literalFromConstant = valueGetter(std::forward<T>(s), ctx);
 
         auto concatOrSetLitFromConst =
             [&](std::optional<Literal>& literalSoFar) {
@@ -467,12 +467,12 @@ class ConcatExpression : public detail::VariadicExpression {
 
         // One of the previous children was not a constant, so we already
         // store a vector.
-        auto visitLiteralVecConcat =
-            [&concatOrSetLitFromConst](LiteralVec&& literalVec) {
-              ql::ranges::for_each(literalVec, [&](auto& literalSoFar) {
-                concatOrSetLitFromConst(literalSoFar);
-              });
-            };
+        auto visitLiteralVecConcat = [&concatOrSetLitFromConst](
+                                         LiteralVec&& literalVec) {
+          ql::ranges::for_each(std::move(literalVec), [&](auto& literalSoFar) {
+            concatOrSetLitFromConst(literalSoFar);
+          });
+        };
 
         std::visit(ad_utility::OverloadCallOperator{visitLiteralConcat,
                                                     visitLiteralVecConcat},
