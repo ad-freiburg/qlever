@@ -110,8 +110,8 @@ void IndexImpl::buildTextIndexFile(std::optional<const string> wordsFile,
                            (wordsFile.has_value() || useDocsFileForVocabulary);
   AD_CORRECTNESS_CHECK(addWordsFromFiles || addWordsFromLiterals);
   AD_CORRECTNESS_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocabulary);
-  string wordsFileString = wordsFile.has_value() ? wordsFile.value() : "";
-  string docsFileString = docsFile.has_value() ? docsFile.value() : "";
+  string wordsFileString = wordsFile.value_or("");
+  string docsFileString = docsFile.value_or("");
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
@@ -253,7 +253,7 @@ size_t IndexImpl::processWordsForVocabulary(const string& file,
     for (const auto& line : DocsFileParser{file, localeManager}) {
       for (const auto& word :
            tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-        WordsFileLine lineToProcess = WordsFileLine{
+        auto lineToProcess = WordsFileLine{
             word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
         processLine(lineToProcess);
       }
