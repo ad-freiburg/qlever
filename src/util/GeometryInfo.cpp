@@ -11,6 +11,7 @@
 #include "parser/GeoPoint.h"
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/geo/Point.h"
@@ -95,14 +96,17 @@ GeometryInfo::GeometryInfo(uint8_t wktType,
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
   // index size.
+
+  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits));
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
-  AD_CORRECTNESS_CHECK((wktType & bitMaskCentroid) == 0);
   uint64_t centroidBits = centroid.toBitRepresentation();
-  AD_CORRECTNESS_CHECK((centroidBits & bitMaskCentroid) == 0);
+  AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0);
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  // TODO check that first is lowerleft & second is upper right
   // TODO make use of 2x4 unused datatype bits in boundingBox
+  AD_CORRECTNESS_CHECK(
+      boundingBox.first.getLat() <= boundingBox.second.getLat() &&
+      boundingBox.first.getLng() <= boundingBox.second.getLng());
   boundingBox_ =
       std::pair<uint64_t, uint64_t>{boundingBox.first.toBitRepresentation(),
                                     boundingBox.second.toBitRepresentation()};
