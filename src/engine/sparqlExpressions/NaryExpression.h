@@ -52,6 +52,7 @@ SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);

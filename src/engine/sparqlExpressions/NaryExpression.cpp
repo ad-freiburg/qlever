@@ -18,6 +18,8 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(
     LatitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(CentroidExpression, 1,
+                FV<ad_utility::WktCentroid, GeometryInfoValueGetter>);
 NARY_EXPRESSION(DistExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
                    GeoPointValueGetter>);
@@ -35,6 +37,9 @@ SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LongitudeExpression>(std::move(child));
+}
+SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<CentroidExpression>(std::move(child));
 }
 
 }  // namespace sparqlExpression
