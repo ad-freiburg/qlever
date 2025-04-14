@@ -113,13 +113,13 @@ struct CompressedBlockMetadataNoBlockIndex {
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
 
-  // Format BlockMetadata contents for debugging.
+  // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str,
       const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
-    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
-        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << ".\n";
+    str << "#CompressedBlockMetadata\n(first) " << blockMetadata.firstTriple_
+        << "(last) " << blockMetadata.lastTriple_
+        << "num. rows: " << blockMetadata.numRows_ << ".\n";
     if (blockMetadata.graphInfo_.has_value()) {
       str << "Graphs: ";
       ad_utility::lazyStrJoin(&str, blockMetadata.graphInfo_.value(), ", ");
@@ -141,7 +141,7 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 
-  // Format BlockMetadata contents for debugging.
+  // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
     str << static_cast<const CompressedBlockMetadataNoBlockIndex&>(
