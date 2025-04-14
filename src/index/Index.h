@@ -99,11 +99,13 @@ class Index {
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
-  void buildTextIndexFile(std::optional<const string> wordsFile,
-                          std::optional<const string> docsFile,
-                          bool addWordsFromLiterals = false,
-                          bool useDocsFileForVocabulary = false,
-                          bool addEntitiesFromWordsfile = false);
+  void buildTextIndexFile(
+      std::optional<const string> wordsFile,
+      std::optional<const string> docsFile, bool addWordsFromLiterals = false,
+      bool useDocsFileForVocabulary = false,
+      bool addEntitiesFromWordsfile = false,
+      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
+      std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);
@@ -213,9 +215,6 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
-
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
 
   const std::string& getTextName() const;
   const std::string& getKbName() const;

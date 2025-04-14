@@ -1,6 +1,8 @@
 // Copyright 2022, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/http/HttpClient.h"
 
@@ -11,6 +13,7 @@
 
 #include "global/Constants.h"
 #include "util/AsioHelpers.h"
+#include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -104,14 +107,17 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
-  auto wait = [&client, &handle]<typename T>(
-                  net::awaitable<T> awaitable,
-                  ad_utility::source_location loc =
-                      ad_utility::source_location::current()) -> T {
-    return ad_utility::runAndWaitForAwaitable(
-        ad_utility::interruptible(std::move(awaitable), handle, std::move(loc)),
-        client->ioContext_);
-  };
+  auto wait = [&client, &handle](auto awaitable,
+                                 ad_utility::source_location loc =
+                                     ad_utility::source_location::current()) ->
+      typename decltype(awaitable)::value_type {
+        static_assert(
+            ad_utility::isInstantiation<decltype(awaitable), net::awaitable>);
+        return ad_utility::runAndWaitForAwaitable(
+            ad_utility::interruptible(std::move(awaitable), handle,
+                                      std::move(loc)),
+            client->ioContext_);
+      };
 
   // Send the request, receive the response (unlimited body size), and return
   // the body as a `std::istringstream`.
@@ -198,16 +204,18 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
+  auto sendRequest = [&](auto ti) -> HttpOrHttpsResponse {
+    using Client = typename decltype(ti)::type;
     auto client = std::make_unique<Client>(url.host(), url.port());
     return Client::sendRequest(std::move(client), method, url.host(),
                                url.target(), std::move(handle), requestData,
                                contentTypeHeader, acceptHeader);
   };
+  using namespace ad_utility::use_type_identity;
   if (url.protocol() == Url::Protocol::HTTP) {
-    return sendRequest.operator()<HttpClient>();
+    return sendRequest(ti<HttpClient>);
   } else {
     AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return sendRequest.operator()<HttpsClient>();
+    return sendRequest(ti<HttpsClient>);
   }
 }

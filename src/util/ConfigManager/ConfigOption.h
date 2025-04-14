@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
 #define QLEVER_SRC_UTIL_CONFIGMANAGER_CONFIGOPTION_H
@@ -240,6 +242,15 @@ class ConfigOption {
     }
   }
 
+  /*
+  @brief Return the string representation/name of the type.
+  */
+  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
+                           T, AvailableTypes>) static std::string
+      availableTypesToString() {
+    return availableTypesToString(T{});
+  }
+
  private:
   // Needed for testing.
   FRIEND_TEST(ConfigManagerTest, AddNonExceptionValidator);
@@ -253,15 +264,6 @@ class ConfigOption {
   held alternative in the given `value`.
   */
   static std::string availableTypesToString(const AvailableTypes& value);
-
-  /*
-  @brief Return the string representation/name of the type.
-  */
-  CPP_template(typename T)(requires ad_utility::SameAsAnyTypeIn<
-                           T, AvailableTypes>) static std::string
-      availableTypesToString() {
-    return availableTypesToString(T{});
-  }
 
   /*
   @brief Return string representation of values, whose type is in

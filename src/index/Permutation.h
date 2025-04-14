@@ -24,8 +24,7 @@ class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
-// avoid code duplication. The first template parameter is a search functor for
-// STXXL.
+// avoid code duplication.
 class Permutation {
  public:
   /// Identifiers for the six possible permutations.

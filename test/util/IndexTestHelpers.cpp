@@ -195,16 +195,35 @@ Index makeTestIndex(const std::string& indexBasename,
     qlever::InputFileSpecification spec{inputFilename, indexType, std::nullopt};
     index.createFromFiles({spec});
     if (createTextIndex) {
-      if (scoringMetric.has_value()) {
-        if (!bAndKParam.has_value()) {
-          index.storeTextScoringParamsInConfiguration(scoringMetric.value(),
-                                                      0.75, 1.75);
-        } else {
-          index.storeTextScoringParamsInConfiguration(
-              scoringMetric.value(), bAndKParam.value().first,
-              bAndKParam.value().second);
-        }
+      // First test the case of invalid b and k parameters for BM25, it should
+      // throw
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          index.buildTextIndexFile(std::nullopt, std::nullopt, true, false,
+                                   false, TextScoringMetric::BM25,
+                                   {2.0f, 0.5f}),
+          ::testing::HasSubstr("Invalid values"));
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          index.buildTextIndexFile(std::nullopt, std::nullopt, true, false,
+                                   false, TextScoringMetric::BM25,
+                                   {0.5f, -1.0f}),
+          ::testing::HasSubstr("Invalid values"));
+      scoringMetric = scoringMetric.value_or(TextScoringMetric::EXPLICIT);
+      bAndKParam = bAndKParam.value_or(std::pair{0.75f, 1.75f});
+
+      // The following tests that garbage values for b and k work if these
+      // parameters are unnecessary because we don't use `BM25`.
+      if (scoringMetric.value() != TextScoringMetric::BM25) {
+        bAndKParam = std::pair{-3.f, -3.f};
       }
+      auto buildTextIndex = [&index, &scoringMetric, &bAndKParam,
+                             &useDocsFileForVocab, &addEntitiesFromWordsFile](
+                                auto wordsFile, auto docsFile,
+                                bool addWordsFromLiterals) {
+        index.buildTextIndexFile(std::move(wordsFile), std::move(docsFile),
+                                 addWordsFromLiterals, useDocsFileForVocab,
+                                 addEntitiesFromWordsFile,
+                                 scoringMetric.value(), bAndKParam.value());
+      };
       if (contentsOfDocsFile.has_value() &&
           (contentsOfWordsFile.has_value() || useDocsFileForVocab)) {
         AD_CONTRACT_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocab);
@@ -221,18 +240,11 @@ Index makeTestIndex(const std::string& indexBasename,
         index.setKbName(indexBasename);
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
-        if (addWordsFromLiterals) {
-          index.buildTextIndexFile(
-              indexBasename + ".wordsfile", indexBasename + ".docsfile", true,
-              useDocsFileForVocab, addEntitiesFromWordsFile);
-        } else {
-          index.buildTextIndexFile(
-              indexBasename + ".wordsfile", indexBasename + ".docsfile", false,
-              useDocsFileForVocab, addEntitiesFromWordsFile);
-        }
+        buildTextIndex(indexBasename + ".wordsfile",
+                       indexBasename + ".docsfile", true);
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(std::nullopt, std::nullopt, true, false);
+        buildTextIndex(std::nullopt, std::nullopt, true);
       }
     }
   }

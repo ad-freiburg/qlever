@@ -30,10 +30,12 @@ void Index::buildTextIndexFile(std::optional<const string> wordsFile,
                                std::optional<const string> docsFile,
                                bool addWordsFromLiterals,
                                bool useDocsFileForVocabulary,
-                               bool addEntitiesFromWordsfile) {
+                               bool addEntitiesFromWordsfile,
+                               TextScoringMetric textScoringMetric,
+                               std::pair<float, float> bAndKForBM25) {
   pimpl_->buildTextIndexFile(wordsFile, docsFile, addWordsFromLiterals,
-                             useDocsFileForVocabulary,
-                             addEntitiesFromWordsfile);
+                             useDocsFileForVocabulary, addEntitiesFromWordsfile,
+                             textScoringMetric, bAndKForBM25);
 }
 
 // ____________________________________________________________________________
@@ -219,12 +221,6 @@ void Index::setSettingsFile(const std::string& filename) {
 // ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
-}
-
-// ____________________________________________________________________________
-void Index::storeTextScoringParamsInConfiguration(
-    TextScoringMetric scoringMetric, float b, float k) {
-  return pimpl_->storeTextScoringParamsInConfiguration(scoringMetric, b, k);
 }
 
 // ____________________________________________________________________________
