@@ -105,9 +105,13 @@ void GeoVocabulary<V>::build(const std::vector<std::string>& v,
 template <typename V>
 GeometryInfo GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   AD_CONTRACT_CHECK(index < size());
-  GeometryInfo info;
-  geoInfoFile_.read(&info, geoInfoOffset, index * geoInfoOffset);
-  return info;
+  // Allocate the required number of bytes
+  uint8_t buffer[geoInfoOffset];
+  void* ptr = &buffer;
+  // Read into the buffer
+  geoInfoFile_.read(ptr, geoInfoOffset, index * geoInfoOffset);
+  // Interpret the buffer as a GeometryInfo object
+  return *static_cast<GeometryInfo*>(ptr);
 }
 
 // Avoid linker trouble.

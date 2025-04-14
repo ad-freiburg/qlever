@@ -51,8 +51,8 @@ void testGeoVocabulary() {
       ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
 
       auto gi = geoVocab.getGeoInfo(i);
-      // TODO<ullingerc> In PR #1957 actually test content of GeometryInfo
-      ASSERT_EQ(gi.dummy_, 1);
+      // TODO<ullingerc> Actually test content of GeometryInfo
+      ASSERT_NE(gi.getWktType(), 0);
     }
   };
 
