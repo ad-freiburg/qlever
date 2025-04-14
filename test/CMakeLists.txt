@@ -462,4 +462,4 @@ addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
 
-addLinkAndDiscoverTest(GeometryInfoTest)
+addLinkAndDiscoverTest(GeometryInfoTest util)
