@@ -443,7 +443,7 @@ class ConcatExpression : public detail::VariadicExpression {
       if (!literal.has_value()) {
         return Id::makeUndefined();
       }
-      return LiteralOrIri(std::move(literal.value()));
+      return LiteralOrIri(literal.value());
     };
 
     auto visitSingleExpressionResult = CPP_template_lambda(
