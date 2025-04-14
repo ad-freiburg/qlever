@@ -200,7 +200,7 @@ TEST_F(ServiceTest, computeResult) {
     // query we expect.
     std::string_view expectedUrl = "http://localhorst:80/api";
     std::string_view expectedSparqlQuery =
-        "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
+        "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
 
     // Shorthand to run computeResult with the test parameters given above.
     auto runComputeResult =
@@ -444,7 +444,7 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
+        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
         ". ?y "
         "<is-a> ?z2 . }";
 
@@ -517,7 +517,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a WHERE { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
+      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
       "?c } } }";
 
   Service serviceOperation{
@@ -538,7 +538,7 @@ TEST_F(ServiceTest, computeResultNoVariables) {
       "{ <a> <b> <c> }",
       false};
 
-  std::string_view expectedSparqlQuery = " SELECT * WHERE { <a> <b> <c> }";
+  std::string_view expectedSparqlQuery = " SELECT * { <a> <b> <c> }";
 
   Service serviceOperation{
       testQec, parsedServiceClause,
@@ -699,7 +699,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
           true},
       getResultFunctionFactory(
           "http://localhorst:80/api",
-          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json"));
 

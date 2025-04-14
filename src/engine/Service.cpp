@@ -136,7 +136,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
           : absl::StrJoin(variables, " ", Variable::AbslFormatter);
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
-                   variablesForSelectClause, " WHERE ", getGraphPattern());
+                   variablesForSelectClause, " ", getGraphPattern());
   LOG(INFO) << "Sending SERVICE query to remote endpoint "
             << "(protocol: " << serviceUrl.protocolAsString()
             << ", host: " << serviceUrl.host()
