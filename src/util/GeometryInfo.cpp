@@ -96,14 +96,14 @@ GeometryInfo::GeometryInfo(uint8_t wktType,
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
   // index size.
-
   AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits));
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0);
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
-  // TODO make use of 2x4 unused datatype bits in boundingBox
+  // TODO<ullingerc> use the 1 byte of unused datatype bits in boundingBox for
+  // something useful
   AD_CORRECTNESS_CHECK(
       boundingBox.first.getLat() <= boundingBox.second.getLat() &&
       boundingBox.first.getLng() <= boundingBox.second.getLng());
@@ -122,12 +122,9 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
   // Parse WKT and compute info
   using namespace detail;
   auto [type, parsed] = parseWkt(wktLiteral);
-  auto [p1, p2] = boundingBoxAsGeoPoints(parsed.value());
-  auto c = centroidAsGeoPoint(parsed.value());
-  // ... further precomputations ...
-
-  return GeometryInfo{type, {p1, p2}, c};
-  // Also return "parsed" for further use (eg. saving to special vocab)?
+  AD_CORRECTNESS_CHECK(parsed.has_value());
+  return {type, boundingBoxAsGeoPoints(parsed.value()),
+          centroidAsGeoPoint(parsed.value())};
 }
 
 // ____________________________________________________________________________
