@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../GeometryInfoTestHelpers.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -26,9 +27,8 @@ void testGeoVocabulary() {
   ww.readableName() = "test";
 
   std::vector<std::string> testLiterals{
-      "\"GEOMETRYCOLLECTION(LINESTRING(1 1, 2 2, 3 "
-      "3), POLYGON((1 1, 2 2, 3 "
-      "3)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
+      "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
       "\"LINESTRING(1 1, 2 2, 3 "
       "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
       "\"POLYGON((1 1, 2 2, 3 "
@@ -49,10 +49,8 @@ void testGeoVocabulary() {
     for (size_t i = 0; i < testLiterals.size(); i++) {
       ASSERT_EQ(geoVocab[i], testLiterals[i]);
       ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-
-      auto gi = geoVocab.getGeoInfo(i);
-      // TODO<ullingerc> Actually test content of GeometryInfo
-      ASSERT_NE(gi.getWktType(), 0);
+      checkGeoInfo(geoVocab.getGeoInfo(i),
+                   GeometryInfo::fromWktLiteral(testLiterals[i]));
     }
   };
 
