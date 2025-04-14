@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TEST_UTIL_GEOMETRYINFOTESTHELPERS_H
-#define QLEVER_TEST_UTIL_GEOMETRYINFOTESTHELPERS_H
+#ifndef QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
+#define QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
 
 #include <gtest/gtest.h>
 
@@ -33,4 +33,4 @@ inline void checkGeoInfo(std::optional<ad_utility::GeometryInfo> actual,
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
 }
 
-#endif  // QLEVER_TEST_UTIL_GEOMETRYINFOTESTHELPERS_H
+#endif  // QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
