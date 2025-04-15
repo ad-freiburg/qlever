@@ -44,7 +44,7 @@ class VocabularyCreator {
       size_t idx = 0;
       for (auto& word : words) {
         size_t actualIdx = ids.has_value() ? ids.value().at(idx) : idx;
-        writer(word, false, actualIdx);
+        writer(word, actualIdx);
         ++idx;
       }
       static std::atomic<unsigned> doFinish = 0;

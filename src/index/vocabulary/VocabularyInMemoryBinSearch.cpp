@@ -57,7 +57,7 @@ VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
 
 // _____________________________________________________________________________
 uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
-    std::string_view str, [[maybe_unused]] bool isExternalDummy, uint64_t idx) {
+    std::string_view str, uint64_t idx) {
   // Check that the indices are ascending.
   AD_CONTRACT_CHECK(!lastIndex_.has_value() || lastIndex_.value() < idx);
   lastIndex_ = idx;
