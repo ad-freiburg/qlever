@@ -27,38 +27,13 @@ using std::string;
 
 namespace po = boost::program_options;
 
-string getStxxlConfigFileName(const string& location) {
-  return absl::StrCat(location, ".stxxl");
-}
-
-string getStxxlDiskFileName(const string& location, const string& tail) {
-  return absl::StrCat(location, tail, ".stxxl-disk");
-}
-
-// Write a .stxxl config-file.
-// All we want is sufficient space somewhere with enough space.
-// We can use the location of input files and use a constant size for now.
-// The required size can only be estimated anyway, since index size
-// depends on the structure of words files rather than their size only,
-// because of the "multiplications" performed.
-void writeStxxlConfigFile(const string& location, const string& tail) {
-  string stxxlConfigFileName = getStxxlConfigFileName(location);
-  ad_utility::File stxxlConfig(stxxlConfigFileName, "w");
-  auto configFile = ad_utility::makeOfstream(stxxlConfigFileName);
-  // Inform stxxl about .stxxl location
-  setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
-  configFile << "disk=" << getStxxlDiskFileName(location, tail) << ","
-             << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
-}
-
-// Check that `values` has exactly one or `numFiles` many entries. If
-// `allowEmpty` is true, then an empty vector will also be accepted. If this
-// condition is violated, throw an exception. This is used to validate the
-// parameters for file types and default graphs.
+// Check that `values` has exactly one or `numFiles` many entries. An empty
+// vector will also be accepted. If this condition is violated, throw an
+// exception. This is used to validate the parameters for file types and default
+// graphs.
 static void checkNumParameterValues(const auto& values, size_t numFiles,
-                                    bool allowEmpty,
                                     std::string_view parameterName) {
-  if (allowEmpty && values.empty()) {
+  if (values.empty()) {
     return;
   }
   if (values.size() == 1 || values.size() == numFiles) {
@@ -68,12 +43,9 @@ static void checkNumParameterValues(const auto& values, size_t numFiles,
       "The parameter \"", parameterName,
       "\" must be specified either exactly once (in which case it is "
       "used for all input files) or exactly as many times as there are "
-      "input files, in which case each input file has its own value.");
-  if (allowEmpty) {
-    absl::StrAppend(&error,
-                    " The parameter can also be omitted entirely, in which "
-                    " case a default value is used for all input files.");
-  }
+      "input files, in which case each input file has its own value.",
+      " The parameter can also be omitted entirely, in which "
+      " case a default value is used for all input files.");
   throw std::runtime_error{error};
 }
 
@@ -169,7 +141,7 @@ int main(int argc, char** argv) {
   bool addWordsFromLiterals = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
-  std::optional<ad_utility::MemorySize> stxxlMemory;
+  std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
   optind = 1;
 
@@ -242,7 +214,7 @@ int main(int argc, char** argv) {
       "queries with predicate variables are not supported");
 
   // Options for the index building process.
-  add("stxxl-memory,m", po::value(&stxxlMemory),
+  add("stxxl-memory,m", po::value(&indexMemoryLimit),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
   add("parser-buffer-size,b", po::value(&parserBufferSize),
@@ -274,8 +246,8 @@ int main(int argc, char** argv) {
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
   }
-  if (stxxlMemory.has_value()) {
-    index.memoryLimitIndexBuilding() = stxxlMemory.value();
+  if (indexMemoryLimit.has_value()) {
+    index.memoryLimitIndexBuilding() = indexMemoryLimit.value();
   }
   if (parserBufferSize.has_value()) {
     index.parserBufferSize() = parserBufferSize.value();
@@ -298,12 +270,9 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    LOG(TRACE) << "Configuring STXXL..." << std::endl;
     size_t posOfLastSlash = baseName.rfind('/');
     string location = baseName.substr(0, posOfLastSlash + 1);
     string tail = baseName.substr(posOfLastSlash + 1);
-    writeStxxlConfigFile(location, tail);
-    string stxxlFileName = getStxxlDiskFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
 
     index.setKbName(kbIndexName);
@@ -317,11 +286,10 @@ int main(int argc, char** argv) {
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.
     auto getFileSpecifications = [&]() {
-      checkNumParameterValues(filetype, inputFile.size(), true,
-                              "--file-format, -F");
-      checkNumParameterValues(defaultGraphs, inputFile.size(), true,
+      checkNumParameterValues(filetype, inputFile.size(), "--file-format, -F");
+      checkNumParameterValues(defaultGraphs, inputFile.size(),
                               "--default-graph, -g");
-      checkNumParameterValues(parseParallel, parseParallel.size(), true,
+      checkNumParameterValues(parseParallel, parseParallel.size(),
                               "--parse-parallel, p");
 
       std::vector<qlever::InputFileSpecification> fileSpecs;
@@ -375,10 +343,9 @@ int main(int argc, char** argv) {
     if (!docsfile.empty()) {
       index.buildDocsDB(docsfile);
     }
-    ad_utility::deleteFile(stxxlFileName, false);
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;
-    exit(2);
+    return 2;
   }
   return 0;
 }

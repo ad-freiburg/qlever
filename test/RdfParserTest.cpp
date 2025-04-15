@@ -15,8 +15,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
@@ -808,7 +809,7 @@ std::vector<TurtleTriple> parseFromFile(
     const std::string& filename, bool useBatchInterface,
     ad_utility::MemorySize bufferSize = 1_kB) {
   auto parserChild = [&]() {
-    if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+    if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
       return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                     bufferSize};
     } else {
@@ -843,8 +844,7 @@ auto forAllParallelParsers(const auto& function, const auto&... args) {
   function(ti<RdfParallelParser<TurtleParser<TokenizerCtre>>>, false, args...);
 }
 auto forAllMultifileParsers(const auto& function, const auto&... args) {
-  function(ti<RdfMultifileParser<Tokenizer>>, true, args...);
-  function(ti<RdfMultifileParser<TokenizerCtre>>, true, args...);
+  function(ti<RdfMultifileParser>, true, args...);
 }
 
 auto forAllParsers(const auto& function, const auto&... args) {
@@ -1002,6 +1002,114 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
+  std::string filename{"exceptionOnScatteredPrefixOrBaseInParallelParser.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::HasSubstr("'--parse-parallel false'"));
+    ad_utility::deleteFile(filename);
+  };
+  // Redefinition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex: <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex: <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://other.example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://other.example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+  // New definition
+  {
+    std::string_view inputWithScatteredPrefix =
+        "@prefix ex: <http://example.org/> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@prefix ex1: <http://example.org/> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+    std::string_view inputWithScatteredSparqlPrefix =
+        "PREFIX ex: <http://example.org/> \n"
+        "<subject> <predicate> <object> . \n "
+        "PREFIX ex1: <http://example.org/> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  }
+  // Same root, different relative base
+  {
+    std::string_view inputWithScatteredBase =
+        "@base <http://example.org/abc> . \n"
+        "<subject> <predicate> <object> . \n "
+        "@base <http://example.org/def> . \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+    std::string_view inputWithScatteredSparqlBase =
+        "BASE <http://example.org/abc> \n"
+        "<subject> <predicate> <object> . \n "
+        "BASE <http://example.org/def> \n";
+    forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+  }
+}
+
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest,
+     noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser) {
+  std::string filename{
+      "noExceptionOnScatteredPrefixOrBaseRedeclarationInParallelParser.dat"};
+  auto testWithParser = [&](auto t, bool useBatchInterface,
+                            ad_utility::MemorySize bufferSize,
+                            std::string_view input) {
+    using Parser = typename decltype(t)::type;
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    EXPECT_NO_THROW(
+        parseFromFile<Parser>(filename, useBatchInterface, bufferSize));
+    ad_utility::deleteFile(filename);
+  };
+  std::string_view inputWithScatteredPrefix =
+      "@prefix ex: <http://example.org/> . \n"
+      "<subject> <predicate> <object> . \n "
+      "@prefix ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredPrefix);
+  std::string_view inputWithScatteredSparqlPrefix =
+      "PREFIX ex: <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "PREFIX ex: <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlPrefix);
+  std::string_view inputWithScatteredBase =
+      "@base <http://example.org/> . \n"
+      "<subject> <predicate> <object> . \n "
+      "@base <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredBase);
+  std::string_view inputWithScatteredSparqlBase =
+      "BASE <http://example.org/> \n"
+      "<subject> <predicate> <object> . \n "
+      "BASE <http://example.org/> \n";
+  forAllParallelParsers(testWithParser, 70_B, inputWithScatteredSparqlBase);
+}
+
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.
@@ -1020,7 +1128,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     {
       [[maybe_unused]] Parser parserChild = [&]() {
-        if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+        if constexpr (ad_utility::isSimilar<Parser, RdfMultifileParser>) {
           return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
                         40_B};
         } else {
