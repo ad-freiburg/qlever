@@ -9,6 +9,9 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
+#include "parser/Literal.h"
+#include "parser/LiteralOrIri.h"
+#include "parser/NormalizedString.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -1717,7 +1720,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
       "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
@@ -1729,7 +1732,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   // Helper function that takes an ID and a vector of test cases and checks
   // if the ID is correctly converted. A more detailed explanation of the test
   // logic is below with the test cases.
-  auto checkIdToLiteralOrIri =
+  auto checkIdToLiteral =
       [&](Id id,
           const std::vector<std::tuple<bool, std::optional<std::string>>>&
               cases) {
@@ -1783,8 +1786,73 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
            {{false, std::nullopt}, {true, std::nullopt}}}};
 
   for (const auto& [id, cases] : testCases) {
-    checkIdToLiteralOrIri(id, cases);
+    checkIdToLiteral(id, cases);
   }
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
+  std::string kg =
+      "<s> <p> \"something\" . <s> <p> 1 . <s> <p> "
+      "\"some\"^^<http://www.w3.org/2001/XMLSchema#string> . <s> <p> "
+      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype> . <s> <p> "
+      "<http://example.com/> .";
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
+
+  std::vector<std::pair<ValueId, std::optional<LiteralOrIri>>> expected{
+      {getId("\"something\""),
+       LiteralOrIri{Literal::fromStringRepresentation("\"something\"")}},
+      {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>")}},
+      {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")}},
+      {getId("<http://example.com/>"),
+       LiteralOrIri{Iri::fromIriref("<http://example.com/>")}},
+      {ValueId::makeFromBool(true),
+       LiteralOrIri{Literal::fromStringRepresentation(
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")}},
+      {ValueId::makeUndefined(), std::nullopt}};
+  for (const auto& [valueId, expRes] : expected) {
+    ASSERT_EQ(ExportQueryExecutionTrees::idToLiteralOrIri(
+                  qec->getIndex(), valueId, LocalVocab{}),
+              expRes);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getLiteralOrNullopt) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
+
+  auto litOrNulloptTestHelper = [](std::optional<LiteralOrIri> input,
+                                   std::optional<std::string> expectedRes) {
+    auto res = ExportQueryExecutionTrees::getLiteralOrNullopt(input);
+    ASSERT_EQ(res.has_value(), expectedRes.has_value());
+    if (res.has_value()) {
+      ASSERT_EQ(expectedRes.value(), res.value().toStringRepresentation());
+    }
+  };
+
+  auto lit = LiteralOrIri{Literal::fromStringRepresentation("\"test\"")};
+  litOrNulloptTestHelper(lit, "\"test\"");
+
+  auto litWithType = LiteralOrIri{Literal::fromStringRepresentation(
+      "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>")};
+  litOrNulloptTestHelper(
+      litWithType, "\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>");
+
+  litOrNulloptTestHelper(std::nullopt, std::nullopt);
+
+  auto iri = LiteralOrIri{Iri::fromIriref("<https://example.com/>")};
+  litOrNulloptTestHelper(iri, std::nullopt);
 }
 
 // _____________________________________________________________________________
