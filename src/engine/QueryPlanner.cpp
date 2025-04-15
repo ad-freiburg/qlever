@@ -2584,17 +2584,20 @@ void QueryPlanner::QueryGraph::setupGraph(
             // This filter cannot be substituted: add no edges.
             continue;
           }
-          auto varsToBeConnected = filter.expression_.containedVariables();
-          // TODO<ullingerc> filter out variables from varsToBeConnected if they
-          // are not in varToNode, otherwise bind()+filter() is broken
+          std::vector<Variable> varsToBeConnected;
+          for (auto var : filter.expression_.containedVariables()) {
+            if (varToNode.contains(*var)) {
+              varsToBeConnected.push_back(*var);
+            }
+          }
           if (varsToBeConnected.size() < 2) {
             // There is no variables to connect, because this filter has one or
             // zero variables.
             continue;
           }
-          auto first = *varsToBeConnected[0];
+          auto first = varsToBeConnected[0];
           for (size_t i = 1; i < varsToBeConnected.size(); i++) {
-            Variable second = *varsToBeConnected[i];
+            auto second = varsToBeConnected[i];
             for (auto n1 : varToNode.at(first)) {
               for (auto n2 : varToNode.at(second)) {
                 if (n1 != n2) {

@@ -2439,13 +2439,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b) <= 0.5)"
       " }",
-      ::testing::AnyOf(
-          h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadVariables::all(), algo, type,
-                         scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")),
-          h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadVariables::all(), algo, type,
-                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+      h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   // TODO<ullingerc> Add more tests
 }
 
