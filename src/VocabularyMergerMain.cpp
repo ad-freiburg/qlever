@@ -24,8 +24,7 @@ int main(int argc, char** argv) {
                           const auto& word,
                           [[maybe_unused]] bool isExternalDummy = true) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    count++;
-    return count - 1;
+    return count++;
   };
 
   VocabularyOnDisk vocab;
