@@ -1,6 +1,8 @@
 //  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
@@ -125,6 +127,18 @@ static void checkRequirementsBlockMetadata(
   }
 };
 
+//______________________________________________________________________________
+static std::vector<CompressedBlockMetadata> getRelevantBlocks(
+    const BlockMetadataRanges& relevantBlockRanges) {
+  std::vector<CompressedBlockMetadata> relevantBlocks;
+  relevantBlocks.reserve(std::transform_reduce(relevantBlockRanges.begin(),
+                                               relevantBlockRanges.end(), 0ULL,
+                                               std::plus{}, ql::ranges::size));
+  ql::ranges::copy(relevantBlockRanges | ql::views::join,
+                   std::back_inserter(relevantBlocks));
+  return relevantBlocks;
+}
+
 namespace detail {
 //______________________________________________________________________________
 // Merge `BlockMetadataRange blockRange` with the previous (relevant)
@@ -219,9 +233,8 @@ BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
 }
 
 //______________________________________________________________________________
-// Map the given `ValueIdItPair`s to their corresponding
-// `BlockMetadataRange`s. The actual mapping is implemented by
-// `mapValueIdItPairToBlockRange`.
+// Map the given `ValueIdItPair`s to their corresponding `BlockMetadataRange`s.
+// The actual mapping is implemented by `mapValueIdItPairToBlockRange`.
 BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
@@ -905,7 +918,8 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   const auto retrieveValueIdOrThrowErr =
       [](const IdOrLocalVocabEntry& referenceValue) {
         return std::visit(
-            []<typename T>(const T& value) -> ValueId {
+            [](const auto& value) -> ValueId {
+              using T = std::decay_t<decltype(value)>;
               if constexpr (ad_utility::isSimilar<T, ValueId>) {
                 return value;
               } else {

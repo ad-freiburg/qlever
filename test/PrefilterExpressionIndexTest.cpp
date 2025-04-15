@@ -370,8 +370,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
         adjustedExpected);
   }
 
-  // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2`
-  // contain equivalent sub-ranges.
+  // Check if `BlockMetadataRanges r1` and `BlockMetadataRanges r2` contain
+  // equivalent sub-ranges.
   bool assertEqRelevantBlockItRanges(const BlockMetadataRanges& r1,
                                      const BlockMetadataRanges& r2) {
     return ql::ranges::equal(r1, r2, ql::ranges::equal);

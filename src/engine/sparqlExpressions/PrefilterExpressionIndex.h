@@ -326,8 +326,8 @@ namespace logicalOps {
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
 // (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
 // (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`
-// (`logical-and &&)`) of `BlockMetadataRanges r1` and
-// `BlockMetadataRanges r2`.
+// (`logical-and &&)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges
+// r2`.
 template <bool GetUnion>
 BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
                                                const BlockMetadataRanges& r2);

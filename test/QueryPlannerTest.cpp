@@ -2674,14 +2674,23 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
+namespace {
+// Get a `QueryExecutionContext` with a text index. This is used in several
+// tests below.
+auto getQecWithTextIndex = []() {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
+      "<a> <p> \"testing and picking\""};
+  config.createTextIndex = true;
+  return ad_utility::testing::getQec(std::move(config));
+};
+}  // namespace
+
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForWord) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"sentence for multiple words tests\" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
   auto wordScan = h::TextIndexScanForWord;
 
   h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
@@ -2706,12 +2715,7 @@ TEST(QueryPlanner, TextIndexScanForWord) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForEntity) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -3045,12 +3049,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3233,12 +3232,7 @@ TEST(QueryPlanner, TextSearchService) {
 }
 
 TEST(QueryPlanner, TextLimit) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -4022,4 +4016,25 @@ TEST(QueryPlanner, negatedPaths) {
                          "?_QLever_internal_variable_qp_1",
                          h::IndexScanFromStrings(
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, transitivePathWithoutVariables) {
+  TransitivePathSide left{std::nullopt, 1, Id::makeFromInt(1), 0};
+  TransitivePathSide right{std::nullopt, 0, Id::makeFromInt(1), 1};
+  h::expect(
+      "SELECT * { 1 <a>* 1 }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { 1 <a>* 1 . 1 <a> 1 }",
+      h::CartesianProductJoin(
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<a>"), 1),
+          h::TransitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1"))));
 }

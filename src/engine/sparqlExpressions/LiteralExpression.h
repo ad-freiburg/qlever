@@ -1,6 +1,8 @@
 //  Copyright 2021, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_LITERALEXPRESSION_H
@@ -41,9 +43,10 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `Iri` case.
-    auto getIdOrString = [this, &context]<typename U>(const U& s)
+    auto getIdOrString = [this, &context](const auto& s)
         -> CPP_ret(ExpressionResult)(
-            requires ad_utility::SameAsAny<U, TripleComponent::Literal,
+            requires ad_utility::SameAsAny<std::decay_t<decltype(s)>,
+                                           TripleComponent::Literal,
                                            TripleComponent::Iri>) {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
