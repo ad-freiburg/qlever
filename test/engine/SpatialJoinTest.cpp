@@ -750,8 +750,7 @@ namespace resultSortedOn {
 TEST(SpatialJoin, resultSortedOn) {
   std::string kg = createSmallDataset();
 
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = buildQec(kg);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
@@ -955,8 +954,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     kg += "<node_1> <name> \"testing multiplicity\" .";
     kg += "<node_1> <name> \"testing multiplicity 2\" .";
 
-    ad_utility::MemorySize blocksizePermutations = 16_MB;
-    auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+    auto qec = buildQec(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     const unsigned int nrTriplesInput = 17;
     ASSERT_EQ(numTriples, nrTriplesInput);
@@ -1087,8 +1085,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
       kg += "<geometry1> <asWKT> \"POINT(7.54321 48.54321)\".";
 
-      ad_utility::MemorySize blocksizePermutations = 16_MB;
-      auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+      auto qec = buildQec(kg);
       auto numTriples = qec->getIndex().numTriples().normal;
       const unsigned int nrTriplesInput = 17;
       ASSERT_EQ(numTriples, nrTriplesInput);
