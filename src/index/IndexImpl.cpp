@@ -1,10 +1,7 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Copyright 2014 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "./IndexImpl.h"
 
@@ -23,6 +20,8 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -70,18 +69,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  auto makeRdfParserImpl =
-      [this, &files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
-    using TokenizerT =
-        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    return std::make_unique<RdfMultifileParser<TokenizerT>>(
-        files, this->parserBufferSize());
-  };
-
-  // `callFixedSize` litfts runtime integers to compile time integers. We use it
-  // here to create the correct combinations of template arguments.
-  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
-                                   makeRdfParserImpl);
+  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -772,7 +760,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
+                                     Permutation::KeyOrder permutation,
                                      auto&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -1569,15 +1557,16 @@ vector<float> IndexImpl::getMultiplicities(
   return {1.0f, 1.0f};
 }
 
-// ___________________________________________________________________
+// _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array<float, 3> m{numTriples / numDistinctSubjects().normal,
-                         numTriples / numDistinctPredicates().normal,
-                         numTriples / numDistinctObjects().normal};
-  return {m[p.keyOrder()[0]], m[p.keyOrder()[1]], m[p.keyOrder()[2]]};
+  std::array multiplicities{numTriples / numDistinctSubjects().normal,
+                            numTriples / numDistinctPredicates().normal,
+                            numTriples / numDistinctObjects().normal};
+  auto permuted = p.keyOrder().permuteTriple(multiplicities);
+  return {permuted.begin(), permuted.end()};
 }
 
 // _____________________________________________________________________________

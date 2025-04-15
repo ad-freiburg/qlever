@@ -520,11 +520,11 @@ TEST(JoinTest, joinTwoScans) {
 // https://github.com/ad-freiburg/qlever/issues/1893 and havily simplified so it
 // can be reproduced in a unit test.
 TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
-  auto qec = ad_utility::testing::getQec(
+  ad_utility::testing::TestIndexConfig config{
       "<x> <p1> <1> <g1> . <x> <p1> <2> <g1> . <x> <p2> <1> <g2> ."
-      " <x> <p2> <2> <g2> .",
-      true, true, true, 16_B, false, true, std::nullopt, 1_kB, std::nullopt,
-      std::nullopt, qlever::Filetype::NQuad);
+      " <x> <p2> <2> <g2> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto qec = ad_utility::testing::getQec(config);
   auto cleanup =
       setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(0);
   using ad_utility::triple_component::Iri;
