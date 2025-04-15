@@ -71,6 +71,7 @@ class VocabularyInMemoryBinSearch
         uint64_t, ad_utility::serialization::FileWriteSerializer>;
     OffsetWriter offsetWriter_;
     std::optional<uint64_t> lastIndex_ = std::nullopt;
+    std::string readableName_ = "";
     // Construct a `WordWriter` that will write to the given `filename`.
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than
@@ -81,6 +82,8 @@ class VocabularyInMemoryBinSearch
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
     void finish();
+
+    std::string& readableName() { return readableName_; }
   };
 
   // Clear the vocabulary.
