@@ -3,7 +3,6 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include <engine/SpatialJoinAlgorithms.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
@@ -16,6 +15,7 @@
 #include "engine/Join.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -26,8 +26,6 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
-#include "gtest/gtest.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"

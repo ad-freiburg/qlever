@@ -4,17 +4,18 @@
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
+#include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
 
 #include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
-#include "absl/strings/str_split.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 
 using namespace deltaTriplesTestHelpers;
 
@@ -266,14 +267,14 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   auto triples =
       makeIdTriples(vocab, localVocabOutside, {"<A> <notInVocab> <B>"});
   AD_CORRECTNESS_CHECK(triples.size() == 1);
-  triples[0].ids_[2] =
+  triples[0].ids()[2] =
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(999'888'777));
-  triples[0].ids_[3] = triples[0].ids_[2];
-  auto [s1, p1, o1, g1] = triples[0].ids_;
+  triples[0].ids()[3] = triples[0].ids()[2];
+  auto [s1, p1, o1, g1] = triples[0].ids();
 
   // Rewrite the IDs in the triple.
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
-  auto [s2, p2, o2, g2] = triples[0].ids_;
+  auto [s2, p2, o2, g2] = triples[0].ids();
 
   // The subject <A> is part of the global vocabulary, so it remains unchanged.
   EXPECT_EQ(s2.getBits(), s1.getBits());
@@ -315,7 +316,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // stores the corresponding values.
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
   ASSERT_EQ(triples.size(), 1);
-  auto [s3, p3, o3, g3] = triples[0].ids_;
+  auto [s3, p3, o3, g3] = triples[0].ids();
   EXPECT_EQ(s3.getBits(), s2.getBits());
   EXPECT_EQ(p3.getBits(), p2.getBits());
   EXPECT_EQ(o3.getBits(), o2.getBits());
@@ -324,9 +325,9 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // If we use a local blank node that is already part of the global vocabulary,
   // nothing gets rewritten either.
   auto blank0 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
-  triples[0].ids_[0] = blank0;
+  triples[0].ids()[0] = blank0;
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
-  auto s4 = triples[0].ids_[0];
+  auto s4 = triples[0].ids()[0];
   EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
 
