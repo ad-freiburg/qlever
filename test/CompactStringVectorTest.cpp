@@ -139,9 +139,9 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
   testSerializationWithPush(CompactVectorInt{}, ints);
 }
 
-// Test that a `CompactStringVectorWriter` can be moved, even when writing has
-// already started.
-TEST(CompactVectorOfStrings, MoveWriterWhileWriting1) {
+// Test that a `CompactStringVectorWriter` can be correctly move-constructed and
+// move-assigned into an empty writer, even when writing has already started.
+TEST(CompactVectorOfStrings, MoveIntoEmptyWriter) {
   auto testSerializationWithPush = [](const auto& v, auto& inputVector) {
     using V = std::decay_t<decltype(v)>;
 
@@ -183,9 +183,9 @@ TEST(CompactVectorOfStrings, MoveWriterWhileWriting1) {
   testSerializationWithPush(CompactVectorInt{}, ints);
 }
 
-// Test the special case of moving into a `CompactStringVectorWriter` that has
-// already been written to.
-TEST(CompactVectorOfStrings, MoveWriterWhileWriting2) {
+// Test the special case of move-assigning a `CompactStringVectorWriter` where
+// the target of the move has already been written to.
+TEST(CompactVectorOfStrings, MoveIntoFullWriter) {
   auto testSerializationWithPush = [](const auto& v, const auto& input1,
                                       const auto& input2) {
     using V = std::decay_t<decltype(v)>;

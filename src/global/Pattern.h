@@ -26,10 +26,6 @@
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 
-typedef uint32_t PatternID;
-
-static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
-
 /**
  * @brief This represents a set of relations of a single entity.
  *        (e.g. a set of books that all have an author and a title).
@@ -38,6 +34,9 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        while writing a query).
  */
 struct Pattern {
+  using PatternId = int32_t;
+  static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
+
   using value_type = Id;
   using ref = value_type&;
   using const_ref = const value_type&;
