@@ -2585,6 +2585,8 @@ void QueryPlanner::QueryGraph::setupGraph(
             continue;
           }
           auto varsToBeConnected = filter.expression_.containedVariables();
+          // TODO<ullingerc> filter out variables from varsToBeConnected if they
+          // are not in varToNode, otherwise bind()+filter() is broken
           if (varsToBeConnected.size() < 2) {
             // There is no variables to connect, because this filter has one or
             // zero variables.
@@ -2595,8 +2597,10 @@ void QueryPlanner::QueryGraph::setupGraph(
             Variable second = *varsToBeConnected[i];
             for (auto n1 : varToNode.at(first)) {
               for (auto n2 : varToNode.at(second)) {
-                result[n1].insert(n2);
-                result[n2].insert(n1);
+                if (n1 != n2) {
+                  result[n1].insert(n2);
+                  result[n2].insert(n1);
+                }
               }
             }
             first = second;
