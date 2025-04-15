@@ -159,6 +159,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction =
         [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
           mergeResult.emplace_back(word, isExternal);
+          return mergeResult.size() - 1;
         };
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, 1_GB);

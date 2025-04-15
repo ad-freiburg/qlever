@@ -71,7 +71,8 @@ class VocabularyInMemory
     uint64_t index_ = 0;
 
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
-    uint64_t operator()(std::string_view str) {
+    uint64_t operator()(std::string_view str,
+                        [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
       return index_++;
     }
