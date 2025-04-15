@@ -554,9 +554,11 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
     wordCallback.readableName() = "internal vocabulary";
-    return ad_utility::vocabulary_merger::mergeVocabulary(
+    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
+    wordCallback.finish();
+    return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsExternalVector res;
