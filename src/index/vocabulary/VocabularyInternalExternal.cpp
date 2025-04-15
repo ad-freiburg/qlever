@@ -25,7 +25,7 @@ uint64_t VocabularyInternalExternal::WordWriter::operator()(
     std::string_view str, bool isExternal) {
   externalWriter_(str);
   if (!isExternal || sinceMilestone_ >= milestoneDistance_ || idx_ == 0) {
-    internalWriter_(str, idx_);
+    internalWriter_(str, false, idx_);
     sinceMilestone_ = 0;
   }
   ++idx_;

@@ -75,7 +75,8 @@ class VocabularyInMemoryBinSearch
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than
     // all previous indices.
-    uint64_t operator()(std::string_view word, uint64_t idx);
+    uint64_t operator()(std::string_view word, bool isExternalDummy = false,
+                        uint64_t idx = 0);
 
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
