@@ -186,52 +186,62 @@ namespace detail {
 // file.
 template <typename data_type>
 struct CompactStringVectorWriter {
-  ad_utility::File file_;
-  off_t startOfFile_;
+ private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
-  std::vector<offset_type> offsets_;
 
-  // A `CompactStringVectorWriter` that has been moved from may not call
-  // `finish()` any more in its destructor.
-  ad_utility::ResetWhenMoved<bool, true> finished_ = false;
-  offset_type nextOffset_ = 0;
+  // The data members are encapsulated in a separate struct to make the
+  // definition of the move-assignment operator easier. NOTE: If you add
+  // additional data members to this class, add them inside the `Data` struct.
+  struct Data {
+    ad_utility::File file_;
+    off_t startOfFile_{};
+    std::vector<offset_type> offsets_{};
+    // A `CompactStringVectorWriter` that has been moved from may not call
+    // `finish()` any more in its destructor.
+    ad_utility::ResetWhenMoved<bool, true> finished_ = false;
+    offset_type nextOffset_ = 0;
+  };
+  Data d_;
+  static_assert(std::is_nothrow_move_assignable_v<Data>);
+  static_assert(std::is_nothrow_move_constructible_v<Data>);
 
+ public:
   explicit CompactStringVectorWriter(const std::string& filename)
-      : file_{filename, "w"} {
+      : d_{{filename, "w"}} {
     commonInitialization();
   }
 
   explicit CompactStringVectorWriter(ad_utility::File&& file)
-      : file_{std::move(file)} {
+      : d_{std::move(file)} {
     commonInitialization();
   }
 
   void push(const data_type* data, size_t elementSize) {
-    AD_CONTRACT_CHECK(!finished_);
-    offsets_.push_back(nextOffset_);
-    nextOffset_ += elementSize;
-    file_.write(data, elementSize * sizeof(data_type));
+    AD_CONTRACT_CHECK(!d_.finished_);
+    d_.offsets_.push_back(d_.nextOffset_);
+    d_.nextOffset_ += elementSize;
+    d_.file_.write(data, elementSize * sizeof(data_type));
   }
 
   // Finish writing, and return the moved file. If the return value is
   // discarded, then the file will be closed immediately by the destructor of
   // the `File` class.
   ad_utility::File finish() {
-    if (finished_) {
+    if (d_.finished_) {
       return {};
     }
-    finished_ = true;
-    offsets_.push_back(nextOffset_);
-    file_.seek(startOfFile_, SEEK_SET);
-    file_.write(&nextOffset_, sizeof(size_t));
-    file_.seek(0, SEEK_END);
-    ad_utility::serialization::FileWriteSerializer f{std::move(file_)};
-    f << offsets_;
+    d_.finished_ = true;
+    d_.offsets_.push_back(d_.nextOffset_);
+    d_.file_.seek(d_.startOfFile_, SEEK_SET);
+    d_.file_.write(&d_.nextOffset_, sizeof(size_t));
+    d_.file_.seek(0, SEEK_END);
+    ad_utility::serialization::FileWriteSerializer f{std::move(d_.file_)};
+    f << d_.offsets_;
     return std::move(f).file();
   }
 
   ~CompactStringVectorWriter() {
-    if (!finished_) {
+    if (!d_.finished_) {
       ad_utility::terminateIfThrows(
           [this]() { finish(); },
           "Finishing the underlying File of a `CompactStringVectorWriter` "
@@ -245,21 +255,27 @@ struct CompactStringVectorWriter {
   CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
       delete;
 
-  // The move operations have to be explicitly defaulted, because we have a
-  // manually defined destructor.
-  // Note: The defaulted move operations behave correctly because of the usage
+  // The defaulted move constructor behave correctly because of the usage
   // of `ResetWhenMoved` with the `finished` member.
   CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
-  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
+
+  // The move assignment first has to `finish` the current object, which already
+  // might have been written to.
+  CompactStringVectorWriter& operator=(
+      CompactStringVectorWriter&& other) noexcept {
+    finish();
+    d_ = std::move(other.d_);
+    return *this;
+  }
 
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
-    AD_CONTRACT_CHECK(file_.isOpen());
+    AD_CONTRACT_CHECK(d_.file_.isOpen());
     // We don't know the data size yet.
-    startOfFile_ = file_.tell();
+    d_.startOfFile_ = d_.file_.tell();
     size_t dataSizeDummy = 0;
-    file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    d_.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 };
 static_assert(
