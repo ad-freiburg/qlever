@@ -112,7 +112,7 @@ class VocabularyInternalExternal {
 
     // Add the next word. If `isExternal` is true, then the word will only be
     // stored on disk, and not be cached in RAM.
-    void operator()(std::string_view word, bool isExternal = true);
+    uint64_t operator()(std::string_view word, bool isExternal = true);
 
     // Finish writing.
     void finish();
