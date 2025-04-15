@@ -1314,25 +1314,29 @@ void QueryPlanner::applyFiltersIfPossible(
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
+
       if (filters[i].second.has_value() &&
           ql::ranges::any_of(filters[i].first.expression_.containedVariables(),
                              [&plan](const auto& variable) {
                                return plan._qet->isVariableCovered(*variable);
                              })) {
+        // Apply filter substitution
         auto jcs = getJoinColumns(filters[i].second.value(), plan);
         for (auto& newPlan :
              createJoinCandidates(filters[i].second.value(), plan, jcs)) {
-          std::cout << "SJ Plan: " << jcs.size() << std::endl;
+          newPlan._idsOfIncludedFilters |= plan._idsOfIncludedFilters;
+          newPlan._idsOfIncludedNodes |= plan._idsOfIncludedNodes;
+          newPlan.type = plan.type;
           addedPlans.push_back(newPlan);
         }
-        // continue;
+        continue;
       }
 
       if (ql::ranges::all_of(filters[i].first.expression_.containedVariables(),
                              [&plan](const auto& variable) {
                                return plan._qet->isVariableCovered(*variable);
                              })) {
-        // Apply this filter.
+        // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
             _qec, plan._qet, filters[i].first.expression_);
         newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
@@ -2571,11 +2575,21 @@ void QueryPlanner::QueryGraph::setupGraph(
             }
           }
         }
+
+        // Add additional edges to the graph representing the connections
+        // between variables given by joins substituting cartesian product +
+        // filter.
         for (auto& [filter, substitute] : filtersAndOptionalSubstitutes) {
           if (!substitute.has_value()) {
+            // This filter cannot be substituted: add no edges.
             continue;
           }
           auto varsToBeConnected = filter.expression_.containedVariables();
+          if (varsToBeConnected.size() < 2) {
+            // There is no variables to connect, because this filter has one or
+            // zero variables.
+            continue;
+          }
           auto first = *varsToBeConnected[0];
           for (size_t i = 1; i < varsToBeConnected.size(); i++) {
             Variable second = *varsToBeConnected[i];
