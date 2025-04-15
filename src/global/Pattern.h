@@ -33,39 +33,9 @@
  *        that a set of entities has (e.g. for autocompletion of relations
  *        while writing a query).
  */
-struct Pattern {
+struct Pattern : std::vector<Id> {
   using PatternId = int32_t;
   static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
-
-  using value_type = Id;
-  using ref = value_type&;
-  using const_ref = const value_type&;
-
-  ref operator[](const size_t pos) { return data_[pos]; }
-  const_ref operator[](const size_t pos) const { return data_[pos]; }
-
-  using const_iterator = ad_utility::IteratorForAccessOperator<
-      Pattern, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::True>;
-
-  const_iterator begin() const { return {this, 0}; }
-
-  const_iterator end() const { return {this, size()}; }
-
-  bool operator==(const Pattern& other) const = default;
-
-  size_t size() const { return data_.size(); }
-
-  void push_back(value_type i) { data_.push_back(i); }
-
-  void clear() { data_.clear(); }
-
-  const_ref back() const { return data_.back(); }
-  ref back() { return data_.back(); }
-  bool empty() const { return data_.empty(); }
-
-  const value_type* data() const { return data_.data(); }
-
-  std::vector<value_type> data_;
 };
 
 namespace detail {
@@ -240,12 +210,10 @@ struct CompactStringVectorWriter {
   }
 
   ~CompactStringVectorWriter() {
-    if (!d_.finished_) {
-      ad_utility::terminateIfThrows(
-          [this]() { finish(); },
-          "Finishing the underlying File of a `CompactStringVectorWriter` "
-          "during destruction failed");
-    }
+    ad_utility::terminateIfThrows(
+        [this]() { finish(); },
+        "Finishing the underlying File of a `CompactStringVectorWriter` "
+        "during destruction failed");
   }
 
   // The copy operations would be deleted implicitly (because `File` is not
@@ -270,7 +238,7 @@ struct CompactStringVectorWriter {
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
-    AD_CONTRACT_CHECK(d_.file_.isOpen());
+    AD_CORRECTNESS_CHECK(d_.file_.isOpen());
     // We don't know the data size yet.
     d_.startOfFile_ = d_.file_.tell();
     size_t dataSizeDummy = 0;
@@ -325,7 +293,7 @@ template <>
 struct std::hash<Pattern> {
   std::size_t operator()(const Pattern& p) const noexcept {
     std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p.data_.data()), sizeof(Id) * p.size());
+        reinterpret_cast<const char*>(p.data()), sizeof(Id) * p.size());
     return hash<std::string_view>()(s);
   }
 };
