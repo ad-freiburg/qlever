@@ -69,6 +69,7 @@ class VocabularyInMemory
   struct WordWriter {
     typename Words::Writer writer_;
     uint64_t index_ = 0;
+    std::string readableName_ = "";
 
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
     uint64_t operator()(std::string_view str,
@@ -78,6 +79,7 @@ class VocabularyInMemory
     }
 
     void finish() { writer_.finish(); }
+    std::string& readableName() { return readableName_; }
   };
 
   // Return a `WordWriter` that directly writes the words to the given

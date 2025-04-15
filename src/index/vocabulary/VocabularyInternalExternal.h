@@ -104,6 +104,7 @@ class VocabularyInternalExternal {
     uint64_t idx_ = 0;
     size_t milestoneDistance_;
     size_t sinceMilestone_ = 0;
+    std::string readableName_ = "";
 
     // Construct from the `filename` to which the vocabulary will be serialized.
     // At least every `milestoneDistance`-th word will be cached in RAM.
@@ -116,6 +117,8 @@ class VocabularyInternalExternal {
 
     // Finish writing.
     void finish();
+
+    std::string& readableName() { return readableName_; }
   };
 
   /// Clear the vocabulary.

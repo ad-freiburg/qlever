@@ -49,6 +49,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t currentOffset_ = 0;
     bool isFinished_ = false;
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
+    std::string readableName_ = "";
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
@@ -59,6 +60,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     void finish();
     // Destructor. Implicitly calls `finish` if it hasn't been called before.
     ~WordWriter();
+
+    std::string& readableName() { return readableName_; }
   };
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
