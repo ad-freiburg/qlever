@@ -1,8 +1,6 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -122,6 +120,41 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
       typename V::Writer writer{filename};
       for (const auto& s : inputVector) {
         writer.push(s.data(), s.size());
+      }
+    }  // The constructor finishes writing the file.
+
+    V compactVector;
+    ad_utility::serialization::FileReadSerializer ser{filename};
+    ser >> compactVector;
+
+    vectorsEqual(inputVector, compactVector);
+
+    ad_utility::deleteFile(filename);
+  };
+  testSerializationWithPush(CompactVectorChar{}, strings);
+  testSerializationWithPush(CompactVectorInt{}, ints);
+}
+
+// Test that a `CompactStringVectorWriter` can be moved, even when writing has
+// already started.
+TEST(CompactVectorOfStrings, MoveWriterWhileWriting) {
+  auto testSerializationWithPush = [](const auto& v, auto& inputVector) {
+    using V = std::decay_t<decltype(v)>;
+
+    const std::string filename = "_writerTest1029348.dat";
+    {
+      typename V::Writer writer0{filename};
+      auto writer1 = std::move(writer0);
+      std::optional<typename V::Writer> writer2;
+      size_t i = 0;
+      for (const auto& s : inputVector) {
+        if (i < 2) {
+          writer1.push(s.data(), s.size());
+          continue;
+        } else if (i == 2) {
+          writer0 = std::move(writer1);
+        }
+        writer0.push(s.data(), s.size());
       }
     }  // The constructor finishes writing the file.
 
