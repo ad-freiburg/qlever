@@ -211,10 +211,10 @@ TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
   auto I = ad_utility::testing::IntId;
   auto Voc = ad_utility::testing::VocabId;
   // The subtree of the `CountAvailablePredicates` is illegal, because the
-  // pattern index column contains the entry `273` which is neither `NO_PATTERN`
+  // pattern index column contains the entry `273` which is neither `NoPattern`
   // nor a valid pattern index.
-  auto illegalInput =
-      makeIdTableFromVector({{Voc(0), I(273)}, {Voc(1), I(NO_PATTERN)}});
+  auto illegalInput = makeIdTableFromVector(
+      {{Voc(0), I(273)}, {Voc(1), I(Pattern::NoPattern)}});
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(illegalInput),
       std::vector<std::optional<Variable>>{V{"?x"}, V{"?predicate"}});
