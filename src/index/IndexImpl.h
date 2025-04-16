@@ -559,6 +559,11 @@ class IndexImpl {
                                     bool addEntitiesFromWordsFile,
                                     TextVec& vec);
 
+  template <typename T>
+  void wordsFromDocsFileEntitiesFromWordsFile(
+      const string& wordsFile, const string& docsFile,
+      const LocaleManager& localeManager, T processLine);
+
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,

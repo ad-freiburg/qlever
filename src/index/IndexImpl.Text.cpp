@@ -301,79 +301,49 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
     }
   };
 
+  // Parsie external files
   if (useDocsFileForVocabulary) {
     const auto& localeManager = textVocab_.getLocaleManager();
     if (addEntitiesFromWordsFile) {
-      // Initialize DocsFileParser and WordsFileParser and the respective
-      // iterators to parse in parallel
-      auto docsFileParser = DocsFileParser{docsFile, localeManager};
-      auto docsFileIterator = docsFileParser.begin();
-      auto wordsFileParser = WordsFileParser{wordsFile, localeManager};
-      auto wordsFileIterator = wordsFileParser.begin();
-      // Get the respective lines
-      WordsFileLine currentWordsFileLine = *wordsFileIterator;
-      DocsFileLine currentDocsFileLine = *docsFileIterator;
-
-      // Iterate over docsfile and wordsfile in parallel. The wordsfile IDs are
-      // in smaller increments than the docsfile IDs in general and the
-      // wordsfile ID belongs to the next largest or equal docsfile ID. Because
-      // of this the wordsfile is advanced until the wordsfile ID is larger than
-      // the docsfile ID. During this the entities from the wordsfile are added
-      // to the respective context in this case the respective document. Once
-      // the wordsfile ID is larger than the docsfile ID the docsfile line is
-      // processed and so on.
-      while (docsFileIterator != docsFileParser.end()) {
-        currentDocsFileLine = *docsFileIterator;
-        while (wordsFileIterator != wordsFileParser.end()) {
-          currentWordsFileLine = *wordsFileIterator;
-          if (currentDocsFileLine.docId_.get() <
-              currentWordsFileLine.contextId_.get()) {
-            break;
-          }
-          if (currentWordsFileLine.isEntity_) {
-            WordsFileLine lineToProcess = currentWordsFileLine;
-            lineToProcess.contextId_ =
-                TextRecordIndex::make(currentDocsFileLine.docId_.get());
-            processLine(lineToProcess);
-          }
-          ++wordsFileIterator;
-        }
-        for (const auto& word : tokenizeAndNormalizeText(
-                 currentDocsFileLine.docContent_, localeManager)) {
-          WordsFileLine lineToProcess = {
-              word, false,
-              TextRecordIndex::make(currentDocsFileLine.docId_.get()), 0,
-              false};
-          processLine(lineToProcess);
-        }
-        ++docsFileIterator;
-      }
+      // useDocsFileForVocabulary && addEntitiesFromWordsFile
+      wordsFromDocsFileEntitiesFromWordsFile(wordsFile, docsFile, localeManager,
+                                             processLine);
     } else {
+      // useDocsFileForVocabulary && !addEntitiesFromWordsFile
       for (const auto& line :
            getWordsLineFromDocsFile(docsFile, localeManager)) {
         processLine(line);
       }
     }
   } else {
+    // !useDocsFileForVocabulary
     for (const auto& line :
          WordsFileParser{wordsFile, textVocab_.getLocaleManager()}) {
       processLine(line);
     }
   }
   lastTextRecordIndexOfNonLiterals_ = currentContext.get();
+
+  // Parse literals if specified
   if (addWordsFromLiterals) {
     for (const auto& line : wordsInLiterals(currentContext.get() + 1)) {
       processLine(line);
     }
   }
+
+  // Warnings
   if (entityNotFoundErrorMsgCount > 0) {
     LOG(WARN) << "Number of mentions of entities not found in the vocabulary: "
               << entityNotFoundErrorMsgCount << std::endl;
   }
   LOG(DEBUG) << "Number of total entity mentions: " << nofEntityPostings
              << std::endl;
+
+  // Add last entries
   ++nofContexts;
   addContextToVector(vec, currentContext, wordsInContext, entitiesInContext);
+
+  // Save metadata
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
@@ -382,6 +352,56 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
   writeConfiguration();
 
   LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
+    const string& wordsFile, const string& docsFile,
+    const LocaleManager& localeManager, T processLine) {
+  // Initialize DocsFileParser and WordsFileParser and the respective
+  // iterators to parse in parallel
+  auto docsFileParser = DocsFileParser{docsFile, localeManager};
+  auto docsFileIterator = docsFileParser.begin();
+  auto wordsFileParser = WordsFileParser{wordsFile, localeManager};
+  auto wordsFileIterator = wordsFileParser.begin();
+  // Get the respective lines
+  WordsFileLine currentWordsFileLine = *wordsFileIterator;
+  DocsFileLine currentDocsFileLine = *docsFileIterator;
+
+  // Iterate over docsfile and wordsfile in parallel. The wordsfile IDs are
+  // in smaller increments than the docsfile IDs in general and the
+  // wordsfile ID belongs to the next largest or equal docsfile ID. Because
+  // of this the wordsfile is advanced until the wordsfile ID is larger than
+  // the docsfile ID. During this the entities from the wordsfile are added
+  // to the respective context in this case the respective document. Once
+  // the wordsfile ID is larger than the docsfile ID the docsfile line is
+  // processed and so on.
+  while (docsFileIterator != docsFileParser.end()) {
+    currentDocsFileLine = *docsFileIterator;
+    while (wordsFileIterator != wordsFileParser.end()) {
+      currentWordsFileLine = *wordsFileIterator;
+      if (currentDocsFileLine.docId_.get() <
+          currentWordsFileLine.contextId_.get()) {
+        break;
+      }
+      if (currentWordsFileLine.isEntity_) {
+        WordsFileLine lineToProcess = currentWordsFileLine;
+        lineToProcess.contextId_ =
+            TextRecordIndex::make(currentDocsFileLine.docId_.get());
+        processLine(lineToProcess);
+      }
+      ++wordsFileIterator;
+    }
+    for (const auto& word : tokenizeAndNormalizeText(
+             currentDocsFileLine.docContent_, localeManager)) {
+      WordsFileLine lineToProcess = {
+          word, false, TextRecordIndex::make(currentDocsFileLine.docId_.get()),
+          0, false};
+      processLine(lineToProcess);
+    }
+    ++docsFileIterator;
+  }
 }
 
 // _____________________________________________________________________________
