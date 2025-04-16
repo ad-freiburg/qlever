@@ -679,12 +679,12 @@ PreconditionAction Operation::createSortedClone(
     const vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
-    return PreconditionAction::NOT_SATISFIABLE;
+    return PreconditionAction::SATISFY_EXTERNALLY;
   }
   for (size_t i = 0; i < sortColumns.size(); ++i) {
     if (sortColumns[i] != inputSortedOn[i]) {
-      return PreconditionAction::NOT_SATISFIABLE;
+      return PreconditionAction::SATISFY_EXTERNALLY;
     }
   }
-  return PreconditionAction::ALREADY_SATISFIED;
+  return PreconditionAction::IMPLICITLY_SATISFIED;
 }

@@ -365,7 +365,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 PreconditionAction Union::createSortedClone(
     const vector<ColumnIndex>& sortColumns) const {
   if (sortColumns.empty()) {
-    return PreconditionAction::ALREADY_SATISFIED;
+    return PreconditionAction::IMPLICITLY_SATISFIED;
   }
   auto operation = std::make_shared<Union>(_executionContext, _subtrees.at(0),
                                            _subtrees.at(1), sortColumns);

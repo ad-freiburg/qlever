@@ -43,8 +43,8 @@ class PreconditionAction {
   PreconditionAction& operator=(const PreconditionAction&) = default;
 
   // Publicly accessible tags for the precondition action.
-  static const PreconditionAction ALREADY_SATISFIED;
-  static const PreconditionAction NOT_SATISFIABLE;
+  static const PreconditionAction IMPLICITLY_SATISFIED;
+  static const PreconditionAction SATISFY_EXTERNALLY;
 
   // Construct a precondition action from a tree that satisfies the condition.
   explicit PreconditionAction(std::shared_ptr<QueryExecutionTree> tree)
@@ -68,9 +68,9 @@ class PreconditionAction {
   }
 };
 
-const inline PreconditionAction PreconditionAction::ALREADY_SATISFIED =
+const inline PreconditionAction PreconditionAction::IMPLICITLY_SATISFIED =
     PreconditionAction{ImplicitlySatisfied{}};
-const inline PreconditionAction PreconditionAction::NOT_SATISFIABLE =
+const inline PreconditionAction PreconditionAction::SATISFY_EXTERNALLY =
     PreconditionAction{MustBeSatisfiedExternally{}};
 
 #endif  // PRECONDITIONACTION_H
