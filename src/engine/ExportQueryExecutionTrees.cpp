@@ -18,7 +18,6 @@
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.
@@ -403,12 +402,15 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      if (word.hasDatatype()) {
+        word.getLiteral().removeDatatypeOrLanguageTag();
+      }
       return std::move(word.getLiteral());
     }
     return std::nullopt;
   }
 
-  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
+  if (word.hasDatatype()) {
     word.getLiteral().removeDatatypeOrLanguageTag();
   }
   return std::move(word.getLiteral());

@@ -150,7 +150,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
-// all datatypes except for xsd:string are removed, language tags are preserved,
+// all datatypes are removed, language tags are preserved,
 // see ExportQueryExecutionTrees::idToLiteral for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
@@ -163,7 +163,7 @@ struct LiteralValueGetterWithStrFunction
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// Same as above but only literals with 'xsd:string' datatype or no datatype are
+// Same as above but only literals no datatype are
 // returned. This is used in the string expressions in `StringExpressions.cpp`.
 struct LiteralValueGetterWithoutStrFunction
     : Mixin<LiteralValueGetterWithoutStrFunction> {
@@ -189,8 +189,8 @@ struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
     return s;
   }
 };
- 
- // Value getter for `isBlank`.
+
+// Value getter for `isBlank`.
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
@@ -202,7 +202,7 @@ struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   }
 };
 
- // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
+// Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {

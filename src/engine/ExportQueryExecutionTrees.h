@@ -24,7 +24,6 @@ class ExportQueryExecutionTrees {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
 
-
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
   // created by the `QueryPlanner`. The result is converted into a sequence of
@@ -77,13 +76,11 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
-
-  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped unless
-  // they are 'xsd:string', so for literals with non-'xsd:string' datatypes
-  // (this includes IDs that directly store their value, like Doubles) the
-  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is false,
-  // IRIs are converted to literals without a datatype, which is equivalent to
-  // the behavior of the SPARQL STR(...) function. If
+  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped, so for
+  // literals (this includes IDs that directly store their value, like Doubles)
+  // the datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is
+  // false, IRIs are converted to literals without a datatype, which is
+  // equivalent to the behavior of the SPARQL STR(...) function. If
   // 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with
   // non'-xsd:string' datatypes (including encoded IDs) return 'std::nullopt'.
   // These semantics are useful for the string expressions in
