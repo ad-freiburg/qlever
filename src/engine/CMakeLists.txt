@@ -17,6 +17,6 @@ add_library(engine
         Describe.cpp GraphStoreProtocol.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SPARQLProtocol.cpp ParsedRequestBuilder.cpp
         NeutralOptional.cpp)
-dd_library(server Server.cpp)
-qlever_target_link_libraries(server)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
+add_library(server Server.cpp)
+qlever_target_link_libraries(server)
