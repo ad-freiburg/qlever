@@ -252,39 +252,45 @@ CPP_template(typename NaryOperation)(
     const SparqlExpression* child0 = this->getChildAtIndex(0).value();
     const SparqlExpression* child1 = this->getChildAtIndex(1).value();
 
-    const auto getPrefilterExprVariableVec =
-        [](const SparqlExpression* child0, const SparqlExpression* child1,
-           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
-      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
-      if (!varExpr) {
-        return {};
-      }
+    const auto makePrefilterExpressionVec =
+        [](const std::pair<std::string, Variable>& strVarPair, bool mirrored) {
+          std::vector<PrefilterExprVariablePair> prefilterVec;
+          const auto& [prefixStr, variable] = strVarPair;
+          prefilterVec.emplace_back(
+              std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+                  prefixStr, mirrored),
+              variable);
+          return prefilterVec;
+        };
 
-      const auto& optReferenceValue =
-          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
-      if (optReferenceValue.has_value()) {
-        return prefilterExpressions::detail::makePrefilterExpressionVec<
-            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
-                                              varExpr->value(), startsWithVar);
+    const auto getPrefixStrAndVariable = [](const SparqlExpression* child0,
+                                            const SparqlExpression* child1)
+        -> std::optional<std::pair<std::string, Variable>> {
+      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
+      auto optReferenceValue = getStringViewFromLiteralExpression(child1);
+      if (!varExpr || !optReferenceValue.has_value()) {
+        return std::nullopt;
       }
-      return {};
+      return std::make_pair(
+          std::string(asStringViewUnsafe(optReferenceValue.value())),
+          varExpr->value());
     };
-    // Remark: With the current implementation we only prefilter w.r.t. one
-    // bound.
-    // TODO: It is technically possible to pre-filter more precisely by
-    // introducing a second bound.
-    //
-    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
-    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
-    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
-    if (!resVec.empty()) {
-      return resVec;
+    // Option 1: STRSTARTS(?var, "prefix")
+    auto strVarPair = getPrefixStrAndVariable(child0, child1);
+    if (strVarPair.has_value()) {
+      return makePrefilterExpressionVec(strVarPair.value(), false);
     }
-    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
-    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
+    // Option 2: STRTSTARTS("someStr", ?var)
+    strVarPair = getPrefixStrAndVariable(child1, child0);
+    if (strVarPair.has_value()) {
+      // Cases like Option 2 are considered mirrored cases because their
+      // reference string ("someStr") appears on the left-hand side of the
+      // expression. To indicate that, we set the mirror flag to true.
+      return makePrefilterExpressionVec(strVarPair.value(), true);
+    }
     // Option 3:
-    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
-    return getPrefilterExprVariableVec(child1, child0, true);
+    // child0 or/and child1 are unsuitable SparqlExpression types.
+    return {};
   }
 };
 

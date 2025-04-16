@@ -11,6 +11,7 @@
 #include "global/Id.h"
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
+#include "index/Vocabulary.h"
 #include "util/Iterators.h"
 
 // For certain SparqlExpressions it is possible to perform a pre-filtering
@@ -26,6 +27,7 @@
 namespace prefilterExpressions {
 
 using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+using Vocab = RdfsVocabulary;
 
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
@@ -144,7 +146,8 @@ class PrefilterExpression {
   // TODO: `evaluate` should also return `BlockMetadataRanges` to avoid deep
   // copies. This requires additional changes in `IndexScan` and
   // `CompressedRelation`.
-  std::vector<CompressedBlockMetadata> evaluate(BlockMetadataSpan blockRange,
+  std::vector<CompressedBlockMetadata> evaluate(const Vocab& vocab,
+                                                BlockMetadataSpan blockRange,
                                                 size_t evaluationColumn) const;
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
@@ -152,7 +155,8 @@ class PrefilterExpression {
   // column index `evaluationColumn` over the containerized `std::span<const
   // CompressedBlockMetadata> input` (`BlockMetadataSpan`).
   virtual BlockMetadataRanges evaluateImpl(
-      const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const = 0;
+      const Vocab& vocab, const ValueIdSubrange& idRange,
+      BlockMetadataSpan blockRange) const = 0;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -165,6 +169,47 @@ class PrefilterExpression {
   // `IdOrLocalVocabEntry` variant.
   static ValueId getValueIdFromIdOrLocalVocabEntry(
       const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
+};
+
+//______________________________________________________________________________
+// `PrefixRegexExpression` implements the prefilter procedure for the SPARQL
+// expressions `REGEX()` and `STRSTARTS()`.
+// For more details refer to the commentary within the declaration and
+// definitions of `PrefixRegexExpression`.
+class PrefixRegexExpression : public PrefilterExpression {
+ private:
+  std::string prefix_;
+  // `mirrored_ = true` specifies "mirrored" cases like `STRSTARTS("str",
+  // ?var)`. With `"str"` appearing as a left-hand side value, the expression is
+  // considered mirrored. This case requires a different evaluation logic.
+  //
+  // With `mirrored_ = false`, we perform the standard prefilter evaluation
+  // procedure for expressions like `STRSTARTS(?var, "prefix")` or `REGEX(?var,
+  // "^prefix")`.
+  bool mirrored_;
+  // `isNegated_ = true` implies that we prefilter a negated expression, hence
+  // `!REGEX()` or `!STRSTARTS()`.
+  bool isNegated_;
+
+ public:
+  explicit PrefixRegexExpression(const std::string& prefix,
+                                 bool mirrored = false, bool isNegated = false)
+      : prefix_(absl::StrCat("\"", prefix)),
+        mirrored_(mirrored),
+        isNegated_(isNegated) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange) const override;
+  BlockMetadataRanges evaluateMirroredImpl(const Vocab& vocab,
+                                           const ValueIdSubrange& idRange,
+                                           BlockMetadataSpan blockSpan) const;
 };
 
 //______________________________________________________________________________
@@ -192,7 +237,11 @@ class LogicalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
+  // Declare `PrefixRegexExpression` as a friend because its `evaluateImpl`
+  // requires access to the `evaluateImpl` declared here.
+  friend class PrefixRegexExpression;
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange) const override;
 };
 
@@ -219,7 +268,8 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange) const override;
 };
 
@@ -261,6 +311,9 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
+  // `PrefixRegexExpression::evaluateMirroredImpl` potentially requires direct
+  // access to the `evaluateImpl` below.
+  friend class PrefixRegexExpression;
   // If `getComplementOverAllDatatypes` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
@@ -270,7 +323,8 @@ class RelationalExpression : public PrefilterExpression {
   // Calls `evaluateOptGetCompleteComplementImpl` with
   // `getComplementOverAllDatatypes` set to `false` (standard evaluation
   // procedure).
-  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange) const override;
 };
 
@@ -294,7 +348,8 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange) const override;
 };
 

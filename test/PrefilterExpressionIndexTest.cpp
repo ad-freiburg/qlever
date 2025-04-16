@@ -83,12 +83,29 @@ const Id VocabId10 = VocabId(10);
 const Id DoubleId33 = DoubleId(33);
 const Id GraphId = VocabId(0);
 
+// Turtle input for testing.
+static const inline std::string turtleInput =
+    "<x0> <name> \"Be\" . "
+    "<x1> <name> \"Bern\" . "
+    "<x2> <name> \"Berlin\" . "
+    "<x3> <name> \"Düsseldorf\" . "
+    "<x4> <name> \"H\" . "
+    "<x5> <name> \"Ham\" . "
+    "<x6> <name> \"Hamb\" . "
+    "<x7> <name> \"Hamburg\" . "
+    "<x8> <name> \"Hamburg Altona\" . "
+    "<x9> <name> \"München\" . "
+    "<x10> <name> \"Stuttgart\" .";
+
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
   // Given that we depend on LocalVocab and Vocab values during evaluation an
   // active Index + global vocabulary is required.
-  QueryExecutionContext* qet = ad_utility::testing::getQec();
+  QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
+  std::function<Id(const std::string&)> getVocabId =
+      ad_utility::testing::makeGetId(qet->getIndex());
+  const RdfsVocabulary& indexVocab = qet->getIndex().getVocab();
   LocalVocab vocab{};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");
@@ -112,6 +129,17 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const LocalVocabEntry iri5 = LVE("<www-iri.de>");
   const LocalVocabEntry iriBegin = LVE("<");
   const Id idAugsburg = getId(augsburg, vocab);
+  const Id vocabIdBe = getVocabId("\"Be\"");
+  const Id vocabIdBern = getVocabId("\"Bern\"");
+  const Id vocabIdBerlin = getVocabId("\"Berlin\"");
+  const Id vocabIdDüsseldorf = getVocabId("\"Düsseldorf\"");
+  const Id vocabIdH = getVocabId("\"H\"");
+  const Id vocabIdHam = getVocabId("\"Ham\"");
+  const Id vocabIdHamb = getVocabId("\"Hamb\"");
+  const Id vocabIdHamburg = getVocabId("\"Hamburg\"");
+  const Id vocabIdHamburgAltona = getVocabId("\"Hamburg Altona\"");
+  const Id vocabIdMünchen = getVocabId("\"München\"");
+  const Id vocabIdStuttgart = getVocabId("\"Stuttgart\"");
   const Id idBerlin = getId(berlin, vocab);
   const Id idDüsseldorf = getId(düsseldorf, vocab);
   const Id idFrankfurt = getId(frankfurt, vocab);
@@ -205,6 +233,21 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const CompressedBlockMetadata b12Date =
       makeBlock(makeIdForLYearDate(14579), makeIdForLYearDate(38263));
 
+  // VocabId blocks.
+  const CompressedBlockMetadata bVocabId0 =
+      makeBlock(vocabIdBerlin, vocabIdBerlin);
+  const CompressedBlockMetadata bVocabId1 =
+      makeBlock(vocabIdBerlin, vocabIdBern);
+  const CompressedBlockMetadata bVocabId2 =
+      makeBlock(vocabIdBern, vocabIdDüsseldorf);
+  const CompressedBlockMetadata bVocabId3 = makeBlock(vocabIdH, vocabIdHam);
+  const CompressedBlockMetadata bVocabId4 =
+      makeBlock(vocabIdHamb, vocabIdHamburg);
+  const CompressedBlockMetadata bVocabId5 =
+      makeBlock(vocabIdHamburgAltona, vocabIdMünchen);
+  const CompressedBlockMetadata bVocabId6 =
+      makeBlock(vocabIdStuttgart, vocabIdStuttgart);
+
   // All blocks that contain mixed (ValueId) types over column 2,
   // or possibly incomplete ones.
   const std::vector<CompressedBlockMetadata> mixedBlocks = {b2,  b4,  b11,
@@ -227,6 +270,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   const std::vector<CompressedBlockMetadata> mixedBlocksTestIsDatatype = {
       b2, b4, b11, b18, b25, b28};
+
+  const std::vector<CompressedBlockMetadata> vocabIdBlocks = {
+      bVocabId0, bVocabId1, bVocabId2, bVocabId3,
+      bVocabId4, bVocabId5, bVocabId6};
 
   // Selection of date related blocks.
   const std::vector<CompressedBlockMetadata> dateBlocks = {
@@ -319,8 +366,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           const std::string& expected,
                           size_t evaluationColumn = 2) {
     std::vector<CompressedBlockMetadata> testBlocks = input;
-    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(testBlocks, evaluationColumn),
-                                 ::testing::HasSubstr(expected));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        expr->evaluate(indexVocab, testBlocks, evaluationColumn),
+        ::testing::HasSubstr(expected));
   }
 
   // Assert that the PrefilterExpression tree is properly copied when calling
@@ -343,7 +391,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     }
     std::vector<CompressedBlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(expr->evaluate(testBlocks, 2),
+    ASSERT_EQ(expr->evaluate(indexVocab, testBlocks, 2),
               addMixedBlocks ? expectedAdjusted : expected);
   }
 
@@ -366,7 +414,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
             ? addBlocksMixedDatatype(expected, mixedBlocksTestIsDatatype)
             : expected;
     ASSERT_EQ(
-        expr->evaluate(input.empty() ? allTestBlocksIsDatatype : input, 2),
+        expr->evaluate(indexVocab,
+                       input.empty() ? allTestBlocksIsDatatype : input, 2),
         adjustedExpected);
   }
 
@@ -410,7 +459,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` on date blocks
   auto makeTestDate(std::unique_ptr<PrefilterExpression> expr,
                     std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(expr->evaluate(dateBlocks, 2), expected);
+    ASSERT_EQ(expr->evaluate(indexVocab, dateBlocks, 2), expected);
+  }
+
+  // Simple `ASSERT_EQ` VocabIdBlocks
+  auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
+                           std::vector<CompressedBlockMetadata>&& expected) {
+    ASSERT_EQ(expr->evaluate(indexVocab, vocabIdBlocks, 2), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -691,6 +746,68 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(falseId), {b4}, true);
   makeTest(neq(referenceDateEqual), {b26, b28});
   makeTest(neq(referenceDate1), {b26, b27, b28});
+}
+
+// Test Prefix-Regex Expression
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
+  // test `mirrored_ = false` and `isNegated_ = false`
+  makeTestPrefixRegex(prefixRegex("Ber"), {bVocabId0, bVocabId1, bVocabId2});
+  makeTestPrefixRegex(prefixRegex("Düssel"), {bVocabId2});
+  makeTestPrefixRegex(prefixRegex("H"), {bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Ham"), {bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hambu"), {bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hamburg Alt"), {bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona"), {bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Noo Prefix"), {});
+  makeTestPrefixRegex(prefixRegex(""),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
+                       bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Stutt"), {bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Stuttgart"), {bVocabId6});
+
+  // test `mirrored_ = false` and `isNegated_ = true`
+  makeTestPrefixRegex(prefixRegex("H", false, true),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Be", false, true),
+                      {bVocabId2, bVocabId3, bVocabId4, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(
+      prefixRegex("Ham", false, true),
+      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(
+      prefixRegex("Stuttgart", false, true),
+      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(
+      prefixRegex("Hamb", false, true),
+      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("", false, true), {});
+
+  // test `mirrored_ = true` and `isNegated_ = false`
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona", true),
+                      {bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("B", true), {});
+  makeTestPrefixRegex(prefixRegex("Bernd", true),
+                      {bVocabId0, bVocabId1, bVocabId2});
+  makeTestPrefixRegex(prefixRegex("Ham", true), {bVocabId3});
+  makeTestPrefixRegex(prefixRegex("Hamb", true), {bVocabId3, bVocabId4});
+  makeTestPrefixRegex(prefixRegex("Stuttgart", true), {bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Düss", true), {bVocabId2});
+
+  // test `mirrored_ = true` and `isNegated = true`.
+  makeTestPrefixRegex(
+      prefixRegex("Stuttgart", true, true),
+      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Be", true, true),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
+                       bVocabId5, bVocabId6});
+  makeTestPrefixRegex(
+      prefixRegex("Berlinnn", true, true),
+      {bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Hamburg Alt", true, true),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Münch", true, true),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
+                       bVocabId5, bVocabId6});
 }
 
 // Test IsDatatype Expressions
@@ -1006,15 +1123,17 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<CompressedBlockMetadata> input = {b16};
-  EXPECT_EQ(expr->evaluate(input, 0), input);
-  EXPECT_EQ(expr->evaluate(input, 1), input);
-  EXPECT_EQ(expr->evaluate(input, 2), input);
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 0), input);
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 1), input);
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 2), input);
   expr = eq(DoubleId(-6.25));
   input = {b15, b16, b17};
-  EXPECT_EQ(expr->evaluate(input, 2),
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 2),
             (std::vector<CompressedBlockMetadata>{b15, b16}));
-  EXPECT_EQ(expr->evaluate(input, 1), std::vector<CompressedBlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(input, 0), std::vector<CompressedBlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 1),
+            std::vector<CompressedBlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(indexVocab, input, 0),
+            std::vector<CompressedBlockMetadata>{});
 }
 
 //______________________________________________________________________________
@@ -1043,6 +1162,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
                        notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
   makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
                        neq(LVE("<iri/id10>"))));
+  makeTestClone(prefixRegex("prefixPreeefix"));
+  makeTestClone(prefixRegex("prefixPreeefix", true, false));
+  makeTestClone(prefixRegex("prefixPreeefix", false, true));
 }
 
 //______________________________________________________________________________
@@ -1080,6 +1202,14 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
                *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
                *orExpr(eq(IntId(0)), le(IntId(0))));
+  // PrefixRegex PrefilterExpression
+  ASSERT_NE(*prefixRegex("prefix", true), *prefixRegex("pref", true));
+  ASSERT_NE(*prefixRegex("prefix", false), *prefixRegex("prefix", true));
+  ASSERT_NE(*prefixRegex("prefix", false, false),
+            *prefixRegex("prefix", false, true));
+  ASSERT_EQ(*prefixRegex("", false), *prefixRegex("", false));
+  ASSERT_EQ(*prefixRegex("", true, true), *prefixRegex("", true, true));
+  ASSERT_EQ(*notExpr(prefixRegex("")), *notExpr(prefixRegex("")));
 }
 
 //______________________________________________________________________________
@@ -1204,6 +1334,19 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "
                       "Numeric\nis negated: true.\n}\n.\n"));
+  EXPECT_THAT(
+      *prefixRegex("str"),
+      matcher(
+          "Prefilter PrefixRegexExpression with prefix \"str.\nExpression is "
+          "negated: false.\nExpression is mirrored: false.\n.\n"));
+  EXPECT_THAT(*prefixRegex("someStr", true, false),
+              matcher("Prefilter PrefixRegexExpression with prefix "
+                      "\"someStr.\nExpression is "
+                      "negated: false.\nExpression is mirrored: true.\n.\n"));
+  EXPECT_THAT(
+      *prefixRegex("", true, true),
+      matcher("Prefilter PrefixRegexExpression with prefix \".\nExpression is "
+              "negated: true.\nExpression is mirrored: true.\n.\n"));
 }
 
 //______________________________________________________________________________

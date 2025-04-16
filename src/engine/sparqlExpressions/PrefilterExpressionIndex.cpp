@@ -436,7 +436,8 @@ ValueId AccessValueIdFromBlockMetadata::operator()(
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
-    BlockMetadataSpan blockRange, size_t evaluationColumn) const {
+    const Vocab& vocab, BlockMetadataSpan blockRange,
+    size_t evaluationColumn) const {
   if (blockRange.size() < 3) {
     return std::vector<CompressedBlockMetadata>(blockRange.begin(),
                                                 blockRange.end());
@@ -462,7 +463,7 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
     result =
         getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
-            evaluateImpl(idRange, blockRange),
+            evaluateImpl(vocab, idRange, blockRange),
             // always add mixed datatype blocks
             getRangesMixedDatatypeBlocks(idRange, blockRange)));
     checkRequirementsBlockMetadata(result, evaluationColumn);
@@ -488,6 +489,109 @@ ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
                         }},
                     referenceValue);
 }
+
+// SECTION PREFIX-REGEX
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> PrefixRegexExpression::logicalComplement()
+    const {
+  return make<PrefixRegexExpression>(prefix_, mirrored_, !isNegated_);
+};
+
+//______________________________________________________________________________
+bool PrefixRegexExpression::operator==(const PrefilterExpression& other) const {
+  const auto* otherPrefixRegex =
+      dynamic_cast<const PrefixRegexExpression*>(&other);
+  if (!otherPrefixRegex) {
+    return false;
+  }
+  return (isNegated_ == otherPrefixRegex->isNegated_) &&
+         (prefix_ == otherPrefixRegex->prefix_) &&
+         (mirrored_ == otherPrefixRegex->mirrored_);
+};
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> PrefixRegexExpression::clone() const {
+  return make<PrefixRegexExpression>(*this);
+};
+
+//______________________________________________________________________________
+std::string PrefixRegexExpression::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter PrefixRegexExpression with prefix ", prefix_,
+      ".\nExpression is negated: ", isNegated_ ? "true" : "false",
+      ".\nExpression is mirrored: ", mirrored_ ? "true.\n" : "false.\n");
+};
+
+//______________________________________________________________________________
+BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange) const {
+  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
+  if (mirrored_) {
+    return evaluateMirroredImpl(vocab, idRange, blockRange);
+  }
+
+  const auto& [beginIndex, endIndex] =
+      vocab.prefixRanges(prefix_).ranges().front();
+  auto lowerId = Id::makeFromVocabIndex(beginIndex);
+  auto upperId = Id::makeFromVocabIndex(endIndex);
+
+  if (isNegated_) {
+    // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
+    // Prefilter ?var >= Id(next("prefix)) || ?var < Id("prefix).
+    return OrExpression(make<LessThanExpression>(lowerId),
+                        make<GreaterEqualExpression>(upperId))
+        .evaluateImpl(vocab, idRange, blockRange);
+  }
+  // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
+  // Prefilter ?var > Id("prefix) && ?var < Id(next("prefix)).
+  return AndExpression(make<GreaterEqualExpression>(lowerId),
+                       make<LessThanExpression>(upperId))
+      .evaluateImpl(vocab, idRange, blockRange);
+};
+
+//______________________________________________________________________________
+BlockMetadataRanges PrefixRegexExpression::evaluateMirroredImpl(
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockSpan) const {
+  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
+  if (prefix_.size() <= 1) {
+    // Case `STRSTARTS("", ?var)`.
+    // The empty incomplete literal acts as a reference bound here.
+    auto emptyBound = Id::makeFromVocabIndex(
+        vocab.prefixRanges(prefix_).ranges().front().first);
+    if (isNegated_) {
+      // Case: `!STRSTARTS("", ?var)`.
+      // Prefilter ?var > ".
+      return GreaterThanExpression(emptyBound)
+          .evaluateImpl(vocab, idRange, blockSpan);
+    }
+    // Case: `STRSTARTS("", ?var)`.
+    // Prefilter ?var <= ".
+    return LessEqualExpression(emptyBound)
+        .evaluateImpl(vocab, idRange, blockSpan);
+  }
+
+  std::string_view lowerStr(&prefix_.front(), 2);
+  auto lowerId = Id::makeFromVocabIndex(
+      vocab.prefixRanges(lowerStr).ranges().front().first);
+  auto upperLVE =
+      LocalVocabEntry::fromStringRepresentation(absl::StrCat(prefix_, "\""));
+
+  if (isNegated_) {
+    // Case: `!STRSTARTS("someStr", ?var)`.
+    // Prefilter ?var < "s || ?var > "someStr".
+    return OrExpression(make<LessThanExpression>(lowerId),
+                        make<GreaterThanExpression>(upperLVE))
+        .evaluateImpl(vocab, idRange, blockSpan);
+  }
+  // Standard case: `STRSTARTS("someStr", ?var)`.
+  // Prefilter ?var >= "s && ?var <= "someStr".
+  return AndExpression(make<GreaterEqualExpression>(lowerId),
+                       make<LessEqualExpression>(upperLVE))
+      .evaluateImpl(vocab, idRange, blockSpan);
+};
 
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
@@ -545,7 +649,8 @@ RelationalExpression<Comparison>::evaluateOptGetCompleteComplementImpl(
 //______________________________________________________________________________
 template <CompOp Comparison>
 BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange) const {
   return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
 };
 
@@ -633,9 +738,9 @@ std::string IsDatatypeExpression<Datatype>::asString(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-static BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated) {
+BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const ValueIdSubrange& idRange,
+                                                 BlockMetadataSpan blockRange,
+                                                 const bool isNegated) {
   using enum IsDatatype;
   static_assert(Datatype == IRI || Datatype == LITERAL);
   using LVE = LocalVocabEntry;
@@ -706,7 +811,8 @@ static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
 //______________________________________________________________________________
 template <IsDatatype Datatype>
 BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange) const {
   using enum IsDatatype;
   if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
     return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
@@ -741,17 +847,18 @@ LogicalExpression<Operation>::logicalComplement() const {
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        child1_->evaluateImpl(idRange, blockRange),
-        child2_->evaluateImpl(idRange, blockRange));
+        child1_->evaluateImpl(vocab, idRange, blockRange),
+        child2_->evaluateImpl(vocab, idRange, blockRange));
   } else {
     static_assert(Operation == OR);
     return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        child1_->evaluateImpl(idRange, blockRange),
-        child2_->evaluateImpl(idRange, blockRange));
+        child1_->evaluateImpl(vocab, idRange, blockRange),
+        child2_->evaluateImpl(vocab, idRange, blockRange));
   }
 };
 
@@ -801,8 +908,9 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 BlockMetadataRanges NotExpression::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  return child_->evaluateImpl(idRange, blockRange);
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange) const {
+  return child_->evaluateImpl(vocab, idRange, blockRange);
 };
 
 //______________________________________________________________________________

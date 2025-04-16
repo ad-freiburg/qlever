@@ -470,16 +470,24 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        eqSprql(Variable{"?country"}, VocabId(20))))))));
 }
 
-// Test PrefilterExpression creation for SparqlExpression STRSTARTS
+// Test PrefixRegexExpression creation from STRSTARTS and REGEX.
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
-     getPrefilterExprForStrStartsExpr) {
+     testGetPrefixRegexExpressionFromSparqlExprssions) {
   const auto varX = Variable{"?x"};
   const auto varY = Variable{"?y"};
   evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
-                       pr(ge(LVE("\"de\"")), varX));
+                       pr(prefixRegex("de"), varX));
   evalAndEqualityCheck(strStartsSprql(L("\"\""), varX),
-                       pr(le(LVE("\"\"")), varX));
+                       pr(prefixRegex("", true), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"someRefStr\""), varX),
+                       pr(prefixRegex("someRefStr", true), varX));
+  evalAndEqualityCheck(notSprqlExpr(strStartsSprql(varX, L("\"de\""))),
+                       pr(notExpr(prefixRegex("de")), varX));
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
+                       pr(prefixRegex("prefix"), varX));
+  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
+                       pr(notExpr(prefixRegex("prefix")), varX));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
