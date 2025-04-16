@@ -432,14 +432,14 @@ add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(IndexBuilderMain index util ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
-target_precompile_headers(ServerMain REUSE_FROM engine)
+target_precompile_headers(ServerMain REUSE_FROM engine util)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index util ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
