@@ -608,7 +608,7 @@ using StrLangTagged =
       literal.value().hasDatatype() || literal.value().hasLanguageTag()) {
     return Id::makeUndefined();
   } else {
-    literal.value().addDatatype(std::move(inputIri.value()));
+    literal.value().addDatatype(inputIri.value());
     return LiteralOrIri{std::move(literal.value())};
   }
 };
