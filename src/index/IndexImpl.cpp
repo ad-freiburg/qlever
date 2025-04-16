@@ -29,7 +29,6 @@
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;

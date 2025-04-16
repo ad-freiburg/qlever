@@ -8,7 +8,6 @@
 
 #include "index/IndexImpl.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
 // ____________________________________________________________________________
 Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
