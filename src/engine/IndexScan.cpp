@@ -295,10 +295,11 @@ void IndexScan::determineMultiplicities() {
 // _____________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
-  std::array triple{&subject_, &predicate_, &object_};
-  auto permutation = Permutation::toKeyOrder(permutation_);
-  return {triple[permutation[0]], triple[permutation[1]],
-          triple[permutation[2]]};
+  std::array<const TripleComponent* const, 3> triple{&subject_, &predicate_,
+                                                     &object_};
+  // TODO<joka921> This place has to be changed once we have a permutation
+  // that is primarily sorted by G (the graph id).
+  return Permutation::toKeyOrder(permutation_).permuteTriple(triple);
 }
 
 // _____________________________________________________________________________

@@ -157,7 +157,6 @@ class PrefilterExpression {
   virtual BlockMetadataRanges evaluateImpl(
       const Vocab& vocab, const ValueIdSubrange& idRange,
       BlockMetadataSpan blockRange) const = 0;
-
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
                                   const PrefilterExpression& expression) {

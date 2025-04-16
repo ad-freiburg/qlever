@@ -651,6 +651,7 @@ template <CompOp Comparison>
 BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange) const {
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
   return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
 };
 
