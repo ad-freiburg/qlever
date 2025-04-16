@@ -85,7 +85,7 @@ class ValueId {
 
   /// The maximum value for the unsigned types that are used as indices
   /// (currently VocabIndex, LocalVocabIndex and Text).
-  static constexpr T maxIndex = 1ull << (numDataBits - 1);
+  static constexpr T maxIndex = (1ull << numDataBits) - 1;
 
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest

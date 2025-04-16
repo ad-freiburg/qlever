@@ -9,6 +9,7 @@
 
 #include "../src/index/Vocabulary.h"
 #include "../src/util/json.h"
+#include "global/IndexTypes.h"
 
 using json = nlohmann::json;
 using std::string;
@@ -86,17 +87,39 @@ TEST(VocabularyTest, createFromSetTest) {
   ad_utility::HashSet<string> s;
   s.insert("a");
   s.insert("ab");
+  s.insert(
+      "\"POLYGON((1 2, 3 "
+      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   s.insert("ba");
   s.insert("car");
+  s.insert(
+      "\"LINESTRING(1 2, 3 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
   TextVocabulary v;
   auto filename = "vocTest4.dat";
   v.createFromSet(s, filename);
+
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
+
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
+
   ASSERT_FALSE(v.getId("foo", &idx));
+
+  ASSERT_TRUE(
+      v.getId("\"LINESTRING(1 2, 3 "
+              "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+              &idx));
+  ASSERT_EQ(static_cast<uint64_t>(1) << 59, idx.get());
+  ASSERT_TRUE(
+      v.getId("\"POLYGON((1 2, 3 "
+              "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+              &idx));
+  ASSERT_EQ((static_cast<uint64_t>(1) << 59) | 1, idx.get());
+
   ad_utility::deleteFile(filename);
 }
 
@@ -124,4 +147,74 @@ TEST(Vocabulary, PrefixFilter) {
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)}}};
   ASSERT_EQ(ranges, expectedRanges);
   ad_utility::deleteFile(filename);
+}
+
+TEST(VocabularyTest, ItemAt) {
+  ad_utility::HashSet<string> s;
+  s.insert("a");
+  s.insert("ab");
+  s.insert(
+      "\"POLYGON((1 2, 3 "
+      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  s.insert("ba");
+  s.insert("car");
+  s.insert(
+      "\"LINESTRING(1 2, 3 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  TextVocabulary v;
+  auto filename = "vocTest6.dat";
+  v.createFromSet(s, filename);
+
+  ASSERT_EQ(v[WordVocabIndex::make(0)], "a");
+  ASSERT_EQ(v[WordVocabIndex::make(1)], "ab");
+  ASSERT_EQ(v[WordVocabIndex::make(2)], "ba");
+  ASSERT_EQ(v[WordVocabIndex::make(3)], "car");
+
+  WordVocabIndex idx = WordVocabIndex::make(static_cast<uint64_t>(1) << 59);
+  ASSERT_EQ(v[idx],
+            "\"LINESTRING(1 2, 3 "
+            "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  idx = WordVocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
+  ASSERT_EQ(v[idx],
+            "\"POLYGON((1 2, 3 "
+            "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  ad_utility::deleteFile(filename);
+}
+
+TEST(Vocabulary, GeoLiteral) {
+  ASSERT_TRUE(RdfsVocabulary::stringIsGeoLiteral(
+      "\"POLYGON((1 2, 3 "
+      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+  ASSERT_TRUE(RdfsVocabulary::stringIsGeoLiteral(
+      "\"LINESTRING(1 2, 3 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
+  ASSERT_FALSE(RdfsVocabulary::stringIsGeoLiteral(""));
+  ASSERT_FALSE(RdfsVocabulary::stringIsGeoLiteral("\"abc\""));
+  ASSERT_FALSE(
+      RdfsVocabulary::stringIsGeoLiteral("\"\"^^<http://example.com>"));
+}
+
+TEST(Vocabulary, WordWriter) {
+  // The word writer in vocabulary wraps another word writer. Its task is to
+  // split words to two different vocabularies for geo and non-geo words. This
+  // split is tested here.
+  RdfsVocabulary vocabulary;
+  auto wordCallback = vocabulary.makeWordWriter("vocTest7.dat");
+
+  ASSERT_EQ(wordCallback("a", true), 0);
+  ASSERT_EQ(wordCallback("ab", true), 1);
+  ASSERT_EQ(
+      wordCallback("\"LINESTRING(1 2, 3 "
+                   "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                   true),
+      (1ull << 59));
+  ASSERT_EQ(wordCallback("ba", true), 2);
+  ASSERT_EQ(wordCallback("car", true), 3);
+  ASSERT_EQ(
+      wordCallback("\"POLYGON((1 2, 3 "
+                   "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                   true),
+      (1ull << 59) | 1);
 }
