@@ -50,6 +50,11 @@ SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeDistWithUnitExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 
