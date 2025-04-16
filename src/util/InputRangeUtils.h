@@ -26,7 +26,7 @@ namespace ad_utility {
 // 3. This class only yields an input range, independent of the range category
 // of the input.
 CPP_class_template(typename View, typename F)(requires(
-    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+    ql::ranges::input_range<View>//&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
                                      View>>)) struct CachingTransformInputRange
@@ -240,56 +240,28 @@ template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
 
-CPP_class_template(typename FirstView, typename SecondView, typename RetVal)(
-    requires(ql::ranges::input_range<FirstView>&& ql::ranges::input_range<
-             SecondView>)) struct MultisourceCachingInputRange
-    : ad_utility::InputRangeFromGet<RetVal> {
-  FirstView firstView_;
-  SecondView secondView_;
-  std::optional<ql::ranges::iterator_t<FirstView>> firstIt_;
-  std::optional<ql::ranges::iterator_t<SecondView>> secondIt_;
+CPP_class_template(typename ViewType)(
+    requires(ql::ranges::input_range<ViewType>)) struct ConcatenatedInputRange
+    : ad_utility::InputRangeFromGet<ql::ranges::range_value_t<ViewType>> {
+  using ViewCollection = std::vector<std::unique_ptr<ViewType>>;
+  ViewCollection viewCollection_;
+  ql::ranges::iterator_t<ViewCollection> collectionIt_;
 
-  MultisourceCachingInputRange(
-      FirstView firstView, SecondView secondView,
-      std::optional<ql::ranges::iterator_t<FirstView>> firstIt = {},
-      std::optional<ql::ranges::iterator_t<SecondView>> secondIt = {})
-      : firstView_(std::move(firstView)),
-        secondView_(std::move(secondView)),
-        firstIt_(std::move(firstIt)),
-        secondIt_(std::move(secondIt)) {}
+  ConcatenatedInputRange(ViewCollection viewCollection)
+      : viewCollection_(std::move(viewCollection)),
+        collectionIt_(viewCollection_.begin()) {}
 
-  std::optional<RetVal> get() {
-    if (!firstIt_.has_value()) {
-      // The first view has not been started yet, so start there
-      firstIt_ = firstView_.begin();
-      return std::optional{std::move(*(firstIt_.value()))};
-    } else if (firstIt_.value() != firstView_.end()) {
-      // The first view is not finished, move to the next item
-      firstIt_.value()++;
-      if ((firstIt_.value() != firstView_.end())) {
-        // The first view has an item, return it
-        return std::optional{std::move(*(firstIt_.value()))};
-      } else {
-        // The first view is now finished, continue with the second view
-        if (!secondIt_.has_value()) {
-          // The second view has not been started. Start at the beginning
-          secondIt_ = secondView_.begin();
-        }  // else The second view is in progress, already pointing to the next
-           // item
-        if (secondIt_.value() != secondView_.end()) {
-          // The second view has an item, return it
-          return std::optional{std::move(*(secondIt_.value()))};
-        }  // else The second view is also finished, return nullopt
+  std::optional<ql::ranges::range_value_t<ViewType>> get() {
+    while (collectionIt_ != viewCollection_.end()) {
+      auto elementOpt = (*collectionIt_)->get();
+      if (elementOpt.has_value()) {
+        // Element exists in the currently iterated view
+        return elementOpt;
       }
-    } else if (secondIt_.value() != secondView_.end()) {
-      // The first view is finished and the first result of the second view has
-      // been returned. Continue to the next item in the second view
-      secondIt_.value()++;
-      if (secondIt_.value() != secondView_.end()) {
-        // The second view has an item, return it
-        return std::optional{std::move(*(secondIt_.value()))};
-      }  // else The second view is also finished, return nullopt
+      // Done with current view, but not all views
+      collectionIt_++;
     }
+    // Done iterating over all views
     return std::nullopt;
   }
 };

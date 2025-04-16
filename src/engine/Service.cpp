@@ -259,7 +259,9 @@ Result::LazyResult Service::computeResultLazily(
       return std::nullopt;
     }
     try {
-      for (const nlohmann::json& partJson : inputRange) {
+      auto partJsonOpt = inputRange.get();
+      while (partJsonOpt.has_value()) {
+        const nlohmann::json& partJson = partJsonOpt.value();
         if (partJson.contains("head")) {
           AD_CORRECTNESS_CHECK(!varsChecked);
           service->verifyVariables(partJson["head"],
@@ -278,6 +280,7 @@ Result::LazyResult Service::computeResultLazily(
           rowIdx = 0;
           return pair;
         }
+        partJsonOpt = inputRange.get();
       }
     } catch (const ad_utility::LazyJsonParser::Error& e) {
       service->throwErrorWithContext(
@@ -596,13 +599,21 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Stop precomputation as the size of `siblingResult` exceeds the
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
+      auto identityFunction = [](auto& p) { return std::move(p); };
+      std::vector<std::unique_ptr<Result::LazyResult>> viewCollection;
+      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
+        ad_utility::CachingTransformInputRange(
+            Result::LazyResult{std::move(resultPairs)},
+            identityFunction)));
+      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
+        ad_utility::CachingTransformInputRange(
+            Result::LazyResult{std::move(generator)}, std::move(++it),
+            std::move(identityFunction))));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
-              Result::LazyResult{ad_utility::MultisourceCachingInputRange<
-                  decltype(resultPairs), decltype(generator),
-                  Result::IdTableVocabPair>(std::move(resultPairs),
-                                            std::move(generator), {},
-                                            std::move(++it))},
+              Result::LazyResult{
+                  ad_utility::ConcatenatedInputRange<Result::LazyResult>(
+                      std::move(viewCollection))},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;
