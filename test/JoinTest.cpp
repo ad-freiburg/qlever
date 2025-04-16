@@ -517,8 +517,8 @@ TEST(JoinTest, joinTwoScans) {
 }
 
 // This is a regression test for an issue that was reported in
-// https://github.com/ad-freiburg/qlever/issues/1893 and havily simplified so it
-// can be reproduced in a unit test.
+// https://github.com/ad-freiburg/qlever/issues/1893 and heavily simplified so
+// it can be reproduced in a unit test.
 TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
   ad_utility::testing::TestIndexConfig config{
       "<x> <p1> <1> <g1> . <x> <p1> <2> <g1> . <x> <p2> <1> <g2> ."
