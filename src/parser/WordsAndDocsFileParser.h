@@ -128,6 +128,7 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
                                 return localeManager.getLowercaseUtf8(str);
                               });
 }
+
 /**
  * @brief This class is the parent class of WordsFileParser and DocsFileParser
  *
@@ -191,5 +192,16 @@ class DocsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 };
+
+inline cppcoro::generator<WordsFileLine> getWordsLineFromDocsFile(
+    const string& docsFile, const LocaleManager& localeManager) {
+  for (const auto& line : DocsFileParser{docsFile, localeManager}) {
+    for (const auto& word :
+         tokenizeAndNormalizeText(line.docContent_, localeManager)) {
+      co_yield WordsFileLine{
+          word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
+    }
+  }
+}
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H

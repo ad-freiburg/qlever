@@ -244,14 +244,9 @@ size_t IndexImpl::processWordsForVocabulary(const string& file,
     }
   };
   if (useDocsFileForVocabulary) {
-    const auto& localeManager = textVocab_.getLocaleManager();
-    for (const auto& line : DocsFileParser{file, localeManager}) {
-      for (const auto& word :
-           tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-        auto lineToProcess = WordsFileLine{
-            word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
-        processLine(lineToProcess);
-      }
+    for (const auto& line :
+         getWordsLineFromDocsFile(file, textVocab_.getLocaleManager())) {
+      processLine(line);
     }
   } else {
     for (const auto& line :
@@ -354,13 +349,9 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
         ++docsFileIterator;
       }
     } else {
-      for (const auto& line : DocsFileParser{docsFile, localeManager}) {
-        for (const auto& word :
-             tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-          WordsFileLine lineToProcess = {
-              word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
-          processLine(lineToProcess);
-        }
+      for (const auto& line :
+           getWordsLineFromDocsFile(docsFile, localeManager)) {
+        processLine(line);
       }
     }
   } else {
