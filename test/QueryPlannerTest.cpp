@@ -9,6 +9,7 @@
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -2423,6 +2424,97 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
+}
+
+TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto type = SpatialJoinType::WITHIN_DIST;
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      " }",
+      h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::SpatialJoin(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                             PayloadVariables::all(), algo, type,
+                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+              scan("?m", "<p>", "?n")),
+          h::SpatialJoin(
+              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                             PayloadVariables::all(), algo, type,
+                             scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+              scan("?a", "<p>", "?b"))));
+
+  // The problem
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "BIND(1 AS ?unrelated)"
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::Bind(h::SpatialJoin(
+                      1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      PayloadVariables::all(), algo, type,
+                      h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")),
+                      scan("?m", "<p>", "?n")),
+                  "1", Variable{"?unrelated"}),
+          h::SpatialJoin(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::Bind(h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")),
+                      "1", Variable{"?unrelated"}),
+              scan("?m", "<p>", "?n")),
+          h::SpatialJoin(
+              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::Bind(h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?m", "<p>", "?n")),
+                      "1", Variable{"?unrelated"}),
+              scan("?a", "<p>", "?b")),
+          h::Bind(h::SpatialJoin(
+                      500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                      PayloadVariables::all(), algo, type,
+                      h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?m", "<p>", "?n")),
+                      scan("?a", "<p>", "?b")),
+                  "1", Variable{"?unrelated"})));
 }
 
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
