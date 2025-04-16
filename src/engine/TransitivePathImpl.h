@@ -228,6 +228,8 @@ class TransitivePathImpl : public TransitivePathBase {
       transitiveHull(const T& edges, LocalVocab edgesVocab, Node startNodes,
                      TripleComponent target, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
+    // `targetId` is only ever used for comparisons, and never stored in the
+    // result, so we use a separate local vocabulary.
     LocalVocab targetHelper;
     std::optional<Id> targetId =
         target.isVariable()

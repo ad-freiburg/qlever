@@ -45,7 +45,10 @@ TransitivePathBase::TransitivePathBase(
   if (minDist_ == 0) {
     auto& startingSide = decideDirection().first;
     // If we have hardcoded differing values left and right, we can increase the
-    // minimum distance to 1
+    // minimum distance to 1. Example: The triple pattern `<x> <p>* <y>` cannot
+    // possibly match with length zero because <x> != <y>. Instead we compute
+    // `<x> <p>+ <y>` which avoids the performance pessimisation of having to
+    // match the iri or literal against the knowledge graph.
     if (!lhs_.isVariable() && !rhs_.isVariable() &&
         lhs_.value_ != rhs_.value_) {
       minDist_ = 1;
@@ -74,12 +77,41 @@ auto makeInternalVariable(std::string_view string) {
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
     QueryExecutionContext* qec, Graphs activeGraphs,
     const TripleComponent& tripleComponent) {
+  // TODO<RobinTF> Once prefiltering is propagated to nested index scans, we can
+  // simplify this by calling `makeEmptyPathSide` and merging this tree instead.
+
+  // Dummy variables to get a full scan of the index.
   auto x = makeInternalVariable("x");
-  auto valuesClause = ad_utility::makeExecutionTree<Values>(
-      qec, parsedQuery::SparqlValues{{x}, {{tripleComponent}}});
-  auto emptyPathSide = makeEmptyPathSide(qec, std::move(activeGraphs));
-  return ad_utility::makeExecutionTree<Join>(qec, std::move(emptyPathSide),
-                                             std::move(valuesClause), 0, 0);
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+
+  auto joinWithValues = [qec, &tripleComponent, &x](
+                            std::shared_ptr<QueryExecutionTree> executionTree) {
+    auto valuesClause = ad_utility::makeExecutionTree<Values>(
+        qec, parsedQuery::SparqlValues{{x}, {{tripleComponent}}});
+    return ad_utility::makeExecutionTree<Join>(qec, std::move(executionTree),
+                                               std::move(valuesClause), 0, 0);
+  };
+  auto selectXVariable =
+      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
+        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
+        return executionTree;
+      };
+  auto allValues = ad_utility::makeExecutionTree<Union>(
+      qec,
+      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
+                       TripleComponent{z}},
+          activeGraphs))),
+      joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
+                       TripleComponent{x}},
+          activeGraphs))));
+  return ad_utility::makeExecutionTree<Distinct>(
+      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
+      std::vector<ColumnIndex>{0});
 }
 
 // _____________________________________________________________________________

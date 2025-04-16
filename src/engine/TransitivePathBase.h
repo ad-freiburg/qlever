@@ -124,7 +124,9 @@ class TransitivePathBase : public Operation {
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
   // Indicate that the variable is only bound because the path is empty, not
-  // because `bindLeftOrRightSide` was called.
+  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // full scan of all subjects and objects in the knowledge graph, but can be
+  // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
 
  public:
@@ -250,6 +252,9 @@ class TransitivePathBase : public Operation {
                                           size_t targetSideCol, bool yieldOnce,
                                           size_t skipCol = 0) const;
 
+  // Return an execution tree, that "joins" the given `tripleComponent` with all
+  // of the subjects or objects in the knowledge graph, so if the graph does not
+  // contain this value it is filtered out.
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,
       const TripleComponent& tripleComponent);
