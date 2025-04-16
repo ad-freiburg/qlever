@@ -1,7 +1,8 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASELISTENER_H
+#define QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASELISTENER_H
 
 #include "AcceptHeaderListener.h"
 #include "antlr4-runtime.h"
@@ -87,3 +88,5 @@ class AcceptHeaderBaseListener : public AcceptHeaderListener {
   virtual void visitTerminal(antlr4::tree::TerminalNode* /*node*/) override {}
   virtual void visitErrorNode(antlr4::tree::ErrorNode* /*node*/) override {}
 };
+
+#endif  // QLEVER_SRC_UTIL_HTTP_HTTPPARSER_GENERATED_ACCEPTHEADERBASELISTENER_H

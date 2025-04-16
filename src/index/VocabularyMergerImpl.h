@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
+#define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
 #include <fstream>
 #include <future>
@@ -18,6 +19,7 @@
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfEscaping.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -176,11 +178,12 @@ CPP_template_def(typename C, typename L)(
       // idVecs to have a more useful external access pattern.
 
       // Write the new word to the vocabulary.
-      const auto& nextWord = lastTripleComponent_.value();
+      auto& nextWord = lastTripleComponent_.value();
       if (nextWord.isBlankNode()) {
-        lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
+        nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+        nextWord.index_ =
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
@@ -367,3 +370,5 @@ inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
   return res;
 }
 }  // namespace ad_utility::vocabulary_merger
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H

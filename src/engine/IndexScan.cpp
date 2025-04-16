@@ -7,7 +7,6 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
-#include <boost/optional.hpp>
 #include <sstream>
 #include <string>
 
@@ -232,7 +231,7 @@ IdTable IndexScan::materializedIndexScan() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult(bool requestLaziness) {
+Result IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
@@ -296,10 +295,11 @@ void IndexScan::determineMultiplicities() {
 // _____________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
-  std::array triple{&subject_, &predicate_, &object_};
-  auto permutation = Permutation::toKeyOrder(permutation_);
-  return {triple[permutation[0]], triple[permutation[1]],
-          triple[permutation[2]]};
+  std::array<const TripleComponent* const, 3> triple{&subject_, &predicate_,
+                                                     &object_};
+  // TODO<joka921> This place has to be changed once we have a permutation
+  // that is primarily sorted by G (the graph id).
+  return Permutation::toKeyOrder(permutation_).permuteTriple(triple);
 }
 
 // _____________________________________________________________________________
@@ -659,4 +659,17 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> IndexScan::cloneImpl() const {
+  auto prefilter =
+      prefilter_.has_value()
+          ? std::optional{std::pair{prefilter_.value().first->clone(),
+                                    prefilter_.value().second}}
+          : std::nullopt;
+  return std::make_unique<IndexScan>(_executionContext, permutation_, subject_,
+                                     predicate_, object_, additionalColumns_,
+                                     additionalVariables_, graphsToFilter_,
+                                     std::move(prefilter));
 }

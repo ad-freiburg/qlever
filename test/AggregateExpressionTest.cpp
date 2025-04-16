@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <optional>
 #include <type_traits>
@@ -311,7 +313,8 @@ TEST(AggregateExpression, SampleExpression) {
   auto testSample = [&](ExpressionResult input, ExpressionResult expected) {
     TestContext testContext;
     std::visit(
-        [&testContext]<typename T>(const T& t) {
+        [&testContext](const auto& t) {
+          using T = std::decay_t<decltype(t)>;
           if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
             testContext.context._endIndex = t.size();
           }

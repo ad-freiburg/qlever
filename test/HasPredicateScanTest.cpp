@@ -16,6 +16,7 @@
 #include "engine/IndexScan.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 using ad_utility::testing::makeAllocator;
@@ -79,6 +80,37 @@ TEST_F(HasPredicateScanTest, freeO) {
                         Variable{"?p"}}};
   runTest(scan, {{p}, {p2}});
 }
+// _____________________________________________________________
+TEST_F(HasPredicateScanTest, clone) {
+  {
+    HasPredicateScan scan{
+        qec, SparqlTriple{Variable{"?x"}, std::string{HAS_PREDICATE_PREDICATE},
+                          iri("<p>")}};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+
+    EXPECT_EQ(scan.getChildren().empty(), cloneReference.getChildren().empty());
+  }
+  {
+    HasPredicateScan scan{qec,
+                          ad_utility::makeExecutionTree<ValuesForTesting>(
+                              qec, makeIdTableFromVector({{0}}),
+                              std::vector<std::optional<V>>{{V{"?p"}}}),
+                          0, V{"?x"}};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+
+    EXPECT_NE(scan.getChildren().at(0), cloneReference.getChildren().at(0));
+  }
+}
 
 // _____________________________________________________________
 TEST_F(HasPredicateScanTest, fullScan) {
@@ -138,6 +170,21 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
 
   runTestUnordered(patternTrick, {{p3, Int(2)}, {p, Int(1)}});
 }
+// ____________________________________________________________
+TEST_F(HasPredicateScanTest, cloneCountAvailablePredicates) {
+  auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
+  triple.additionalScanColumns_.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO, triple);
+  CountAvailablePredicates patternTrick{qec, indexScan, 1, V{"?predicate"},
+                                        V{"?count"}};
+
+  auto clone = patternTrick.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(patternTrick, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), patternTrick.getDescriptor());
+}
 
 // ____________________________________________________________
 TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
@@ -164,10 +211,10 @@ TEST_F(HasPredicateScanTest, patternTrickIllegalInput) {
   auto I = ad_utility::testing::IntId;
   auto Voc = ad_utility::testing::VocabId;
   // The subtree of the `CountAvailablePredicates` is illegal, because the
-  // pattern index column contains the entry `273` which is neither `NO_PATTERN`
+  // pattern index column contains the entry `273` which is neither `NoPattern`
   // nor a valid pattern index.
-  auto illegalInput =
-      makeIdTableFromVector({{Voc(0), I(273)}, {Voc(1), I(NO_PATTERN)}});
+  auto illegalInput = makeIdTableFromVector(
+      {{Voc(0), I(273)}, {Voc(1), I(Pattern::NoPattern)}});
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(illegalInput),
       std::vector<std::optional<Variable>>{V{"?x"}, V{"?predicate"}});

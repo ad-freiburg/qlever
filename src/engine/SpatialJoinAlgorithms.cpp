@@ -1,7 +1,8 @@
-//  Copyright 2024, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Copyright 2024 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Jonathan Zeller github@Jonathan24680
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+//          Patrick Brosi <brosi@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoinAlgorithms.h"
 
@@ -10,9 +11,15 @@
 #include <s2/s2point.h>
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
+#include <spatialjoin/BoxIds.h>
+#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
+#include <util/geo/Geo.h>
 
 #include <cmath>
+#include <set>
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -25,7 +32,41 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     : qec_{qec},
       params_{std::move(params)},
       config_{std::move(config)},
-      spatialJoin_{spatialJoin} {}
+      spatialJoin_{spatialJoin},
+      geometries_{qec->getAllocator()} {}
+
+// ____________________________________________________________________________
+util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
+    bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
+    sj::Sweeper& sweeper, size_t numThreads) const {
+  // Initialize the parser.
+  sj::WKTParser parser(&sweeper, numThreads);
+
+  // Iterate over all rows in `idTable` and parse the geometries from `column`.
+  for (size_t row = 0; row < idTable->size(); row++) {
+    auto id = idTable->at(row, column);
+    if (id.getDatatype() == Datatype::VocabIndex) {
+      const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
+      parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
+    } else if (id.getDatatype() == Datatype::GeoPoint) {
+      const auto& p = id.getGeoPoint();
+      parser.parsePoint(util::geo::DPoint(p.getLng(), p.getLat()), row,
+                        leftOrRightSide);
+    } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      const auto& literalOrIri = *id.getLocalVocabIndex();
+      if (literalOrIri.isLiteral()) {
+        const auto& wkt =
+            asStringViewUnsafe(literalOrIri.getLiteral().getContent());
+        parser.parseWKT(wkt, row, leftOrRightSide);
+      }
+    }
+  }
+
+  // Wait for all parser threads to finish, then return the bounding box of all
+  // the geometries parsed so far.
+  parser.done();
+  return parser.getBoundingBox();
+}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -38,18 +79,100 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
-                                      const IdTable* idTableRight,
-                                      size_t rowLeft, size_t rowRight,
-                                      ColumnIndex leftPointCol,
-                                      ColumnIndex rightPointCol) const {
-  auto point1 = getPoint(idTableLeft, rowLeft, leftPointCol);
-  auto point2 = getPoint(idTableRight, rowRight, rightPointCol);
-  if (!point1.has_value() || !point2.has_value()) {
-    return Id::makeUndefined();
+std::string_view SpatialJoinAlgorithms::betweenQuotes(
+    std::string_view extractFrom) const {
+  size_t pos1 = extractFrom.find("\"", 0);
+  size_t pos2 = extractFrom.find("\"", pos1 + 1);
+  if (pos1 != std::string::npos && pos2 != std::string::npos) {
+    return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
+  } else {
+    return extractFrom;
   }
-  return Id::makeFromDouble(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
+}
+
+std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
+    const IdTable* idtable, size_t row, size_t col) {
+  auto printWarning = [this, &spatialJoin = spatialJoin_]() {
+    if (this->numFailedParsedGeometries_ == 0) {
+      std::string warning =
+          "The input to a spatial join contained at least one element, "
+          "that is not a Point, Linestring, Polygon, MultiPoint, "
+          "MultiLinestring or MultiPolygon geometry and is thus skipped. Note "
+          "that QLever currently only accepts those geometries for "
+          "the spatial joins";
+      AD_LOG_WARN << warning << std::endl;
+      this->numFailedParsedGeometries_ += 1;
+      if (spatialJoin.has_value()) {
+        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
+        spatialJoin.value()->addWarning(warning);
+      }
+    }
+  };
+
+  // unfortunately, the current implementation requires the fully materialized
+  // string. In the future this might get changed. When only the bounding box
+  // is needed, one could store it in an ID similar to GeoPoint (but with less
+  // precision), and then the full geometry would only need to be read, when
+  // the exact distance is wanted
+  std::string str(betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+                                    qec_->getIndex(), idtable->at(row, col), {})
+                                    .value()
+                                    .first));
+  AnyGeometry geometry;
+  try {
+    bg::read_wkt(str, geometry);
+    geometries_.push_back(std::move(geometry));
+  } catch (...) {
+    printWarning();
+    return std::nullopt;
+  }
+  return geometries_.size() - 1;  // index of the last element
+}
+
+// ____________________________________________________________________________
+double SpatialJoinAlgorithms::computeDist(const size_t geometryIndex1,
+                                          const size_t geometryIndex2) const {
+  return boost::apply_visitor(ClosestPointVisitor(),
+                              geometries_.at(geometryIndex1),
+                              geometries_.at(geometryIndex2));
+};
+
+// ____________________________________________________________________________
+size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
+  geometries_.emplace_back(Point(point.getLng(), point.getLat()));
+  return geometries_.size() - 1;  // index of the last element
+};
+
+// ____________________________________________________________________________
+Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
+  auto convertPoint = [&](RtreeEntry& entry) {
+    if (entry.geoPoint_) {
+      return entry.geoPoint_.value();
+    }
+    if (!entry.boundingBox_.has_value()) {
+      entry.boundingBox_ = boost::apply_visitor(
+          BoundingBoxVisitor(), geometries_.at(entry.geometryIndex_.value()));
+    }
+    Point p = calculateMidpointOfBox(entry.boundingBox_.value());
+    return GeoPoint(p.get<1>(), p.get<0>());
+  };
+
+  auto getIndex = [&](RtreeEntry& entry) {
+    if (!entry.geometryIndex_) {
+      entry.geometryIndex_ = convertGeoPointToPoint(entry.geoPoint_.value());
+    }
+    return entry.geometryIndex_.value();
+  };
+
+  // use the already parsed geometries to calculate the distance
+  if (useMidpointForAreas_ ||
+      (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value())) {
+    return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
+        convertPoint(geo1), convertPoint(geo2)));
+  } else {
+    // at least one area
+    return Id::makeFromDouble(computeDist(getIndex(geo1), getIndex(geo2)));
+  }
 }
 
 // ____________________________________________________________________________
@@ -98,8 +221,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -118,10 +241,17 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
                         decltype(compare)>
         intermediate(compare);
 
+    auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
+
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
-      Id dist = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
-                            leftJoinCol, rightJoinCol);
+      auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
+
+      if (!entryLeft || !entryRight) {
+        continue;
+      }
+
+      Id dist = computeDist(entryLeft.value(), entryRight.value());
 
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Double ||
@@ -164,10 +294,129 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 }
 
 // ____________________________________________________________________________
+Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
+  // Setup.
+  IdTable result{numColumns, qec_->getAllocator()};
+  size_t NUM_THREADS = std::thread::hardware_concurrency();
+  std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
+  std::vector<std::vector<double>> resultDists(NUM_THREADS);
+  auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
+
+  // Add number of threads to runtime information.
+  spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
+                                                NUM_THREADS);
+
+  // Set the distance for the `WITHIN_DIST` join type. This has to be set to
+  // a value < 0 to disable the `WITHIN_DIST` calculation in `libspatialjoin`.
+  double withinDist = -1;
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    withinDist = maxDist.value_or(0);
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist", withinDist);
+  }
+
+  // Configure the sweeper.
+  const sj::SweeperCfg sweeperCfg = [&] {
+    sj::SweeperCfg cfg;
+    cfg.numThreads = NUM_THREADS;
+    cfg.numCacheThreads = NUM_THREADS;
+    cfg.geomCacheMaxSize = 10000;
+    cfg.pairStart = "";
+    cfg.sepIsect = std::string{static_cast<char>(SpatialJoinType::INTERSECTS)};
+    cfg.sepContains = std::string{static_cast<char>(SpatialJoinType::CONTAINS)};
+    cfg.sepCovers = std::string{static_cast<char>(SpatialJoinType::COVERS)};
+    cfg.sepTouches = std::string{static_cast<char>(SpatialJoinType::TOUCHES)};
+    cfg.sepEquals = std::string{static_cast<char>(SpatialJoinType::EQUALS)};
+    cfg.sepOverlaps = std::string{static_cast<char>(SpatialJoinType::OVERLAPS)};
+    cfg.sepCrosses = std::string{static_cast<char>(SpatialJoinType::CROSSES)};
+    cfg.pairEnd = "";
+    cfg.useBoxIds = true;
+    cfg.useArea = true;
+    cfg.useOBB = false;
+    cfg.useCutouts = true;
+    cfg.useDiagBox = true;
+    cfg.useFastSweepSkip = true;
+    cfg.useInnerOuter = false;
+    cfg.noGeometryChecks = false;
+    cfg.withinDist = withinDist;
+    cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
+                         size_t t, const char* a, const char* b,
+                         const char* pred) {
+      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+        resultDists[t].push_back(atof(pred));
+      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
+      }
+    };
+    cfg.logCb = {};
+    cfg.statsCb = {};
+    cfg.sweepProgressCb = {};
+    return cfg;
+  }();
+
+  std::string sweeperPath = qec_->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::Sweeper sweeper(sweeperCfg, ".", "", sweeperPath.c_str());
+  ad_utility::Timer tParse{ad_utility::Timer::Started};
+
+  // Parse the geometries from the left and right input table, starting with the
+  // smaller one. Compute the bounding box of the smaller table (appropriately
+  // inflated for `WITHIN_DIST` joins) and only add those geometries from the
+  // larger table that intersect this bounding box.
+  if (idTableLeft->size() < idTableRight->size()) {
+    auto box = libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper,
+                                   NUM_THREADS);
+    sweeper.setFilterBox(box);
+    libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS);
+  } else {
+    auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
+                                   NUM_THREADS);
+    sweeper.setFilterBox(box);
+    libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS);
+  }
+
+  // Flush the geometry caches and the sweepline event list cache to disk and
+  // add the time for parsing and processing the geometries to the runtime
+  // information.
+  sweeper.flush();
+  spatialJoin_.value()->runtimeInfo().addDetail("time for reading geometries",
+                                                tParse.msecs().count());
+
+  // Now do the sweep, which performs the actual spatial join.
+  ad_utility::Timer tSweep{ad_utility::Timer::Started};
+  sweeper.sweep();
+  spatialJoin_.value()->runtimeInfo().addDetail("time for spatialjoin sweep",
+                                                tSweep.msecs().count());
+  ad_utility::Timer tCollect{ad_utility::Timer::Started};
+
+  // Collect the results and add them to the result table. For `WITHIN_DIST`,
+  // also add the distance for each pair of objects in the result.
+  for (size_t t = 0; t < NUM_THREADS; t++) {
+    for (size_t i = 0; i < results[t].size(); i++) {
+      const auto& res = results[t][i];
+      double dist = 0;
+      if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+        dist = resultDists[t][i];
+      }
+      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
+                          res.second, Id::makeFromDouble(dist));
+    }
+  }
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "time for collecting results from threads", tCollect.msecs().count());
+
+  // Return the result.
+  return Result(std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight));
+}
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
@@ -240,11 +489,11 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
-    const Point& startPoint) const {
+std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
+    const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -254,13 +503,14 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
 
   // safety buffer for numerical inaccuracies
-  double maxDistInMetersBuffer;
-  if (maxDist.value() < 10) {
+  double maxDistInMetersBuffer =
+      static_cast<double>(maxDist.value()) + additionalDist;
+  if (maxDistInMetersBuffer < 10) {
     maxDistInMetersBuffer = 10;
   } else if (static_cast<double>(maxDist.value()) <
              static_cast<double>(std::numeric_limits<long long>::max()) /
                  1.02) {
-    maxDistInMetersBuffer = 1.01 * static_cast<double>(maxDist.value());
+    maxDistInMetersBuffer = 1.01 * maxDistInMetersBuffer;
   } else {
     maxDistInMetersBuffer =
         static_cast<double>(std::numeric_limits<long long>::max());
@@ -270,7 +520,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   // a single bounding box for the whole planet, do an optimized version
   if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
       static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
-    return computeBoundingBoxForLargeDistances(startPoint);
+    return computeQueryBoxForLargeDistances(startPoint);
   }
 
   // compute latitude bound
@@ -323,11 +573,11 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
+std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -443,27 +693,79 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 }
 
 // ____________________________________________________________________________
+Point SpatialJoinAlgorithms::calculateMidpointOfBox(const Box& box) const {
+  double lng = (box.min_corner().get<0>() + box.max_corner().get<0>()) / 2.0;
+  double lat = (box.min_corner().get<1>() + box.max_corner().get<1>()) / 2.0;
+  return Point(lng, lat);
+}
+
+// ____________________________________________________________________________
+double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
+    const Box& box, std::optional<Point> midpoint) const {
+  if (!midpoint) {
+    midpoint = calculateMidpointOfBox(box);
+  }
+  double distLng =
+      std::abs(box.min_corner().get<0>() - midpoint.value().get<0>());
+  double distLat =
+      std::abs(box.min_corner().get<1>() - midpoint.value().get<1>());
+  // convert to meters and return
+  return (distLng + distLat) * 40075000 / 360;
+}
+
+// ____________________________________________________________________________
+std::optional<RtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
+    const IdTable* idTable, const size_t row, const ColumnIndex col) {
+  RtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
+  entry.geoPoint_ = getPoint(idTable, row, col);
+
+  if (!entry.geoPoint_) {
+    entry.geometryIndex_ = getAnyGeometry(idTable, row, col);
+    if (!entry.geometryIndex_) {
+      return std::nullopt;
+    }
+    entry.boundingBox_ = boost::apply_visitor(
+        BoundingBoxVisitor(), geometries_.at(entry.geometryIndex_.value()));
+  } else {
+    entry.boundingBox_ =
+        Box(Point(entry.geoPoint_.value().getLng(),
+                  entry.geoPoint_.value().getLat()),
+            Point(entry.geoPoint_.value().getLng() + 0.00000001,
+                  entry.geoPoint_.value().getLat() + 0.00000001));
+  }
+  return entry;
+}
+
+// ____________________________________________________________________________
+std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
+    const std::optional<RtreeEntry>& entry) const {
+  if (!entry.value().geoPoint_) {
+    auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
+    return computeQueryBox(midpoint,
+                           getMaxDistFromMidpointToAnyPointInsideTheBox(
+                               entry.value().boundingBox_.value(), midpoint));
+  } else {
+    return computeQueryBox(Point(entry.value().geoPoint_.value().getLng(),
+                                 entry.value().geoPoint_.value().getLat()));
+  }
+}
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  auto printWarning = [alreadyWarned = false,
-                       &spatialJoin = spatialJoin_]() mutable {
-    if (!alreadyWarned) {
-      std::string warning =
-          "The input to a spatial join contained at least one element, "
-          "that is not a point geometry and is thus skipped. Note that "
-          "QLever currently only accepts point geometries for the "
-          "spatial joins";
-      AD_LOG_WARN << warning << std::endl;
-      alreadyWarned = true;
-      if (spatialJoin.has_value()) {
-        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
-        spatialJoin.value()->addWarning(warning);
-      }
+  // helper struct to avoid duplicate entries for areas
+  struct AddedPair {
+    size_t rowLeft_;
+    size_t rowRight_;
+
+    auto operator<=>(const AddedPair& other) const {
+      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_)
+                                          : (rowLeft_ <=> other.rowLeft_);
     }
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
@@ -478,56 +780,71 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::swap(smallerResJoinCol, otherResJoinCol);
   }
 
+  // build rtree with one child
   bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>,
              bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
-    // get point of row i
-    auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
-
-    if (!geopoint) {
-      printWarning();
+    if (spatialJoin_.has_value()) {
+      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+    }
+    // add every box together with the additional information into the rtree
+    std::optional<RtreeEntry> entry =
+        getRtreeEntry(smallerResult, i, smallerResJoinCol);
+    if (!entry) {
+      // nothing to do. When parsing a point or an area fails, a warning
+      // message gets printed at another place and the point/area just gets
+      // skipped
       continue;
     }
-
-    Point p(geopoint.value().getLng(), geopoint.value().getLat());
-
-    // add every point together with the row number into the rtree
-    rtree.insert(std::make_pair(std::move(p), i));
+    rtree.insert(std::pair(entry.value().boundingBox_.value(),
+                           std::move(entry.value())));
   }
+
+  // query rtree with the other child
   std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
       qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
-    auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
-
-    if (!geopoint1) {
-      printWarning();
+    if (spatialJoin_.has_value()) {
+      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+    }
+    std::optional<RtreeEntry> entry =
+        getRtreeEntry(otherResult, i, otherResJoinCol);
+    if (!entry) {
+      // nothing to do. When parsing a point or an area fails, a warning
+      // message gets printed at another place and the point/area just gets
+      // skipped
       continue;
     }
+    std::vector<Box> queryBox = getQueryBox(entry);
 
-    Point p(geopoint1.value().getLng(), geopoint1.value().getLat());
-
-    // query the other rtree for every point using the following bounding box
-    std::vector<Box> bbox = computeBoundingBox(p);
     results.clear();
 
-    ql::ranges::for_each(bbox, [&](const Box& bbox) {
+    ql::ranges::for_each(queryBox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    ql::ranges::for_each(results, [&](const Value& res) {
-      size_t rowLeft = res.second;
+    std::set<AddedPair> pairs;
+    ql::ranges::for_each(results, [&](Value& res) {
+      size_t rowLeft = res.second.row_;
       size_t rowRight = i;
       if (!leftResSmaller) {
         std::swap(rowLeft, rowRight);
       }
-      auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
-                                  leftJoinCol, rightJoinCol);
+      auto distance = computeDist(res.second, entry.value());
       AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
       if (distance.getDouble() * 1000 <= static_cast<double>(maxDist.value())) {
-        addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, distance);
+        // make sure, that no duplicate elements are inserted in the result
+        // table. As duplicates can only occur, when areas are not approximated
+        // as midpoints, the additional runtime can be saved in that case
+        if (useMidpointForAreas_) {
+          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                              rowRight, distance);
+        } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
+          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                              rowRight, distance);
+        }
       }
     });
   }

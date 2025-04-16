@@ -1,8 +1,11 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_PARAMETERS_H
+#define QLEVER_SRC_UTIL_PARAMETERS_H
 
 #include <atomic>
 #include <concepts>
@@ -335,7 +338,8 @@ class Parameters {
   [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const {
     ad_utility::HashMap<std::string, std::string> result;
 
-    auto insert = [&]<typename T>(const T& synchronizedParameter) {
+    auto insert = [&](const auto& synchronizedParameter) {
+      using T = std::decay_t<decltype(synchronizedParameter)>;
       std::string name{T::value_type::name};
       result[std::move(name)] = synchronizedParameter.rlock()->toString();
     };
@@ -348,7 +352,8 @@ class Parameters {
     static ad_utility::HashSet<std::string> value = [this]() {
       ad_utility::HashSet<std::string> result;
 
-      auto insert = [&result]<typename T>(const T&) {
+      auto insert = [&result](const auto& t) {
+        using T = std::decay_t<decltype(t)>;
         result.insert(std::string{T::value_type::name});
       };
       ad_utility::forEachInTuple(_parameters, insert);
@@ -358,3 +363,5 @@ class Parameters {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_PARAMETERS_H

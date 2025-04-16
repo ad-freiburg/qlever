@@ -2,8 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2024      Fabian Krause (fabian.krause@students.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
+#define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -13,9 +16,9 @@
 // For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.
 static constexpr auto valueAdder = []() {
-  auto numericValueAdder = []<typename T>(T value, double& sum,
-                                          [[maybe_unused]] const bool& error)
-      -> CPP_ret(void)(requires std::is_arithmetic_v<T>) {
+  auto numericValueAdder = [](auto value, double& sum,
+                              [[maybe_unused]] const bool& error)
+      -> CPP_ret(void)(requires std::is_arithmetic_v<decltype(value)>) {
     sum += static_cast<double>(value);
   };
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
@@ -173,3 +176,5 @@ struct SampleAggregationData {
 
   void reset() { *this = SampleAggregationData{}; }
 };
+
+#endif  // QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 
 #include <string>
 #include <string_view>
@@ -67,36 +68,44 @@ class VocabularyInMemory
   /// documentation of `CompactVectorOfStrings` for details.
   struct WordWriter {
     typename Words::Writer writer_;
-    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    uint64_t index_ = 0;
+    std::string readableName_ = "";
 
-    // Write a word. The `isExternalDummy` is only there to have a consistent
-    // interface with the `VocabularyInternalExternal`.
-    void operator()(std::string_view str,
-                    [[maybe_unused]] bool isExternalDummy = false) {
+    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    uint64_t operator()(std::string_view str,
+                        [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
+      return index_++;
     }
 
     void finish() { writer_.finish(); }
+    std::string& readableName() { return readableName_; }
   };
 
   // Return a `WordWriter` that directly writes the words to the given
   // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initialized via `open(filename)`.
-  static WordWriter makeDiskWriter(const std::string& filename) {
+  // has to be explicitly initizlied via `open(filename)`.
+  WordWriter makeDiskWriter(const std::string& filename) const {
     return WordWriter{filename};
-  }
-
-  // Same as `makeDiskWriter` above, but the result is returned via
-  // `unique_ptr`.
-  static std::unique_ptr<WordWriter> makeDiskWriterPtr(
-      const std::string& filename) {
-    return std::make_unique<WordWriter>(filename);
   }
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
 
+  /// Initialize the vocabulary from the given `words`.
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    writer.finish();
+    open(filename);
+  }
+
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }
   auto end() const { return _words.end(); }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

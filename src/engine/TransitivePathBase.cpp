@@ -5,16 +5,20 @@
 
 #include "TransitivePathBase.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Distinct.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
+#include "engine/Union.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -22,16 +26,15 @@
 TransitivePathBase::TransitivePathBase(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist)
+    size_t maxDist, Graphs activeGraphs)
     : Operation(qec),
-      subtree_(child
-                   ? QueryExecutionTree::createSortedTree(std::move(child), {0})
-                   : nullptr),
+      subtree_(std::move(child)),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
       maxDist_(maxDist) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
+  AD_CORRECTNESS_CHECK(subtree_);
   if (lhs_.isVariable()) {
     variableColumns_[std::get<Variable>(lhs_.value_)] =
         makeAlwaysDefinedColumn(0);
@@ -40,9 +43,50 @@ TransitivePathBase::TransitivePathBase(
     variableColumns_[std::get<Variable>(rhs_.value_)] =
         makeAlwaysDefinedColumn(1);
   }
+  if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
+    emptyPathBound_ = true;
+    lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
+                             0);
+  }
 
   lhs_.outputCol_ = 0;
   rhs_.outputCol_ = 1;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
+    QueryExecutionContext* qec, Graphs activeGraphs) {
+  auto makeInternalVariable = [](std::string_view string) {
+    return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+  };
+  // Dummy variables to get a full scan of the index.
+  auto x = makeInternalVariable("x");
+  auto y = makeInternalVariable("y");
+  auto z = makeInternalVariable("z");
+  // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
+  // and ?z in the first place.
+  // We don't need to materialize the extra variables y and z in the union.
+  auto selectXVariable =
+      [&x](std::shared_ptr<QueryExecutionTree> executionTree) {
+        executionTree->getRootOperation()->setSelectedVariablesForSubquery({x});
+        return executionTree;
+      };
+  auto allValues = ad_utility::makeExecutionTree<Union>(
+      qec,
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::SPO,
+          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
+                       TripleComponent{z}},
+          activeGraphs)),
+      selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::OPS,
+          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
+                       TripleComponent{x}},
+          activeGraphs)));
+  auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
+      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
+      std::vector<ColumnIndex>{0});
+  return uniqueValues;
 }
 
 // _____________________________________________________________________________
@@ -120,7 +164,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     }
 
     if (yieldOnce) {
-      mergedVocab.mergeWith(std::span{&localVocab, 1});
+      mergedVocab.mergeWith(localVocab);
     } else {
       timer.stop();
       runtimeInfo().addDetail("IdTable fill time", timer.msecs());
@@ -148,7 +192,6 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
   os << "Right side:\n";
   os << rhs_.getCacheKey();
 
-  AD_CORRECTNESS_CHECK(subtree_);
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
   return std::move(os).str();
@@ -277,27 +320,27 @@ size_t TransitivePathBase::getCostEstimate() {
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist) {
+    size_t maxDist, Graphs activeGraphs) {
   bool useBinSearch =
       RuntimeParameters().get<"use-binsearch-transitive-path">();
   return makeTransitivePath(qec, std::move(child), std::move(leftSide),
                             std::move(rightSide), minDist, maxDist,
-                            useBinSearch);
+                            useBinSearch, std::move(activeGraphs));
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, bool useBinSearch) {
+    size_t maxDist, bool useBinSearch, Graphs activeGraphs) {
   if (useBinSearch) {
     return std::make_shared<TransitivePathBinSearch>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist);
+        minDist, maxDist, std::move(activeGraphs));
   } else {
     return std::make_shared<TransitivePathHashMap>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist);
+        minDist, maxDist, std::move(activeGraphs));
   }
 }
 
@@ -347,6 +390,10 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   if (isLeft) {
     lhs.treeAndCol_ = {leftOrRightOp, inputCol};
   } else {
+    // Remove empty path tree if binding actual tree.
+    if (emptyPathBound_) {
+      lhs.treeAndCol_ = std::nullopt;
+    }
     rhs.treeAndCol_ = {leftOrRightOp, inputCol};
   }
 
@@ -357,12 +404,12 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
-                                          rhs, minDist_, maxDist_,
-                                          useBinSearch));
+                                          rhs, minDist_, maxDist_, useBinSearch,
+                                          {}));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
-    candidates.push_back(makeTransitivePath(getExecutionContext(),
-                                            alternativeSubtree, lhs, rhs,
-                                            minDist_, maxDist_, useBinSearch));
+    candidates.push_back(
+        makeTransitivePath(getExecutionContext(), alternativeSubtree, lhs, rhs,
+                           minDist_, maxDist_, useBinSearch, {}));
   }
 
   auto& p = *ql::ranges::min_element(
@@ -389,8 +436,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 
 // _____________________________________________________________________________
 bool TransitivePathBase::isBoundOrId() const {
-  return lhs_.isBoundVariable() || rhs_.isBoundVariable() ||
-         !lhs_.isVariable() || !rhs_.isVariable();
+  // Don't make the execution tree for the empty path count as "bound".
+  return !emptyPathBound_ &&
+         (!lhs_.isUnboundVariable() || !rhs_.isUnboundVariable());
 }
 
 // _____________________________________________________________________________
@@ -398,7 +446,7 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow,
-                                     size_t skipCol) const {
+                                     size_t skipCol) {
   size_t inCol = 0;
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());

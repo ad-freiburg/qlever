@@ -3,6 +3,8 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Join.h"
 
@@ -153,7 +155,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-ProtoResult Join::computeResult(bool requestLaziness) {
+Result Join::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
@@ -477,7 +479,7 @@ CPP_template_2(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>>)
-    ProtoResult Join::createResult(
+    Result Join::createResult(
         bool requestedLaziness, ActionT action,
         std::optional<std::vector<ColumnIndex>> permutation) const {
   if (requestedLaziness) {
@@ -492,9 +494,9 @@ CPP_template_2(typename ActionT)(
 }
 
 // ______________________________________________________________________________
-ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a,
-                           std::shared_ptr<const Result> b,
-                           bool requestLaziness) const {
+Result Join::lazyJoin(std::shared_ptr<const Result> a,
+                      std::shared_ptr<const Result> b,
+                      bool requestLaziness) const {
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
@@ -543,10 +545,10 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = []<typename Table>(const Table& table,
-                                             const ColumnIndex jc) {
+  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
+    using Table = std::decay_t<decltype(table)>;
     ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
@@ -653,7 +655,7 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
+Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
   return createResult(
       requestLaziness,
       [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
@@ -695,7 +697,7 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
 
 // ______________________________________________________________________________________________________
 template <bool idTableIsRightInput>
-ProtoResult Join::computeResultForIndexScanAndIdTable(
+Result Join::computeResultForIndexScanAndIdTable(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK((idTableIsRightInput ? _leftJoinCol : _rightJoinCol) ==
@@ -774,7 +776,7 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
 }
 
 // ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForIndexScanAndLazyOperation(
+Result Join::computeResultForIndexScanAndLazyOperation(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK(_rightJoinCol == 0);
@@ -808,7 +810,7 @@ ProtoResult Join::computeResultForIndexScanAndLazyOperation(
       std::move(resultPermutation));
 }
 // _____________________________________________________________________________
-ProtoResult Join::computeResultForTwoMaterializedInputs(
+Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
@@ -820,7 +822,7 @@ ProtoResult Join::computeResultForTwoMaterializedInputs(
 }
 
 // _____________________________________________________________________________
-ProtoResult Join::createEmptyResult() const {
+Result Join::createEmptyResult() const {
   return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
           LocalVocab{}};
 }
@@ -838,4 +840,12 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
   return ad_utility::AddCombinedRowToIdTable{
       1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
       CHUNK_SIZE, std::move(callback)};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Join::cloneImpl() const {
+  auto copy = std::make_unique<Join>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
 }

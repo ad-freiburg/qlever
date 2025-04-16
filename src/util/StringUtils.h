@@ -2,7 +2,8 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_STRINGUTILS_H
+#define QLEVER_SRC_UTIL_STRINGUTILS_H
 
 #include <string_view>
 
@@ -276,6 +277,10 @@ constexpr std::string_view constexprStrCat() {
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
   return {b.data(), b.size() - 1};
 }
+
+// Truncates the operation string to a maximum length of
+// `MAX_LENGTH_OPERATION_ECHO`.
+std::string truncateOperationString(std::string_view operation);
 }  // namespace ad_utility
 
 // A helper function for the `operator+` overloads below.
@@ -308,3 +313,5 @@ template <typename Char>
 std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }
+
+#endif  // QLEVER_SRC_UTIL_STRINGUTILS_H

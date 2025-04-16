@@ -10,6 +10,7 @@
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -195,4 +196,14 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(Sort, clone) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_PERMUTATION_H
+#define QLEVER_SRC_INDEX_PERMUTATION_H
 
 #include <array>
 #include <string>
@@ -10,6 +11,7 @@
 #include "global/Constants.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
+#include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -23,10 +25,10 @@ class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
-// avoid code duplication. The first template parameter is a search functor for
-// STXXL.
+// avoid code duplication.
 class Permutation {
  public:
+  using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
@@ -52,7 +54,7 @@ class Permutation {
 
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
-  static std::array<size_t, 3> toKeyOrder(Enum permutation);
+  static KeyOrder toKeyOrder(Enum permutation);
 
   explicit Permutation(Enum permutation, Allocator allocator);
 
@@ -150,7 +152,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const array<size_t, 3>& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; };
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -183,7 +185,7 @@ class Permutation {
   std::string fileSuffix_;
   // The order of the three components (S=0, P=1, O=2) in this permutation,
   // e.g., `{1, 0, 2}` for `PSO`.
-  array<size_t, 3> keyOrder_;
+  KeyOrder keyOrder_;
   // The metadata for this permutation.
   MetaData meta_;
 
@@ -201,3 +203,5 @@ class Permutation {
 
   bool isInternalPermutation_ = false;
 };
+
+#endif  // QLEVER_SRC_INDEX_PERMUTATION_H

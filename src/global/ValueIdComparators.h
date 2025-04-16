@@ -1,13 +1,15 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_VALUEIDCOMPARATORS_H
 #define QLEVER_VALUEIDCOMPARATORS_H
 
 #include <utility>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
@@ -349,30 +351,30 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
-inline auto simplifyRanges =
-    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input,
-                          bool removeEmptyRanges = true) {
-      if (removeEmptyRanges) {
-        // Eliminate empty ranges
-        std::erase_if(input, [](const auto& p) { return p.first == p.second; });
-      }
-      std::sort(input.begin(), input.end());
-      if (input.empty()) {
-        return input;
-      }
-      // Merge directly adjacent ranges.
-      // TODO<joka921, C++20> use `ql::ranges`
-      decltype(input) result;
-      result.push_back(input.front());
-      for (auto it = input.begin() + 1; it != input.end(); ++it) {
-        if (it->first == result.back().second) {
-          result.back().second = it->second;
-        } else {
-          result.push_back(*it);
-        }
-      }
-      return result;
-    };
+template <typename RandomIt>
+auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
+                    bool removeEmptyRanges = true) {
+  if (removeEmptyRanges) {
+    // Eliminate empty ranges
+    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+  }
+  std::sort(input.begin(), input.end());
+  if (input.empty()) {
+    return input;
+  }
+  // Merge directly adjacent ranges.
+  // TODO<joka921, C++20> use `ql::ranges`
+  decltype(input) result;
+  result.push_back(input.front());
+  for (auto it = input.begin() + 1; it != input.end(); ++it) {
+    if (it->first == result.back().second) {
+      result.back().second = it->second;
+    } else {
+      result.push_back(*it);
+    }
+  }
+  return result;
+};
 
 }  // namespace detail
 
@@ -505,17 +507,25 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     return fromBool(std::invoke(comparator, a, b));
   }
 
-  auto visitor = [comparator]<typename A, typename B>(
-                     const A& aValue, const B& bValue) -> ComparisonResult {
-    if constexpr (std::is_same_v<A, LocalVocabIndex> &&
-                  std::is_same_v<B, LocalVocabIndex>) {
-      // We have handled this case outside the visitor.
-      AD_FAIL();
-    } else if constexpr (requires() {
-                           std::invoke(comparator, aValue, bValue);
-                         }) {
+  // If both are geo points, compare the raw IDs.
+  if (a.getDatatype() == Datatype::GeoPoint &&
+      b.getDatatype() == Datatype::GeoPoint) {
+    return fromBool(std::invoke(comparator, a.getBits(), b.getBits()));
+  }
+
+  auto visitor = [comparator, &a, &b](const auto& aValue,
+                                      const auto& bValue) -> ComparisonResult {
+    using A = std::decay_t<decltype(aValue)>;
+    using B = std::decay_t<decltype(bValue)>;
+    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
+      static_assert((!std::is_same_v<A, B>) ||
+                    ad_utility::SameAsAny<A, LocalVocabIndex, GeoPoint,
+                                          Id::UndefinedType>);
+      AD_LOG_ERROR << "Comparison not implemented for types "
+                   << toString(a.getDatatype()) << " and "
+                   << toString(b.getDatatype()) << std::endl;
       AD_FAIL();
     }
   };

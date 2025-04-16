@@ -3,13 +3,14 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
+#define QLEVER_SRC_INDEX_INDEXIMPL_H
 
 #include <array>
 #include <memory>
 #include <optional>
 #include <string>
-#include <stxxl/vector>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -21,14 +22,15 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
+#include "index/ExternalSortFunctors.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/Postings.h"
-#include "index/StxxlSortFunctors.h"
 #include "index/TextMetaData.h"
+#include "index/TextScoring.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -70,9 +72,8 @@ struct IndexBuilderDataBase {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
 };
 
-// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
-// triples.
-struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
+// All the data from IndexBuilderDataBase and (unsorted) external ID triples.
+struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
   using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
@@ -106,8 +107,7 @@ class IndexImpl {
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, Context Id, Word Id, Score, entity
-  using TextVec = stxxl::vector<
-      tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
+  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -135,6 +135,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  ScoreData scoreData_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -164,6 +165,9 @@ class IndexImpl {
   // in the test retrieval of the texts. This only works reliably if the
   // wordsFile.tsv starts with contextId 1 and is continuous.
   size_t nofNonLiteralsInTextIndex_;
+
+  TextScoringMetric textScoringMetric_;
+  std::pair<float, float> bAndKParamForTextScoring_;
 
   // Global static pointers to the currently active index and comparator.
   // Those are used to compare LocalVocab entries with each other as well as
@@ -254,12 +258,18 @@ class IndexImpl {
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool persistUpdatesOnDisk);
 
-  // Adds a text index to a complete KB index. First reads the given context
-  // file (if file name not empty), then adds words from literals (if true).
-  void addTextFromContextFile(const string& contextFile,
-                              bool addWordsFromLiterals);
+  // Adds a text index to a complete KB index. Reads words from the given
+  // wordsfile and calculates bm25 scores with the docsfile if given.
+  // Additionally adds words from literals of the existing KB. Can't be called
+  // with only words or only docsfile, but with or without both. Also can't be
+  // called with the pair empty and bool false
+  void buildTextIndexFile(
+      const std::optional<std::pair<string, string>>& wordsAndDocsFile,
+      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+      std::pair<float, float> bAndKForBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -272,6 +282,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  const auto& getScoreData() const { return scoreData_; }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -384,6 +396,10 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  IdTable readContextListHelper(
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const ContextListMetaData& contextList, bool isWordCl) const;
+
   IdTable readWordCl(const TextBlockMetaData& tbmd,
                      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
@@ -437,9 +453,8 @@ class IndexImpl {
   }
 
   const string& getTextName() const { return textMeta_.getName(); }
-
   const string& getKbName() const { return pso_.getKbName(); }
-
+  const string& getOnDiskBase() const { return onDiskBase_; }
   const string& getIndexId() const { return indexId_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
@@ -494,7 +509,7 @@ class IndexImpl {
       std::shared_ptr<RdfParserBase> parser);
 
   // ___________________________________________________________________
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+  IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
   /**
@@ -543,10 +558,11 @@ class IndexImpl {
 
   void processWordCaseDuringInvertedListProcessing(
       const WordsFileLine& line,
-      ad_utility::HashMap<WordIndex, Score>& wordsInContext) const;
+      ad_utility::HashMap<WordIndex, Score>& wordsInContext,
+      ScoreData& scoreData) const;
 
-  void logEntityNotFound(const string& word,
-                         size_t& entityNotFoundErrorMsgCount) const;
+  static void logEntityNotFound(const string& word,
+                                size_t& entityNotFoundErrorMsgCount);
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
@@ -560,7 +576,7 @@ class IndexImpl {
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
-                            std::array<size_t, 3> permutation,
+                            Permutation::KeyOrder permutation,
                             auto&&... perTripleCallbacks);
 
   // _______________________________________________________________________
@@ -598,14 +614,13 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      auto&&... perTripleCallbacks);
 
-  void createTextIndex(const string& filename, const TextVec& vec);
+  void createTextIndex(const string& filename, TextVec& vec);
 
   void openTextFileHandle();
 
-  void addContextToVector(TextVec::bufwriter_type& writer,
-                          TextRecordIndex context,
+  void addContextToVector(TextVec& vec, TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities);
+                          const ad_utility::HashMap<Id, Score>& entities) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
@@ -791,4 +806,9 @@ class IndexImpl {
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
+
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 };
+
+#endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

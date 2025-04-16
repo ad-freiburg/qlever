@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TEXTLIMIT_H
+#define QLEVER_SRC_ENGINE_TEXTLIMIT_H
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -62,7 +63,11 @@ class TextLimit : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

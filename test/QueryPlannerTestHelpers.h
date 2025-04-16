@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
+#define QLEVER_TEST_QUERYPLANNERTESTHELPERS_H
 
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
@@ -15,6 +16,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -23,6 +25,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -154,6 +157,12 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
+constexpr auto TextIndexScanForWordConf =
+    [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForWord>(
+      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
+};
+
 // Matcher for the `TextLimit` Operation.
 constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
                               const Variable& textRecVar,
@@ -192,6 +201,12 @@ inline auto TextIndexScanForEntity =
         AD_PROPERTY(::TextIndexScanForEntity, word, word),
         AD_PROPERTY(::TextIndexScanForEntity, hasFixedEntity, true)));
   }
+};
+
+constexpr auto TextIndexScanForEntityConf =
+    [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
+  return RootOperation<::TextIndexScanForEntity>(
+      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,
@@ -261,6 +276,8 @@ inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+
+constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
@@ -360,6 +377,7 @@ inline auto SpatialJoin =
         size_t maxDist, size_t maxResults, Variable left, Variable right,
         std::optional<Variable> distanceVariable,
         PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
+        std::optional<SpatialJoinType> joinType,
         const ChildArgs&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
@@ -371,7 +389,8 @@ inline auto SpatialJoin =
                             Eq(distanceVariable)),
                 AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
                             Eq(payloadVariables)),
-                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
+                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm)),
+                AD_PROPERTY(SpatialJoin, getJoinType, Eq(joinType))));
     };
 
 // Match a GroupBy operation
@@ -419,6 +438,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `DISTINCT` operation.
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(
@@ -482,6 +510,16 @@ void expectWithGivenBudget(std::string query, auto matcher,
   EXPECT_THAT(qet, matcher);
 }
 
+// Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
+void expectWithGivenBudgets(std::string query, auto matcher,
+                            std::optional<QueryExecutionContext*> optQec,
+                            std::vector<size_t> queryPlanningBudgets,
+                            source_location l = source_location::current()) {
+  for (size_t budget : queryPlanningBudgets) {
+    expectWithGivenBudget(query, matcher, optQec, budget, l);
+  }
+}
+
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
 void expectGreedy(std::string query, auto matcher,
@@ -505,13 +543,9 @@ void expectDynamicProgramming(
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = source_location::current()) {
-  auto e = [&](size_t budget) {
-    expectWithGivenBudget(query, matcher, optQec, budget, l);
-  };
-  e(0);
-  e(1);
-  e(4);
-  e(16);
-  e(64'000'000);
+  expectWithGivenBudgets(std::move(query), std::move(matcher),
+                         std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
+
+#endif  // QLEVER_TEST_QUERYPLANNERTESTHELPERS_H

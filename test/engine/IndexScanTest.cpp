@@ -103,7 +103,9 @@ void testLazyScanForJoinOfTwoScans(
   // blocks.
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
-    auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
+    TestIndexConfig config{kgTurtle};
+    config.blocksizePermutations = blocksizePermutations;
+    auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.setLimit(limit);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
@@ -422,7 +424,7 @@ TEST(IndexScan, additionalColumn) {
   // <x> is the only subject, so it has pattern 0, <z> doesn't appear as a
   // subject, so it has no pattern.
   auto exp = makeIdTableFromVector(
-      {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
+      {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
 
@@ -513,10 +515,18 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
+namespace {
+// Return a `QueryExecutionContext` that is used in some of the tests below,
+auto getQecWithoutPatterns = []() {
+  TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
+  config.usePatterns = false;
+  return getQec(std::move(config));
+};
+}  // namespace
 // _____________________________________________________________________________
 TEST(IndexScan, computeResultCanBeConsumedLazily) {
   using V = Variable;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   auto getId = makeGetId(qec->getIndex());
   auto x = getId("<x>");
   auto p = getId("<p>");
@@ -526,7 +536,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
   SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -544,11 +554,11 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   using V = Variable;
   using I = TripleComponent::Iri;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -563,7 +573,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using V = Variable;
   using I = TripleComponent::Iri;
   using enum Permutation::Enum;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
   auto p2 = I::fromIriref("<p2>");
@@ -1081,4 +1091,34 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
 
   EXPECT_EQ(leftGenerator.begin(), leftGenerator.end());
   EXPECT_EQ(rightGenerator.begin(), rightGenerator.end());
+}
+// _____________________________________________________________________________
+TEST(IndexScan, clone) {
+  auto* qec = getQec();
+  {
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    IndexScan scan{qec, Permutation::PSO, xpy};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+  }
+  {
+    using namespace makeFilterExpression;
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    IndexScan scan{
+        qec,
+        Permutation::PSO,
+        xpy,
+        std::nullopt,
+        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
+
+    auto clone = scan.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(scan), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+  }
 }

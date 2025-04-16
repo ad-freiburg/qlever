@@ -3,6 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -20,44 +22,19 @@
 #include "util/File.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
+#include "util/ReadableNumberFacet.h"
 
 using std::string;
 
 namespace po = boost::program_options;
 
-string getStxxlConfigFileName(const string& location) {
-  return absl::StrCat(location, ".stxxl");
-}
-
-string getStxxlDiskFileName(const string& location, const string& tail) {
-  return absl::StrCat(location, tail, ".stxxl-disk");
-}
-
-// Write a .stxxl config-file.
-// All we want is sufficient space somewhere with enough space.
-// We can use the location of input files and use a constant size for now.
-// The required size can only be estimated anyway, since index size
-// depends on the structure of words files rather than their size only,
-// because of the "multiplications" performed.
-void writeStxxlConfigFile(const string& location, const string& tail) {
-  string stxxlConfigFileName = getStxxlConfigFileName(location);
-  ad_utility::File stxxlConfig(stxxlConfigFileName, "w");
-  auto configFile = ad_utility::makeOfstream(stxxlConfigFileName);
-  // Inform stxxl about .stxxl location
-  setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
-  configFile << "disk=" << getStxxlDiskFileName(location, tail) << ","
-             << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
-}
-
-// Check that `values` has exactly one or `numFiles` many entries. If
-// `allowEmpty` is true, then an empty vector will also be accepted. If this
-// condition is violated, throw an exception. This is used to validate the
-// parameters for file types and default graphs.
+// Check that `values` has exactly one or `numFiles` many entries. An empty
+// vector will also be accepted. If this condition is violated, throw an
+// exception. This is used to validate the parameters for file types and default
+// graphs.
 static void checkNumParameterValues(const auto& values, size_t numFiles,
-                                    bool allowEmpty,
                                     std::string_view parameterName) {
-  if (allowEmpty && values.empty()) {
+  if (values.empty()) {
     return;
   }
   if (values.size() == 1 || values.size() == numFiles) {
@@ -67,12 +44,9 @@ static void checkNumParameterValues(const auto& values, size_t numFiles,
       "The parameter \"", parameterName,
       "\" must be specified either exactly once (in which case it is "
       "used for all input files) or exactly as many times as there are "
-      "input files, in which case each input file has its own value.");
-  if (allowEmpty) {
-    absl::StrAppend(&error,
-                    " The parameter can also be omitted entirely, in which "
-                    " case a default value is used for all input files.");
-  }
+      "input files, in which case each input file has its own value.",
+      " The parameter can also be omitted entirely, in which "
+      " case a default value is used for all input files.");
   throw std::runtime_error{error};
 }
 
@@ -156,6 +130,7 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
+  string scoringMetric = "explicit";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -165,7 +140,9 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
-  std::optional<ad_utility::MemorySize> stxxlMemory;
+  float bScoringParam = 0.75;
+  float kScoringParam = 1.75;
+  std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
   std::optional<ad_utility::VocabularyType> vocabType;
 
@@ -173,8 +150,8 @@ int main(int argc, char** argv) {
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
-  auto add = [&boostOptions]<typename... Args>(Args&&... args) {
-    boostOptions.add_options()(std::forward<Args>(args)...);
+  auto add = [&boostOptions](auto&&... args) {
+    boostOptions.add_options()(AD_FWD(args)...);
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&baseName)->required(),
@@ -215,6 +192,17 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
+  add("bm25-b", po::value(&bScoringParam),
+      "Sets the b param in the BM25 scoring metric for the fulltext index."
+      " This has to be between (including) 0 and 1.");
+  add("bm25-k", po::value(&kScoringParam),
+      "Sets the k param in the BM25 scoring metric for the fulltext index."
+      "This has to be greater than or equal to 0.");
+  add("set-scoring-metric,S", po::value(&scoringMetric),
+      R"(Sets the scoring metric used. Options are "explicit" for explicit )"
+      "scores that are read from the wordsfile, "
+      R"("tf-idf" for tf idf )"
+      R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),
@@ -231,7 +219,7 @@ int main(int argc, char** argv) {
   add("vocabulary-type", po::value(&vocabType), msg.c_str());
 
   // Options for the index building process.
-  add("stxxl-memory,m", po::value(&stxxlMemory),
+  add("stxxl-memory,m", po::value(&indexMemoryLimit),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
   add("parser-buffer-size,b", po::value(&parserBufferSize),
@@ -250,13 +238,21 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (kScoringParam < 0) {
+      throw std::invalid_argument("The value of bm25-k must be >= 0");
+    }
+    if (bScoringParam < 0 || bScoringParam > 1) {
+      throw std::invalid_argument(
+          "The value of bm25-b must be between and "
+          "including 0 and 1");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
   }
-  if (stxxlMemory.has_value()) {
-    index.memoryLimitIndexBuilding() = stxxlMemory.value();
+  if (indexMemoryLimit.has_value()) {
+    index.memoryLimitIndexBuilding() = indexMemoryLimit.value();
   }
   if (parserBufferSize.has_value()) {
     index.parserBufferSize() = parserBufferSize.value();
@@ -283,12 +279,9 @@ int main(int argc, char** argv) {
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
-    LOG(TRACE) << "Configuring STXXL..." << std::endl;
     size_t posOfLastSlash = baseName.rfind('/');
     string location = baseName.substr(0, posOfLastSlash + 1);
     string tail = baseName.substr(posOfLastSlash + 1);
-    writeStxxlConfigFile(location, tail);
-    string stxxlFileName = getStxxlDiskFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
 
     index.setKbName(kbIndexName);
@@ -302,11 +295,10 @@ int main(int argc, char** argv) {
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.
     auto getFileSpecifications = [&]() {
-      checkNumParameterValues(filetype, inputFile.size(), true,
-                              "--file-format, -F");
-      checkNumParameterValues(defaultGraphs, inputFile.size(), true,
+      checkNumParameterValues(filetype, inputFile.size(), "--file-format, -F");
+      checkNumParameterValues(defaultGraphs, inputFile.size(),
                               "--default-graph, -g");
-      checkNumParameterValues(parseParallel, parseParallel.size(), true,
+      checkNumParameterValues(parseParallel, parseParallel.size(),
                               "--parse-parallel, p");
 
       std::vector<qlever::InputFileSpecification> fileSpecs;
@@ -338,18 +330,31 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
+    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
 
-    if (!wordsfile.empty() || addWordsFromLiterals) {
-      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
+    if (!(wordsAndDocsFileSpecified ||
+          (wordsfile.empty() && docsfile.empty()))) {
+      throw std::runtime_error(absl::StrCat(
+          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
+          ". Both or none of docsfile and wordsfile have to be given to build "
+          "text index. If none are given the option to add words from literals "
+          "has to be true. For details see --help."));
+    }
+    if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
+      index.buildTextIndexFile(
+          wordsAndDocsFileSpecified
+              ? std::optional{std::pair{wordsfile, docsfile}}
+              : std::nullopt,
+          addWordsFromLiterals, getTextScoringMetricFromString(scoringMetric),
+          {bScoringParam, kScoringParam});
     }
 
     if (!docsfile.empty()) {
       index.buildDocsDB(docsfile);
     }
-    ad_utility::deleteFile(stxxlFileName, false);
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;
-    exit(2);
+    return 2;
   }
   return 0;
 }

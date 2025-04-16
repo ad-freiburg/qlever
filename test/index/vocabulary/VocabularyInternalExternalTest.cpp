@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -34,12 +35,12 @@ class VocabularyCreator {
   auto createVocabularyImpl(const std::vector<std::string>& words) {
     VocabularyInternalExternal vocabulary;
     {
-      auto writer = VocabularyInternalExternal::makeDiskWriter(vocabFilename_);
-      size_t i = 0;
-      for (auto& word : words) {
-        writer(word, i % 2 == 0);
-        ++i;
+      auto writer = VocabularyInternalExternal::WordWriter(vocabFilename_);
+      for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+        EXPECT_EQ(writer(word, i % 2 == 0), static_cast<uint64_t>(i));
       }
+      writer.readableName() = "blabbiblu";
+      EXPECT_EQ(writer.readableName(), "blabbiblu");
       static std::atomic<unsigned> doFinish = 0;
       // In some tests, call `finish` explicitly, in others let the destructor
       // handle this.

@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARYONDISK_H
+#define QLEVER_SRC_INDEX_VOCABULARYONDISK_H
 
 #include <string>
 #include <vector>
@@ -48,16 +49,19 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     uint64_t currentOffset_ = 0;
     bool isFinished_ = false;
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
+    std::string readableName_ = "";
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
     explicit WordWriter(const std::string& filename);
-    // Add the next word to the vocabulary.
-    void operator()(std::string_view word);
+    // Add the next word to the vocabulary and return its index.
+    uint64_t operator()(std::string_view word, bool isExternalDummy = true);
     // Finish the writing. After this no more calls to `operator()` are allowed.
     void finish();
     // Destructor. Implicitly calls `finish` if it hasn't been called before.
     ~WordWriter();
+
+    std::string& readableName() { return readableName_; }
   };
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
@@ -122,3 +126,5 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   template <class Iterable>
   void buildFromIterable(Iterable&& iterable, const string& filename);
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

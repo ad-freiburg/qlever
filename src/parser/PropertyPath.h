@@ -1,7 +1,9 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
+#define QLEVER_SRC_PARSER_PROPERTYPATH_H
 
 #include <cstdint>
 #include <initializer_list>
@@ -19,7 +21,8 @@ class PropertyPath {
     IRI,
     ZERO_OR_MORE,
     ONE_OR_MORE,
-    ZERO_OR_ONE
+    ZERO_OR_ONE,
+    NEGATED
   };
 
   PropertyPath() : operation_(Operation::IRI) {}
@@ -93,6 +96,10 @@ class PropertyPath {
     return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
   }
 
+  static PropertyPath makeNegated(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::NEGATED);
+  }
+
   bool operator==(const PropertyPath& other) const = default;
 
   void writeToStream(std::ostream& out) const;
@@ -118,3 +125,5 @@ class PropertyPath {
    */
   bool canBeNull_ = false;
 };
+
+#endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

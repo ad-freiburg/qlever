@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
+#define QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 
 #include <functional>
 #include <optional>
@@ -166,3 +167,5 @@ decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
       integers, []<int... Is>(auto&&... args) -> decltype(auto) { \
         return std::invoke(func<Is...>, AD_FWD(args)...);         \
       } __VA_OPT__(, ) __VA_ARGS__)
+
+#endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H

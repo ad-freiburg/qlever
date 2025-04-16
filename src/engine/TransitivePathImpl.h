@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
 
 #include <utility>
 
-#include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
-#include "util/Exception.h"
 #include "util/Timer.h"
 
 namespace detail {
@@ -26,7 +25,7 @@ struct TableColumnWithVocab {
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(const IdTable* table, ColumnType column,
                        LocalVocab vocab)
-      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {};
+      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
 
@@ -45,12 +44,7 @@ class TransitivePathImpl : public TransitivePathBase {
       detail::TableColumnWithVocab<std::span<const Id>>;
 
  public:
-  TransitivePathImpl(QueryExecutionContext* qec,
-                     std::shared_ptr<QueryExecutionTree> child,
-                     TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist)
-      : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist){};
+  using TransitivePathBase::TransitivePathBase;
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -142,7 +136,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-  };
+  }
 
  protected:
   /**
@@ -154,14 +148,7 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @return Result The result of the TransitivePath operation
    */
-  ProtoResult computeResult(bool requestLaziness) override {
-    if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
-        rhs_.isVariable()) {
-      AD_THROW(
-          "This query might have to evaluate the empty path, which is "
-          "currently "
-          "not supported");
-    }
+  Result computeResult(bool requestLaziness) override {
     auto [startSide, targetSide] = decideDirection();
     // In order to traverse the graph represented by this result, we need random
     // access across the whole table, so it doesn't make sense to lazily compute
@@ -176,17 +163,15 @@ class TransitivePathImpl : public TransitivePathBase {
           computeTransitivePathBound(std::move(subRes), startSide, targetSide,
                                      std::move(sideRes), !requestLaziness);
 
-      return requestLaziness
-                 ? ProtoResult{std::move(gen), resultSortedOn()}
-                 : ProtoResult{cppcoro::getSingleElement(std::move(gen)),
-                               resultSortedOn()};
+      return requestLaziness ? Result{std::move(gen), resultSortedOn()}
+                             : Result{cppcoro::getSingleElement(std::move(gen)),
+                                      resultSortedOn()};
     }
     auto gen = computeTransitivePath(std::move(subRes), startSide, targetSide,
                                      !requestLaziness);
-    return requestLaziness
-               ? ProtoResult{std::move(gen), resultSortedOn()}
-               : ProtoResult{cppcoro::getSingleElement(std::move(gen)),
-                             resultSortedOn()};
+    return requestLaziness ? Result{std::move(gen), resultSortedOn()}
+                           : Result{cppcoro::getSingleElement(std::move(gen)),
+                                    resultSortedOn()};
   }
 
   /**
@@ -252,7 +237,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
-      mergedVocab.mergeWith(std::span{&edgesVocab, 1});
+      mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
         Set connectedNodes = findConnectedNodes(edges, startNode, target);
@@ -315,9 +300,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
-  cppcoro::generator<TableColumnWithVocab> setupNodes(
+  static cppcoro::generator<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
-      std::shared_ptr<const Result> startSideResult) const {
+      std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
       // Bound -> var|id
       std::span<const Id> startNodes = startSideResult->idTable().getColumn(
@@ -339,3 +324,5 @@ class TransitivePathImpl : public TransitivePathBase {
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H

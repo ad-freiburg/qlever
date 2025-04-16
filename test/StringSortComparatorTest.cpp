@@ -128,9 +128,9 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
     EXPECT_EQ(ab, comp(a, bSplit));
     EXPECT_EQ(ab, comp(aSplit, b));
 
+    EXPECT_EQ(ba, comp(bSplit, aSplit));
     EXPECT_EQ(ba, comp(b, aSplit));
     EXPECT_EQ(ba, comp(bSplit, a));
-    EXPECT_EQ(ba, comp(bSplit, aSplit));
   };
 
   auto assertTrue = [&comp, &assertConsistent](

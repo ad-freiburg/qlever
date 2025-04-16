@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_RDFPARSER_H
+#define QLEVER_SRC_PARSER_RDFPARSER_H
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
@@ -85,22 +86,7 @@ class RdfParserBase {
 
   // Return a batch of the next 100'000 triples at once. If the parser is
   // exhausted, return `nullopt`.
-  virtual std::optional<std::vector<TurtleTriple>> getBatch() {
-    std::vector<TurtleTriple> result;
-    result.reserve(100'000);
-    for (size_t i = 0; i < 100'000; ++i) {
-      result.emplace_back();
-      bool success = getLine(result.back());
-      if (!success) {
-        result.resize(result.size() - 1);
-        break;
-      }
-    }
-    if (result.empty()) {
-      return std::nullopt;
-    }
-    return result;
-  }
+  virtual std::optional<std::vector<TurtleTriple>> getBatch();
 };
 
 /**
@@ -165,6 +151,16 @@ class TurtleParser : public RdfParserBase {
   static constexpr const char* baseForRelativeIriKey_ = "@";
   static constexpr const char* baseForAbsoluteIriKey_ = "@@";
 
+  // Helper function to raise an exception in response to BASE or PREFIX
+  // mismatches during parallel parsing.
+  [[noreturn]] void raiseDisallowedPrefixOrBaseError() const;
+
+  // Set the prefix or base IRI for the given key. If `prefixAndBaseDisabled_`
+  // is true, throw an error if this would change the mapping, which is illegal
+  // during parallel parsing.
+  void setPrefixOrThrow(const std::string& key,
+                        const ad_utility::triple_component::Iri& prefix);
+
  protected:
   // Data members.
 
@@ -227,20 +223,7 @@ class TurtleParser : public RdfParserBase {
 
  protected:
   // clear all the parser's state to the initial values.
-  void clear() {
-    lastParseResult_ = "";
-
-    activeSubject_ = TripleComponent::Iri::fromIriref("<>");
-    activePredicate_ = TripleComponent::Iri::fromIriref("<>");
-    activePrefix_.clear();
-
-    prefixMap_ = prefixMapDefault_;
-
-    tok_.reset(nullptr, 0);
-    triples_.clear();
-    numBlankNodes_ = 0;
-    isParserExhausted_ = false;
-  }
+  void clear();
 
   // the following functions refer to the nonterminals of the turtle grammar
   // a return value of true means that the nonterminal could be parsed and that
@@ -257,29 +240,11 @@ class TurtleParser : public RdfParserBase {
   virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
-  [[noreturn]] void raise(std::string_view error_message) {
-    auto d = tok_.view();
-    std::stringstream errorMessage;
-    errorMessage << "Parse error at byte position " << getParsePosition()
-                 << ": " << error_message << '\n';
-    if (!d.empty()) {
-      size_t num_bytes = 500;
-      auto s = std::min(size_t(num_bytes), size_t(d.size()));
-      errorMessage << "The next " << num_bytes << " bytes are:\n"
-                   << std::string_view(d.data(), s) << '\n';
-    }
-    throw ParseException{std::move(errorMessage).str()};
-  }
+  [[noreturn]] void raise(std::string_view error_message) const;
 
   // Throw an exception or simply ignore the current triple, depending on the
   // setting of `invalidLiteralsAreSkipped()`.
-  void raiseOrIgnoreTriple(std::string_view errorMessage) {
-    if (invalidLiteralsAreSkipped()) {
-      currentTripleIgnoredBecauseOfInvalidLiteral_ = true;
-    } else {
-      raise(errorMessage);
-    }
-  }
+  void raiseOrIgnoreTriple(std::string_view errorMessage);
 
  protected:
   /* private Member Functions */
@@ -338,13 +303,7 @@ class TurtleParser : public RdfParserBase {
   bool langtag() { return parseTerminal<TurtleTokenId::Langtag>(); }
   bool blankNodeLabel();
 
-  bool anon() {
-    if (!parseTerminal<TurtleTokenId::Anon>()) {
-      return false;
-    }
-    lastParseResult_ = createAnonNode();
-    return true;
-  }
+  bool anon();
 
   // Skip a given regex without parsing it
   template <TurtleTokenId reg>
@@ -361,42 +320,18 @@ class TurtleParser : public RdfParserBase {
   bool parseTerminal();
 
   // ______________________________________________________________________________________
-  void emitTriple() {
-    if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
-                            defaultGraphIri_);
-    }
-    currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
-  }
+  void emitTriple();
 
   // Enforce that the argument is true: if it is false, a parse Exception is
   // thrown this helps formulating the LL1 property in easily readable code
-  bool check(bool result) {
-    if (result) {
-      return true;
-    } else {
-      raise("A check for a required element failed");
-    }
-  }
+  bool check(bool result) const;
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
-  TripleComponent::Iri expandPrefix(const std::string& prefix) {
-    if (!prefixMap_.count(prefix)) {
-      raise("Prefix " + prefix +
-            " was not previously defined using a PREFIX or @prefix "
-            "declaration");
-    } else {
-      return prefixMap_[prefix];
-    }
-  }
+  TripleComponent::Iri expandPrefix(const std::string& prefix);
 
   // create a new, unused, unique blank node string
-  std::string createAnonNode() {
-    return BlankNode{true,
-                     absl::StrCat(blankNodePrefix_, "_", numBlankNodes_++)}
-        .toSparql();
-  }
+  std::string createAnonNode();
 
  public:
   // To get consistent blank node labels when testing, we need to manually set
@@ -735,7 +670,6 @@ class RdfParallelParser : public Parser {
 
 // This class is an RDF parser that parses multiple files in parallel. Each
 // file is specified by an  `InputFileSpecification`.
-template <typename Tokenizer>
 class RdfMultifileParser : public RdfParserBase {
  public:
   // Default construction needed for tests
@@ -788,3 +722,5 @@ class RdfMultifileParser : public RdfParserBase {
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
 };
+
+#endif  // QLEVER_SRC_PARSER_RDFPARSER_H

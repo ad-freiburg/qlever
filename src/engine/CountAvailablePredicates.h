@@ -1,20 +1,17 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
+#define QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
 
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "../global/Pattern.h"
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-
-using std::string;
-using std::vector;
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/Pattern.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -43,16 +40,16 @@ class CountAvailablePredicates : public Operation {
                            Variable predicateVariable, Variable countVariable);
 
  protected:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     using R = vector<QueryExecutionTree*>;
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
@@ -68,6 +65,8 @@ class CountAvailablePredicates : public Operation {
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
+
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  public:
   size_t getCostEstimate() override;
@@ -103,6 +102,8 @@ class CountAvailablePredicates : public Operation {
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H

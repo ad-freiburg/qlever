@@ -132,13 +132,13 @@ void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
 }
 
 // _____________________________________________________________________________
-ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
-                                      ComputationMode computationMode) {
+Result Operation::runComputation(const ad_utility::Timer& timer,
+                                 ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
-  ProtoResult result =
+  Result result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
                     result.isFullyMaterialized());
@@ -163,6 +163,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
     if (vocabSize > 1) {
       runtimeInfo().addDetail("local-vocab-size", vocabSize);
     }
+    AD_CORRECTNESS_CHECK(result.idTable().numColumns() == getResultWidth());
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
@@ -175,6 +176,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
           const IdTable& idTable = pair.idTable_;
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
+          AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
           mergeStats(vocabStats, pair.localVocab_);
@@ -341,6 +343,15 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     if (result._resultPointer->resultTable().isFullyMaterialized()) {
+      AD_CORRECTNESS_CHECK(
+          result._resultPointer->resultTable().idTable().numColumns() ==
+              getResultWidth(),
+          result._cacheStatus == ad_utility::CacheStatus::computed
+              ? "This should never happen, non-matching result widths should "
+                "have been caught earlier"
+              : "Retrieved result from cache with a different number of "
+                "columns than expected. There's something wrong with the cache "
+                "key.");
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
@@ -644,4 +655,41 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::clone() const {
+  auto result = cloneImpl();
+
+  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
+    // Make sure previously hidden variables remain hidden.
+    std::vector<Variable> visibleVariables;
+    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                     std::back_inserter(visibleVariables));
+    result->setSelectedVariablesForSubquery(visibleVariables);
+  }
+
+  auto compareTypes = [this, &result]() {
+    const auto& reference = *result;
+    return typeid(*this) == typeid(reference);
+  };
+  AD_CORRECTNESS_CHECK(compareTypes());
+  AD_CORRECTNESS_CHECK(result->_executionContext == _executionContext);
+  auto areChildrenDifferent = [this, &result]() {
+    auto ownChildren = getChildren();
+    auto otherChildren = result->getChildren();
+    if (ownChildren.size() != otherChildren.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < ownChildren.size(); i++) {
+      if (ownChildren.at(i) == otherChildren.at(i)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  AD_CORRECTNESS_CHECK(areChildrenDifferent());
+  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  return result;
 }

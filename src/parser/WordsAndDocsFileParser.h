@@ -3,7 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Felix Meisen (fesemeisen@outlook.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
+#define QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
 
 #include <absl/strings/str_split.h>
 #include <unicode/locid.h>
@@ -190,3 +191,5 @@ class DocsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 };
+
+#endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H

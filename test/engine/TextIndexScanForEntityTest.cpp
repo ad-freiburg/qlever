@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForEntity.h"
@@ -22,8 +23,16 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
+// Return a `QueryExecutionContext` from the given `kg`(see above) that has a
+// text index for the literals in the `kg`.
+auto qecWithTextIndex = []() {
+  TestIndexConfig config{kg};
+  config.createTextIndex = true;
+  return getQec(std::move(config));
+};
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -54,7 +63,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
@@ -85,7 +94,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -129,7 +138,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};
@@ -150,6 +159,19 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   TextIndexScanForEntity s3{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test"};
   ASSERT_TRUE(!s3.knownEmptyResult());
+}
+
+// _____________________________________________________________________________
+TEST(TextIndexScanForEntity, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForEntity scan{qec, Variable{"?text"}, Variable{"?entityVar"},
+                              "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(scan, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), scan.getDescriptor());
 }
 
 }  // namespace

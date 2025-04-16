@@ -27,10 +27,12 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "gmock/gmock.h"
+#include "parser/SparqlParser.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -221,6 +223,42 @@ using VarColTestSuiteParam = std::tuple<bool, bool, bool, bool>;
 using V = Variable;
 using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
 
+// Helper function to create a spatial join from VALUEs
+std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
+    QueryExecutionContext* qec, PayloadVariables pv = PayloadVariables::all(),
+    SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
+  const auto sharedHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  // also include some garbage input geometries
+  auto pqLeft = SparqlParser::parseQuery(
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
+      "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
+      "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
+  auto pqRight = SparqlParser::parseQuery(
+      "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
+      "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
+  QueryPlanner qp{qec, sharedHandle};
+
+  auto leftChild =
+      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqLeft));
+  auto rightChild =
+      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?a"},
+                                   Variable{"?b"}, std::nullopt, pv, alg,
+                                   SpatialJoinType::INTERSECTS},
+          std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto spJoin1 = spatialJoin->addChild(leftChild, Variable{"?a"});
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
+  auto spJoin2 = spatialJoin->addChild(rightChild, Variable{"?b"});
+  return spJoin2;
+}
+
 class SpatialJoinVarColParamTest
     : public ::testing::TestWithParam<VarColTestSuiteParam> {
  public:
@@ -262,7 +300,9 @@ class SpatialJoinVarColParamTest
 
   std::shared_ptr<SpatialJoin> makeSpatialJoin(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
-      bool addDist = true, PayloadVariables pv = PayloadVariables::all()) {
+      bool addDist = true, PayloadVariables pv = PayloadVariables::all(),
+      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM,
+      SpatialJoinType joinType = SpatialJoinType::WITHIN_DIST) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -276,7 +316,8 @@ class SpatialJoinVarColParamTest
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
             SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv},
+                                     Variable{"?point2"}, dist, pv, alg,
+                                     joinType},
             std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -296,11 +337,13 @@ class SpatialJoinVarColParamTest
   // failed, instead of failing for both getResultWidth() and
   // computeVariableToColumnMap() if only one of them is wrong
   void testGetResultWidthOrVariableToColumnMap(
-      VarColTestSuiteParam parameters) {
+      VarColTestSuiteParam parameters,
+      SpatialJoinAlgorithm alg = SPATIAL_JOIN_DEFAULT_ALGORITHM) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto qec = buildTestQEC();
-    auto spJoin2 = makeSpatialJoin(qec, parameters);
+    auto spJoin2 =
+        makeSpatialJoin(qec, parameters, true, PayloadVariables::all(), alg);
     auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
     size_t expectedResultWidth =
@@ -320,6 +363,78 @@ class SpatialJoinVarColParamTest
           addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
       expectedColumns.push_back({"?distOfTheTwoObjectsAddedInternally", "0"});
+
+      auto varColMap = spatialJoin->computeVariableToColumnMap();
+      auto resultTable = spatialJoin->computeResult(false);
+
+      // if the size of varColMap and expectedColumns is the same and each
+      // element of expectedColumns is contained in varColMap, then they are the
+      // same (assuming that each element is unique)
+      ASSERT_EQ(varColMap.size(), expectedColumns.size());
+
+      for (size_t i = 0; i < expectedColumns.size(); i++) {
+        ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
+
+        // test, that the column contains the correct values
+        ColumnIndex ind =
+            varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
+        const IdTable* r = &resultTable.idTable();
+        ASSERT_LT(0, r->numRows());
+        ASSERT_LT(ind, r->numColumns());
+        ValueId tableEntry = r->at(0, ind);
+
+        if (tableEntry.getDatatype() == Datatype::VocabIndex) {
+          std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
+          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
+                      string::npos);
+        } else if (tableEntry.getDatatype() == Datatype::Int) {
+          std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                                  qec->getIndex(), tableEntry, {})
+                                  .value()
+                                  .first;
+          ASSERT_EQ(value, expectedColumns.at(i).second);
+        } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
+          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
+                                   qec->getIndex(), tableEntry, {})
+                                   .value();
+          value = absl::StrCat("\"", value, "\"^^<", type, ">");
+          ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
+                      string::npos);
+        }
+      }
+    }
+  }
+
+  // Test spatial join on contains
+  void testGetResultWidthOrVariableToColumnMapSpatialJoinContains(
+      VarColTestSuiteParam parameters) {
+    auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
+          testVarToColMap] = parameters;
+    auto qec = buildNonSelfJoinDataset();
+
+    auto spJoin2 = makeSpatialJoin(
+        qec, parameters, false, PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::CONTAINS);
+    auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
+
+    size_t expectedResultWidth =
+        (leftSideBigChild ? 4 : 3) + (rightSideBigChild ? 4 : 3);
+
+    auto numTriples = qec->getIndex().numTriples().normal;
+    ASSERT_EQ(numTriples, 22);
+
+    if (!testVarToColMap) {
+      ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
+    } else {
+      std::vector<std::pair<std::string, std::string>> expectedColumns{};
+
+      expectedColumns =
+          addExpectedColumns(expectedColumns, leftSideBigChild, "1");
+      expectedColumns =
+          addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
       auto varColMap = spatialJoin->computeVariableToColumnMap();
       auto resultTable = spatialJoin->computeResult(false);
@@ -517,6 +632,32 @@ TEST_P(SpatialJoinVarColParamTest, variableToColumnMap) {
   testGetResultWidthOrVariableToColumnMap(GetParam());
 }
 
+// Test `libspatialjoin` with `within-dist` spatial join type. This is
+// essentially a self-join (but the payload may be different for the two
+// sides).
+TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoin) {
+  testGetResultWidthOrVariableToColumnMap(GetParam(),
+                                          SpatialJoinAlgorithm::LIBSPATIALJOIN);
+}
+
+// Test `libspatialjoin` with `contains` spatial join type. Here the two sides
+// have different sets of objects,
+TEST_P(SpatialJoinVarColParamTest, variableToColumnMapLibspatialjoinContains) {
+  testGetResultWidthOrVariableToColumnMapSpatialJoinContains(GetParam());
+}
+
+// Test a spatial join with VALUES as both children
+TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
+  auto qec = buildNonSelfJoinDataset();
+
+  auto spJoin2 = makeSpatialJoinFromValues(
+      qec, PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN);
+  auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
+
+  auto resultTable = spatialJoin->computeResult(false);
+  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+}
+
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {
   testPayloadVariablesVarToColMap(GetParam());
 }
@@ -607,10 +748,9 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinKnownEmptyTest,
 namespace resultSortedOn {
 
 TEST(SpatialJoin, resultSortedOn) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = createSmallDataset();
 
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = buildQec(kg);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
@@ -706,6 +846,87 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, clone) {
+  auto qec = buildTestQEC();
+  auto numTriples = qec->getIndex().numTriples().normal;
+  ASSERT_EQ(numTriples, 15);
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        std::nullopt, std::nullopt};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_EQ(spatialJoin.getChildren().empty(),
+              cloneReference.getChildren().empty());
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        leftChild, std::nullopt};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        std::nullopt, rightChild};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+  }
+
+  {
+    SpatialJoin spatialJoin{
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                                 Variable{"?point2"}},
+        leftChild, rightChild};
+
+    auto clone = spatialJoin.clone();
+    ASSERT_TRUE(clone);
+    const auto& cloneReference = *clone;
+    EXPECT_EQ(typeid(spatialJoin), typeid(cloneReference));
+    EXPECT_EQ(cloneReference.getDescriptor(), spatialJoin.getDescriptor());
+
+    EXPECT_NE(spatialJoin.getChildren().at(0),
+              cloneReference.getChildren().at(0));
+    EXPECT_NE(spatialJoin.getChildren().at(1),
+              cloneReference.getChildren().at(1));
+  }
+}
+
 }  // namespace stringRepresentation
 
 namespace getMultiplicityAndSizeEstimate {
@@ -727,14 +948,13 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     };
 
     const double doubleBound = 0.00001;
-    std::string kg = createSmallDatasetWithPoints();
+    std::string kg = createSmallDataset();
 
     // add multiplicities to test knowledge graph
     kg += "<node_1> <name> \"testing multiplicity\" .";
     kg += "<node_1> <name> \"testing multiplicity 2\" .";
 
-    ad_utility::MemorySize blocksizePermutations = 16_MB;
-    auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+    auto qec = buildQec(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     const unsigned int nrTriplesInput = 17;
     ASSERT_EQ(numTriples, nrTriplesInput);
@@ -859,14 +1079,13 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       // ================================ here the children are only index
       // scans, as they are perfectly predictable in relation to size and
       // multiplicity estimates
-      std::string kg = createSmallDatasetWithPoints();
+      std::string kg = createSmallDataset();
 
       // add multiplicities to test knowledge graph
       kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
       kg += "<geometry1> <asWKT> \"POINT(7.54321 48.54321)\".";
 
-      ad_utility::MemorySize blocksizePermutations = 16_MB;
-      auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+      auto qec = buildQec(kg);
       auto numTriples = qec->getIndex().numTriples().normal;
       const unsigned int nrTriplesInput = 17;
       ASSERT_EQ(numTriples, nrTriplesInput);

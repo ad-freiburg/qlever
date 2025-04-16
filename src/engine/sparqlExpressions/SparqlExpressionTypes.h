@@ -1,9 +1,12 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Several helper types needed for the SparqlExpression module
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H
 
 #include <vector>
 
@@ -56,7 +59,7 @@ class VectorWithMemoryLimit
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
   VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
-      : Base(init, alloc){};
+      : Base(init, alloc) {}
 
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
@@ -120,9 +123,10 @@ CPP_template(typename ResultT)(
     requires ad_utility::SimilarTo<ResultT,
                                    ExpressionResult>) inline ExpressionResult
     copyExpressionResult(ResultT&& result) {
-  auto copyIfCopyable =
-      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
-                                     requires SingleExpressionResult<R>) {
+  auto copyIfCopyable = [](const auto& x)
+      -> CPP_ret(ExpressionResult)(
+          requires SingleExpressionResult<std::decay_t<decltype(x)>>) {
+    using R = std::decay_t<decltype(x)>;
     if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
@@ -168,7 +172,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
+  LocalVocab& _localVocab;
 
   // If the expression is part of a GROUP BY then this member has to be set to
   // the variables by which the input is grouped. These variables will then be
@@ -204,7 +208,7 @@ struct EvaluationContext {
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab,
+                    LocalVocab& localVocab,
                     ad_utility::SharedCancellationHandle cancellationHandle,
                     TimePoint deadline);
 
@@ -231,7 +235,8 @@ CPP_template(typename T, typename LocalVocabT)(
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
-        [&localVocab]<typename R>(R&& el) mutable {
+        [&localVocab](auto&& el) mutable {
+          using R = decltype(el);
           if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
@@ -375,3 +380,5 @@ CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
 
 }  // namespace detail
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONTYPES_H

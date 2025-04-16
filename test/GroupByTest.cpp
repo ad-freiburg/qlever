@@ -3,7 +3,6 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include <engine/SpatialJoinAlgorithms.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
@@ -16,6 +15,7 @@
 #include "engine/Join.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -26,10 +26,9 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
-#include "gtest/gtest.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
 using ::testing::Eq;
@@ -76,7 +75,10 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.addTextFromContextFile("group_by_test.words", false);
+    _index.buildTextIndexFile(
+        std::pair<std::string, std::string>{"group_by_test.words",
+                                            "group_by_test.documents"},
+        false);
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
@@ -114,6 +116,26 @@ TEST_F(GroupByTest, getDescriptor) {
   GroupBy groupBy{
       ad_utility::testing::getQec(), {Variable{"?a"}}, {alias}, values};
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByTest, clone) {
+  auto expr =
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
+  auto alias =
+      Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
+            Variable{"?a"}};
+
+  parsedQuery::SparqlValues input;
+  input._variables = {Variable{"?a"}};
+  auto values = ad_utility::makeExecutionTree<Values>(getQec(), input);
+
+  GroupBy groupBy{getQec(), {Variable{"?a"}}, {alias}, values};
+
+  auto clone = groupBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(groupBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), groupBy.getDescriptor());
 }
 
 TEST_F(GroupByTest, doGroupBy) {
@@ -2226,8 +2248,8 @@ TEST_P(GroupByLazyFixture, groupsOfSize1AreAggregatedCorrectly) {
 
 // _____________________________________________________________________________
 TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
-  // Test queries of the class `SELECT (CONCAT(SUM(?x), "---") as ?result) ...`
-  // where the aggregate function is not on top of the expression tree.
+  // Test queries of the class `SELECT (CONCAT(STR(SUM(?x)), "---") as ?result)
+  // ...` where the aggregate function is not on top of the expression tree.
   using L = TripleComponent::Literal;
   std::vector<IdTable> idTables;
   idTables.push_back(makeIntTable({{1, 0}}));
@@ -2237,7 +2259,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
       std::vector<ColumnIndex>{1});
 
   std::vector<std::unique_ptr<SparqlExpression>> children;
-  children.push_back(makeSum("?x"));
+  children.push_back(makeStrExpression(makeSum("?x")));
   children.push_back(std::make_unique<StringLiteralExpression>(
       L::fromStringRepresentation("\"---\"")));
   Alias alias{SparqlExpressionPimpl{makeConcatExpression(std::move(children)),

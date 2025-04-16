@@ -3,7 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
+#define QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H
 
 #include <memory>
 #include <string>
@@ -179,3 +180,5 @@ class QueryExecutionContext {
 
   std::optional<std::string> pinWithExplicitName_ = std::nullopt;
 };
+
+#endif  // QLEVER_SRC_ENGINE_QUERYEXECUTIONCONTEXT_H

@@ -54,7 +54,7 @@ class LazyGroupByTest : public ::testing::Test {
       ua, 1};
 
   sparqlExpression::EvaluationContext makeEvaluationContext(
-      const IdTable& idTable) const {
+      const IdTable& idTable) {
     sparqlExpression::EvaluationContext evaluationContext{
         *qec_,
         subtree_->getVariableColumns(),

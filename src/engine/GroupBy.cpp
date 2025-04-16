@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Florian Kramer [2018 - 2020]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupBy.h"
 
@@ -283,7 +285,7 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
 
 // _____________________________________________________________________________
 sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
-    const LocalVocab& localVocab, const IdTable& idTable) const {
+    LocalVocab& localVocab, const IdTable& idTable) const {
   sparqlExpression::EvaluationContext evaluationContext{
       *getExecutionContext(),
       _subtree->getVariableColumns(),
@@ -309,7 +311,7 @@ sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
-ProtoResult GroupBy::computeResult(bool requestLaziness) {
+Result GroupBy::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
@@ -411,9 +413,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(groupByCols), !requestLaziness);
 
     return requestLaziness
-               ? ProtoResult{std::move(generator), resultSortedOn()}
-               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                             resultSortedOn()};
+               ? Result{std::move(generator), resultSortedOn()}
+               : Result{cppcoro::getSingleElement(std::move(generator)),
+                        resultSortedOn()};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
@@ -1274,8 +1276,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     const auto numberOfGroups = getNumberOfGroups();
 
     std::visit(
-        [&resizeVectors, &aggregationTypeWithData,
-         numberOfGroups]<typename T>(T& arg) {
+        [&resizeVectors, &aggregationTypeWithData, numberOfGroups](auto& arg) {
           resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
@@ -1535,7 +1536,7 @@ Result GroupBy::computeGroupByForHashMapOptimization(
     //
     // NOTE: If the input blocks have very similar or even identical non-empty
     // local vocabs, no deduplication is performed.
-    localVocab.mergeWith(std::span{&inputLocalVocab, 1});
+    localVocab.mergeWith(inputLocalVocab);
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
@@ -1623,4 +1624,10 @@ GroupBy::getVariableForCountOfSingleAlias() const {
 // _____________________________________________________________________________
 bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
   return _subtree->getVariableColumnOrNullopt(variable).has_value();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> GroupBy::cloneImpl() const {
+  return std::make_unique<GroupBy>(_executionContext, _groupByVariables,
+                                   _aliases, _subtree->clone());
 }

@@ -6,7 +6,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
 #include <fstream>
@@ -20,10 +21,13 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -32,6 +36,11 @@
 
 using std::string;
 using std::vector;
+
+template <class StringType>
+using AccessReturnType_t =
+    std::conditional_t<std::is_same_v<StringType, CompressedString>,
+                       std::string, std::string_view>;
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -56,16 +65,12 @@ inline std::ostream& operator<<(std::ostream& stream,
 }
 
 // A vocabulary. Wraps a vector of strings and provides additional methods for
-// retrieval.
-template <typename UnderlyingVocabulary, typename ComparatorType,
-          typename IndexT>
+// retrieval. Template parameters that are supported are:
+// std::string -> no compression is applied
+// CompressedString -> prefix compression is applied
+template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
  public:
-  // The type that is returned by the `operator[]` of this vocabulary. Typically
-  // either `std::string` or `std::string_view`.
-  using AccessReturnType =
-      decltype(std::declval<const UnderlyingVocabulary&>()[0]);
-
   // The index ranges for a prefix + a function to check whether a given index
   // is contained in one of them.
   //
@@ -90,6 +95,17 @@ class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
+  template <typename T, typename R = void>
+  using enable_if_compressed =
+      std::enable_if_t<std::is_same_v<T, CompressedString>>;
+
+  template <typename T, typename R = void>
+  using enable_if_uncompressed =
+      std::enable_if_t<!std::is_same_v<T, CompressedString>>;
+
+  static constexpr bool isCompressed_ =
+      std::is_same_v<StringType, CompressedString>;
+
   // If a literal uses one of these language tags or starts with one of these
   // prefixes, it will be externalized. By default, everything is externalized.
   // Both of these settings can be overridden using the `settings.json` file.
@@ -99,6 +115,10 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
+  using UnderlyingVocabulary =
+      std::conditional_t<isCompressed_,
+                         CompressedVocabulary<VocabularyInternalExternal>,
+                         VocabularyInMemory>;
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
@@ -113,7 +133,10 @@ class Vocabulary {
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
 
-  Vocabulary() = default;
+  template <
+      typename = std::enable_if_t<std::is_same_v<StringType, string> ||
+                                  std::is_same_v<StringType, CompressedString>>>
+  Vocabulary() {}
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
   Vocabulary(Vocabulary&&) noexcept = default;
 
@@ -124,7 +147,10 @@ class Vocabulary {
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
-  AccessReturnType operator[](IndexType idx) const;
+  AccessReturnType_t<StringType> operator[](IndexType idx) const;
+
+  // AccessReturnType_t<StringType> at(IndexType idx) const { return
+  // operator[](id); }
 
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
@@ -213,39 +239,13 @@ class Vocabulary {
   // vocabulary.
   UnderlyingVocabulary::WordWriter makeWordWriter(
       const std::string& filename) const {
-    // Note: In GCC this triggers a move construction of the created
-    // `DiskWriter`, although mandatory copy elision should kick in here
-    // according to our understanding (and does in clang). We could investigate
-    // whether this is a bug in GCC or whether we are missing something.
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
-  }
-
-  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
-  // vocabulary and set the type of the vocabulary according to the `type`
-  // argument (see the `PolymorphicVocabulary` class for details).
-  void resetToType(ad_utility::VocabularyType type) {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
-      vocabulary_.getUnderlyingVocabulary().resetToType(type);
-    }
   }
 };
 
-namespace detail {
-// Thecompile-time definitions `_QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be
-// used to disable the external vocab and the compression of the vocab at
-// compile time. NOTE: These change the binary format of QLever's index, so
-// changing them requires rebuilding of the indices.
+using RdfsVocabulary =
+    Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
+using TextVocabulary =
+    Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
 
-#ifdef _QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY
-using UnderlyingVocabRdfsVocabulary = VocabularyInMemory;
-#else
-using UnderlyingVocabRdfsVocabulary = PolymorphicVocabulary;
-#endif
-
-using UnderlyingVocabTextVocabulary = VocabularyInMemory;
-}  // namespace detail
-
-using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
-                                  TripleComponentComparator, VocabIndex>;
-using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
-                                  SimpleStringComparator, WordVocabIndex>;
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_H

@@ -123,8 +123,11 @@ class OperationTestFixture : public testing::Test {
  protected:
   std::vector<std::string> jsonHistory;
 
-  Index index =
-      makeTestIndex("OperationTest", std::nullopt, true, true, true, 32_B);
+  Index index = []() {
+    TestIndexConfig indexConfig{};
+    indexConfig.blocksizePermutations = 32_B;
+    return makeTestIndex("OperationTest", std::move(indexConfig));
+  }();
   QueryResultCache cache;
   NamedQueryCache namedCache;
   QueryExecutionContext qec{
@@ -422,9 +425,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
 // _____________________________________________________________________________
 TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   bool signaledUpdate = false;
-  Index index = makeTestIndex(
-      "ensureFailedStatusIsSetWhenGeneratorThrowsException", std::nullopt, true,
-      true, true, ad_utility::MemorySize::bytes(16), false);
+  const Index& index = ad_utility::testing::getQec()->getIndex();
   QueryResultCache cache{};
   NamedQueryCache namedCache{};
   QueryExecutionContext context{
@@ -454,9 +455,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 #endif
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
-  Index index = makeTestIndex(
-      "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", std::nullopt, true,
-      true, true, ad_utility::MemorySize::bytes(16), false);
+  const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedQueryCache namedCache{};
   QueryExecutionContext context{
@@ -502,9 +501,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
   uint32_t updateCallCounter = 0;
   auto idTable = makeIdTableFromVector({{}});
-  Index index = makeTestIndex(
-      "ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption", std::nullopt,
-      true, true, true, ad_utility::MemorySize::bytes(16), false);
+  const Index& index = getQec()->getIndex();
   QueryResultCache cache{};
   NamedQueryCache namedCache{};
   QueryExecutionContext context{
