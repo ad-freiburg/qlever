@@ -175,33 +175,6 @@ struct LiteralValueGetterWithoutStrFunction
   std::optional<ad_utility::triple_component::Literal> operator()(
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
-
-// This class can be used as the `ValueGetter` argument of Expression
-// templates. It produces a LiteralOrIri.
-struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
-  using Mixin<LiteralOrIriValueGetter>::operator();
-
-  std::optional<LiteralOrIri> operator()(ValueId,
-                                         const EvaluationContext*) const;
-
-  std::optional<LiteralOrIri> operator()(const LiteralOrIri& s,
-                                         const EvaluationContext*) const {
-    return s;
-  }
-};
-
-// Value getter for `isBlank`.
-struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
-  using Mixin<IsBlankNodeValueGetter>::operator();
-  Id operator()(ValueId id, const EvaluationContext*) const {
-    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
-  }
-
-  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
-    return Id::makeFromBool(false);
-  }
-};
-
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>

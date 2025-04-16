@@ -18,8 +18,6 @@
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
