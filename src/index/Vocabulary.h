@@ -25,6 +25,7 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -116,27 +117,15 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
-  // The 5th highest bit of the vocabulary index is used as a marker to
-  // determine whether the word is stored in the normal vocabulary or the
-  // geometry vocabulary.
-  static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
-  static constexpr uint64_t geoVocabIndexMask =
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits - 1);
-  static constexpr uint64_t maxWordIndex = geoVocabMarker - 1;
-
-  static constexpr std::string_view geoVocabSuffix = ".geometries";
-
-  using UnderlyingVocabulary =
-      std::conditional_t<isCompressed_,
-                         CompressedVocabulary<VocabularyInternalExternal>,
-                         VocabularyInMemory>;
+  using UnderlyingVocabulary = SplitGeoVocabulary<std::conditional_t<
+      isCompressed_, CompressedVocabulary<VocabularyInternalExternal>,
+      VocabularyInMemory>>;
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
   // The vocabulary is split into an underlying vocabulary for normal literals
   // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
-  VocabularyWithUnicodeComparator geoVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -168,9 +157,7 @@ class Vocabulary {
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const {
-    return vocabulary_.size() + geoVocabulary_.size();
-  }
+  [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -195,18 +182,9 @@ class Vocabulary {
 
   static bool stringIsLiteral(std::string_view s);
 
-  static constexpr std::string_view geoLiteralSuffix =
-      ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
-  static bool stringIsGeoLiteral(std::string_view s);
-
-  static uint64_t makeGeoVocabIndex(uint64_t vocabIndex);
-
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
-  }
-  bool isGeoLiteral(IndexT index) const {
-    return static_cast<bool>(index.get() & geoVocabMarker);
   }
 
   bool shouldBeExternalized(std::string_view word) const;
@@ -259,35 +237,14 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
-  // This word writer writes words to different vocabularies depending on their
-  // content.
-  class WordWriter {
-   private:
-    using WW = UnderlyingVocabulary::WordWriter;
-    WW underlyingWordWriter_;
-    WW underlyingGeoWordWriter_;
-
-   public:
-    WordWriter(const VocabularyWithUnicodeComparator& vocabulary,
-               const std::string& filename);
-
-    // Add the next word to the vocabulary and return its index.
-    uint64_t operator()(std::string_view word, bool isExternal);
-
-    // Finish the writing on both underlying word writers. After this no more
-    // calls to `operator()` are allowed.
-    void finish();
-
-    std::string& readableName();
-  };
-
   // Get a writer for each underlying vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary have to be pushed one by one to add words to the
   // vocabulary. This writer internally splits the words into a generic
   // vocabulary and a geometry vocabulary.
-  WordWriter makeWordWriter(const std::string& filename) const {
-    return {vocabulary_, filename};
+  UnderlyingVocabulary::WordWriter makeWordWriter(
+      const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeWordWriter(filename);
   }
 };
 

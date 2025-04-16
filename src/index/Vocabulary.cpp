@@ -45,26 +45,7 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& filename) {
-  auto readSingle = [](VocabularyWithUnicodeComparator& vocab,
-                       const string& filename) {
-    LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
-              << std::endl;
-    vocab.close();
-    vocab.open(filename);
-    if constexpr (isCompressed_) {
-      const auto& internalExternalVocab =
-          vocab.getUnderlyingVocabulary().getUnderlyingVocabulary();
-      LOG(INFO) << "Done, number of words: "
-                << internalExternalVocab.internalVocab().size() << std::endl;
-      LOG(INFO) << "Number of words in external vocabulary: "
-                << internalExternalVocab.externalVocab().size() << std::endl;
-    } else {
-      LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
-    }
-  };
-
-  readSingle(vocabulary_, filename);
-  readSingle(geoVocabulary_, filename + geoVocabSuffix);
+  vocabulary_.getUnderlyingVocabulary().readFromFile(filename);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -80,53 +61,13 @@ void Vocabulary<S, C, I>::readFromFile(const string& filename) {
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
-  LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  vocabulary_.close();
-  geoVocabulary_.close();
-
-  // Split words depending on whether they should be stored in the normal or
-  // geometry vocabulary
-  std::vector<std::string> words;
-  std::vector<std::string> geoWords;
-  for (const auto& word : set) {
-    if (stringIsGeoLiteral(word)) {
-      geoWords.push_back(word);
-    } else {
-      words.push_back(word);
-    }
-  }
-
-  auto totalComparison = [this](const auto& a, const auto& b) {
-    return getCaseComparator()(a, b, SortLevel::TOTAL);
-  };
-  auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
-                                       std::vector<std::string>& words,
-                                       const std::string& filename) {
-    std::sort(begin(words), end(words), totalComparison);
-    vocab.build(words, filename);
-  };
-  buildSingle(vocabulary_, words, filename);
-  buildSingle(geoVocabulary_, geoWords, filename + geoVocabSuffix);
-
-  LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
+  vocabulary_.getUnderlyingVocabulary().createFromSet(set, filename);
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
   return s.starts_with('"');
-}
-
-// _____________________________________________________________________________
-template <class S, class C, class I>
-bool Vocabulary<S, C, I>::stringIsGeoLiteral(std::string_view s) {
-  return stringIsLiteral(s) && s.ends_with(geoLiteralSuffix);
-}
-
-// _____________________________________________________________________________
-template <class S, class C, class I>
-uint64_t Vocabulary<S, C, I>::makeGeoVocabIndex(uint64_t vocabIndex) {
-  return vocabIndex | geoVocabMarker;
 }
 
 // _____________________________________________________________________________
@@ -291,28 +232,7 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // Helper lambda to lookup a the word in a given vocabulary.
-  auto checkWord =
-      [&word, &idx](const VocabularyWithUnicodeComparator& vocab) -> bool {
-    // We need the TOTAL level because we want the unique word.
-    auto wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
-    if (wordAndIndex.isEnd()) {
-      return false;
-    }
-    idx->get() = wordAndIndex.index();
-    return wordAndIndex.word() == word;
-  };
-
-  // Check if the word is in the regular non-geometry vocabulary
-  if (checkWord(vocabulary_)) {
-    return true;
-  }
-
-  // Not found in regular vocabulary: test if it is in the geometry vocabulary
-  bool res = checkWord(geoVocabulary_);
-  // Index with special marker bit for geometry word
-  idx->get() |= geoVocabMarker;
-  return res;
+  return vocabulary_.getUnderlyingVocabulary().getId(word, &idx->get());
 }
 
 // ___________________________________________________________________________
@@ -332,78 +252,7 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::operator[](IndexType idx) const
     -> AccessReturnType_t<S> {
-  // Check marker bit to determine which vocabulary to use
-  if (idx.get() & geoVocabMarker) {
-    // The requested word is stored in the geometry vocabulary
-    uint64_t unmarkedIdx = idx.get() & geoVocabIndexMask;
-    return geoVocabulary_[unmarkedIdx];
-  } else {
-    // The requested word is stored in the vocabulary for normal words
-    AD_CONTRACT_CHECK(idx.get() <= maxWordIndex);
-    return vocabulary_[idx.get()];
-  }
-}
-
-// _____________________________________________________________________________
-template <class S, class C, typename I>
-Vocabulary<S, C, I>::WordWriter::WordWriter(
-    const VocabularyWithUnicodeComparator& vocabulary,
-    const std::string& filename)
-    : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
-          filename)},
-      underlyingGeoWordWriter_{
-          vocabulary.getUnderlyingVocabulary().makeDiskWriter(
-              filename + geoVocabSuffix)} {};
-
-// _____________________________________________________________________________
-template <class S, class C, typename I>
-uint64_t Vocabulary<S, C, I>::WordWriter::operator()(std::string_view word,
-                                                     bool isExternal) {
-  if (stringIsGeoLiteral(word)) {
-    // The word to be stored in the vocabulary is a geometry literal. It
-    // needs to be written to the dedicated geometry vocabulary and get an
-    // index with the marker bit set to 1.
-    uint64_t index;
-    // TODO<ullingerc> Remove type check as soon as word writers have a unified
-    // signature.
-    if constexpr (std::is_same_v<S, CompressedString>) {
-      index = underlyingGeoWordWriter_(word, isExternal);
-    } else {
-      index = underlyingGeoWordWriter_(word);
-    }
-    AD_CONTRACT_CHECK(index <= maxWordIndex);
-    return makeGeoVocabIndex(index);
-  } else {
-    // We have any other word: it goes to the normal vocabulary.
-    uint64_t index;
-    // TODO<ullingerc> Remove type check as soon as word writers have a unified
-    // signature.
-    if constexpr (std::is_same_v<S, CompressedString>) {
-      index = underlyingWordWriter_(word, isExternal);
-    } else {
-      index = underlyingWordWriter_(word);
-    }
-    AD_CONTRACT_CHECK(index <= maxWordIndex);
-    return index;
-  }
-}
-
-// _____________________________________________________________________________
-template <class S, class C, typename I>
-void Vocabulary<S, C, I>::WordWriter::finish() {
-  underlyingWordWriter_.finish();
-  underlyingGeoWordWriter_.finish();
-}
-
-// _____________________________________________________________________________
-template <class S, class C, typename I>
-std::string& Vocabulary<S, C, I>::WordWriter::readableName() {
-  if constexpr (std::is_same_v<S, CompressedString>) {
-    return underlyingWordWriter_.readableName();
-  }
-  // TODO<ullingerc> Remove this dummy as soon as possible.
-  static std::string dummy;
-  return dummy;
+  return vocabulary_[idx.get()];
 }
 
 // Explicit template instantiations
