@@ -9,16 +9,19 @@
 #include "util/Log.h"
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-uint64_t SplitVocabulary<M, S, SF, SFN>::makeSpecialVocabIndex(
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::makeSpecialVocabIndex(
     uint64_t vocabIndex) {
   AD_CORRECTNESS_CHECK(vocabIndex < maxVocabIndex);
   return vocabIndex | specialVocabMarker;
 }
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-void SplitVocabulary<M, S, SF, SFN>::readFromFile(const string& filename) {
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
+    const string& filename) {
   auto readSingle = [](auto& vocab, const string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
@@ -32,25 +35,21 @@ void SplitVocabulary<M, S, SF, SFN>::readFromFile(const string& filename) {
   readSingle(underlyingSpecial_, fnSpecial);
 }
 
+// //
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-decltype(auto) SplitVocabulary<M, S, SF, SFN>::operator[](uint64_t idx) const {
-  // Check marker bit to determine which vocabulary to use
-  if (idx & specialVocabMarker) {
-    // The requested word is stored in the special vocabulary
-    uint64_t unmarkedIdx = idx & specialVocabIndexMask;
-    return underlyingSpecial_[unmarkedIdx];
-  } else {
-    // The requested word is stored in the vocabulary for normal words
-    AD_CONTRACT_CHECK(idx <= maxVocabIndex);
-    return underlyingMain_[idx];
-  }
-}
+// template <typename ST, typename CT, typename IT, class M, class S,
+// const auto &SF,
+//     const auto &SFN >
+// decltype(auto) SplitVocabulary<ST, CT, IT, M, S, SF,
+// SFN>::operator[](uint64_t idx) const
+// {
+// }
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-SplitVocabulary<M, S, SF, SFN>::WordWriter::WordWriter(
-    const SplitVocabulary<M, S, SF, SFN>& vocabulary,
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
+    const SplitVocabulary<ST, CT, IT, M, S, SF, SFN>& vocabulary,
     const std::string& filename)
     : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
           SFN(filename).at(0))},
@@ -59,8 +58,9 @@ SplitVocabulary<M, S, SF, SFN>::WordWriter::WordWriter(
               SFN(filename).at(1))} {};
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-uint64_t SplitVocabulary<M, S, SF, SFN>::WordWriter::operator()(
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::operator()(
     std::string_view word, bool isExternal) {
   if (SF(word)) {
     // The word to be stored in the vocabulary is selected by the split function
@@ -77,56 +77,30 @@ uint64_t SplitVocabulary<M, S, SF, SFN>::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-void SplitVocabulary<M, S, SF, SFN>::WordWriter::finish() {
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::finish() {
   underlyingWordWriter_.finish();
   underlyingSpecialWordWriter_.finish();
 }
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-void SplitVocabulary<M, S, SF, SFN>::createFromSet(
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
   // TODO
-  LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  underlyingMain_.close();
-  underlyingSpecial_.close();
-
-  // Split words depending on whether they should be stored in the normal or
-  // geometry vocabulary
-  std::vector<std::string> words;
-  std::vector<std::string> geoWords;
-  for (const auto& word : set) {
-    if (SF(word)) {
-      geoWords.push_back(word);
-    } else {
-      words.push_back(word);
-    }
-  }
-
-  auto totalComparison = [this](const auto& a, const auto& b) {
-    return getCaseComparator()(a, b, SortLevel::TOTAL);
-  };
-  auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
-                                       std::vector<std::string>& words,
-                                       const std::string& filename) {
-    std::sort(begin(words), end(words), totalComparison);
-    vocab.build(words, filename);
-  };
-  buildSingle(vocabulary_, words, filename);
-  buildSingle(geoVocabulary_, geoWords, filename + geoVocabSuffix);
-
-  LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
 // _____________________________________________________________________________
-template <class M, class S, const auto& SF, const auto& SFN>
-bool SplitVocabulary<M, S, SF, SFN>::getId(std::string_view word,
-                                           uint64_t* idx) const {
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
+                                                       uint64_t* idx) const {
   // Helper lambda to lookup a the word in a given vocabulary.
   auto checkWord = [&word, &idx](const auto& vocab) -> bool {
     // We need the TOTAL level because we want the unique word.
-    auto wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
+    auto wordAndIndex = vocab.lower_bound(word, CT::Level::TOTAL);
     if (wordAndIndex.isEnd()) {
       return false;
     }

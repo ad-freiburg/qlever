@@ -21,7 +21,8 @@ using SplitFunctionT = const std::function<bool(std::string_view)>&;
 using SplitFilenameFunctionT =
     const std::function<std::array<std::string, 2>(std::string)>&;
 
-template <class MainVocabulary, class SpecialVocabulary,
+template <typename StringType, typename ComparatorType, typename IndexT,
+          class MainVocabulary, class SpecialVocabulary,
           const auto& SplitFunction, const auto& SplitFilenameFunction>
 class SplitVocabulary {
  private:
@@ -44,26 +45,53 @@ class SplitVocabulary {
     return static_cast<bool>(index & specialVocabMarker);
   }
 
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeWordWriter(filename);
+    for (const auto& word : words) {
+      writer(word, true);  // isExternal?
+    }
+    writer.finish();
+    open(filename);
+  }
+
+  void close() {
+    underlyingMain_.close();
+    underlyingSpecial_.close();
+  }
+
   // Read the vocabulary from files.
   void readFromFile(const std::string& filename);
 
-  decltype(auto) operator[](uint64_t id) const;
+  decltype(auto) operator[](uint64_t idx) const {
+    // Check marker bit to determine which vocabulary to use
+    if (idx & specialVocabMarker) {
+      // The requested word is stored in the special vocabulary
+      uint64_t unmarkedIdx = idx & specialVocabIndexMask;
+      return underlyingSpecial_[unmarkedIdx];
+    } else {
+      // The requested word is stored in the vocabulary for normal words
+      AD_CONTRACT_CHECK(idx <= maxVocabIndex);
+      return underlyingMain_[idx];
+    }
+  }
 
   [[nodiscard]] uint64_t size() const {
     return underlyingMain_.size() + underlyingSpecial_.size();
   }
 
-  // TODO
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
+    // TODO
     return underlyingMain_.lower_bound(word, comparator);
   }
 
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    return underlyingSpecial_.upper_bound(word, comparator);
+    // TODO
+    return underlyingMain_.upper_bound(word, comparator);
   }
 
   MainVocabulary& getUnderlyingMainVocabulary() { return underlyingMain_; }
@@ -92,7 +120,8 @@ class SplitVocabulary {
 
    public:
     WordWriter(
-        const SplitVocabulary<MainVocabulary, SpecialVocabulary, SplitFunction,
+        const SplitVocabulary<StringType, ComparatorType, IndexT,
+                              MainVocabulary, SpecialVocabulary, SplitFunction,
                               SplitFilenameFunction>& vocabulary,
         const std::string& filename);
 
@@ -131,9 +160,10 @@ const auto geoFilenameFunc =
   return {base, base + ".geometry"};
 };
 
-template <class UnderlyingVocabulary>
+template <typename StringType, typename ComparatorType, typename IndexT,
+          class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<UnderlyingVocabulary, UnderlyingVocabulary, geoSplitFunc,
-                    geoFilenameFunc>;
+    SplitVocabulary<StringType, ComparatorType, IndexT, UnderlyingVocabulary,
+                    UnderlyingVocabulary, geoSplitFunc, geoFilenameFunc>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

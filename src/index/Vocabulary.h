@@ -117,9 +117,11 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
-  using UnderlyingVocabulary = SplitGeoVocabulary<std::conditional_t<
-      isCompressed_, CompressedVocabulary<VocabularyInternalExternal>,
-      VocabularyInMemory>>;
+  using UnderlyingVocabulary = SplitGeoVocabulary<
+      StringType, ComparatorType, IndexT,
+      std::conditional_t<isCompressed_,
+                         CompressedVocabulary<VocabularyInternalExternal>,
+                         VocabularyInMemory>>;
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
