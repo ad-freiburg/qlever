@@ -6,6 +6,8 @@
 #ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 #define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
 
+#include <absl/hash/hash.h>
+
 #include <functional>
 #include <memory>
 
@@ -70,14 +72,10 @@ struct TransitivePathSide {
 
 // We deliberately use the `std::` variants of a hash set and hash map because
 // `absl`s types are not exception safe.
-struct HashId {
-  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
-};
-
-using Set = std::unordered_set<Id, HashId, std::equal_to<Id>,
+using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
 using Map = std::unordered_map<
-    Id, Set, HashId, std::equal_to<Id>,
+    Id, Set, absl::Hash<Id>, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
 // Helper struct, that allows a generator to yield a a node and all its

@@ -8,10 +8,9 @@
 
 #include <memory>
 
-#include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorWithLimit.h"
 
 /**
  * @class HashMapWrapper
