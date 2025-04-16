@@ -75,7 +75,17 @@ void Vocabulary<S, C, I>::createFromSet(
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  vocabulary_.build(words, filename);
+  auto writerPtr = makeWordWriterPtr(filename);
+  auto writeWords = [&writer = *writerPtr](std::string_view word) {
+    // All words are stored in the internal vocab (this is consistent with the
+    // previous behavior). NOTE: This function is currently only used for the
+    // text index and for few unit tests, where we don't have an external
+    // vocabulary anyway.
+    writer(word, false);
+  };
+  ql::ranges::for_each(words, writeWords);
+  writerPtr->finish();
+  vocabulary_.open(filename);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 

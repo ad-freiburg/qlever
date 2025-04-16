@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 
 #include <fstream>
 
@@ -23,8 +23,8 @@ OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   AD_CONTRACT_CHECK(idx < size());
   auto offsetAndSize = getOffsetAndSize(idx);
-  string result(offsetAndSize._size, '\0');
-  file_.read(result.data(), offsetAndSize._size, offsetAndSize._offset);
+  string result(offsetAndSize.size_, '\0');
+  file_.read(result.data(), offsetAndSize.size_, offsetAndSize.offset_);
   return result;
 }
 
@@ -90,7 +90,7 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 void VocabularyOnDisk::buildFromStringsAndIds(
     const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
     const std::string& fileName) {
-  return buildFromIterable(wordsAndIds, fileName);
+  buildFromIterable(wordsAndIds, fileName);
 }
 
 // _____________________________________________________________________________
