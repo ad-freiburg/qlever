@@ -1,6 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #ifndef QLEVER_SRC_GLOBAL_PATTERN_H
 #define QLEVER_SRC_GLOBAL_PATTERN_H
@@ -20,14 +21,10 @@
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
-#include "util/UninitializedAllocator.h"
-
-typedef uint32_t PatternID;
-
-static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
 
 /**
  * @brief This represents a set of relations of a single entity.
@@ -36,36 +33,9 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        that a set of entities has (e.g. for autocompletion of relations
  *        while writing a query).
  */
-struct Pattern {
-  using value_type = Id;
-  using ref = value_type&;
-  using const_ref = const value_type&;
-
-  ref operator[](const size_t pos) { return _data[pos]; }
-  const_ref operator[](const size_t pos) const { return _data[pos]; }
-
-  using const_iterator = ad_utility::IteratorForAccessOperator<
-      Pattern, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::True>;
-
-  const_iterator begin() const { return {this, 0}; }
-
-  const_iterator end() const { return {this, size()}; }
-
-  bool operator==(const Pattern& other) const = default;
-
-  size_t size() const { return _data.size(); }
-
-  void push_back(value_type i) { _data.push_back(i); }
-
-  void clear() { _data.clear(); }
-
-  const_ref back() const { return _data.back(); }
-  ref back() { return _data.back(); }
-  bool empty() const { return _data.empty(); }
-
-  const value_type* data() const { return _data.data(); }
-
-  std::vector<value_type> _data;
+struct Pattern : std::vector<Id> {
+  using PatternId = int32_t;
+  static constexpr PatternId NoPattern = std::numeric_limits<PatternId>::max();
 };
 
 namespace detail {
@@ -115,19 +85,19 @@ class CompactVectorOfStrings {
     static_assert(
         ad_utility::SimilarTo<decltype(*(input.begin()->begin())), data_type>);
     // Also make room for the end offset of the last element.
-    _offsets.reserve(input.size() + 1);
+    offsets_.reserve(input.size() + 1);
     size_t dataSize = 0;
     for (const auto& element : input) {
-      _offsets.push_back(dataSize);
+      offsets_.push_back(dataSize);
       dataSize += element.size();
     }
     // The last offset is the offset right after the last element.
-    _offsets.push_back(dataSize);
+    offsets_.push_back(dataSize);
 
-    _data.reserve(dataSize);
+    data_.reserve(dataSize);
 
     for (const auto& el : input) {
-      _data.insert(_data.end(), el.begin(), el.end());
+      data_.insert(data_.end(), el.begin(), el.end());
     }
   }
 
@@ -139,9 +109,9 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
-  size_t size() const { return ready() ? _offsets.size() - 1 : 0; }
+  size_t size() const { return ready() ? offsets_.size() - 1 : 0; }
 
-  bool ready() const { return !_offsets.empty(); }
+  bool ready() const { return !offsets_.empty(); }
 
   /**
    * @brief operator []
@@ -150,9 +120,9 @@ class CompactVectorOfStrings {
    *         elements stored at the pointers target.
    */
   const value_type operator[](size_t i) const {
-    offset_type offset = _offsets[i];
-    const data_type* ptr = _data.data() + offset;
-    size_t size = _offsets[i + 1] - offset;
+    offset_type offset = offsets_[i];
+    const data_type* ptr = data_.data() + offset;
+    size_t size = offsets_[i + 1] - offset;
     return {ptr, size};
   }
 
@@ -171,13 +141,13 @@ class CompactVectorOfStrings {
 
   // Allow serialization via the ad_utility::serialization interface.
   AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
-    serializer | arg._data;
-    serializer | arg._offsets;
+    serializer | arg.data_;
+    serializer | arg.offsets_;
   }
 
  private:
-  std::vector<data_type> _data;
-  std::vector<offset_type> _offsets;
+  std::vector<data_type> data_;
+  std::vector<offset_type> offsets_;
 };
 
 namespace detail {
@@ -185,66 +155,100 @@ namespace detail {
 // file.
 template <typename data_type>
 struct CompactStringVectorWriter {
-  ad_utility::File _file;
-  off_t _startOfFile;
+ private:
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
-  std::vector<offset_type> _offsets;
-  bool _finished = false;
-  offset_type _nextOffset = 0;
 
+  // The data members are encapsulated in a separate struct to make the
+  // definition of the move-assignment operator easier. NOTE: If you add
+  // additional data members to this class, add them inside the `Data` struct.
+  struct Data {
+    ad_utility::File file_;
+    off_t startOfFile_{};
+    std::vector<offset_type> offsets_{};
+    // A `CompactStringVectorWriter` that has been moved from may not call
+    // `finish()` any more in its destructor.
+    ad_utility::ResetWhenMoved<bool, true> finished_ = false;
+    offset_type nextOffset_ = 0;
+  };
+  Data d_;
+  static_assert(std::is_nothrow_move_assignable_v<Data>);
+  static_assert(std::is_nothrow_move_constructible_v<Data>);
+
+ public:
   explicit CompactStringVectorWriter(const std::string& filename)
-      : _file{filename, "w"} {
+      : d_{{filename, "w"}} {
     commonInitialization();
   }
 
   explicit CompactStringVectorWriter(ad_utility::File&& file)
-      : _file{std::move(file)} {
+      : d_{std::move(file)} {
     commonInitialization();
   }
 
   void push(const data_type* data, size_t elementSize) {
-    AD_CONTRACT_CHECK(!_finished);
-    _offsets.push_back(_nextOffset);
-    _nextOffset += elementSize;
-    _file.write(data, elementSize * sizeof(data_type));
+    AD_CONTRACT_CHECK(!d_.finished_);
+    d_.offsets_.push_back(d_.nextOffset_);
+    d_.nextOffset_ += elementSize;
+    d_.file_.write(data, elementSize * sizeof(data_type));
   }
 
   // Finish writing, and return the moved file. If the return value is
   // discarded, then the file will be closed immediately by the destructor of
   // the `File` class.
   ad_utility::File finish() {
-    if (_finished) {
+    if (d_.finished_) {
       return {};
     }
-    _finished = true;
-    _offsets.push_back(_nextOffset);
-    _file.seek(_startOfFile, SEEK_SET);
-    _file.write(&_nextOffset, sizeof(size_t));
-    _file.seek(0, SEEK_END);
-    ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
-    f << _offsets;
+    d_.finished_ = true;
+    d_.offsets_.push_back(d_.nextOffset_);
+    d_.file_.seek(d_.startOfFile_, SEEK_SET);
+    d_.file_.write(&d_.nextOffset_, sizeof(size_t));
+    d_.file_.seek(0, SEEK_END);
+    ad_utility::serialization::FileWriteSerializer f{std::move(d_.file_)};
+    f << d_.offsets_;
     return std::move(f).file();
   }
 
   ~CompactStringVectorWriter() {
-    if (!_finished) {
-      ad_utility::terminateIfThrows(
-          [this]() { finish(); },
-          "Finishing the underlying File of a `CompactStringVectorWriter` "
-          "during destruction failed");
-    }
+    ad_utility::terminateIfThrows(
+        [this]() { finish(); },
+        "Finishing the underlying File of a `CompactStringVectorWriter` "
+        "during destruction failed");
+  }
+
+  // The copy operations would be deleted implicitly (because `File` is not
+  // copyable.
+  CompactStringVectorWriter(const CompactStringVectorWriter&) = delete;
+  CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
+      delete;
+
+  // The defaulted move constructor behave correctly because of the usage
+  // of `ResetWhenMoved` with the `finished` member.
+  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
+
+  // The move assignment first has to `finish` the current object, which already
+  // might have been written to.
+  CompactStringVectorWriter& operator=(
+      CompactStringVectorWriter&& other) noexcept {
+    finish();
+    d_ = std::move(other.d_);
+    return *this;
   }
 
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
-    AD_CONTRACT_CHECK(_file.isOpen());
-    // We don't known the data size yet.
-    _startOfFile = _file.tell();
+    AD_CORRECTNESS_CHECK(d_.file_.isOpen());
+    // We don't know the data size yet.
+    d_.startOfFile_ = d_.file_.tell();
     size_t dataSizeDummy = 0;
-    _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    d_.file_.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 };
+static_assert(
+    std::is_nothrow_move_assignable_v<CompactStringVectorWriter<char>>);
+static_assert(
+    std::is_nothrow_move_constructible_v<CompactStringVectorWriter<char>>);
 }  // namespace detail
 
 // Forward iterator for a `CompactVectorOfStrings` that reads directly from
@@ -284,15 +288,14 @@ CompactVectorOfStrings<DataT>::diskIterator(string filename) {
   }
 }
 
-namespace std {
+// Hashing support for the `Pattern` class.
 template <>
-struct hash<Pattern> {
-  std::size_t operator()(const Pattern& p) const {
+struct std::hash<Pattern> {
+  std::size_t operator()(const Pattern& p) const noexcept {
     std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p._data.data()), sizeof(Id) * p.size());
+        reinterpret_cast<const char*>(p.data()), sizeof(Id) * p.size());
     return hash<std::string_view>()(s);
   }
 };
-}  // namespace std
 
 #endif  // QLEVER_SRC_GLOBAL_PATTERN_H

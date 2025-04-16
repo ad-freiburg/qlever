@@ -424,7 +424,7 @@ TEST(IndexScan, additionalColumn) {
   // <x> is the only subject, so it has pattern 0, <z> doesn't appear as a
   // subject, so it has no pattern.
   auto exp = makeIdTableFromVector(
-      {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
+      {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
 
