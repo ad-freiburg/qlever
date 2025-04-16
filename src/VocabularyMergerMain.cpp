@@ -20,11 +20,11 @@ int main(int argc, char** argv) {
 
   auto file = ad_utility::makeOfstream(basename + VOCAB_SUFFIX);
   uint64_t count = 0;
-  auto wordCallback = [&file, &count](const auto& word,
-                                      [[maybe_unused]] bool isExternal) {
+  auto wordCallback = [&file, &count](
+                          const auto& word,
+                          [[maybe_unused]] bool isExternalDummy = true) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    count++;
-    return count - 1;
+    return count++;
   };
 
   VocabularyOnDisk vocab;

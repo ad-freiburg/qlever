@@ -160,8 +160,7 @@ CPP_template(typename UnderlyingVocabulary,
       if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
-      counter_++;
-      return counter_ - 1;
+      return counter_++;
     }
 
     /// Dump all the words that still might be contained in intermediate buffers
