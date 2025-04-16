@@ -109,7 +109,7 @@ class PolymorphicVocabulary {
     void finish();
 
     // Write the next word to the vocabulary.
-    void operator()(std::string_view word, bool isExternal);
+    uint64_t operator()(std::string_view word, bool isExternal);
   };
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`

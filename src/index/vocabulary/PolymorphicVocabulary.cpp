@@ -43,9 +43,9 @@ void PolymorphicVocabulary::WordWriter::finish() {
 }
 
 // _____________________________________________________________________________
-void PolymorphicVocabulary::WordWriter::operator()(std::string_view word,
-                                                   bool isExternal) {
-  std::visit(
+uint64_t PolymorphicVocabulary::WordWriter::operator()(std::string_view word,
+                                                       bool isExternal) {
+  return std::visit(
       [&word, isExternal](auto& writer) { return (*writer)(word, isExternal); },
       writer_);
 }
