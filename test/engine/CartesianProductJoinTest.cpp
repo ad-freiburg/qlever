@@ -4,13 +4,13 @@
 
 #include <gmock/gmock.h>
 
-#include "../engine/ValuesForTesting.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;

@@ -8,6 +8,7 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -55,6 +56,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               std::optional<T>*, int) {
   // First parse as a T
   T* dummy = nullptr;
+  using namespace boost::program_options;
   validate(v, values, dummy, 0);
 
   // Wrap the T inside std::optional
@@ -120,6 +122,22 @@ class ParameterToProgramOptionFactory {
         ->notifier(setParameterToValue);
   }
 };
+
+// This function is required  to use `VocabularyEnum` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     VocabularyType*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = VocabularyType::fromString(s);
+}
 
 }  // namespace ad_utility
 

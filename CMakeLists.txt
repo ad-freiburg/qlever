@@ -213,6 +213,11 @@ if (${USE_CPP_17_BACKPORTS})
     add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
 endif()
 
+set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
+if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
+    add_definitions("-D_QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY")
+endif ()
+
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
@@ -421,6 +426,7 @@ add_subdirectory(src/index)
 add_subdirectory(src/util)
 add_subdirectory(src/global)
 add_subdirectory(benchmark)
+add_subdirectory(src/libqlever)
 
 enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
@@ -435,7 +441,7 @@ add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
+qlever_target_link_libraries(ServerMain engine server ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)

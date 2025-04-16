@@ -8,12 +8,12 @@
 #include <random>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../test/engine/ValuesForTesting.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/IndexTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
