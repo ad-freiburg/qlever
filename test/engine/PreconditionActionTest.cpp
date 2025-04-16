@@ -11,13 +11,13 @@
 
 // _____________________________________________________________________________
 TEST(PreconditionAction, basicFunctionality) {
-  EXPECT_TRUE(PreconditionAction::ALREADY_SATISFIED.isAlreadySatisfied());
-  EXPECT_FALSE(PreconditionAction::ALREADY_SATISFIED.isNotSatisfiable());
+  EXPECT_TRUE(PreconditionAction::ALREADY_SATISFIED.isImplicitlySatisfied());
+  EXPECT_FALSE(PreconditionAction::ALREADY_SATISFIED.mustBeSatisfiedExternally());
   EXPECT_THROW(
       PreconditionAction{PreconditionAction::ALREADY_SATISFIED}.getTree(),
       ad_utility::Exception);
-  EXPECT_TRUE(PreconditionAction::NOT_SATISFIABLE.isNotSatisfiable());
-  EXPECT_FALSE(PreconditionAction::NOT_SATISFIABLE.isAlreadySatisfied());
+  EXPECT_TRUE(PreconditionAction::NOT_SATISFIABLE.mustBeSatisfiedExternally());
+  EXPECT_FALSE(PreconditionAction::NOT_SATISFIABLE.isImplicitlySatisfied());
   EXPECT_THROW(
       PreconditionAction{PreconditionAction::NOT_SATISFIABLE}.getTree(),
       ad_utility::Exception);
@@ -27,7 +27,7 @@ TEST(PreconditionAction, basicFunctionality) {
                qec, IdTable{0, qec->getAllocator()},
                std::vector<std::optional<Variable>>{}));
   PreconditionAction action{tree};
-  EXPECT_FALSE(action.isNotSatisfiable());
-  EXPECT_FALSE(action.isAlreadySatisfied());
+  EXPECT_FALSE(action.mustBeSatisfiedExternally());
+  EXPECT_FALSE(action.isImplicitlySatisfied());
   EXPECT_EQ(tree, std::move(action).getTree());
 }

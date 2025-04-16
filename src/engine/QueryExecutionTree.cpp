@@ -173,10 +173,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   PreconditionAction state =
       qet->getRootOperation()->createSortedClone(sortColumns);
 
-  if (state.isAlreadySatisfied()) {
+  if (state.isImplicitlySatisfied()) {
     return qet;
   }
-  if (state.isNotSatisfiable()) {
+  if (state.mustBeSatisfiedExternally()) {
     auto* qec = qet->getRootOperation()->getExecutionContext();
     auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
     return std::make_shared<QueryExecutionTree>(qec, std::move(sort));

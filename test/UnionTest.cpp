@@ -539,8 +539,8 @@ TEST(Union, createSortedVariantWorksProperly) {
   {
     qec->getQueryTreeCache().clearAll();
     auto action = unionOperation.createSortedClone({0, 1, 2, 3});
-    ASSERT_FALSE(action.isAlreadySatisfied());
-    ASSERT_FALSE(action.isNotSatisfiable());
+    ASSERT_FALSE(action.isImplicitlySatisfied());
+    ASSERT_FALSE(action.mustBeSatisfiedExternally());
     auto variant = std::move(action).getTree()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 1, 2, 3}));
@@ -558,8 +558,8 @@ TEST(Union, createSortedVariantWorksProperly) {
   {
     qec->getQueryTreeCache().clearAll();
     auto action = unionOperation.createSortedClone({0, 3, 1, 2});
-    ASSERT_FALSE(action.isAlreadySatisfied());
-    ASSERT_FALSE(action.isNotSatisfiable());
+    ASSERT_FALSE(action.isImplicitlySatisfied());
+    ASSERT_FALSE(action.mustBeSatisfiedExternally());
     auto variant = std::move(action).getTree()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 3, 1, 2}));
@@ -577,7 +577,7 @@ TEST(Union, createSortedVariantWorksProperly) {
   {
     qec->getQueryTreeCache().clearAll();
     auto action = unionOperation.createSortedClone({});
-    ASSERT_TRUE(action.isAlreadySatisfied());
+    ASSERT_TRUE(action.isImplicitlySatisfied());
   }
 }
 

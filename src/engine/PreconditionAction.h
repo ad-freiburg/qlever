@@ -14,19 +14,26 @@
 class QueryExecutionTree;
 
 // Represent how a precondition of an operation can be satisfied.
+// `isImplicitlySatisfied()` will return true if the `Operation` in question is
+// already naturally fulfilling the requested requirement.
+// `mustBeSatisfiedExternally()` will return true if the `Operation` cannot
+// fulfil the requirement on its own and needs external support.
+// These two cases are mutually exclusive. If both options are false, the
+// operation created a query execution tree that represents a modification of
+// itself that can fulfil the requirement.
 class PreconditionAction {
-  class AlreadySatisfied {};
-  class NotSatisfiable {};
+  class ImplicitlySatisfied {};
+  class MustBeSatisfiedExternally {};
 
   // Hold the underlying state, or an alternative tree that satisfies the
   // condition.
-  std::variant<AlreadySatisfied, NotSatisfiable,
+  std::variant<ImplicitlySatisfied, MustBeSatisfiedExternally,
                std::shared_ptr<QueryExecutionTree>>
       value_;
 
   // Construct exclusively from the two tags.
-  explicit PreconditionAction(const AlreadySatisfied& tag) : value_{tag} {}
-  explicit PreconditionAction(const NotSatisfiable& tag) : value_{tag} {}
+  explicit PreconditionAction(ImplicitlySatisfied tag) : value_{tag} {}
+  explicit PreconditionAction(MustBeSatisfiedExternally tag) : value_{tag} {}
 
  public:
   // Copy and move constructors and assignment operators are defaulted.
@@ -43,14 +50,14 @@ class PreconditionAction {
   explicit PreconditionAction(std::shared_ptr<QueryExecutionTree> tree)
       : value_{std::move(tree)} {}
 
-  // Check if the precondition is already satisfied.
-  bool isAlreadySatisfied() const {
-    return std::holds_alternative<AlreadySatisfied>(value_);
+  // Check if the precondition is already implicitly satisfied.
+  bool isImplicitlySatisfied() const {
+    return std::holds_alternative<ImplicitlySatisfied>(value_);
   }
 
-  // Check if the precondition is not satisfiable.
-  bool isNotSatisfiable() const {
-    return std::holds_alternative<NotSatisfiable>(value_);
+  // Check if the precondition cannot be satisfied by the operation on its own.
+  bool mustBeSatisfiedExternally() const {
+    return std::holds_alternative<MustBeSatisfiedExternally>(value_);
   }
 
   // Get the tree that satisfies the precondition.
@@ -62,8 +69,8 @@ class PreconditionAction {
 };
 
 const inline PreconditionAction PreconditionAction::ALREADY_SATISFIED =
-    PreconditionAction{AlreadySatisfied{}};
+    PreconditionAction{ImplicitlySatisfied{}};
 const inline PreconditionAction PreconditionAction::NOT_SATISFIABLE =
-    PreconditionAction{NotSatisfiable{}};
+    PreconditionAction{MustBeSatisfiedExternally{}};
 
 #endif  // PRECONDITIONACTION_H

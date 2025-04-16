@@ -179,11 +179,11 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0});
-    EXPECT_TRUE(sort.createSortedClone({0}).isAlreadySatisfied());
-    EXPECT_TRUE(sort.createSortedClone({}).isAlreadySatisfied());
+    EXPECT_TRUE(sort.createSortedClone({0}).isImplicitlySatisfied());
+    EXPECT_TRUE(sort.createSortedClone({}).isImplicitlySatisfied());
     auto clone = sort.createSortedClone({0, 1});
-    EXPECT_FALSE(clone.isAlreadySatisfied());
-    EXPECT_FALSE(clone.isNotSatisfiable());
+    EXPECT_FALSE(clone.isImplicitlySatisfied());
+    EXPECT_FALSE(clone.mustBeSatisfiedExternally());
     // Check that we don't double sort
     auto operation = std::move(clone).getTree();
     const auto& childReference =
@@ -195,8 +195,8 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0, 1});
     auto clone = sort.createSortedClone({1, 0});
-    EXPECT_FALSE(clone.isAlreadySatisfied());
-    EXPECT_FALSE(clone.isNotSatisfiable());
+    EXPECT_FALSE(clone.isImplicitlySatisfied());
+    EXPECT_FALSE(clone.mustBeSatisfiedExternally());
     // Check that we don't double sort
     auto operation = std::move(clone).getTree();
     const auto& childReference =

@@ -79,10 +79,10 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 PreconditionAction Sort::createSortedClone(
     const vector<ColumnIndex>& sortColumns) const {
   auto result = Operation::createSortedClone(sortColumns);
-  if (result.isAlreadySatisfied()) {
+  if (result.isImplicitlySatisfied()) {
     return result;
   }
-  AD_CORRECTNESS_CHECK(result.isNotSatisfiable());
+  AD_CORRECTNESS_CHECK(result.mustBeSatisfiedExternally());
   AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
                   "with `Sort` with a different sort order. This is "
                   "indicates a flaw during query planning."
