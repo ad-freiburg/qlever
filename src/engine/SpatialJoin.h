@@ -175,6 +175,11 @@ class SpatialJoin : public Operation {
     return config_.joinType_;
   }
 
+  // retrieve the variables the spatial join is joining on
+  std::pair<Variable, Variable> getSpatialJoinVariables() const {
+    return {config_.left_, config_.right_};
+  }
+
   // get the boolean flag if this spatial join operation is used to substitute a
   // GeoSPARQL filter operation
   bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }

@@ -11,6 +11,7 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -1322,14 +1323,26 @@ void QueryPlanner::applyFiltersIfPossible(
                              })) {
         // Apply filter substitution
         auto jcs = getJoinColumns(filters[i].second.value(), plan);
-        for (auto& newPlan :
-             createJoinCandidates(filters[i].second.value(), plan, jcs)) {
+        // QueryPlanner::JoinColumns jcs2;
+        // for (auto x : filters[i].first.expression_.containedVariables()) {
+        //   if (filters[i].second.value()._qet->isVariableCovered(*x) &&
+        //       plan._qet->isVariableCovered(*x)) {
+        //     jcs2.push_back(std::array<ColumnIndex, 2>{
+        //         filters[i].second.value()._qet->getVariableColumn(*x),
+        //         plan._qet->getVariableColumn(*x)});
+        //   }
+        // }
+        auto substPlans =
+            createJoinCandidates(filters[i].second.value(), plan, jcs);
+        for (auto& newPlan : substPlans) {
           newPlan._idsOfIncludedFilters |= plan._idsOfIncludedFilters;
           newPlan._idsOfIncludedNodes |= plan._idsOfIncludedNodes;
           newPlan.type = plan.type;
           addedPlans.push_back(newPlan);
         }
+        // if (substPlans.size()) {
         continue;
+        // }
       }
 
       if (ql::ranges::all_of(filters[i].first.expression_.containedVariables(),
@@ -2235,6 +2248,10 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
+  // auto [left, right] = spatialJoin->getSpatialJoinVariables();
+  // if (var != left && var != right) {
+  //   return std::nullopt;
+  // }
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
