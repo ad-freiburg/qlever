@@ -153,11 +153,31 @@ ExpressionPtr Visitor::processIriFunctionCall(
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
+  // Create `SparqlExpression` with two or three children (currently used for
+  // backward-compatible geof:distance function)
+  auto createBinaryOrTernary =
+      CPP_template_lambda(&argList)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                         ExpressionPtr,
+                                         std::optional<ExpressionPtr>>) {
+    if (argList.size() == 2) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::nullopt);
+    } else if (argList.size() == 3) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::move(argList[2]));
+    } else {
+      AD_THROW(
+          "Incorrect number of arguments: two or optionally three required");
+    }
+  };
 
   // Geo functions.
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
-      return createBinary(&makeDistExpression);
+      return createBinaryOrTernary(&makeDistWithUnitExpression);
+    } else if (functionName == "metricDistance") {
+      return createBinary(&makeMetricDistExpression);
     } else if (functionName == "longitude") {
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {

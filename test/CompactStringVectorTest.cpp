@@ -1,8 +1,6 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -11,9 +9,13 @@
 
 #include "global/Pattern.h"
 
+namespace {
 std::vector<std::string> strings{"alpha", "b", "3920193",
                                  "<Qlever-internal-langtag>"};
+std::vector<std::string> strings1{"bi", "ba", "12butzemann",
+                                  "<Qlever-internal-langtag>"};
 std::vector<std::vector<int>> ints{{1, 2, 3}, {42}, {6, 5, -4, 96}, {-38, 0}};
+std::vector<std::vector<int>> ints1{{1}, {42, 19}, {6, 5, -4, 96}, {-38, 4, 7}};
 
 auto iterablesEqual(const auto& a, const auto& b) {
   ASSERT_EQ(a.size(), b.size());
@@ -22,8 +24,7 @@ auto iterablesEqual(const auto& a, const auto& b) {
   }
 }
 
-static auto vectorsEqual = [](const auto& compactVector,
-                              const auto& compareVector) {
+auto vectorsEqual = [](const auto& compactVector, const auto& compareVector) {
   ASSERT_EQ(compactVector.size(), compareVector.size());
   for (size_t i = 0; i < compactVector.size(); ++i) {
     using value_type =
@@ -35,6 +36,7 @@ static auto vectorsEqual = [](const auto& compactVector,
 
 using CompactVectorChar = CompactVectorOfStrings<char>;
 using CompactVectorInt = CompactVectorOfStrings<int>;
+}  // namespace
 
 TEST(CompactVectorOfStrings, Build) {
   CompactVectorInt i;
@@ -135,6 +137,97 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
   };
   testSerializationWithPush(CompactVectorChar{}, strings);
   testSerializationWithPush(CompactVectorInt{}, ints);
+}
+
+// Test that a `CompactStringVectorWriter` can be correctly move-constructed and
+// move-assigned into an empty writer, even when writing has already started.
+TEST(CompactVectorOfStrings, MoveIntoEmptyWriter) {
+  auto testSerializationWithPush = [](const auto& v, auto& inputVector) {
+    using V = std::decay_t<decltype(v)>;
+
+    const std::string filename = "_writerTest1029348.dat";
+    {
+      // Move-assign and move-construct before pushing anything.
+      typename V::Writer writer1{filename};
+      auto writer0{std::move(writer1)};
+      writer1 = std::move(writer0);
+
+      std::optional<typename V::Writer> writer2;
+      auto* writer = &writer1;
+      size_t i = 0;
+      for (const auto& s : inputVector) {
+        if (i == 1) {
+          // Move assignment after push.
+          writer0 = std::move(*writer);
+          writer = &writer0;
+        }
+        if (i == 2) {
+          // Move construction after push.
+          writer2.emplace(std::move(*writer));
+          writer = &writer2.value();
+        }
+        writer->push(s.data(), s.size());
+        ++i;
+      }
+    }  // The constructor finishes writing the file.
+
+    V compactVector;
+    ad_utility::serialization::FileReadSerializer ser{filename};
+    ser >> compactVector;
+
+    vectorsEqual(inputVector, compactVector);
+
+    ad_utility::deleteFile(filename);
+  };
+  testSerializationWithPush(CompactVectorChar{}, strings);
+  testSerializationWithPush(CompactVectorInt{}, ints);
+}
+
+// Test the special case of move-assigning a `CompactStringVectorWriter` where
+// the target of the move has already been written to.
+TEST(CompactVectorOfStrings, MoveIntoFullWriter) {
+  auto testSerializationWithPush = [](const auto& v, const auto& input1,
+                                      const auto& input2) {
+    using V = std::decay_t<decltype(v)>;
+
+    const std::string filename = "_writerTest1029348A.dat";
+    const std::string filename2 = "_writerTest1029348B.dat";
+    {
+      // Move-assign and move-construct before pushing anything.
+      typename V::Writer writer{filename};
+      for (const auto& s : input1) {
+        writer.push(s.data(), s.size());
+      }
+
+      typename V::Writer writer2{filename2};
+      AD_CORRECTNESS_CHECK(input1.size() > 1);
+      AD_CORRECTNESS_CHECK(input2.size() > 1);
+      auto& fst = input2.at(0);
+      writer2.push(fst.data(), fst.size());
+
+      // Move the writer, both of the involved writers already have been written
+      // to.
+      writer = std::move(writer2);
+      for (size_t i = 1; i < input2.size(); ++i) {
+        auto& el = input2.at(i);
+        writer.push(el.data(), el.size());
+      }
+    }
+
+    V compactVector;
+    ad_utility::serialization::FileReadSerializer ser{filename};
+    ser >> compactVector;
+
+    vectorsEqual(input1, compactVector);
+    ad_utility::serialization::FileReadSerializer ser2{filename2};
+    ser2 >> compactVector;
+    vectorsEqual(input2, compactVector);
+
+    ad_utility::deleteFile(filename);
+    ad_utility::deleteFile(filename2);
+  };
+  testSerializationWithPush(CompactVectorChar{}, strings, strings1);
+  testSerializationWithPush(CompactVectorInt{}, ints, ints1);
 }
 
 TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
