@@ -61,9 +61,11 @@ VocabularyOnDisk::WordWriter::WordWriter(const std::string& outFilename)
                ad_utility::CreateTag{}} {}
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::WordWriter::operator()(std::string_view word) {
+uint64_t VocabularyOnDisk::WordWriter::operator()(
+    std::string_view word, [[maybe_unused]] bool isExternalDummy) {
   offsets_.push_back(currentOffset_);
   currentOffset_ += file_.write(word.data(), word.size());
+  return offsets_.size() - 1;
 }
 
 // _____________________________________________________________________________

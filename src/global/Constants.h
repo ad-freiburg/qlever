@@ -20,7 +20,6 @@ using namespace ad_utility::memory_literals;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
-constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
@@ -146,6 +145,8 @@ constexpr inline char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
+constexpr inline char XSD_ANYURI_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#anyURI";
 constexpr inline char RDF_PREFIX[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 constexpr inline char RDF_LANGTAG_STRING[] =
@@ -153,6 +154,15 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
+constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
+constexpr inline std::string_view UNIT_METER_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "M">();
+constexpr inline std::string_view UNIT_KILOMETER_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
+constexpr inline std::string_view UNIT_MILE_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";

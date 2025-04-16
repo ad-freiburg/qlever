@@ -63,15 +63,13 @@ class File {
       close();
     }
 
-    file_ = rhs.file_;
-    rhs.file_ = nullptr;
+    file_ = std::exchange(rhs.file_, nullptr);
     name_ = std::move(rhs.name_);
     return *this;
   }
 
-  File(File&& rhs) noexcept : name_{std::move(rhs.name_)}, file_{rhs.file_} {
-    rhs.file_ = nullptr;
-  }
+  File(File&& rhs) noexcept
+      : name_{std::move(rhs.name_)}, file_{std::exchange(rhs.file_, nullptr)} {}
 
   //! Destructor closes file if still open
   ~File() {

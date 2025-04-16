@@ -68,16 +68,18 @@ class VocabularyInMemory
   /// documentation of `CompactVectorOfStrings` for details.
   struct WordWriter {
     typename Words::Writer writer_;
-    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    uint64_t index_ = 0;
+    std::string readableName_ = "";
 
-    // Write a word. The `isExternalDummy` is only there to have a consistent
-    // interface with the `VocabularyInternalExternal`.
-    void operator()(std::string_view str,
-                    [[maybe_unused]] bool isExternalDummy = false) {
+    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    uint64_t operator()(std::string_view str,
+                        [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
+      return index_++;
     }
 
     void finish() { writer_.finish(); }
+    std::string& readableName() { return readableName_; }
   };
 
   // Return a `WordWriter` that directly writes the words to the given
