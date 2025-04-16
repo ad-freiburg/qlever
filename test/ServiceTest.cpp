@@ -58,13 +58,16 @@ class ServiceTest : public ::testing::Test {
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "application/sparql-results+json",
-         std::exception_ptr mockException =
-             nullptr) -> Service::GetResultFunction {
+         std::exception_ptr mockException = nullptr,
+         ad_utility::source_location loc =
+             ad_utility::source_location::current())
+      -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
                std::string_view acceptHeader) {
+      auto g = generateLocationTrace(loc);
       // Check that the request parameters are as expected.
       //
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
@@ -197,18 +200,20 @@ TEST_F(ServiceTest, computeResult) {
     // query we expect.
     std::string_view expectedUrl = "http://localhorst:80/api";
     std::string_view expectedSparqlQuery =
-        "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
+        "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
 
     // Shorthand to run computeResult with the test parameters given above.
     auto runComputeResult =
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false) -> Result {
-      Service s{testQec,
-                silent ? parsedServiceClauseSilent : parsedServiceClause,
-                getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
-                                         result, status, contentType)};
+            bool silent = false,
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) -> Result {
+      Service s{
+          testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
+          getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                   status, contentType, nullptr, loc)};
       return s.computeResultOnlyForTesting();
     };
 
@@ -266,7 +271,10 @@ TEST_F(ServiceTest, computeResult) {
     auto expectThrowOrSilence =
         [&](const std::string& result, std::string_view errorMsg,
             boost::beast::http::status status = boost::beast::http::status::ok,
-            std::string contentType = "application/sparql-results+json") {
+            std::string contentType = "application/sparql-results+json",
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) {
+          auto g = generateLocationTrace(loc);
           AD_EXPECT_THROW_WITH_MESSAGE(
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
@@ -436,7 +444,7 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
+        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
         ". ?y "
         "<is-a> ?z2 . }";
 
@@ -509,7 +517,7 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
       false};
 
   std::string_view expectedSparqlQuery =
-      " SELECT ?a WHERE { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
+      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
       "?c } } }";
 
   Service serviceOperation{
@@ -518,6 +526,25 @@ TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
                                genJsonResult({"a"}, {{"a"}}))};
 
   serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultNoVariables) {
+  parsedQuery::Service parsedServiceClause{
+      {},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ <a> <b> <c> }",
+      false};
+
+  std::string_view expectedSparqlQuery = " SELECT * { <a> <b> <c> }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({}, {{}}))};
+
   EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
 }
 
@@ -672,7 +699,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
           true},
       getResultFunctionFactory(
           "http://localhorst:80/api",
-          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json"));
 
