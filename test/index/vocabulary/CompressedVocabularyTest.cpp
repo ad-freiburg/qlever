@@ -59,10 +59,12 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
   auto writer = v.makeDiskWriter("vocabtmp.txt");
-  for (const auto& word : words) {
-    writer(word);
+  for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+    ASSERT_EQ(writer(word), static_cast<uint64_t>(i));
   }
   writer.finish();
+  writer.readableName() = "blabb";
+  EXPECT_EQ(writer.readableName(), "blabb");
 
   VocabularyInMemory simple;
   simple.open("vocabtmp.txt.words");

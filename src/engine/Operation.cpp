@@ -164,6 +164,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     if (vocabSize > 1) {
       runtimeInfo().addDetail("local-vocab-size", vocabSize);
     }
+    AD_CORRECTNESS_CHECK(result.idTable().numColumns() == getResultWidth());
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
@@ -176,6 +177,7 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
           const IdTable& idTable = pair.idTable_;
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
+          AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
           mergeStats(vocabStats, pair.localVocab_);
@@ -336,6 +338,15 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     if (result._resultPointer->resultTable().isFullyMaterialized()) {
+      AD_CORRECTNESS_CHECK(
+          result._resultPointer->resultTable().idTable().numColumns() ==
+              getResultWidth(),
+          result._cacheStatus == ad_utility::CacheStatus::computed
+              ? "This should never happen, non-matching result widths should "
+                "have been caught earlier"
+              : "Retrieved result from cache with a different number of "
+                "columns than expected. There's something wrong with the cache "
+                "key.");
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
@@ -629,6 +640,15 @@ uint64_t Operation::getSizeEstimate() {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
+
+  if (variableToColumnMap_ && externallyVisibleVariableToColumnMap_) {
+    // Make sure previously hidden variables remain hidden.
+    std::vector<Variable> visibleVariables;
+    ql::ranges::copy(getExternallyVisibleVariableColumns() | ql::views::keys,
+                     std::back_inserter(visibleVariables));
+    result->setSelectedVariablesForSubquery(visibleVariables);
+  }
+
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
     return typeid(*this) == typeid(reference);

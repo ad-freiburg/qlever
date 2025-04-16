@@ -1,6 +1,8 @@
 // Copyright 2023, University of Freiburg,
 //                 Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -107,7 +109,9 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
 
 // Test the case that multiple workers are pushing concurrently.
 TEST(ThreadSafeQueue, Concurrency) {
-  auto runTest = []<typename Queue>(Queue queue) {
+  auto runTest = [](auto queue) {
+    using Queue = decltype(queue);
+
     std::atomic<size_t> numPushed = 0;
     std::atomic<size_t> numThreadsDone = 0;
     auto push = makePush(queue);
@@ -219,7 +223,9 @@ TEST(ThreadSafeQueue, PushException) {
 
 // ________________________________________________________________
 TEST(ThreadSafeQueue, DisablePush) {
-  auto runTest = []<typename Queue>(Queue queue) {
+  auto runTest = [](auto queue) {
+    using Queue = decltype(queue);
+
     std::atomic<size_t> numPushed = 0;
     auto push = makePush(queue);
 
@@ -269,7 +275,7 @@ TEST(ThreadSafeQueue, DisablePush) {
 // worker threads as well as in the consumer threads. By `safe` we mean that the
 // program is neither terminated nor does it run into a deadlock.
 TEST(ThreadSafeQueue, SafeExceptionHandling) {
-  auto runTest = []<typename Queue>(bool workerThrows, Queue&& queue) {
+  auto runTest = [](bool workerThrows, auto&& queue) {
     auto throwingProcedure = [&]() {
       auto threadFunction = [&queue, workerThrows] {
         try {
@@ -331,16 +337,9 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
   runWithBothQueueTypes(std::bind_front(runTest, false));
 }
 
-// ________________________________________________________________
-TEST(ThreadSafeQueue, queueManager) {
-  enum class TestType {
-    producerThrows,
-    consumerThrows,
-    normalExecution,
-    consumerFinishesEarly,
-    bothThrowImmediately
-  };
-  auto runTest = []<typename Queue>(TestType testType, Queue&&) {
+struct RunQueueManagerTest {
+  template <typename TestType, typename Queue>
+  void operator()(TestType testType, Queue&&) const {
     std::atomic<size_t> numPushed = 0;
     auto task =
         [&numPushed,
@@ -359,6 +358,7 @@ TEST(ThreadSafeQueue, queueManager) {
         return std::nullopt;
       }
     };
+
     std::vector<size_t> result;
     size_t numPopped = 0;
     try {
@@ -407,11 +407,25 @@ TEST(ThreadSafeQueue, queueManager) {
     }
     // The probably most important test of all is that the destructors which are
     // run at the following closing brace never lead to a deadlock.
+  }
+};
+
+// ________________________________________________________________
+TEST(ThreadSafeQueue, queueManager) {
+  enum class TestType {
+    producerThrows,
+    consumerThrows,
+    normalExecution,
+    consumerFinishesEarly,
+    bothThrowImmediately
   };
   using enum TestType;
-  runWithBothQueueTypes(std::bind_front(runTest, consumerThrows));
-  runWithBothQueueTypes(std::bind_front(runTest, producerThrows));
-  runWithBothQueueTypes(std::bind_front(runTest, consumerFinishesEarly));
-  runWithBothQueueTypes(std::bind_front(runTest, normalExecution));
-  runWithBothQueueTypes(std::bind_front(runTest, bothThrowImmediately));
+  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, consumerThrows));
+  runWithBothQueueTypes(std::bind_front(RunQueueManagerTest{}, producerThrows));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, consumerFinishesEarly));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, normalExecution));
+  runWithBothQueueTypes(
+      std::bind_front(RunQueueManagerTest{}, bothThrowImmediately));
 }

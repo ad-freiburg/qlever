@@ -10,7 +10,7 @@
 #include "../../util/IdTableHelpers.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/StxxlSortFunctors.h"
+#include "index/ExternalSortFunctors.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;

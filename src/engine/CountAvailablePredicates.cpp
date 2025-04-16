@@ -292,7 +292,7 @@ void CountAvailablePredicates::computePatternTrick(
       // TODO<joka921> As soon as we have a better way of handling the
       // parallelism, the following block can become a simple AD_CONTRACT_CHECK.
       if (patternIndex >= patterns.size()) {
-        if (patternIndex != NO_PATTERN) {
+        if (patternIndex != Pattern::NoPattern) {
           illegalPatternIndexFound = true;
         }
         continue;
