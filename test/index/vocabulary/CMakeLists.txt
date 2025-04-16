@@ -9,3 +9,5 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 addLinkAndDiscoverTest(VocabularyInternalExternalTest vocabulary)
 
 addLinkAndDiscoverTest(VocabularyInMemoryBinSearchTest vocabulary)
+
+addLinkAndDiscoverTest(GeoVocabularyTest vocabulary)
