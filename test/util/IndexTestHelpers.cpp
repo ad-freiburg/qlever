@@ -81,7 +81,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
     if (scanResultHasPattern.numRows() == 0) {
-      EXPECT_EQ(patternIdx, NO_PATTERN) << id << ' ' << NO_PATTERN;
+      EXPECT_EQ(patternIdx, Pattern::NoPattern)
+          << id << ' ' << Pattern::NoPattern;
     } else {
       auto actualPattern = scanResultHasPattern(0, 0).getInt();
       EXPECT_EQ(patternIdx, actualPattern) << id << ' ' << actualPattern;

@@ -28,9 +28,8 @@ uint64_t VocabularyInternalExternal::WordWriter::operator()(
     internalWriter_(str, idx_);
     sinceMilestone_ = 0;
   }
-  ++idx_;
   ++sinceMilestone_;
-  return idx_ - 1;
+  return idx_++;
 }
 
 // _____________________________________________________________________________
