@@ -1885,7 +1885,7 @@ queries:
   - query: CONCAT
     type: no-text
     sparql: |
-      SELECT ?x (CONCAT("Name: ", ?x, " ", "Year: ", YEAR(?date)) as ?f) WHERE {
+      SELECT ?x (CONCAT("Name: ", STR(?x), " ", "Year: ", STR(YEAR(?date))) as ?f) WHERE {
           ?x <is-a> <Scientist> .
           ?x <Gender> <Female>  .
           ?x <Date_of_birth> ?date
@@ -1900,7 +1900,7 @@ queries:
   - query: CONCAT_WITH_GROUP_BY
     type: no-text
     sparql: |
-      SELECT ?x (CONCAT("Name: ", ?x, " ", "Year: ", SAMPLE(YEAR(?date))) as ?f) WHERE {
+      SELECT ?x (CONCAT("Name: ", STR(?x), " ", "Year: ", SAMPLE(STR(YEAR(?date)))) as ?f) WHERE {
           ?x <is-a> <Scientist> .
           ?x <Gender> <Female>  .
           ?x <Date_of_birth> ?date

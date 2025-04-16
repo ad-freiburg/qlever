@@ -24,8 +24,24 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <fly> <Rocket> .";
 
+// Return a `QueryExecutionContext` from the given `kg`(see above) that has a
+// text index for the literals in the `kg`. If specified the text index uses the
+// given wordsFileContent and docsFileContent to build the text index.
+auto qecWithTextIndex =
+    [](bool useDocsFileForVocab = false, bool addEntitiesFromWordsFile = false,
+       std::optional<string> wordsFileContent = std::nullopt,
+       std::optional<string> docsFileContent = std::nullopt) {
+      TestIndexConfig config{kg};
+      config.createTextIndex = true;
+      config.useDocsFileForVocab = useDocsFileForVocab;
+      config.addEntitiesFromWordsFile = addEntitiesFromWordsFile;
+      config.contentsOfWordsFile = wordsFileContent;
+      config.contentsOfDocsFile = docsFileContent;
+      return getQec(std::move(config));
+    };
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -56,7 +72,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
@@ -143,8 +159,7 @@ TEST(TextIndexScanForEntity, DocsFileBuildWithEntitesFromWordsFile) {
   std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
                                 createDocsFileLineAsString(7, secondDocText);
 
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, true, true,
-                    wordsFileContent, docsFileContent);
+  auto qec = qecWithTextIndex(true, true, wordsFileContent, docsFileContent);
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -182,7 +197,7 @@ TEST(TextIndexScanForEntity, DocsFileBuildWithEntitesFromWordsFile) {
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -226,7 +241,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = qecWithTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};

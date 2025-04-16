@@ -81,7 +81,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
     if (scanResultHasPattern.numRows() == 0) {
-      EXPECT_EQ(patternIdx, NO_PATTERN) << id << ' ' << NO_PATTERN;
+      EXPECT_EQ(patternIdx, Pattern::NoPattern)
+          << id << ' ' << Pattern::NoPattern;
     } else {
       auto actualPattern = scanResultHasPattern(0, 0).getInt();
       EXPECT_EQ(patternIdx, actualPattern) << id << ' ' << actualPattern;
@@ -137,27 +138,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 }
 }  // namespace
 
-// ______________________________________________________________
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput,
-                    bool loadAllPermutations, bool usePatterns,
-                    [[maybe_unused]] bool usePrefixCompression,
-                    ad_utility::MemorySize blocksizePermutations,
-                    bool createTextIndex, bool addWordsFromLiterals,
-                    bool useDocsFileForVocab, bool addEntitiesFromWordsFile,
-                    std::optional<std::string> contentsOfWordsFile,
-                    std::optional<std::string> contentsOfDocsFile,
-                    ad_utility::MemorySize parserBufferSize,
-                    std::optional<TextScoringMetric> scoringMetric,
-                    std::optional<pair<float, float>> bAndKParam,
-                    qlever::Filetype indexType) {
+// _____________________________________________________________________________
+Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   std::string inputFilename = indexBasename + ".ttl";
-  if (!turtleInput.has_value()) {
-    turtleInput =
+  if (!c.turtleInput.has_value()) {
+    c.turtleInput =
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
@@ -167,34 +156,35 @@ Index makeTestIndex(const std::string& indexBasename,
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
-    f << turtleInput.value();
+    f << c.turtleInput.value();
     f.close();
   }
   {
     std::fstream settingsFile(inputFilename + ".settings.json",
                               std::ios_base::out);
     nlohmann::json settingsJson;
-    if (!createTextIndex) {
+    if (!c.createTextIndex) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
     }
     settingsFile << settingsJson.dump();
   }
   {
-    Index index = makeIndexWithTestSettings(parserBufferSize);
+    Index index = makeIndexWithTestSettings(c.parserBufferSize);
     // This is enough for 2 triples per block. This is deliberately chosen as a
     // small value, s.t. the tiny knowledge graphs from unit tests also contain
     // multiple blocks. Should this value or the semantics of it (how many
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
-    index.blocksizePermutationsPerColumn() = blocksizePermutations;
+    index.blocksizePermutationsPerColumn() = c.blocksizePermutations;
     index.setOnDiskBase(indexBasename);
-    index.usePatterns() = usePatterns;
+    index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
-    index.loadAllPermutations() = loadAllPermutations;
-    qlever::InputFileSpecification spec{inputFilename, indexType, std::nullopt};
+    index.loadAllPermutations() = c.loadAllPermutations;
+    qlever::InputFileSpecification spec{inputFilename, c.indexType,
+                                        std::nullopt};
     index.createFromFiles({spec});
-    if (createTextIndex) {
+    if (c.createTextIndex) {
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
@@ -207,48 +197,46 @@ Index makeTestIndex(const std::string& indexBasename,
                                    false, TextScoringMetric::BM25,
                                    {0.5f, -1.0f}),
           ::testing::HasSubstr("Invalid values"));
-      scoringMetric = scoringMetric.value_or(TextScoringMetric::EXPLICIT);
-      bAndKParam = bAndKParam.value_or(std::pair{0.75f, 1.75f});
+      c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
+      c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
 
       // The following tests that garbage values for b and k work if these
       // parameters are unnecessary because we don't use `BM25`.
-      if (scoringMetric.value() != TextScoringMetric::BM25) {
-        bAndKParam = std::pair{-3.f, -3.f};
+      if (c.scoringMetric.value() != TextScoringMetric::BM25) {
+        c.bAndKParam = std::pair{-3.f, -3.f};
       }
-      auto buildTextIndex = [&index, &scoringMetric, &bAndKParam,
-                             &useDocsFileForVocab, &addEntitiesFromWordsFile](
-                                auto wordsFile, auto docsFile,
-                                bool addWordsFromLiterals) {
+      auto buildTextIndex = [&index, &c](auto wordsFile, auto docsFile,
+                                         bool addWordsFromLiterals) {
         index.buildTextIndexFile(std::move(wordsFile), std::move(docsFile),
-                                 addWordsFromLiterals, useDocsFileForVocab,
-                                 addEntitiesFromWordsFile,
-                                 scoringMetric.value(), bAndKParam.value());
+                                 addWordsFromLiterals, c.useDocsFileForVocab,
+                                 c.addEntitiesFromWordsFile,
+                                 c.scoringMetric.value(), c.bAndKParam.value());
       };
-      if (contentsOfDocsFile.has_value() &&
-          (contentsOfWordsFile.has_value() || useDocsFileForVocab)) {
-        AD_CONTRACT_CHECK(!addEntitiesFromWordsFile || useDocsFileForVocab);
+      if (c.contentsOfDocsFile.has_value() &&
+          (c.contentsOfWordsFile.has_value() || c.useDocsFileForVocab)) {
+        AD_CONTRACT_CHECK(!c.addEntitiesFromWordsFile || c.useDocsFileForVocab);
         // Create and write to words- and docsfile to later build a full text
         // index from them
         ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
         ad_utility::File docsFile(indexBasename + ".docsfile", "w");
-        wordsFile.write(contentsOfWordsFile.value().c_str(),
-                        contentsOfWordsFile.value().size());
-        docsFile.write(contentsOfDocsFile.value().c_str(),
-                       contentsOfDocsFile.value().size());
+        wordsFile.write(c.contentsOfWordsFile.value().c_str(),
+                        c.contentsOfWordsFile.value().size());
+        docsFile.write(c.contentsOfDocsFile.value().c_str(),
+                       c.contentsOfDocsFile.value().size());
         wordsFile.close();
         docsFile.close();
         index.setKbName(indexBasename);
         index.setTextName(indexBasename);
         index.setOnDiskBase(indexBasename);
         buildTextIndex(indexBasename + ".wordsfile",
-                       indexBasename + ".docsfile", true);
+                       indexBasename + ".docsfile", c.addWordsFromLiterals);
         index.buildDocsDB(indexBasename + ".docsfile");
-      } else if (addWordsFromLiterals) {
+      } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, std::nullopt, true);
       }
     }
   }
-  if (!usePatterns || !loadAllPermutations) {
+  if (!c.usePatterns || !c.loadAllPermutations) {
     // If we have no patterns, or only two permutations, then check the graceful
     // fallback even if the options were not explicitly specified during the
     // loading of the server.
@@ -256,39 +244,32 @@ Index makeTestIndex(const std::string& indexBasename,
     index.usePatterns() = true;
     index.loadAllPermutations() = true;
     EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename, false));
-    EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
-    EXPECT_EQ(index.usePatterns(), usePatterns);
+    EXPECT_EQ(index.loadAllPermutations(), c.loadAllPermutations);
+    EXPECT_EQ(index.usePatterns(), c.usePatterns);
   }
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-  index.usePatterns() = usePatterns;
-  index.loadAllPermutations() = loadAllPermutations;
+  index.usePatterns() = c.usePatterns;
+  index.loadAllPermutations() = c.loadAllPermutations;
   index.createFromOnDiskIndex(indexBasename, false);
-  if (createTextIndex) {
+  if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
   }
   ad_utility::setGlobalLoggingStream(&std::cout);
 
-  if (usePatterns && loadAllPermutations) {
+  if (c.usePatterns && c.loadAllPermutations) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
   }
   return index;
 }
 
+// _____________________________________________________________________________
+Index makeTestIndex(const std::string& indexBasename, std::string turtle) {
+  return makeTestIndex(indexBasename, TestIndexConfig{std::move(turtle)});
+}
+
 // ________________________________________________________________________________
-QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
-                              bool loadAllPermutations, bool usePatterns,
-                              bool usePrefixCompression,
-                              ad_utility::MemorySize blocksizePermutations,
-                              bool createTextIndex, bool addWordsFromLiterals,
-                              bool useDocsFileForVocab,
-                              bool addEntitiesFromWordsFile,
-                              std::optional<std::string> contentsOfWordsFile,
-                              std::optional<std::string> contentsOfDocsFile,
-                              ad_utility::MemorySize parserBufferSize,
-                              std::optional<TextScoringMetric> scoringMetric,
-                              std::optional<std::pair<float, float>> bAndKParam,
-                              qlever::Filetype indexType) {
+QueryExecutionContext* getQec(TestIndexConfig c) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -324,45 +305,34 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
             SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<
-      std::optional<string>, bool, bool, bool, ad_utility::MemorySize, bool,
-      bool, bool, std::optional<string>, std::optional<string>,
-      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
-  static ad_utility::HashMap<Key, Context> contextMap;
+  static ad_utility::HashMap<TestIndexConfig, Context> contextMap;
 
-  auto key = Key{turtleInput,           loadAllPermutations,
-                 usePatterns,           usePrefixCompression,
-                 blocksizePermutations, addWordsFromLiterals,
-                 useDocsFileForVocab,   addEntitiesFromWordsFile,
-                 contentsOfWordsFile,   contentsOfDocsFile,
-                 scoringMetric,         bAndKParam};
-
-  if (!contextMap.contains(key)) {
+  if (!contextMap.contains(c)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        key,
-        Context{TypeErasedCleanup{[testIndexBasename]() {
-                  for (const std::string& indexFilename :
-                       getAllIndexFilenames(testIndexBasename)) {
-                    // Don't log when a file can't be deleted,
-                    // because the logging might already be
-                    // destroyed.
-                    ad_utility::deleteFile(indexFilename, false);
-                  }
-                }},
-                std::make_unique<Index>(makeTestIndex(
-                    testIndexBasename, turtleInput, loadAllPermutations,
-                    usePatterns, usePrefixCompression, blocksizePermutations,
-                    createTextIndex, addWordsFromLiterals, useDocsFileForVocab,
-                    addEntitiesFromWordsFile, contentsOfWordsFile,
-                    contentsOfDocsFile, parserBufferSize, scoringMetric,
-                    bAndKParam, indexType)),
-                std::make_unique<QueryResultCache>()});
+        c, Context{TypeErasedCleanup{[testIndexBasename]() {
+                     for (const std::string& indexFilename :
+                          getAllIndexFilenames(testIndexBasename)) {
+                       // Don't log when a file can't be deleted,
+                       // because the logging might already be
+                       // destroyed.
+                       ad_utility::deleteFile(indexFilename, false);
+                     }
+                   }},
+                   std::make_unique<Index>(makeTestIndex(testIndexBasename, c)),
+                   std::make_unique<QueryResultCache>()});
   }
-  auto* qec = contextMap.at(key).qec_.get();
+  auto* qec = contextMap.at(c).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
   return qec;
+}
+
+// _____________________________________________________________________________
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput) {
+  TestIndexConfig config;
+  config.turtleInput = std::move(turtleInput);
+  return getQec(std::move(config));
 }
 
 // ___________________________________________________________
