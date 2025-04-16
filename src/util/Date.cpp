@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "util/Date.h"
 
@@ -10,7 +12,8 @@
 
 // _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
-  auto impl = []<typename T>(const T& value) -> std::string {
+  auto impl = [](const auto& value) -> std::string {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (std::is_same_v<T, NoTimeZone>) {
       return "";
     } else if constexpr (std::is_same_v<T, TimeZoneZ>) {

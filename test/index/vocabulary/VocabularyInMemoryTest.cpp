@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 using Vocab = VocabularyInMemory;
 
@@ -13,9 +14,20 @@ namespace {
 using namespace vocabulary_test;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  Vocab::Words w;
-  w.build(words);
-  return Vocab(std::move(w));
+  auto filename = "vocabInMemoryCreation.tmp";
+  {
+    Vocab v;
+    auto writer = v.makeDiskWriter(filename);
+    for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+      auto idx = writer(word);
+      EXPECT_EQ(idx, static_cast<uint64_t>(i));
+    }
+    writer.readableName() = "blubb";
+    EXPECT_EQ(writer.readableName(), "blubb");
+  }
+  Vocab v;
+  v.open(filename);
+  return v;
 }
 
 TEST(VocabularyInMemory, UpperLowerBound) {
