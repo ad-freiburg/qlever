@@ -262,13 +262,7 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(
-      std::optional<const string> wordsFile,
-      std::optional<const string> docsFile, bool addWordsFromLiterals = false,
-      bool useDocsFileForVocabulary = false,
-      bool addEntitiesFromWordsFile = false,
-      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
-      std::pair<float, float> bAndKForBM25 = {0.75, 1.75});
+  void buildTextIndexFile(TextIndexConfig config);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;

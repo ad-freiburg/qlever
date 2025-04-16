@@ -15,6 +15,7 @@
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
+#include "index/TextIndexConfig.h"
 #include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -99,13 +100,7 @@ class Index {
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
-  void buildTextIndexFile(
-      std::optional<const string> wordsFile,
-      std::optional<const string> docsFile, bool addWordsFromLiterals = false,
-      bool useDocsFileForVocabulary = false,
-      bool addEntitiesFromWordsfile = false,
-      TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
-      std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
+  void buildTextIndexFile(TextIndexConfig config);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);

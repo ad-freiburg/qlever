@@ -26,16 +26,8 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase,
 }
 
 // ____________________________________________________________________________
-void Index::buildTextIndexFile(std::optional<const string> wordsFile,
-                               std::optional<const string> docsFile,
-                               bool addWordsFromLiterals,
-                               bool useDocsFileForVocabulary,
-                               bool addEntitiesFromWordsfile,
-                               TextScoringMetric textScoringMetric,
-                               std::pair<float, float> bAndKForBM25) {
-  pimpl_->buildTextIndexFile(wordsFile, docsFile, addWordsFromLiterals,
-                             useDocsFileForVocabulary, addEntitiesFromWordsfile,
-                             textScoringMetric, bAndKForBM25);
+void Index::buildTextIndexFile(TextIndexConfig config) {
+  pimpl_->buildTextIndexFile(config);
 }
 
 // ____________________________________________________________________________

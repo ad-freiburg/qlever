@@ -349,13 +349,15 @@ int main(int argc, char** argv) {
     }
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
       index.buildTextIndexFile(
-          wordsfile.empty() ? std::nullopt
-                            : std::optional<const string>(wordsfile),
-          docsfile.empty() ? std::nullopt
-                           : std::optional<const string>(docsfile),
-          addWordsFromLiterals, useWordsFromDocsfile, addEntitiesFromWordsfile,
-          getTextScoringMetricFromString(scoringMetric),
-          {bScoringParam, kScoringParam});
+          {wordsfile.empty() ? std::nullopt
+                             : std::optional<const string>(wordsfile),
+           docsfile.empty() ? std::nullopt
+                            : std::optional<const string>(docsfile),
+           addWordsFromLiterals,
+           useWordsFromDocsfile,
+           addEntitiesFromWordsfile,
+           getTextScoringMetricFromString(scoringMetric),
+           {bScoringParam, kScoringParam}});
     }
 
     if (!docsfile.empty()) {
