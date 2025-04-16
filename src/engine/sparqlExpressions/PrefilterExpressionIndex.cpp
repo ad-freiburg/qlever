@@ -652,381 +652,389 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange) const {
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
-};
+      return evaluateOptGetCompleteComplementImpl(idRange, blockRange, false);
+    };
 
-//______________________________________________________________________________
-template <CompOp Comparison>
-bool RelationalExpression<Comparison>::operator==(
-    const PrefilterExpression& other) const {
-  const auto* otherRelational =
-      dynamic_cast<const RelationalExpression<Comparison>*>(&other);
-  if (!otherRelational) {
-    return false;
-  }
-  return rightSideReferenceValue_ == otherRelational->rightSideReferenceValue_;
-};
+    //______________________________________________________________________________
+    template <CompOp Comparison>
+    bool RelationalExpression<Comparison>::operator==(
+        const PrefilterExpression& other) const {
+      const auto* otherRelational =
+          dynamic_cast<const RelationalExpression<Comparison>*>(&other);
+      if (!otherRelational) {
+        return false;
+      }
+      return rightSideReferenceValue_ ==
+             otherRelational->rightSideReferenceValue_;
+    };
 
-//______________________________________________________________________________
-template <CompOp Comparison>
-std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
-    const {
-  return make<RelationalExpression<Comparison>>(rightSideReferenceValue_);
-};
+    //______________________________________________________________________________
+    template <CompOp Comparison>
+    std::unique_ptr<PrefilterExpression>
+    RelationalExpression<Comparison>::clone() const {
+      return make<RelationalExpression<Comparison>>(rightSideReferenceValue_);
+    };
 
-//______________________________________________________________________________
-template <CompOp Comparison>
-std::string RelationalExpression<Comparison>::asString(
-    [[maybe_unused]] size_t depth) const {
-  auto referenceValueToString = [](std::stringstream& stream,
-                                   const IdOrLocalVocabEntry& referenceValue) {
-    std::visit(
-        ad_utility::OverloadCallOperator{
-            [&stream](const ValueId& referenceId) { stream << referenceId; },
-            [&stream](const LocalVocabEntry& referenceValue) {
-              stream << referenceValue.toStringRepresentation();
-            }},
-        referenceValue);
-  };
+    //______________________________________________________________________________
+    template <CompOp Comparison>
+    std::string RelationalExpression<Comparison>::asString(
+        [[maybe_unused]] size_t depth) const {
+      auto referenceValueToString =
+          [](std::stringstream& stream,
+             const IdOrLocalVocabEntry& referenceValue) {
+            std::visit(ad_utility::OverloadCallOperator{
+                           [&stream](const ValueId& referenceId) {
+                             stream << referenceId;
+                           },
+                           [&stream](const LocalVocabEntry& referenceValue) {
+                             stream << referenceValue.toStringRepresentation();
+                           }},
+                       referenceValue);
+          };
 
-  std::stringstream stream;
-  stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
-         << ">\nreferenceValue_ : ";
-  referenceValueToString(stream, rightSideReferenceValue_);
-  stream << " ." << std::endl;
-  return stream.str();
-};
+      std::stringstream stream;
+      stream << "Prefilter RelationalExpression<"
+             << getRelationalOpStr(Comparison) << ">\nreferenceValue_ : ";
+      referenceValueToString(stream, rightSideReferenceValue_);
+      stream << " ." << std::endl;
+      return stream.str();
+    };
 
-// SECTION ISDATATYPE
-//______________________________________________________________________________
-// Remark: The current `logicalComplement` implementation retrieves the full
-// complement w.r.t. the datatypes defined and represented by the `ValueId`
-// space.
-template <IsDatatype Datatype>
-std::unique_ptr<PrefilterExpression>
-IsDatatypeExpression<Datatype>::logicalComplement() const {
-  return make<IsDatatypeExpression<Datatype>>(!isNegated_);
-};
+    // SECTION ISDATATYPE
+    //______________________________________________________________________________
+    // Remark: The current `logicalComplement` implementation retrieves the full
+    // complement w.r.t. the datatypes defined and represented by the `ValueId`
+    // space.
+    template <IsDatatype Datatype>
+    std::unique_ptr<PrefilterExpression>
+    IsDatatypeExpression<Datatype>::logicalComplement() const {
+      return make<IsDatatypeExpression<Datatype>>(!isNegated_);
+    };
 
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
-    const {
-  return make<IsDatatypeExpression<Datatype>>(*this);
-};
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
+        const {
+      return make<IsDatatypeExpression<Datatype>>(*this);
+    };
 
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-bool IsDatatypeExpression<Datatype>::operator==(
-    const PrefilterExpression& other) const {
-  const auto* otherIsDatatype =
-      dynamic_cast<const IsDatatypeExpression<Datatype>*>(&other);
-  if (!otherIsDatatype) {
-    return false;
-  }
-  return isNegated_ == otherIsDatatype->isNegated_;
-};
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    bool IsDatatypeExpression<Datatype>::operator==(
+        const PrefilterExpression& other) const {
+      const auto* otherIsDatatype =
+          dynamic_cast<const IsDatatypeExpression<Datatype>*>(&other);
+      if (!otherIsDatatype) {
+        return false;
+      }
+      return isNegated_ == otherIsDatatype->isNegated_;
+    };
 
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-std::string IsDatatypeExpression<Datatype>::asString(
-    [[maybe_unused]] size_t depth) const {
-  return absl::StrCat(
-      "Prefilter IsDatatypeExpression:", "\nPrefilter for datatype: ",
-      getDatatypeIsTypeStr(Datatype),
-      "\nis negated: ", isNegated_ ? "true" : "false", ".\n");
-};
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    std::string IsDatatypeExpression<Datatype>::asString(
+        [[maybe_unused]] size_t depth) const {
+      return absl::StrCat(
+          "Prefilter IsDatatypeExpression:", "\nPrefilter for datatype: ",
+          getDatatypeIsTypeStr(Datatype),
+          "\nis negated: ", isNegated_ ? "true" : "false", ".\n");
+    };
 
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const ValueIdSubrange& idRange,
-                                                 BlockMetadataSpan blockRange,
-                                                 const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == IRI || Datatype == LITERAL);
-  using LVE = LocalVocabEntry;
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(
+        const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+        const bool isNegated) {
+      using enum IsDatatype;
+      static_assert(Datatype == IRI || Datatype == LITERAL);
+      using LVE = LocalVocabEntry;
 
-  return Datatype == IRI
-             // Remark: Ids containing LITERAL values precede IRI related Ids
-             // in order. The smallest possible IRI is represented by "<>", we
-             // use its corresponding ValueId later on as a lower bound.
-             ? GreaterThanExpression(LVE::fromStringRepresentation("<>"))
-                   .evaluateOptGetCompleteComplementImpl(idRange, blockRange,
-                                                         isNegated)
-             // For pre-filtering LITERAL related ValueIds we use the ValueId
-             // representing the beginning of IRI values as an upper bound.
-             : LessThanExpression(LVE::fromStringRepresentation("<"))
-                   .evaluateOptGetCompleteComplementImpl(idRange, blockRange,
-                                                         isNegated);
-}
-
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    const bool isNegated) {
-  using enum IsDatatype;
-  static_assert(Datatype == BLANK || Datatype == NUMERIC);
-
-  std::vector<ValueIdItPair> relevantRanges;
-  if constexpr (Datatype == BLANK) {
-    relevantRanges = {valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::BlankNodeIndex)};
-  } else {
-    // Remark: Swapping the defined relational order for Datatype::Int
-    // to Datatype::Double ValueIds (in ValueId.h) might affect the
-    // correctness of the following lines!
-    static_assert(Datatype::Int < Datatype::Double);
-
-    const auto& rangeInt = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Int);
-    const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
-        idRange.begin(), idRange.end(), Datatype::Double);
-    // Differentiate here regarding the adjacency of Int and Double
-    // datatype values. This is relevant w.r.t.
-    // getRelevantBlocksFromIdRanges(), because we technically add to
-    // .second + 1 for the first datatype range. If we simply add
-    // rangeInt and rangeDouble given that datatype Int and Double are
-    // stored directly next to each other, we potentially add a block
-    // twice (forbidden). Remark: This is necessary even if
-    // simplifyRanges(relevantRanges) is performed later on.
-    if (rangeInt.second == rangeDouble.first ||
-        rangeDouble.second == rangeInt.first) {
-      relevantRanges.emplace_back(
-          std::min(rangeInt.first, rangeDouble.first),
-          std::max(rangeInt.second, rangeDouble.second));
-    } else {
-      relevantRanges.emplace_back(rangeInt);
-      relevantRanges.emplace_back(rangeDouble);
+      return Datatype == IRI
+                 // Remark: Ids containing LITERAL values precede IRI related
+                 // Ids in order. The smallest possible IRI is represented by
+                 // "<>", we use its corresponding ValueId later on as a lower
+                 // bound.
+                 ? GreaterThanExpression(LVE::fromStringRepresentation("<>"))
+                       .evaluateOptGetCompleteComplementImpl(
+                           idRange, blockRange, isNegated)
+                 // For pre-filtering LITERAL related ValueIds we use the
+                 // ValueId representing the beginning of IRI values as an upper
+                 // bound.
+                 : LessThanExpression(LVE::fromStringRepresentation("<"))
+                       .evaluateOptGetCompleteComplementImpl(
+                           idRange, blockRange, isNegated);
     }
-  }
-  // Sort and remove overlapping ranges.
-  valueIdComparators::detail::simplifyRanges(relevantRanges);
-  return isNegated
-             ? detail::mapping::mapValueIdItRangesToBlockItRangesComplemented(
-                   relevantRanges, idRange, blockRange)
-             : detail::mapping::mapValueIdItRangesToBlockItRanges(
-                   relevantRanges, idRange, blockRange);
-}
 
-//______________________________________________________________________________
-template <IsDatatype Datatype>
-BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
-    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange) const {
-  using enum IsDatatype;
-  if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
-    return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
-                                                    isNegated_);
-  } else {
-    static_assert(Datatype == IRI || Datatype == LITERAL);
-    return evaluateIsIriOrIsLiteralImpl<Datatype>(idRange, blockRange,
-                                                  isNegated_);
-  }
-};
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
+        const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+        const bool isNegated) {
+      using enum IsDatatype;
+      static_assert(Datatype == BLANK || Datatype == NUMERIC);
 
-// SECTION LOGICAL OPERATIONS
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-std::unique_ptr<PrefilterExpression>
-LogicalExpression<Operation>::logicalComplement() const {
-  using enum LogicalOperator;
-  // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
-  // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
-  if constexpr (Operation == OR) {
-    // De Morgan's law: not (A or B) = (not A) and (not B)
-    return make<AndExpression>(child1_->logicalComplement(),
-                               child2_->logicalComplement());
-  } else {
-    static_assert(Operation == AND);
-    // De Morgan's law: not (A and B) = (not A) or (not B)
-    return make<OrExpression>(child1_->logicalComplement(),
-                              child2_->logicalComplement());
-  }
-};
+      std::vector<ValueIdItPair> relevantRanges;
+      if constexpr (Datatype == BLANK) {
+        relevantRanges = {valueIdComparators::getRangeForDatatype(
+            idRange.begin(), idRange.end(), Datatype::BlankNodeIndex)};
+      } else {
+        // Remark: Swapping the defined relational order for Datatype::Int
+        // to Datatype::Double ValueIds (in ValueId.h) might affect the
+        // correctness of the following lines!
+        static_assert(Datatype::Int < Datatype::Double);
 
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
-    const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange) const {
-  using enum LogicalOperator;
-  if constexpr (Operation == AND) {
-    return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        child1_->evaluateImpl(vocab, idRange, blockRange),
-        child2_->evaluateImpl(vocab, idRange, blockRange));
-  } else {
-    static_assert(Operation == OR);
-    return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        child1_->evaluateImpl(vocab, idRange, blockRange),
-        child2_->evaluateImpl(vocab, idRange, blockRange));
-  }
-};
+        const auto& rangeInt = valueIdComparators::getRangeForDatatype(
+            idRange.begin(), idRange.end(), Datatype::Int);
+        const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
+            idRange.begin(), idRange.end(), Datatype::Double);
+        // Differentiate here regarding the adjacency of Int and Double
+        // datatype values. This is relevant w.r.t.
+        // getRelevantBlocksFromIdRanges(), because we technically add to
+        // .second + 1 for the first datatype range. If we simply add
+        // rangeInt and rangeDouble given that datatype Int and Double are
+        // stored directly next to each other, we potentially add a block
+        // twice (forbidden). Remark: This is necessary even if
+        // simplifyRanges(relevantRanges) is performed later on.
+        if (rangeInt.second == rangeDouble.first ||
+            rangeDouble.second == rangeInt.first) {
+          relevantRanges.emplace_back(
+              std::min(rangeInt.first, rangeDouble.first),
+              std::max(rangeInt.second, rangeDouble.second));
+        } else {
+          relevantRanges.emplace_back(rangeInt);
+          relevantRanges.emplace_back(rangeDouble);
+        }
+      }
+      // Sort and remove overlapping ranges.
+      valueIdComparators::detail::simplifyRanges(relevantRanges);
+      return isNegated ? detail::mapping::
+                             mapValueIdItRangesToBlockItRangesComplemented(
+                                 relevantRanges, idRange, blockRange)
+                       : detail::mapping::mapValueIdItRangesToBlockItRanges(
+                             relevantRanges, idRange, blockRange);
+    }
 
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-bool LogicalExpression<Operation>::operator==(
-    const PrefilterExpression& other) const {
-  const auto* otherlogical =
-      dynamic_cast<const LogicalExpression<Operation>*>(&other);
-  if (!otherlogical) {
-    return false;
-  }
-  return *child1_ == *otherlogical->child1_ &&
-         *child2_ == *otherlogical->child2_;
-};
+    //______________________________________________________________________________
+    template <IsDatatype Datatype>
+    BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
+        [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+        BlockMetadataSpan blockRange) const {
+      using enum IsDatatype;
+      if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
+        return evaluateIsBlankOrIsNumericImpl<Datatype>(idRange, blockRange,
+                                                        isNegated_);
+      } else {
+        static_assert(Datatype == IRI || Datatype == LITERAL);
+        return evaluateIsIriOrIsLiteralImpl<Datatype>(idRange, blockRange,
+                                                      isNegated_);
+      }
+    };
 
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
-    const {
-  return make<LogicalExpression<Operation>>(child1_->clone(), child2_->clone());
-};
+    // SECTION LOGICAL OPERATIONS
+    //______________________________________________________________________________
+    template <LogicalOperator Operation>
+    std::unique_ptr<PrefilterExpression>
+    LogicalExpression<Operation>::logicalComplement() const {
+      using enum LogicalOperator;
+      // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
+      // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
+      if constexpr (Operation == OR) {
+        // De Morgan's law: not (A or B) = (not A) and (not B)
+        return make<AndExpression>(child1_->logicalComplement(),
+                                   child2_->logicalComplement());
+      } else {
+        static_assert(Operation == AND);
+        // De Morgan's law: not (A and B) = (not A) or (not B)
+        return make<OrExpression>(child1_->logicalComplement(),
+                                  child2_->logicalComplement());
+      }
+    };
 
-//______________________________________________________________________________
-template <LogicalOperator Operation>
-std::string LogicalExpression<Operation>::asString(size_t depth) const {
-  std::string child1Info =
-      depth < maxInfoRecursion ? child1_->asString(depth + 1) : "MAX_DEPTH";
-  std::string child2Info =
-      depth < maxInfoRecursion ? child2_->asString(depth + 1) : "MAX_DEPTH";
-  std::stringstream stream;
-  stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
-         << ">\n"
-         << "child1 {" << child1Info << "}"
-         << "child2 {" << child2Info << "}" << std::endl;
-  return stream.str();
-};
+    //______________________________________________________________________________
+    template <LogicalOperator Operation>
+    BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
+        const Vocab& vocab, const ValueIdSubrange& idRange,
+        BlockMetadataSpan blockRange) const {
+      using enum LogicalOperator;
+      if constexpr (Operation == AND) {
+        return detail::logicalOps::mergeRelevantBlockItRanges<false>(
+            child1_->evaluateImpl(vocab, idRange, blockRange),
+            child2_->evaluateImpl(vocab, idRange, blockRange));
+      } else {
+        static_assert(Operation == OR);
+        return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+            child1_->evaluateImpl(vocab, idRange, blockRange),
+            child2_->evaluateImpl(vocab, idRange, blockRange));
+      }
+    };
 
-// SECTION NOT-EXPRESSION
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
-  // Logically we complement (negate) a NOT here => NOT cancels out.
-  // Therefore, we can simply return the child of the respective NOT
-  // expression after undoing its previous complementation.
-  return child_->logicalComplement();
-};
+    //______________________________________________________________________________
+    template <LogicalOperator Operation>
+    bool LogicalExpression<Operation>::operator==(
+        const PrefilterExpression& other) const {
+      const auto* otherlogical =
+          dynamic_cast<const LogicalExpression<Operation>*>(&other);
+      if (!otherlogical) {
+        return false;
+      }
+      return *child1_ == *otherlogical->child1_ &&
+             *child2_ == *otherlogical->child2_;
+    };
 
-//______________________________________________________________________________
-BlockMetadataRanges NotExpression::evaluateImpl(
-    const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange) const {
-  return child_->evaluateImpl(vocab, idRange, blockRange);
-};
+    //______________________________________________________________________________
+    template <LogicalOperator Operation>
+    std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
+        const {
+      return make<LogicalExpression<Operation>>(child1_->clone(),
+                                                child2_->clone());
+    };
 
-//______________________________________________________________________________
-bool NotExpression::operator==(const PrefilterExpression& other) const {
-  const auto* otherNotExpression = dynamic_cast<const NotExpression*>(&other);
-  if (!otherNotExpression) {
-    return false;
-  }
-  return *child_ == *otherNotExpression->child_;
-}
+    //______________________________________________________________________________
+    template <LogicalOperator Operation>
+    std::string LogicalExpression<Operation>::asString(size_t depth) const {
+      std::string child1Info =
+          depth < maxInfoRecursion ? child1_->asString(depth + 1) : "MAX_DEPTH";
+      std::string child2Info =
+          depth < maxInfoRecursion ? child2_->asString(depth + 1) : "MAX_DEPTH";
+      std::stringstream stream;
+      stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
+             << ">\n"
+             << "child1 {" << child1Info << "}"
+             << "child2 {" << child2Info << "}" << std::endl;
+      return stream.str();
+    };
 
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
-  return make<NotExpression>((child_->clone()), true);
-};
+    // SECTION NOT-EXPRESSION
+    //______________________________________________________________________________
+    std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement()
+        const {
+      // Logically we complement (negate) a NOT here => NOT cancels out.
+      // Therefore, we can simply return the child of the respective NOT
+      // expression after undoing its previous complementation.
+      return child_->logicalComplement();
+    };
 
-//______________________________________________________________________________
-std::string NotExpression::asString(size_t depth) const {
-  std::string childInfo =
-      depth < maxInfoRecursion ? child_->asString(depth + 1) : "MAX_DEPTH";
-  std::stringstream stream;
-  stream << "Prefilter NotExpression:\n"
-         << "child {" << childInfo << "}" << std::endl;
-  return stream.str();
-}
+    //______________________________________________________________________________
+    BlockMetadataRanges NotExpression::evaluateImpl(
+        const Vocab& vocab, const ValueIdSubrange& idRange,
+        BlockMetadataSpan blockRange) const {
+      return child_->evaluateImpl(vocab, idRange, blockRange);
+    };
 
-//______________________________________________________________________________
-// Instanitate templates with specializations (for linking accessibility)
-template class RelationalExpression<CompOp::LT>;
-template class RelationalExpression<CompOp::LE>;
-template class RelationalExpression<CompOp::GE>;
-template class RelationalExpression<CompOp::GT>;
-template class RelationalExpression<CompOp::EQ>;
-template class RelationalExpression<CompOp::NE>;
+    //______________________________________________________________________________
+    bool NotExpression::operator==(const PrefilterExpression& other) const {
+      const auto* otherNotExpression =
+          dynamic_cast<const NotExpression*>(&other);
+      if (!otherNotExpression) {
+        return false;
+      }
+      return *child_ == *otherNotExpression->child_;
+    }
 
-template class IsDatatypeExpression<IsDatatype::IRI>;
-template class IsDatatypeExpression<IsDatatype::BLANK>;
-template class IsDatatypeExpression<IsDatatype::LITERAL>;
-template class IsDatatypeExpression<IsDatatype::NUMERIC>;
+    //______________________________________________________________________________
+    std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
+      return make<NotExpression>((child_->clone()), true);
+    };
 
-template class LogicalExpression<LogicalOperator::AND>;
-template class LogicalExpression<LogicalOperator::OR>;
+    //______________________________________________________________________________
+    std::string NotExpression::asString(size_t depth) const {
+      std::string childInfo =
+          depth < maxInfoRecursion ? child_->asString(depth + 1) : "MAX_DEPTH";
+      std::stringstream stream;
+      stream << "Prefilter NotExpression:\n"
+             << "child {" << childInfo << "}" << std::endl;
+      return stream.str();
+    }
 
-namespace detail {
-//______________________________________________________________________________
-void checkPropertiesForPrefilterConstruction(
-    const std::vector<PrefilterExprVariablePair>& vec) {
-  auto viewVariable = vec | ql::views::values;
-  if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
-    throw std::runtime_error(
-        "The vector must contain the <PrefilterExpression, "
-        "Variable> pairs in "
-        "sorted order w.r.t. Variable value.");
-  }
-  if (auto it = ql::ranges::adjacent_find(viewVariable);
-      it != ql::ranges::end(viewVariable)) {
-    throw std::runtime_error(
-        "For each relevant Variable must exist exactly one "
-        "<PrefilterExpression, Variable> pair.");
-  }
-}
+    //______________________________________________________________________________
+    // Instanitate templates with specializations (for linking accessibility)
+    template class RelationalExpression<CompOp::LT>;
+    template class RelationalExpression<CompOp::LE>;
+    template class RelationalExpression<CompOp::GE>;
+    template class RelationalExpression<CompOp::GT>;
+    template class RelationalExpression<CompOp::EQ>;
+    template class RelationalExpression<CompOp::NE>;
 
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-    CompOp comparison, const int year) {
-  using GeExpr = GreaterEqualExpression;
-  using LtExpr = LessThanExpression;
+    template class IsDatatypeExpression<IsDatatype::IRI>;
+    template class IsDatatypeExpression<IsDatatype::BLANK>;
+    template class IsDatatypeExpression<IsDatatype::LITERAL>;
+    template class IsDatatypeExpression<IsDatatype::NUMERIC>;
 
-  // `getDateId` returns an `Id` containing the smallest possible
-  // `Date`
-  // (`xsd::date`) for which `YEAR(Id) == adjustedYear` is valid.
-  // This `Id` acts as a reference bound for the actual
-  // `DateYearOrDuration` prefiltering procedure.
-  const auto getDateId = [](const int adjustedYear) {
-    return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
-  };
-  using enum CompOp;
-  switch (comparison) {
-    case EQ:
-      return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
-                                 make<GeExpr>(getDateId(year)));
-    case LT:
-      return make<LtExpr>(getDateId(year));
-    case LE:
-      return make<LtExpr>(getDateId(year + 1));
-    case GE:
-      return make<GeExpr>(getDateId(year));
-    case GT:
-      return make<GeExpr>(getDateId(year + 1));
-    case NE:
-      return make<OrExpression>(make<LtExpr>(getDateId(year)),
-                                make<GeExpr>(getDateId(year + 1)));
-    default:
-      throw std::runtime_error(
-          absl::StrCat("Set unknown (relational) comparison operator for "
-                       "the creation of PrefilterExpression on date-values: ",
-                       getRelationalOpStr(comparison)));
-  }
-};
+    template class LogicalExpression<LogicalOperator::AND>;
+    template class LogicalExpression<LogicalOperator::OR>;
 
-//______________________________________________________________________________
-template <CompOp comparison>
-static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
-    const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
-  using enum Datatype;
-  // Standard pre-filtering procedure.
-  if (!prefilterDateByYear) {
-    return make<RelationalExpression<comparison>>(referenceValue);
-  }
-  // Helper to safely retrieve `ValueId/Id` values from the provided
-  // `IdOrLocalVocabEntry referenceValue` if contained. Given no
-  // `ValueId` is contained, a explanatory message per
-  // `std::runtime_error` is thrown.
-  const auto retrieveValueIdOrThrowErr =
-      [](const IdOrLocalVocabEntry& referenceValue) {
+    namespace detail {
+    //______________________________________________________________________________
+    void checkPropertiesForPrefilterConstruction(
+        const std::vector<PrefilterExprVariablePair>& vec) {
+      auto viewVariable = vec | ql::views::values;
+      if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
+        throw std::runtime_error(
+            "The vector must contain the <PrefilterExpression, "
+            "Variable> pairs in "
+            "sorted order w.r.t. Variable value.");
+      }
+      if (auto it = ql::ranges::adjacent_find(viewVariable);
+          it != ql::ranges::end(viewVariable)) {
+        throw std::runtime_error(
+            "For each relevant Variable must exist exactly one "
+            "<PrefilterExpression, Variable> pair.");
+      }
+    }
+
+    //______________________________________________________________________________
+    std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+        CompOp comparison, const int year) {
+      using GeExpr = GreaterEqualExpression;
+      using LtExpr = LessThanExpression;
+
+      // `getDateId` returns an `Id` containing the smallest possible
+      // `Date`
+      // (`xsd::date`) for which `YEAR(Id) == adjustedYear` is valid.
+      // This `Id` acts as a reference bound for the actual
+      // `DateYearOrDuration` prefiltering procedure.
+      const auto getDateId = [](const int adjustedYear) {
+        return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
+      };
+      using enum CompOp;
+      switch (comparison) {
+        case EQ:
+          return make<AndExpression>(make<LtExpr>(getDateId(year + 1)),
+                                     make<GeExpr>(getDateId(year)));
+        case LT:
+          return make<LtExpr>(getDateId(year));
+        case LE:
+          return make<LtExpr>(getDateId(year + 1));
+        case GE:
+          return make<GeExpr>(getDateId(year));
+        case GT:
+          return make<GeExpr>(getDateId(year + 1));
+        case NE:
+          return make<OrExpression>(make<LtExpr>(getDateId(year)),
+                                    make<GeExpr>(getDateId(year + 1)));
+        default:
+          throw std::runtime_error(absl::StrCat(
+              "Set unknown (relational) comparison operator for "
+              "the creation of PrefilterExpression on date-values: ",
+              getRelationalOpStr(comparison)));
+      }
+    };
+
+    //______________________________________________________________________________
+    template <CompOp comparison>
+    static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
+        const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
+      using enum Datatype;
+      // Standard pre-filtering procedure.
+      if (!prefilterDateByYear) {
+        return make<RelationalExpression<comparison>>(referenceValue);
+      }
+      // Helper to safely retrieve `ValueId/Id` values from the provided
+      // `IdOrLocalVocabEntry referenceValue` if contained. Given no
+      // `ValueId` is contained, a explanatory message per
+      // `std::runtime_error` is thrown.
+      const auto retrieveValueIdOrThrowErr = [](const IdOrLocalVocabEntry&
+                                                    referenceValue) {
         return std::visit(
             [](const auto& value) -> ValueId {
               using T = std::decay_t<decltype(value)>;
@@ -1044,64 +1052,65 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
             },
             referenceValue);
       };
-  // Handle year extraction and return a date-value adjusted
-  // `PrefilterExpression` if possible. Given an unsuitable reference
-  // value was provided, throw a std::runtime_error with an
-  // explanatory message.
-  const auto retrieveYearIntOrThrowErr =
-      [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
-        const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
-        if (valueId.getDatatype() == Int) {
-          return valueId.getInt();
-        }
-        throw std::runtime_error(absl::StrCat(
-            "Reference value for filtering date values over "
-            "expression YEAR is of invalid datatype: ",
-            toString(valueId.getDatatype()),
-            ".\nPlease provide an integer value as reference year."));
-      };
-  return makePrefilterExpressionYearImpl(
-      comparison, retrieveYearIntOrThrowErr(referenceValue));
-};
+      // Handle year extraction and return a date-value adjusted
+      // `PrefilterExpression` if possible. Given an unsuitable reference
+      // value was provided, throw a std::runtime_error with an
+      // explanatory message.
+      const auto retrieveYearIntOrThrowErr =
+          [&retrieveValueIdOrThrowErr](
+              const IdOrLocalVocabEntry& referenceValue) {
+            const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
+            if (valueId.getDatatype() == Int) {
+              return valueId.getInt();
+            }
+            throw std::runtime_error(absl::StrCat(
+                "Reference value for filtering date values over "
+                "expression YEAR is of invalid datatype: ",
+                toString(valueId.getDatatype()),
+                ".\nPlease provide an integer value as reference year."));
+          };
+      return makePrefilterExpressionYearImpl(
+          comparison, retrieveYearIntOrThrowErr(referenceValue));
+    };
+
+    //______________________________________________________________________________
+    template <CompOp comparison>
+    std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
+        const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+        bool mirrored, bool prefilterDateByYear) {
+      using enum CompOp;
+      std::vector<PrefilterExprVariablePair> resVec{};
+      if (mirrored) {
+        using P = std::pair<CompOp, CompOp>;
+        // Retrieve by map the corresponding mirrored `CompOp` value for
+        // the given `CompOp comparison` template argument. E.g., this
+        // procedure will transform the relational expression
+        // `referenceValue > ?var` into `?var < referenceValue`.
+        constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
+            {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
+        resVec.emplace_back(
+            makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
+                referenceValue, prefilterDateByYear),
+            variable);
+      } else {
+        resVec.emplace_back(makePrefilterExpressionVecImpl<comparison>(
+                                referenceValue, prefilterDateByYear),
+                            variable);
+      }
+      return resVec;
+    }
 
 //______________________________________________________________________________
-template <CompOp comparison>
-std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
-    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDateByYear) {
-  using enum CompOp;
-  std::vector<PrefilterExprVariablePair> resVec{};
-  if (mirrored) {
-    using P = std::pair<CompOp, CompOp>;
-    // Retrieve by map the corresponding mirrored `CompOp` value for
-    // the given `CompOp comparison` template argument. E.g., this
-    // procedure will transform the relational expression
-    // `referenceValue > ?var` into `?var < referenceValue`.
-    constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
-        {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
-    resVec.emplace_back(
-        makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
-            referenceValue, prefilterDateByYear),
-        variable);
-  } else {
-    resVec.emplace_back(makePrefilterExpressionVecImpl<comparison>(
-                            referenceValue, prefilterDateByYear),
-                        variable);
-  }
-  return resVec;
-}
+#define INSTANTIATE_MAKE_PREFILTER(Comparison)                         \
+    template std::vector<PrefilterExprVariablePair>                    \
+    makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
+                                           const Variable&, bool, bool);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::GE);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::GT);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::EQ);
+    INSTANTIATE_MAKE_PREFILTER(CompOp::NE);
 
-//______________________________________________________________________________
-#define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
-  template std::vector<PrefilterExprVariablePair>                    \
-  makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
-                                         const Variable&, bool, bool);
-INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
-INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
-INSTANTIATE_MAKE_PREFILTER(CompOp::GE);
-INSTANTIATE_MAKE_PREFILTER(CompOp::GT);
-INSTANTIATE_MAKE_PREFILTER(CompOp::EQ);
-INSTANTIATE_MAKE_PREFILTER(CompOp::NE);
-
-}  //  namespace detail
+    }  //  namespace detail
 }  //  namespace prefilterExpressions

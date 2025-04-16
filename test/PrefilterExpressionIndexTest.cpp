@@ -759,7 +759,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
   makeTestPrefixRegex(prefixRegex("Hambu"), {bVocabId4, bVocabId5});
   makeTestPrefixRegex(prefixRegex("Hamburg Alt"), {bVocabId5});
   makeTestPrefixRegex(prefixRegex("Hamburg Altona"), {bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Noo Prefix"), {});
+  makeTestPrefixRegex(prefixRegex("No Prefix"), {});
   makeTestPrefixRegex(prefixRegex(""),
                       {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
                        bVocabId5, bVocabId6});
