@@ -5,6 +5,9 @@
 #include "index/vocabulary/SplitVocabulary.h"
 
 #include "index/Vocabulary.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 
@@ -51,8 +54,8 @@ template <typename ST, typename CT, typename IT, class M, class S,
 SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
     const SplitVocabulary<ST, CT, IT, M, S, SF, SFN>& vocabulary,
     const std::string& filename)
-    : underlyingWordWriter_{vocabulary.getUnderlyingVocabulary().makeDiskWriter(
-          SFN(filename).at(0))},
+    : underlyingWordWriter_{vocabulary.getUnderlyingMainVocabulary()
+                                .makeDiskWriter(SFN(filename).at(0))},
       underlyingSpecialWordWriter_{
           vocabulary.getUnderlyingSpecialVocabulary().makeDiskWriter(
               SFN(filename).at(1))} {};
@@ -97,10 +100,14 @@ template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
 bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
                                                        uint64_t* idx) const {
+  // Todo move getid + lower upper bound to vocab.h again; and only look in main
+  // vocab, when that works, start changing lower/upper bound to arrays
+
   // Helper lambda to lookup a the word in a given vocabulary.
   auto checkWord = [&word, &idx](const auto& vocab) -> bool {
     // We need the TOTAL level because we want the unique word.
-    auto wordAndIndex = vocab.lower_bound(word, CT::Level::TOTAL);
+    using SortLevel = typename CT::Level;
+    auto wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
     if (wordAndIndex.isEnd()) {
       return false;
     }
@@ -119,3 +126,21 @@ bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
   *idx |= specialVocabMarker;
   return res;
 };
+
+// Explicit template instantiations
+template class SplitVocabulary<CompressedString, TripleComponentComparator,
+                               VocabIndex,
+                               CompressedVocabulary<VocabularyInternalExternal>,
+                               CompressedVocabulary<VocabularyInternalExternal>,
+                               geoSplitFunc, geoFilenameFunc>;
+template class SplitVocabulary<std::string, SimpleStringComparator,
+                               WordVocabIndex,
+                               CompressedVocabulary<VocabularyInternalExternal>,
+                               CompressedVocabulary<VocabularyInternalExternal>,
+                               geoSplitFunc, geoFilenameFunc>;
+// template class SplitVocabulary<
+//     CompressedString, TripleComponentComparator, VocabIndex,
+//     VocabularyInMemory, VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
+// template class SplitVocabulary<
+//     std::string, SimpleStringComparator, WordVocabIndex, VocabularyInMemory,
+//     VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;

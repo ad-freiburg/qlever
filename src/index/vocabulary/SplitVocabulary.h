@@ -104,7 +104,7 @@ class SplitVocabulary {
     return underlyingSpecial_;
   }
 
-  const SpecialVocabulary& getUnderlyingVocabulary() const {
+  const SpecialVocabulary& getUnderlyingSpecialVocabulary() const {
     return underlyingSpecial_;
   }
 

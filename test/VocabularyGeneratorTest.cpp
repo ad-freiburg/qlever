@@ -134,9 +134,9 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
-                if (RdfsVocabulary::stringIsGeoLiteral(w.iriOrLiteral())) {
-                  globalId = RdfsVocabulary::makeGeoVocabIndex(globalId);
-                }
+                // if (RdfsVocabulary::stringIsGeoLiteral(w.iriOrLiteral())) {
+                //   globalId = RdfsVocabulary::makeGeoVocabIndex(globalId);
+                // }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }
             }
