@@ -15,6 +15,7 @@
 #include "util/Forward.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
+#include "util/ValueIdentity.h"
 
 // Various helper functions for compile-time programming.
 
@@ -112,12 +113,14 @@ struct ConstexprSwitch {
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
-                   [&function, &value]<size_t Index>() {
-                     if (Index == value) {
-                       function.template operator()<Index>();
-                     }
-                   });
+  ConstexprForLoop(
+      std::make_index_sequence<MaxValue + 1>{},
+      ad_utility::ApplyAsValueIdentity{[&function, &value](auto valueIdentity) {
+        static constexpr size_t Index = valueIdentity.value;
+        if (Index == value) {
+          function.template operator()<Index>();
+        }
+      }});
 }
 
 /*

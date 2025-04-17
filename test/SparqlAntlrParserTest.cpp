@@ -430,7 +430,8 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
 }
 
 TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
-  auto doTest = []<bool allowPath>() {
+  auto doTest = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+    static constexpr bool allowPath = valueIdentity.value;
     auto input = "[ ?x ?y ] ?a ?b";
     auto [output, internal] = [&input]() {
       if constexpr (allowPath) {
@@ -447,7 +448,7 @@ TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
         output, UnorderedElementsAre(
                     ::testing::FieldsAre(internal, var("?x"), var("?y")),
                     ::testing::FieldsAre(internal, var("?a"), var("?b"))));
-  };
+  }};
   doTest.template operator()<true>();
   doTest.template operator()<false>();
 }
@@ -499,7 +500,8 @@ TEST(SparqlParser, ObjectList) {
 }
 
 TEST(SparqlParser, BlankNodePropertyList) {
-  auto doMatch = []<bool InsideConstruct>() {
+  auto doMatch = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+    static constexpr bool InsideConstruct = valueIdentity.value;
     const auto blank = [] {
       if constexpr (InsideConstruct) {
         return m::BlankNode(true, "0");
@@ -515,7 +517,7 @@ TEST(SparqlParser, BlankNodePropertyList) {
                  ElementsAre(blank, m::Iri(type), m::VariableVariant("?a")),
                  ElementsAre(blank, m::Iri(type), m::VariableVariant("?b")),
                  ElementsAre(blank, m::Iri(type), m::VariableVariant("?c")))));
-  };
+  }};
   doMatch.template operator()<true>();
   doMatch.template operator()<false>();
 }

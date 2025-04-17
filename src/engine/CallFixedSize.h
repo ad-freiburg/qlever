@@ -52,20 +52,6 @@
 
 namespace ad_utility {
 
-template <typename F>
-struct ApplyAsValueIdentity {
-  F function;
-
-  template <auto... Is, typename... Args>
-  decltype(auto) operator()(Args&&... args) const {
-    using ad_utility::use_value_identity::vi;
-    return function(vi<Is>..., AD_FWD(args)...);
-  }
-};
-
-template <typename F>
-ApplyAsValueIdentity(F&&) -> ApplyAsValueIdentity<F>;
-
 namespace detail {
 
 // Call the `lambda` when the correct compile-time `Int`s are given as a

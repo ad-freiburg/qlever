@@ -111,7 +111,8 @@ auto testGetRangesForId(It begin, It end, ValueId id,
                         source_location l = source_location::current()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
-  auto testImpl = [&]<Comparison comparison>() {
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
+    static constexpr Comparison comparison = valueIdentity.value;
     auto ranges = getRangesForId(begin, end, id, comparison);
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
@@ -145,7 +146,7 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
     }
-  };
+  }};
 
   testImpl.template operator()<Comparison::LT>();
   testImpl.template operator()<Comparison::LE>();
@@ -220,7 +221,8 @@ template <typename It, typename IsMatchingDatatype>
 auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
                               IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
-  auto testImpl = [&]<Comparison comparison>() {
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
+    static constexpr Comparison comparison = valueIdentity.value;
     if (comparison == Comparison::NE &&
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
@@ -251,7 +253,7 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
                   ::testing::AnyOf(False, Undef));
       ++it;
     }
-  };
+  }};
 
   testImpl.template operator()<Comparison::LT>();
   testImpl.template operator()<Comparison::LE>();
@@ -269,7 +271,9 @@ TEST_F(ValueIdComparators, IndexTypes) {
   std::sort(ids.begin(), ids.end(), compareByBits);
 
   // Perform the test for a single `Datatype`.
-  auto testImpl = [&]<Datatype datatype>(auto getFromId) {
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity,
+                                                       auto getFromId) {
+    static constexpr Datatype datatype = valueIdentity.value;
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
@@ -308,7 +312,7 @@ TEST_F(ValueIdComparators, IndexTypes) {
       testGetRangesForEqualIds(ids.begin(), ids.end(), *begin, *end,
                                isTypeMatching);
     }
-  };
+  }};
 
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....

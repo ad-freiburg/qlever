@@ -3,6 +3,8 @@
 // Authors:
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "index/LocatedTriples.h"
 
@@ -11,6 +13,7 @@
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ValueIdentity.h"
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -57,6 +60,26 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
 
+namespace {
+template <typename T>
+class TieHelper {
+  T& t;
+
+ public:
+  TieHelper(T& t) : t(t) {}
+
+  template <size_t... I>
+  auto operator()(std::index_sequence<I...>) {
+    return std::tie(t[I]...);
+  }
+
+  template <size_t... I>
+  auto operator()(ad_utility::ValueSequence<size_t, I...>) {
+    return std::tie(t[I]...);
+  }
+};
+}  // namespace
+
 // Return a `std::tie` of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
@@ -65,10 +88,9 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieIdTableRow(T& row) {
-  return [&row]<size_t... I>(std::index_sequence<I...>) {
-    return std::tie(row[I]...);
-  }(std::make_index_sequence<numIndexColumns +
-                             static_cast<size_t>(includeGraphColumn)>{});
+  return TieHelper(row)(
+      std::make_index_sequence<numIndexColumns +
+                               static_cast<size_t>(includeGraphColumn)>{});
 }
 
 // Return a `std::tie` of the relevant entries of a located triple,
@@ -94,9 +116,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
     return a;
   }();
   auto& ids = lt->triple_.ids();
-  return [&ids]<size_t... I>(ad_utility::ValueSequence<size_t, I...>) {
-    return std::tie(ids[I]...);
-  }(ad_utility::toIntegerSequence<indices>());
+  return TieHelper(ids)(ad_utility::toIntegerSequence<indices>());
 }
 
 // ____________________________________________________________________________
@@ -193,17 +213,18 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              bool includeGraphColumn) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
-  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
-                                 this]<bool hasGraphColumn>() {
-    if (numIndexColumns == 3) {
-      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
-    } else if (numIndexColumns == 2) {
-      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
-    } else {
-      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
-    }
-  };
+  auto mergeTriplesImplHelper = ad_utility::ApplyAsValueIdentity{
+      [numIndexColumns, blockIndex, &block, this](auto valueIdentity) {
+        static constexpr bool hasGraphColumn = valueIdentity.value;
+        if (numIndexColumns == 3) {
+          return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+        } else if (numIndexColumns == 2) {
+          return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+        } else {
+          AD_CORRECTNESS_CHECK(numIndexColumns == 1);
+          return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+        }
+      }};
   if (includeGraphColumn) {
     return mergeTriplesImplHelper.template operator()<true>();
   } else {
