@@ -105,7 +105,6 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   QueryExecutionContext* qet = ad_utility::testing::getQec(turtleInput);
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
-  const RdfsVocabulary& indexVocab = qet->getIndex().getVocab();
   LocalVocab vocab{};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");
@@ -154,6 +153,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id idIri4 = getId(iri4, vocab);
   const Id idIri5 = getId(iri5, vocab);
   const Id iriStart = getId(iriBegin, vocab);
+  const RdfsVocabulary& indexVocab = qet->getIndex().getVocab();
 
   // Define CompressedBlockMetadata
   const CompressedBlockMetadata b1 = makeBlock(undef, undef);
@@ -781,7 +781,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
       prefixRegex("Hamb", false, true),
       {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId5, bVocabId6});
   makeTestPrefixRegex(prefixRegex("", false, true), {});
+}
 
+// Test Prefix-Regex Expression (mirrored)
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpressionMirrored) {
   // test `mirrored_ = true` and `isNegated_ = false`
   makeTestPrefixRegex(prefixRegex("Hamburg Altona", true),
                       {bVocabId3, bVocabId4, bVocabId5});
@@ -792,6 +796,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
   makeTestPrefixRegex(prefixRegex("Hamb", true), {bVocabId3, bVocabId4});
   makeTestPrefixRegex(prefixRegex("Stuttgart", true), {bVocabId6});
   makeTestPrefixRegex(prefixRegex("Düss", true), {bVocabId2});
+  makeTestPrefixRegex(prefixRegex("", true), {});
 
   // test `mirrored_ = true` and `isNegated = true`.
   makeTestPrefixRegex(
@@ -806,6 +811,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
   makeTestPrefixRegex(prefixRegex("Hamburg Alt", true, true),
                       {bVocabId0, bVocabId1, bVocabId2, bVocabId5, bVocabId6});
   makeTestPrefixRegex(prefixRegex("Münch", true, true),
+                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
+                       bVocabId5, bVocabId6});
+  makeTestPrefixRegex(prefixRegex("", true, true),
                       {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
                        bVocabId5, bVocabId6});
 }

@@ -620,3 +620,17 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
           "The vector must contain the <PrefilterExpression, Variable> "
           "pairs in sorted order w.r.t. Variable value."));
 }
+
+//______________________________________________________________________________
+// Test helper `getStringViewFromLiteralExpression` from LiteralExpression.h
+TEST(GetPrefilterExpressionFromSparqlExpression,
+     getNormalizedStringViewFromStringLiteralExpression) {
+  using namespace sparqlExpression;
+  ASSERT_TRUE(
+      sparqlExpression::detail::getStringViewFromLiteralExpression(
+          std::make_unique<StringLiteralExpression>(L("\"hello\"")).get())
+          .has_value());
+  ASSERT_FALSE(sparqlExpression::detail::getStringViewFromLiteralExpression(
+                   std::make_unique<IriExpression>(I("<iri>")).get())
+                   .has_value());
+}

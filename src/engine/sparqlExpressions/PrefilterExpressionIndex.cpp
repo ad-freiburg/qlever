@@ -504,9 +504,9 @@ bool PrefixRegexExpression::operator==(const PrefilterExpression& other) const {
   if (!otherPrefixRegex) {
     return false;
   }
-  return (isNegated_ == otherPrefixRegex->isNegated_) &&
-         (prefix_ == otherPrefixRegex->prefix_) &&
-         (mirrored_ == otherPrefixRegex->mirrored_);
+  return isNegated_ == otherPrefixRegex->isNegated_ &&
+         prefix_ == otherPrefixRegex->prefix_ &&
+         mirrored_ == otherPrefixRegex->mirrored_;
 };
 
 //______________________________________________________________________________
@@ -527,13 +527,13 @@ std::string PrefixRegexExpression::asString(
 BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange) const {
-  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   if (mirrored_) {
     return evaluateMirroredImpl(vocab, idRange, blockRange);
   }
 
+  std::string_view prefixSv(prefix_);
   const auto& [beginIndex, endIndex] =
-      vocab.prefixRanges(prefix_).ranges().front();
+      vocab.prefixRanges(prefixSv).ranges().front();
   auto lowerId = Id::makeFromVocabIndex(beginIndex);
   auto upperId = Id::makeFromVocabIndex(endIndex);
 
@@ -556,11 +556,13 @@ BlockMetadataRanges PrefixRegexExpression::evaluateMirroredImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockSpan) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
-  if (prefix_.size() <= 1) {
+
+  if (prefix_.size() == 1) {
     // Case `STRSTARTS("", ?var)`.
     // The empty incomplete literal acts as a reference bound here.
+    std::string_view lowerStr(&prefix_.front(), 1);
     auto emptyBound = Id::makeFromVocabIndex(
-        vocab.prefixRanges(prefix_).ranges().front().first);
+        vocab.prefixRanges(lowerStr).ranges().front().first);
     if (isNegated_) {
       // Case: `!STRSTARTS("", ?var)`.
       // Prefilter ?var > ".
