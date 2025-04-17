@@ -129,11 +129,14 @@ Result Service::computeResultImpl(bool requestLaziness) {
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Construct the query to be sent to the SPARQL endpoint.
-  std::string variablesForSelectClause = absl::StrJoin(
-      parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
+  const auto& variables = parsedServiceClause_.visibleVariables_;
+  std::string variablesForSelectClause =
+      variables.empty()
+          ? "*"
+          : absl::StrJoin(variables, " ", Variable::AbslFormatter);
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
-                   variablesForSelectClause, " WHERE ", getGraphPattern());
+                   variablesForSelectClause, " ", getGraphPattern());
   LOG(INFO) << "Sending SERVICE query to remote endpoint "
             << "(protocol: " << serviceUrl.protocolAsString()
             << ", host: " << serviceUrl.host()
