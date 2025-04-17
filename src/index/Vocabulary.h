@@ -22,7 +22,7 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StringSortComparator.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Exception.h"
@@ -113,6 +113,7 @@ class Vocabulary {
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
+  using AccessReturnType = AccessReturnType_t<StringType>;
 
   Vocabulary() = default;
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
@@ -206,19 +207,14 @@ class Vocabulary {
 
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+                        SortLevel level = SortLevel::QUARTERNARY) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
-  UnderlyingVocabulary::WordWriter makeWordWriter(
-      const std::string& filename) const {
-    // Note: In GCC this triggers a move construction of the created
-    // `DiskWriter`, although mandatory copy elision should kick in here
-    // according to our understanding (and does in clang). We could investigate
-    // whether this is a bug in GCC or whether we are missing something.
-    return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
+  auto makeWordWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the

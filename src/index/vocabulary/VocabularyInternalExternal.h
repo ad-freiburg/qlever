@@ -118,11 +118,7 @@ class VocabularyInternalExternal {
     std::string& readableName() { return readableName_; }
   };
 
-  // Return a `WordWriter` or (in the second function) a
-  // `unique_ptr<WordWriter>` for the given filename.
-  static WordWriter makeDiskWriter(const std::string& filename) {
-    return WordWriter{filename};
-  }
+  // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
   static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
   }

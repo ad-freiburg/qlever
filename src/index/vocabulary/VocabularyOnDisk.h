@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "global/Id.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"

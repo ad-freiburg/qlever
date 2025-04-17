@@ -8,8 +8,7 @@ addLinkAndDiscoverTestNoLibs(UnicodeVocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyInternalExternalTest vocabulary)
 
-addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)
-
 addLinkAndDiscoverTestNoLibs(PolymorphicVocabularyTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
+addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)

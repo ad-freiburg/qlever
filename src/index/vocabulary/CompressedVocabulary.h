@@ -261,17 +261,9 @@ CPP_template(typename UnderlyingVocabulary,
   };
   using WordWriter = DiskWriterFromUncompressedWords;
 
-  // Return a `DiskWriter` that can be used to create the vocabulary.
-  static DiskWriterFromUncompressedWords makeDiskWriter(
-      const std::string& filename) {
-    return DiskWriterFromUncompressedWords{
-        absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix)};
-  }
-
-  // Return a `unique_ptr<DiskWriter>`.
-  static std::unique_ptr<DiskWriterFromUncompressedWords> makeDiskWriterPtr(
-      const std::string& filename) {
+  // Return a `unique_ptr<DiskWriter>` that can be used to create the
+  // vocabulary.
+  static auto makeDiskWriterPtr(const std::string& filename) {
     return std::make_unique<DiskWriterFromUncompressedWords>(
         absl::StrCat(filename, wordsSuffix),
         absl::StrCat(filename, decodersSuffix));

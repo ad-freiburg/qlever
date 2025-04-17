@@ -114,7 +114,7 @@ class Index {
   void addTextFromOnDiskIndex();
 
   using Vocab = RdfsVocabulary;
-  [[nodiscard]] const Vocab& getVocab() const;
+  const Vocab& getVocab() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;
@@ -139,8 +139,8 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  Vocab::AccessReturnType indexToString(VocabIndex id) const;
-  TextVocab::AccessReturnType indexToString(WordVocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
