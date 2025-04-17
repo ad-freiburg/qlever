@@ -265,7 +265,7 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     return true;
   }
 
-  if (checkWord(false)) {
+  if (checkWord(true)) {
     return true;
   }
 

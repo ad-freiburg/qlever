@@ -88,6 +88,9 @@ class SplitVocabulary {
                            bool useSpecial = false) const {
     if (useSpecial) {
       WordAndIndex subResult = underlyingSpecial_.lower_bound(word, comparator);
+      if (subResult.isEnd()) {
+        return subResult;
+      }
       return {subResult.word(), subResult.index() | specialVocabMarker};
     } else {
       return underlyingMain_.lower_bound(word, comparator);
@@ -99,6 +102,9 @@ class SplitVocabulary {
                            bool useSpecial = false) const {
     if (useSpecial) {
       WordAndIndex subResult = underlyingSpecial_.upper_bound(word, comparator);
+      if (subResult.isEnd()) {
+        return subResult;
+      }
       return {subResult.word(), subResult.index() | specialVocabMarker};
     } else {
       return underlyingMain_.upper_bound(word, comparator);

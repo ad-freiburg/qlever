@@ -12,6 +12,9 @@
 #include "index/Index.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 
 using namespace ad_utility::vocabulary_merger;
@@ -134,9 +137,12 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
-                // if (RdfsVocabulary::stringIsGeoLiteral(w.iriOrLiteral())) {
-                //   globalId = RdfsVocabulary::makeGeoVocabIndex(globalId);
-                // }
+                using GeoVocab = SplitGeoVocabulary<
+                    CompressedString, TripleComponentComparator, VocabIndex,
+                    CompressedVocabulary<VocabularyInternalExternal>>;
+                if (GeoVocab::isSpecialLiteral(w.iriOrLiteral())) {
+                  globalId = GeoVocab::makeSpecialVocabIndex(globalId);
+                }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }
             }
