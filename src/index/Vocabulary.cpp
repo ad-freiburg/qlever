@@ -6,11 +6,18 @@
 
 #include "index/Vocabulary.h"
 
+#include <filesystem>
 #include <iostream>
+#include <type_traits>
 
+#include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/json.h"
 
@@ -37,22 +44,10 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 }
 
 // _____________________________________________________________________________
+
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
-  vocabulary_.close();
-  vocabulary_.open(fileName);
-  if constexpr (isCompressed_) {
-    const auto& internalExternalVocab =
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-    LOG(INFO) << "Done, number of words: "
-              << internalExternalVocab.internalVocab().size() << std::endl;
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << internalExternalVocab.externalVocab().size() << std::endl;
-  } else {
-    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
-  }
+void Vocabulary<S, C, I>::readFromFile(const string& filename) {
+  vocabulary_.getUnderlyingVocabulary().readFromFile(filename);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -253,13 +248,28 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // need the TOTAL level because we want the unique word.
-  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
-  if (wordAndIndex.isEnd()) {
-    return false;
+  // Helper lambda to lookup a the word in a given vocabulary and pass
+  // arguments to the underlying vocabulary below the unicode support layer.
+  auto checkWord = [this, &word, &idx](auto&&... args) -> bool {
+    // We need the TOTAL level because we want the unique word.
+    WordAndIndex wordAndIndex =
+        vocabulary_.lower_bound(word, SortLevel::TOTAL, AD_FWD(args)...);
+    if (wordAndIndex.isEnd()) {
+      return false;
+    }
+    idx->get() = wordAndIndex.index();
+    return wordAndIndex.word() == word;
+  };
+
+  if (checkWord()) {
+    return true;
   }
-  idx->get() = wordAndIndex.index();
-  return wordAndIndex.word() == word;
+
+  if (checkWord(true)) {
+    return true;
+  }
+
+  return false;
 }
 
 // ___________________________________________________________________________
@@ -277,7 +287,6 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::operator[](IndexType idx) const
     -> AccessReturnType_t<S> {
-  AD_CONTRACT_CHECK(idx.get() < size());
   return vocabulary_[idx.get()];
 }
 

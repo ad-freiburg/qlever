@@ -24,10 +24,12 @@
 #include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -115,10 +117,11 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
-  using UnderlyingVocabulary =
+  using UnderlyingVocabulary = SplitGeoVocabulary<
+      StringType, ComparatorType, IndexT,
       std::conditional_t<isCompressed_,
                          CompressedVocabulary<VocabularyInternalExternal>,
-                         VocabularyInMemory>;
+                         VocabularyInMemory>>;
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
@@ -144,7 +147,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -239,7 +242,7 @@ class Vocabulary {
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
   auto makeWordWriterPtr(const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
+    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
   }
 };
 
