@@ -125,8 +125,6 @@ class Vocabulary {
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
-  // The vocabulary is split into an underlying vocabulary for normal literals
-  // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
@@ -148,8 +146,7 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  //! Read the vocabulary from files containing words and geometries
-  //! respectively.
+  //! Read the vocabulary from file.
   void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
@@ -241,7 +238,7 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
 
-  // Get a writer for each underlying vocab that has an `operator()` method to
+  // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
