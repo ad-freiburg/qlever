@@ -229,7 +229,6 @@ class Vocabulary {
     return getCaseComparator().getLocaleManager();
   }
 
-  // TODO migrate to arrays of indices
   // Wraps std::lower_bound and returns an index instead of an iterator
   IndexType lower_bound(std::string_view word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;

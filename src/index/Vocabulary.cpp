@@ -247,8 +247,6 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // return vocabulary_.getUnderlyingVocabulary().getId(word, &idx->get());
-
   // Helper lambda to lookup a the word in a given vocabulary.
   auto checkWord = [&word, &idx](const auto& vocab) -> bool {
     // We need the TOTAL level because we want the unique word.
