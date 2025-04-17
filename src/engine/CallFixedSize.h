@@ -1,6 +1,8 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 #define QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
@@ -12,6 +14,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/ValueIdentity.h"
 
 // The functions and macros are able to call functions that take a set of
 // integers as template parameters with integers that are only known at runtime.
@@ -48,7 +51,30 @@
 // the macro and the template function interface, see `CallFixedSizeTest.cpp`.
 
 namespace ad_utility {
+
+template <typename F>
+struct ApplyAsValueIdentity {
+  F function;
+
+  template <auto... Is, typename... Args>
+  decltype(auto) operator()(Args&&... args) const {
+    using ad_utility::use_value_identity::vi;
+    return function(vi<Is>..., AD_FWD(args)...);
+  }
+};
+
+template <typename F>
+ApplyAsValueIdentity(F&&) -> ApplyAsValueIdentity<F>;
+
 namespace detail {
+
+// Call the `lambda` when the correct compile-time `Int`s are given as a
+// `std::integer_sequence`.
+template <std::integral Int, Int... Is, typename F, typename... Args>
+auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
+                            Args&&... args) {
+  return lambda.template operator()<Is...>(AD_FWD(args)...);
+};
 
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
@@ -61,18 +87,12 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
 
-  // Call the `lambda` when the correct compile-time `Int`s are given as a
-  // `std::integer_sequence`.
-  auto applyOnIntegerSequence =
-      [&]<Int... Is>(ad_utility::ValueSequence<Int, Is...>) {
-        return lambda.template operator()<Is...>(AD_FWD(args)...);
-      };
-
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
   using Result = decltype(applyOnIntegerSequence(
-      ad_utility::toIntegerSequence<ArrayType{}>()));
+      ad_utility::toIntegerSequence<ArrayType{}>(), AD_FWD(lambda),
+      AD_FWD(args)...));
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
@@ -80,22 +100,24 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
   // Lambda: If the compile time parameter `I` and the runtime parameter `array`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
-  auto applyIf = [&]<ArrayType Array>() mutable {
+  auto applyIf = ApplyAsValueIdentity{[&](auto valueIdentity) {
+    static constexpr auto Array = valueIdentity.value;
     if (array == Array) {
       if constexpr (resultIsVoid) {
-        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>(),
+                               AD_FWD(lambda), AD_FWD(args)...);
       } else {
-        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>(),
+                                        AD_FWD(lambda), AD_FWD(args)...);
       }
     }
-  };
+  }};
 
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
   // runtime parameter always is `array`.
-  auto f =
-      [&applyIf]<ArrayType... Is>(ad_utility::ValueSequence<ArrayType, Is...>) {
-        (..., applyIf.template operator()<Is>());
-      };
+  auto f = [&](auto&& valueSequence) {
+    forEachValueInValueSequence(AD_FWD(valueSequence), AD_FWD(applyIf));
+  };
 
   // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
   // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.

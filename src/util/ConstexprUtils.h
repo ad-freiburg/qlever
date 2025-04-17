@@ -289,6 +289,12 @@ constexpr void forEachTypeInTemplateTypeWithTI(
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
 }
 
+template <typename T, T... values, typename F>
+constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
+                                           F&& lambda) {
+  (lambda.template operator()<values>(), ...);
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_CONSTEXPRUTILS_H

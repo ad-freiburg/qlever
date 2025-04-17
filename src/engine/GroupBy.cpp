@@ -380,11 +380,13 @@ Result GroupBy::computeResult(bool requestLaziness) {
     // given `subresults`.
     auto computeWithHashMap = [this, &metadataForUnsequentialData,
                                &groupByCols](auto&& subresults) {
-      auto doCompute = [&]<int NumCols> {
-        return computeGroupByForHashMapOptimization<NumCols>(
-            metadataForUnsequentialData->aggregateAliases_, AD_FWD(subresults),
-            groupByCols);
-      };
+      auto doCompute =
+          ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
+            static constexpr int NumCols = valueIdentity.value;
+            return computeGroupByForHashMapOptimization<NumCols>(
+                metadataForUnsequentialData->aggregateAliases_,
+                AD_FWD(subresults), groupByCols);
+          }};
       return ad_utility::callFixedSize(groupByCols.size(), doCompute);
     };
 

@@ -342,3 +342,51 @@ TEST(ConstexprUtils, forEachTypeInTemplateTypeWithTI) {
   testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfTuple{},
                                  typeToStringFactoryWithTI);
 }
+
+template <typename Values>
+struct TestForEachValueInValueSequence {
+  Values& values;
+
+  template <auto V>
+  void operator()() const {
+    values.push_back(V);
+  }
+};
+
+template <typename Values>
+TestForEachValueInValueSequence(Values&)
+    -> TestForEachValueInValueSequence<Values>;
+
+TEST(ConstexprUtils, forEachValueInValueSequence) {
+  // Test with an empty ValueSequence.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int>{}, collectValues);
+    ASSERT_TRUE(values.empty());
+  }
+
+  // Test with a ValueSequence of integers.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int, 1, 2, 3>{}, collectValues);
+    ASSERT_EQ(values.size(), 3);
+    ASSERT_EQ(values[0], 1);
+    ASSERT_EQ(values[1], 2);
+    ASSERT_EQ(values[2], 3);
+  }
+
+  // Test with a ValueSequence of std::array.
+  {
+    using ArrayType = std::array<int, 3>;
+    std::vector<ArrayType> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(
+        ValueSequence<ArrayType, ArrayType{1, 2, 3}, ArrayType{4, 5, 6}>{},
+        collectValues);
+    ASSERT_EQ(values.size(), 2);
+    ASSERT_EQ(values[0], (ArrayType{1, 2, 3}));
+    ASSERT_EQ(values[1], (ArrayType{4, 5, 6}));
+  }
+}

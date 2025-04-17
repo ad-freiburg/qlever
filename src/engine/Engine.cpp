@@ -33,9 +33,12 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
       }
     };
     ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+                              ad_utility::ApplyAsValueIdentity{
+                                  [&idTable, comparison](auto valueIdentity) {
+                                    static constexpr int I =
+                                        valueIdentity.value;
+                                    Engine::sort<I>(&idTable, comparison);
+                                  }});
   } else {
     auto comparison = [&sortCols](const auto& row1, const auto& row2) {
       for (auto& col : sortCols) {
@@ -46,9 +49,12 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
       return false;
     };
     ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+                              ad_utility::ApplyAsValueIdentity{
+                                  [&idTable, comparison](auto valueIdentity) {
+                                    static constexpr int I =
+                                        valueIdentity.value;
+                                    Engine::sort<I>(&idTable, comparison);
+                                  }});
   }
 }
 
