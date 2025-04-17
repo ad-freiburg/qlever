@@ -60,7 +60,7 @@ class SplitVocabulary {
   void readFromFile(const std::string& filename);
 
   // Problem with getId is that it needs the Comparator which is from the
-  // UnicodeVocab above this splitvocab for the correct lower_bound. -> we cant
+  // UnicodeVocab above this splitvocab for the correct lower_bound. -> we can't
   // do it here
   // bool getId(std::string_view word, uint64_t* idx) const;
 
