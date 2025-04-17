@@ -4190,3 +4190,16 @@ TEST(QueryPlanner, emptyPathWithLiteralsBound) {
               h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                       "?_QLever_internal_variable_qp_1")))));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?x"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?x"}, 1};
+  h::expect("SELECT * { ?x <a>+ ?x . ?x <b> <c> }",
+            h::TransitivePath(std::move(left), std::move(right), 1,
+                              std::numeric_limits<size_t>::max(),
+                              h::IndexScanFromStrings("?x", "<b>", "<c>"),
+                              h::IndexScanFromStrings(
+                                  "?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
