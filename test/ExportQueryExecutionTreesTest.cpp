@@ -3,8 +3,6 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 

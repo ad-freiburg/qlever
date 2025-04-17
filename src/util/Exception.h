@@ -2,8 +2,6 @@
 // Structures.
 // Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
 //         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_EXCEPTION_H
 #define QLEVER_SRC_UTIL_EXCEPTION_H

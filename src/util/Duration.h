@@ -1,10 +1,8 @@
 //  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
-//
+
 //  Tests for this class can be found in DurationTest.cpp
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_DURATION_H
 #define QLEVER_DURATION_H

@@ -1,8 +1,6 @@
 //  Copyright 2020, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Common classes / Typedefs that are used during Index Creation
 

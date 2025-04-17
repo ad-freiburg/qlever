@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H
 #define QLEVER_SRC_ENGINE_QUERYEXECUTIONTREE_H

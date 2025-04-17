@@ -1,8 +1,6 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 #define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
@@ -12,7 +10,6 @@
 #include <vector>
 
 #include "backports/concepts.h"
-#include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
