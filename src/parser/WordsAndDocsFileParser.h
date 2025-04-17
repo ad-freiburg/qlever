@@ -14,6 +14,7 @@
 
 #include "global/Id.h"
 #include "index/StringSortComparator.h"
+#include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Views.h"
 
@@ -198,8 +199,9 @@ inline cppcoro::generator<WordsFileLine> getWordsLineFromDocsFile(
   for (const auto& line : DocsFileParser{docsFile, localeManager}) {
     for (const auto& word :
          tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-      co_yield WordsFileLine{
+      auto lineToReturn = WordsFileLine{
           word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
+      co_yield lineToReturn;
     }
   }
 }
