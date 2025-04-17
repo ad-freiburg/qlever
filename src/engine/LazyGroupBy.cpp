@@ -17,7 +17,9 @@ LazyGroupBy::LazyGroupBy(
       aggregationData_{allocator, aggregateAliases_, numGroupColumns} {
   for (const auto& aggregateInfo : allAggregateInfoView()) {
     visitAggregate(
-        [&aggregateInfo]<VectorOfAggregationData T>(T& arg) {
+        [&aggregateInfo](auto& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          static_assert(VectorOfAggregationData<T>);
           if constexpr (std::same_as<typename T::value_type,
                                      GroupConcatAggregationData>) {
             arg.emplace_back(aggregateInfo.aggregateType_.separator_.value());
@@ -32,8 +34,13 @@ LazyGroupBy::LazyGroupBy(
 // _____________________________________________________________________________
 void LazyGroupBy::resetAggregationData() {
   for (const auto& aggregateInfo : allAggregateInfoView()) {
-    visitAggregate([]<VectorOfAggregationData T>(T& arg) { arg.at(0).reset(); },
-                   aggregateInfo);
+    visitAggregate(
+        [](auto& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          static_assert(VectorOfAggregationData<T>);
+          arg.at(0).reset();
+        },
+        aggregateInfo);
   }
 }
 

@@ -117,19 +117,27 @@ TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstexprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
+  ConstexprForLoop(
+      std::make_index_sequence<100>{},
+      ad_utility::ApplyAsValueIdentity{[&i](auto /*valueIdentity*/) { i++; }});
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
   ConstexprForLoop(std::index_sequence<2, 5, 9>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+                   ad_utility::ApplyAsValueIdentity{[&i](auto valueIdentity) {
+                     static constexpr size_t NumberToAdd = valueIdentity.value;
+                     i += NumberToAdd;
+                   }});
   ASSERT_EQ(i, 16);
 
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
   ConstexprForLoop(std::index_sequence<>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+                   ad_utility::ApplyAsValueIdentity{[&i](auto valueIdentity) {
+                     static constexpr size_t NumberToAdd = valueIdentity.value;
+                     i += NumberToAdd;
+                   }});
   ASSERT_EQ(i, 0);
 }
 
@@ -137,7 +145,10 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
   // Create one function, that sets `i` to x, for every possible
   // version of x in [0,100].
   size_t i = 1;
-  auto setI = [&i]<size_t Number>() { i = Number; };
+  auto setI = ad_utility::ApplyAsValueIdentity{[&i](auto valueIdentity) {
+    static constexpr size_t Number = valueIdentity.value;
+    i = Number;
+  }};
   for (size_t d = 0; d <= 100; d++) {
     RuntimeValueToCompileTimeValue<100>(d, setI);
     ASSERT_EQ(i, d);
@@ -158,13 +169,19 @@ struct F1 {
 TEST(ConstexprUtils, ConstexprSwitch) {
   using namespace ad_utility;
   {
-    auto f = []<int i> { return i * 2; };
+    auto f = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+      static constexpr int i = valueIdentity.value;
+      return i * 2;
+    }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2)), 4);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4)));
   }
   {
-    auto f = []<int i>(int j) { return i * j; };
+    auto f = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity, int j) {
+      static constexpr int i = valueIdentity.value;
+      return i * j;
+    }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2, 7)), 14);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5, 2)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4, 3)));
