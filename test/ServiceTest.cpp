@@ -15,7 +15,6 @@
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -23,6 +22,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -580,6 +580,58 @@ TEST_F(ServiceTest, getCacheKey) {
   EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
 }
 
+// _____________________________________________________________________________
+TEST_F(ServiceTest, getCacheKeyWithCaching) {
+  using namespace ::testing;
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  {
+    parsedQuery::Service parsedServiceClause{
+        {Variable{"?x"}, Variable{"?y"}},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        false};
+
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult(
+                {"x", "y"},
+                {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
+
+    EXPECT_THAT(service.getCacheKey(),
+                AllOf(StartsWith("SERVICE"), Not(HasSubstr("SILENT")),
+                      HasSubstr("<http://localhorst/api>"),
+                      HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
+  {
+    parsedQuery::Service parsedServiceClause{
+        {Variable{"?x"}, Variable{"?y"}},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        true};
+
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult(
+                {"x", "y"},
+                {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
+
+    EXPECT_THAT(service.getCacheKey(),
+                AllOf(StartsWith("SERVICE"), HasSubstr("SILENT"),
+                      HasSubstr("<http://localhorst/api>"),
+                      HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
+}
+
 // Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
   ad_utility::HashMap<std::string, Id> blankNodeMap;
@@ -685,6 +737,30 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
       idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
           .value(),
       absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+
+  auto sibling = std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
+
+  EXPECT_NO_THROW(
+      Service::precomputeSiblingResult(sibling, service, true, false));
+  EXPECT_FALSE(service->siblingInfo_.has_value());
 }
 
 // ____________________________________________________________________________
