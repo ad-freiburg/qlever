@@ -78,7 +78,7 @@ static bool checkBlockIsInconsistent(const CompressedBlockMetadata& block,
 // order. (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
-    absl::Span<const BlockMetadata> input, size_t evaluationColumn) {
+    absl::Span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
   const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
   };
@@ -178,7 +178,7 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   auto blockRangeBegin = blockRange.begin();
   // Each `CompressedBlockMetadata` value contains two bounding `ValueId`s, one
   // for `firstTriple_` and `lastTriple_` respectively. `ValueIdIt idRangeBegin`
-  // is the first valid iterator on our flattened `std::span<const
+  // is the first valid iterator on our flattened `absl::Span<const
   // CompressedBlockMetadata> blockRange` with respect to the contained
   // `ValueId`s.
   // `blockRange.begin()` represents the first valid iterator on our original

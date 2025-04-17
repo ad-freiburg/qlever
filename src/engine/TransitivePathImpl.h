@@ -122,10 +122,7 @@ class TransitivePathImpl : public TransitivePathBase {
     NodeGenerator hull = transitiveHull(
         edges, sub->getCopyOfLocalVocab(),
         absl::Span<detail::TableColumnWithVocab<const Set&>>(&tableInfo, 1),
-        targetSide.isVariable()
-            ? std::nullopt
-            : std::optional{std::get<Id>(targetSide.value_)},
-        yieldOnce);
+        targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
@@ -277,7 +274,7 @@ class TransitivePathImpl : public TransitivePathBase {
    */
   std::vector<absl::Span<const Id>> setupNodes(
       const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSidem, const T& edges) const {
+      const TransitivePathSide& targetSide, const T& edges) const {
     std::vector<absl::Span<const Id>> result;
 
     // id -> var|id

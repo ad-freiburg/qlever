@@ -1396,7 +1396,7 @@ size_t QueryPlanner::findUniqueNodeIds(
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-      nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
+      nodeIds, [](auto nodeId) { return absl::popcount(nodeId) == 1; }));
   ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
