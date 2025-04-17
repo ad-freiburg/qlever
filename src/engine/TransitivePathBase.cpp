@@ -109,9 +109,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
           SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
                        TripleComponent{x}},
           activeGraphs))));
-  return ad_utility::makeExecutionTree<Distinct>(
-      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
-      std::vector<ColumnIndex>{0});
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
+                                                 std::vector<ColumnIndex>{0});
 }
 
 // _____________________________________________________________________________
@@ -141,9 +140,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
           SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
                        TripleComponent{x}},
           activeGraphs)));
-  return ad_utility::makeExecutionTree<Distinct>(
-      qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
-      std::vector<ColumnIndex>{0});
+  return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
+                                                 std::vector<ColumnIndex>{0});
 }
 
 // _____________________________________________________________________________
