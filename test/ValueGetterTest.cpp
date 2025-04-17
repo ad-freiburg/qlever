@@ -197,8 +197,7 @@ TEST(LiteralValueGetterWithStrFunction, OperatorWithId) {
                                        std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromId(
       "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
-      literalValueGetter);
+      "anXsdString", std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromId("<x>", "x", std::nullopt,
                                        literalValueGetter);
 }
@@ -216,8 +215,7 @@ TEST(LiteralValueGetterWithStrFunction, OperatorWithLiteralOrIri) {
   checkLiteralContentAndDatatypeFromLiteralOrIri(
       "anXsdString",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"), false,
-      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
-      literalValueGetter);
+      "anXsdString", std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromLiteralOrIri(
       "<x>", std::nullopt, true, "x", std::nullopt, literalValueGetter);
 }
@@ -231,8 +229,7 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithId) {
                                        std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromId(
       "\"anXsdString\"^^<http://www.w3.org/2001/XMLSchema#string>",
-      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
-      literalValueGetter);
+      "anXsdString", std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromId("<x>", std::nullopt, std::nullopt,
                                        literalValueGetter);
 }
@@ -250,8 +247,7 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
   checkLiteralContentAndDatatypeFromLiteralOrIri(
       "anXsdString",
       Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"), false,
-      "anXsdString", "http://www.w3.org/2001/XMLSchema#string",
-      literalValueGetter);
+      "anXsdString", std::nullopt, literalValueGetter);
   checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
                                                  std::nullopt, std::nullopt,
                                                  literalValueGetter);
