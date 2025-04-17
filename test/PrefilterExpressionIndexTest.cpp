@@ -752,19 +752,23 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
   // test `mirrored_ = false` and `isNegated_ = false`
-  makeTestPrefixRegex(prefixRegex("Ber"), {bVocabId0, bVocabId1, bVocabId2});
-  makeTestPrefixRegex(prefixRegex("Düssel"), {bVocabId2});
-  makeTestPrefixRegex(prefixRegex("H"), {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Ham"), {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hambu"), {bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hamburg Alt"), {bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hamburg Altona"), {bVocabId5});
-  makeTestPrefixRegex(prefixRegex("No Prefix"), {});
-  makeTestPrefixRegex(prefixRegex(""),
+  makeTestPrefixRegex(prefixRegex("Ber", false, false),
+                      {bVocabId0, bVocabId1, bVocabId2});
+  makeTestPrefixRegex(prefixRegex("Düssel", false, false), {bVocabId2});
+  makeTestPrefixRegex(prefixRegex("H", false, false),
+                      {bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Ham", false, false),
+                      {bVocabId3, bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hambu", false, false),
+                      {bVocabId4, bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hamburg Alt", false, false), {bVocabId5});
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona", false, false), {bVocabId5});
+  makeTestPrefixRegex(prefixRegex("No Prefix", false, false), {});
+  makeTestPrefixRegex(prefixRegex("", false, false),
                       {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
                        bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Stutt"), {bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Stuttgart"), {bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Stutt", false, false), {bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Stuttgart", false, false), {bVocabId6});
 
   // test `mirrored_ = false` and `isNegated_ = true`
   makeTestPrefixRegex(prefixRegex("H", false, true),
@@ -787,16 +791,16 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpressionMirrored) {
   // test `mirrored_ = true` and `isNegated_ = false`
-  makeTestPrefixRegex(prefixRegex("Hamburg Altona", true),
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona", true, false),
                       {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("B", true), {});
-  makeTestPrefixRegex(prefixRegex("Bernd", true),
+  makeTestPrefixRegex(prefixRegex("B", true, false), {});
+  makeTestPrefixRegex(prefixRegex("Bernd", true, false),
                       {bVocabId0, bVocabId1, bVocabId2});
-  makeTestPrefixRegex(prefixRegex("Ham", true), {bVocabId3});
-  makeTestPrefixRegex(prefixRegex("Hamb", true), {bVocabId3, bVocabId4});
-  makeTestPrefixRegex(prefixRegex("Stuttgart", true), {bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Düss", true), {bVocabId2});
-  makeTestPrefixRegex(prefixRegex("", true), {});
+  makeTestPrefixRegex(prefixRegex("Ham", true, false), {bVocabId3});
+  makeTestPrefixRegex(prefixRegex("Hamb", true, false), {bVocabId3, bVocabId4});
+  makeTestPrefixRegex(prefixRegex("Stuttgart", true, false), {bVocabId6});
+  makeTestPrefixRegex(prefixRegex("Düss", true, false), {bVocabId2});
+  makeTestPrefixRegex(prefixRegex("", true, false), {});
 
   // test `mirrored_ = true` and `isNegated = true`.
   makeTestPrefixRegex(

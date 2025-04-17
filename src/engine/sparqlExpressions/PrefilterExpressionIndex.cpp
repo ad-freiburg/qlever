@@ -532,10 +532,11 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   }
 
   std::string_view prefixSv(&prefix_.front(), prefix_.size());
-  const auto& [beginIndex, endIndex] =
-      vocab.prefixRanges(prefixSv).ranges().front();
-  auto lowerId = Id::makeFromVocabIndex(beginIndex);
-  auto upperId = Id::makeFromVocabIndex(endIndex);
+  const auto& prefixRanges = vocab.prefixRanges(prefixSv);
+  const auto& ranges = prefixRanges.ranges();
+  const auto& firstRange = ranges.front();
+  auto lowerId = Id::makeFromVocabIndex(firstRange.first);
+  auto upperId = Id::makeFromVocabIndex(firstRange.second);
 
   if (isNegated_) {
     // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
