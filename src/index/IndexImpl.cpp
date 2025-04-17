@@ -552,7 +552,8 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
+    auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
@@ -979,7 +980,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(std::string_view object) const {
   return decltype(vocab_)::stringIsLiteral(object);
 }
 
@@ -1532,10 +1533,13 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
+RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
+  return vocab_[id];
+}
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType IndexImpl::indexToString(
+    WordVocabIndex id) const {
   return textVocab_[id];
 }
 

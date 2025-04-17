@@ -37,3 +37,9 @@ void VocabularyInternalExternal::WordWriter::finish() {
   internalWriter_.finish();
   externalWriter_.finish();
 }
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::open(const string& filename) {
+  internalVocab_.open(filename + ".internal");
+  externalVocab_.open(filename + ".external");
+}
