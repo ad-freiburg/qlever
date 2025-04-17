@@ -538,7 +538,10 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 1, 2, 3});
+    auto action = unionOperation.createSortedClone({0, 1, 2, 3});
+    auto tree = std::move(action).getTree();
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 1, 2, 3}));
     EXPECT_EQ(
@@ -554,7 +557,10 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 3, 1, 2});
+    auto action = unionOperation.createSortedClone({0, 3, 1, 2});
+    auto tree = std::move(action).getTree();
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 3, 1, 2}));
     EXPECT_EQ(
@@ -567,6 +573,16 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
     EXPECT_EQ(result->idTable(), expected);
+  }
+  {
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_FALSE(unionOperation.createSortedClone({})
+                     .handle([]() {
+                       ADD_FAILURE() << "This should not be called";
+                       return nullptr;
+                     })
+                     .getTree()
+                     .has_value());
   }
 }
 

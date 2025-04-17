@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "engine/PreconditionAction.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -324,6 +325,16 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Try to create a version of this operation that is sorted on the given
+  // `sortColumns`. The default implementation returns `IMPLICITLY_SATISFIED` if
+  // the output is already sorted naturally, and `SATISFY_EXTERNALLY` otherwise.
+  // The latter case means that the result needs to be sorted using the `Sort`
+  // operation or by some other means. If an `Operation` can provide a more
+  // efficient way to achieve a sorted result, it should override this function
+  // and return an alternative execution tree that produces a sorted result.
+  virtual PreconditionAction createSortedClone(
+      const vector<ColumnIndex>& sortColumns) const;
 
  protected:
   // The QueryExecutionContext for this particular element.
