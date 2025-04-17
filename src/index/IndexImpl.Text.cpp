@@ -281,7 +281,10 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
   size_t entityNotFoundErrorMsgCount = 0;
   size_t nofLiterals = 0;
 
-  auto processLine = [&](const WordsFileLine& line) {
+  auto processLine = [&currentContext, &nofContexts, &vec, &wordsInContext,
+                      &entitiesInContext, &nofEntityPostings, &nofLiterals,
+                      &entityNotFoundErrorMsgCount, &nofWordPostings,
+                      this](const WordsFileLine& line) {
     if (line.contextId_ != currentContext) {
       ++nofContexts;
       addContextToVector(vec, currentContext, wordsInContext,
@@ -301,22 +304,22 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
     }
   };
 
-  // Parsie external files
+  // Parse external files
   if (useDocsFileForVocabulary) {
     const auto& localeManager = textVocab_.getLocaleManager();
     if (addEntitiesFromWordsFile) {
-      // useDocsFileForVocabulary && addEntitiesFromWordsFile
+      // Case where: useDocsFileForVocabulary && addEntitiesFromWordsFile
       wordsFromDocsFileEntitiesFromWordsFile(wordsFile, docsFile, localeManager,
                                              processLine);
     } else {
-      // useDocsFileForVocabulary && !addEntitiesFromWordsFile
+      // Cas where: useDocsFileForVocabulary && !addEntitiesFromWordsFile
       for (const auto& line :
            getWordsLineFromDocsFile(docsFile, localeManager)) {
         processLine(line);
       }
     }
   } else {
-    // !useDocsFileForVocabulary
+    // Case where: !useDocsFileForVocabulary
     for (const auto& line :
          WordsFileParser{wordsFile, textVocab_.getLocaleManager()}) {
       processLine(line);
@@ -358,7 +361,7 @@ void IndexImpl::processWordsForInvertedLists(const string& wordsFile,
 template <typename T>
 void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
     const string& wordsFile, const string& docsFile,
-    const LocaleManager& localeManager, T processLine) {
+    const LocaleManager& localeManager, T processLine) const {
   // Initialize DocsFileParser and WordsFileParser and the respective
   // iterators to parse in parallel
   auto docsFileParser = DocsFileParser{docsFile, localeManager};

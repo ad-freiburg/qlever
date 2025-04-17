@@ -195,7 +195,7 @@ class DocsFileParser : public WordsAndDocsFileParser,
 };
 
 inline cppcoro::generator<WordsFileLine> getWordsLineFromDocsFile(
-    const string& docsFile, const LocaleManager& localeManager) {
+    const string docsFile, const LocaleManager localeManager) {
   for (const auto& line : DocsFileParser{docsFile, localeManager}) {
     for (const auto& word :
          tokenizeAndNormalizeText(line.docContent_, localeManager)) {
