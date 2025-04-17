@@ -13,6 +13,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
 #include "util/Exception.h"
@@ -262,7 +263,30 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  return vocabulary_.getUnderlyingVocabulary().getId(word, &idx->get());
+  // return vocabulary_.getUnderlyingVocabulary().getId(word, &idx->get());
+
+  // Helper lambda to lookup a the word in a given vocabulary.
+  auto checkWord = [&word, &idx](const auto& vocab) -> bool {
+    // We need the TOTAL level because we want the unique word.
+    WordAndIndex wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
+    if (wordAndIndex.isEnd()) {
+      return false;
+    }
+    idx->get() = wordAndIndex.index();
+    return wordAndIndex.word() == word;
+  };
+
+  // Check if the word is in the regular non-geometry vocabulary
+  if (checkWord(vocabulary_)) {
+    return true;
+  }
+
+  // Not found in regular vocabulary: test if it is in the geometry vocabulary
+  // bool res = checkWord(underlyingSpecial_);
+  // // Index with special marker bit for geometry word
+  // *idx |= specialVocabMarker;
+  // return res;
+  return false;
 }
 
 // ___________________________________________________________________________

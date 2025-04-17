@@ -38,6 +38,15 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
   readSingle(underlyingSpecial_, fnSpecial);
 }
 
+// _____________________________________________________________________________
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::open(const string& filename) {
+  auto [fnMain, fnSpecial] = SFN(filename);
+  underlyingMain_.open(fnMain);
+  underlyingSpecial_.open(fnSpecial);
+}
+
 // //
 // _____________________________________________________________________________
 // template <typename ST, typename CT, typename IT, class M, class S,
@@ -52,13 +61,11 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
 template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
 SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
-    const SplitVocabulary<ST, CT, IT, M, S, SF, SFN>& vocabulary,
+    const M& mainVocabulary, const S& specialVocabulary,
     const std::string& filename)
-    : underlyingWordWriter_{vocabulary.getUnderlyingMainVocabulary()
-                                .makeDiskWriter(SFN(filename).at(0))},
+    : underlyingWordWriter_{mainVocabulary.makeDiskWriter(SFN(filename).at(0))},
       underlyingSpecialWordWriter_{
-          vocabulary.getUnderlyingSpecialVocabulary().makeDiskWriter(
-              SFN(filename).at(1))} {};
+          specialVocabulary.makeDiskWriter(SFN(filename).at(1))} {};
 
 // _____________________________________________________________________________
 template <typename ST, typename CT, typename IT, class M, class S,
@@ -102,29 +109,7 @@ bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
                                                        uint64_t* idx) const {
   // Todo move getid + lower upper bound to vocab.h again; and only look in main
   // vocab, when that works, start changing lower/upper bound to arrays
-
-  // Helper lambda to lookup a the word in a given vocabulary.
-  auto checkWord = [&word, &idx](const auto& vocab) -> bool {
-    // We need the TOTAL level because we want the unique word.
-    using SortLevel = typename CT::Level;
-    auto wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
-    if (wordAndIndex.isEnd()) {
-      return false;
-    }
-    *idx = wordAndIndex.index();
-    return wordAndIndex.word() == word;
-  };
-
-  // Check if the word is in the regular non-geometry vocabulary
-  if (checkWord(underlyingMain_)) {
-    return true;
-  }
-
-  // Not found in regular vocabulary: test if it is in the geometry vocabulary
-  bool res = checkWord(underlyingSpecial_);
-  // Index with special marker bit for geometry word
-  *idx |= specialVocabMarker;
-  return res;
+  return false;
 };
 
 // Explicit template instantiations
@@ -138,9 +123,9 @@ template class SplitVocabulary<std::string, SimpleStringComparator,
                                CompressedVocabulary<VocabularyInternalExternal>,
                                CompressedVocabulary<VocabularyInternalExternal>,
                                geoSplitFunc, geoFilenameFunc>;
-// template class SplitVocabulary<
-//     CompressedString, TripleComponentComparator, VocabIndex,
-//     VocabularyInMemory, VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
-// template class SplitVocabulary<
-//     std::string, SimpleStringComparator, WordVocabIndex, VocabularyInMemory,
-//     VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
+template class SplitVocabulary<
+    CompressedString, TripleComponentComparator, VocabIndex, VocabularyInMemory,
+    VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
+template class SplitVocabulary<
+    std::string, SimpleStringComparator, WordVocabIndex, VocabularyInMemory,
+    VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;

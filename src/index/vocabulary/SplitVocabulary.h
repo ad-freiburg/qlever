@@ -119,11 +119,9 @@ class SplitVocabulary {
     std::string readableName_ = "";
 
    public:
-    WordWriter(
-        const SplitVocabulary<StringType, ComparatorType, IndexT,
-                              MainVocabulary, SpecialVocabulary, SplitFunction,
-                              SplitFilenameFunction>& vocabulary,
-        const std::string& filename);
+    WordWriter(const MainVocabulary& mainVocabulary,
+               const SpecialVocabulary& specialVocabulary,
+               const std::string& filename);
 
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternal);
@@ -136,7 +134,7 @@ class SplitVocabulary {
   };
 
   WordWriter makeWordWriter(const std::string& filename) const {
-    return {*this, filename};
+    return {underlyingMain_, underlyingSpecial_, filename};
   }
 
   void createFromSet(const ad_utility::HashSet<std::string>& set,
@@ -151,12 +149,12 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
     ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
 
 // Split function
-const auto geoSplitFunc = [](std::string_view word) -> bool {
+inline bool geoSplitFunc(std::string_view word) {
   return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
 };
+
 // Split filename function
-const auto geoFilenameFunc =
-    [](std::string base) -> std::array<std::string, 2> {
+inline std::array<std::string, 2> geoFilenameFunc(std::string base) {
   return {base, base + ".geometry"};
 };
 
