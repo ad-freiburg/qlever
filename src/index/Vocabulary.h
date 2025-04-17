@@ -23,12 +23,12 @@
 #include "global/Pattern.h"
 #include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -137,6 +137,7 @@ class Vocabulary {
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
+  using AccessReturnType = AccessReturnType_t<StringType>;
 
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
@@ -238,16 +239,14 @@ class Vocabulary {
 
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+                        SortLevel level = SortLevel::QUARTERNARY) const;
 
   // Get a writer for each underlying vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
-  // the internal vocabulary have to be pushed one by one to add words to the
-  // vocabulary. This writer internally splits the words into a generic
-  // vocabulary and a geometry vocabulary.
-  UnderlyingVocabulary::WordWriter makeWordWriter(
-      const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeWordWriter(filename);
+  // the internal vocabulary  have to be pushed one by one to add words to the
+  // vocabulary.
+  auto makeWordWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
   }
 };
 

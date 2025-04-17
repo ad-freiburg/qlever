@@ -6,10 +6,10 @@
 
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 
 namespace {
 
@@ -58,7 +58,8 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
                                        "31",    "0",     "al"};
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
-  auto writer = v.makeDiskWriter("vocabtmp.txt");
+  auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
+  auto& writer = *writerPtr;
   for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
     ASSERT_EQ(writer(word), static_cast<uint64_t>(i));
   }
@@ -97,7 +98,8 @@ CPP_template(typename Compressor)(
     return [filename](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
-      auto writer = vocab.makeDiskWriter(filename);
+      auto writerPtr = vocab.makeDiskWriterPtr(filename);
+      auto& writer = *writerPtr;
       for (const auto& word : words) {
         writer(word);
       }

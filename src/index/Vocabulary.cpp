@@ -83,15 +83,18 @@ void Vocabulary<S, C, I>::createFromSet(
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
-  auto buildSingle = [totalComparison](VocabularyWithUnicodeComparator& vocab,
-                                       std::vector<std::string>& words,
-                                       const std::string& filename) {
-    std::sort(begin(words), end(words), totalComparison);
-    vocab.build(words, filename);
+  std::sort(begin(words), end(words), totalComparison);
+  auto writerPtr = makeWordWriterPtr(filename);
+  auto writeWords = [&writer = *writerPtr](std::string_view word) {
+    // All words are stored in the internal vocab (this is consistent with the
+    // previous behavior). NOTE: This function is currently only used for the
+    // text index and for few unit tests, where we don't have an external
+    // vocabulary anyway.
+    writer(word, false);
   };
-  buildSingle(vocabulary_, words, filename);
-  // buildSingle(geoVocabulary_, geoWords, filename + geoVocabSuffix);
-
+  ql::ranges::for_each(words, writeWords);
+  writerPtr->finish();
+  vocabulary_.open(filename);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
