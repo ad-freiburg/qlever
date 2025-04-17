@@ -30,7 +30,7 @@ Service::Service(QueryExecutionContext* qec,
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
-  if (RuntimeParameters().get<"cache-service">()) {
+  if (RuntimeParameters().get<"cache-service-results">()) {
     return absl::StrCat(
         "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
@@ -536,7 +536,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // - or exactly one of the operations is a Service. If we could estimate
   // the result size of a Service, the Service with the smaller result could
   // be used as a sibling here.
-  if (RuntimeParameters().get<"cache-service">() ||
+  if (RuntimeParameters().get<"cache-service-results">() ||
       (rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;

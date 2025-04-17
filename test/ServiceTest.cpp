@@ -583,7 +583,7 @@ TEST_F(ServiceTest, getCacheKey) {
 // _____________________________________________________________________________
 TEST_F(ServiceTest, getCacheKeyWithCaching) {
   using namespace ::testing;
-  auto cleanup = setRuntimeParameterForTest<"cache-service">(true);
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
   {
     parsedQuery::Service parsedServiceClause{
         {Variable{"?x"}, Variable{"?y"}},
@@ -741,7 +741,7 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
 
 // ____________________________________________________________________________
 TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
-  auto cleanup = setRuntimeParameterForTest<"cache-service">(true);
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
   auto service = std::make_shared<Service>(
       testQec,
       parsedQuery::Service{
