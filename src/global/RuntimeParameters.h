@@ -67,7 +67,7 @@ inline auto& RuntimeParameters() {
         MemorySizeParameter<"request-body-limit">{100_MB},
         // SERVICE operations are not cached by default, but can be enabled
         // which has the downside that the sibling optimization where VALUES are
-        // dynamically pushed into `SERVICE` can no longer be used.
+        // dynamically pushed into `SERVICE` is no longer used.
         Bool<"cache-service-results">{false},
     };
   }();
