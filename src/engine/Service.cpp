@@ -1,6 +1,7 @@
 // Copyright 2022 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Service.h"
 
@@ -195,7 +196,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
-             : Result{cppcoro::getSingleElement(std::move(generator)),
+             : Result{ad_utility::getSingleElement(std::move(generator)),
                       resultSortedOn()};
 }
 
@@ -244,65 +245,84 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 }
 
 // ____________________________________________________________________________
-Result::Generator Service::computeResultLazily(
-    const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
-  LocalVocab localVocab{};
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-
-  size_t rowIdx = 0;
-  bool varsChecked{false};
-  bool resultExists{false};
-  try {
-    for (const nlohmann::json& partJson : body) {
-      if (partJson.contains("head")) {
-        AD_CORRECTNESS_CHECK(!varsChecked);
-        verifyVariables(partJson["head"], body.details());
-        varsChecked = true;
-      }
-
-      CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, &localVocab, rowIdx);
-      if (!singleIdTable) {
-        Result::IdTableVocabPair pair{std::move(idTable),
-                                      std::move(localVocab)};
-        co_yield pair;
-        // Move back to reuse buffer if not moved out.
-        idTable = std::move(pair.idTable_);
-        idTable.clear();
-        localVocab = LocalVocab{};
-        rowIdx = 0;
-      }
-      resultExists = true;
+Result::LazyResult Service::computeResultLazily(
+    std::vector<std::string> vars, ad_utility::LazyJsonParser::Generator body,
+    bool singleIdTable) {
+  auto inputRange = ad_utility::CachingTransformInputRange(
+      std::move(body), [](auto& input) { return std::move(input); });
+  auto get = [service = this, vars = std::move(vars),
+              singleIdTable = singleIdTable, inputRange = std::move(inputRange),
+              localVocab = LocalVocab{},
+              idTable = IdTable{getResultWidth(),
+                                getExecutionContext()->getAllocator()},
+              rowIdx = size_t{0}, varsChecked = false, resultExists = false,
+              singleIdTableReturned =
+                  false]() mutable -> std::optional<Result::IdTableVocabPair> {
+    if (singleIdTableReturned) {
+      return std::nullopt;
     }
-  } catch (const ad_utility::LazyJsonParser::Error& e) {
-    throwErrorWithContext(
-        absl::StrCat("Parser failed with error: '", e.what(), "'"),
-        body.details().first100_, body.details().last100_);
-  }
+    try {
+      auto partJsonOpt = inputRange.get();
+      while (partJsonOpt.has_value()) {
+        const nlohmann::json& partJson = partJsonOpt.value();
+        if (partJson.contains("head")) {
+          AD_CORRECTNESS_CHECK(!varsChecked);
+          service->verifyVariables(partJson["head"],
+                                   inputRange.view().base().details());
+          varsChecked = true;
+        }
 
-  // As the LazyJsonParser only passes parts of the result that match
-  // the expected structure, no result implies an unexpected
-  // structure.
-  if (!resultExists) {
-    throwErrorWithContext(
-        "JSON result does not have the expected structure (results "
-        "section "
-        "missing)",
-        body.details().first100_, body.details().last100_);
-  }
+        CALL_FIXED_SIZE(service->getResultWidth(), &Service::writeJsonResult,
+                        service, vars, partJson, &idTable, &localVocab, rowIdx);
+        resultExists = true;
+        if (!singleIdTable) {
+          Result::IdTableVocabPair pair{std::move(idTable),
+                                        std::move(localVocab)};
+          idTable.clear();
+          localVocab = LocalVocab{};
+          rowIdx = 0;
+          return pair;
+        }
+        partJsonOpt = inputRange.get();
+      }
+    } catch (const ad_utility::LazyJsonParser::Error& e) {
+      service->throwErrorWithContext(
+          absl::StrCat("Parser failed with error: '", e.what(), "'"),
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
+    }
 
-  if (!varsChecked) {
-    throwErrorWithContext(
-        "JSON result does not have the expected structure (head "
-        "section "
-        "missing)",
-        body.details().first100_, body.details().last100_);
-  }
+    // As the LazyJsonParser only passes parts of the result that match
+    // the expected structure, no result implies an unexpected
+    // structure.
+    if (!resultExists) {
+      service->throwErrorWithContext(
+          "JSON result does not have the expected structure (results "
+          "section "
+          "missing)",
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
+    }
 
-  if (singleIdTable) {
-    co_yield {std::move(idTable), std::move(localVocab)};
-  }
+    if (!varsChecked) {
+      service->throwErrorWithContext(
+          "JSON result does not have the expected structure (head "
+          "section "
+          "missing)",
+          inputRange.view().base().details().first100_,
+          inputRange.view().base().details().last100_);
+    }
+
+    if (singleIdTable) {
+      singleIdTableReturned = true;
+      return Result::IdTableVocabPair(std::move(idTable),
+                                      std::move(localVocab));
+    }
+
+    return std::nullopt;
+  };
+  return Result::LazyResult{
+      ad_utility::InputRangeFromGetCallable{std::move(get)}};
 }
 
 // ____________________________________________________________________________
@@ -567,19 +587,6 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     return;
   }
 
-  // Creates a `Result::Generator` from partially materialized result data.
-  auto partialResultGenerator =
-      [](std::vector<Result::IdTableVocabPair> pairs,
-         Result::LazyResult prevGenerator,
-         ql::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
-    for (auto& pair : pairs) {
-      co_yield pair;
-    }
-    for (auto& pair : ql::ranges::subrange{it, prevGenerator.end()}) {
-      co_yield pair;
-    }
-  };
-
   // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
@@ -595,10 +602,21 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Stop precomputation as the size of `siblingResult` exceeds the
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
+      auto identityFunction = [](auto& p) { return std::move(p); };
+      std::vector<std::unique_ptr<Result::LazyResult>> viewCollection;
+      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
+        ad_utility::CachingTransformInputRange(
+            Result::LazyResult{std::move(resultPairs)},
+            identityFunction)));
+      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
+        ad_utility::CachingTransformInputRange(
+            Result::LazyResult{std::move(generator)}, std::move(++it),
+            std::move(identityFunction))));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
-              partialResultGenerator(std::move(resultPairs),
-                                     std::move(generator), std::move(++it)),
+              Result::LazyResult{
+                  ad_utility::ConcatenatedInputRange<Result::LazyResult>(
+                      std::move(viewCollection))},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;

@@ -1,6 +1,7 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
 #include "backports/algorithm.h"
@@ -25,7 +26,7 @@ namespace ad_utility {
 // 3. This class only yields an input range, independent of the range category
 // of the input.
 CPP_class_template(typename View, typename F)(requires(
-    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
+    ql::ranges::input_range<View>//&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
                                      View>>)) struct CachingTransformInputRange
@@ -48,6 +49,17 @@ CPP_class_template(typename View, typename F)(requires(
   explicit CachingTransformInputRange(View view, F transformation = {})
       : view_{std::move(view)}, transfomation_(std::move(transformation)) {}
 
+  // Constructor for creating an InputRange from a subrange, which takes an
+  // iterator to the beginning of the subrange. This allows for omitting
+  // elements at the beginning of the original range, but it does not make it
+  // possible to omit elements at the end of the range.
+  explicit CachingTransformInputRange(View view,
+                                      ql::ranges::iterator_t<View> view_begin,
+                                      F transformation = {})
+      : view_{std::move(view)},
+        transfomation_(std::move(transformation)),
+        it_(std::move(view_begin)) {}
+
   // TODO<joka921> Make this private again and give explicit access to low-level
   // tools like the ones below.
  public:
@@ -57,7 +69,7 @@ CPP_class_template(typename View, typename F)(requires(
     // with lazy `generator`s.
     if (!it_.has_value()) {
       it_ = view_.begin();
-    } else {
+    } else if (*it_ != view_.end()) {
       ++(it_.value());
     }
     if (*it_ == view_.end()) {
@@ -65,6 +77,9 @@ CPP_class_template(typename View, typename F)(requires(
     }
     return std::invoke(transfomation_, *it_.value());
   }
+
+  const View& view() { return view_; }
+
   // Give the mixin access to the private `get` function.
   friend class InputRangeFromGet<Res>;
 };
@@ -72,8 +87,8 @@ CPP_class_template(typename View, typename F)(requires(
 // Deduction guides to correctly propagate the input as a value or reference.
 // This is the exact same way `std::ranges` and `range-v3` behave.
 template <typename Range, typename F>
-CachingTransformInputRange(Range&&, F)
-    -> CachingTransformInputRange<all_t<Range>, F>;
+CachingTransformInputRange(Range&&,
+                           F) -> CachingTransformInputRange<all_t<Range>, F>;
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
@@ -224,5 +239,31 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
+
+CPP_class_template(typename ViewType)(
+    requires(ql::ranges::input_range<ViewType>)) struct ConcatenatedInputRange
+    : ad_utility::InputRangeFromGet<ql::ranges::range_value_t<ViewType>> {
+  using ViewCollection = std::vector<std::unique_ptr<ViewType>>;
+  ViewCollection viewCollection_;
+  ql::ranges::iterator_t<ViewCollection> collectionIt_;
+
+  ConcatenatedInputRange(ViewCollection viewCollection)
+      : viewCollection_(std::move(viewCollection)),
+        collectionIt_(viewCollection_.begin()) {}
+
+  std::optional<ql::ranges::range_value_t<ViewType>> get() {
+    while (collectionIt_ != viewCollection_.end()) {
+      auto elementOpt = (*collectionIt_)->get();
+      if (elementOpt.has_value()) {
+        // Element exists in the currently iterated view
+        return elementOpt;
+      }
+      // Done with current view, but not all views
+      collectionIt_++;
+    }
+    // Done iterating over all views
+    return std::nullopt;
+  }
+};
 
 }  // namespace ad_utility
