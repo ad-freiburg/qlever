@@ -89,7 +89,7 @@ class PatternCreator {
   // Store the ID of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
-    PatternID patternId_ = 0;
+    Pattern::PatternId patternId_ = 0;
     uint64_t count_ = 0;
   };
   using PatternToIdAndCount = ad_utility::HashMap<Pattern, PatternIdAndCount>;
@@ -183,7 +183,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
-  PatternID finishPattern(const Pattern& pattern);
+  Pattern::PatternId finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

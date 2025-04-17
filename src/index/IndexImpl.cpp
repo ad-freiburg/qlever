@@ -132,7 +132,7 @@ constexpr auto makePermutationFirstThirdSwitched = []() {
   return permutation;
 };
 // In the pattern column replace UNDEF (which is created by the optional join)
-// by the special `NO_PATTERN` ID and undo the permutation of the columns that
+// by the special `NoPattern` ID and undo the permutation of the columns that
 // was only needed for the join algorithm.
 auto fixBlockAfterPatternJoin(auto block) {
   // The permutation must be the inverse of the original permutation, which just
@@ -143,7 +143,9 @@ auto fixBlockAfterPatternJoin(auto block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](Id& id) { id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id; });
+      [](Id& id) {
+        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+      });
   return std::move(block.value()).template toStatic<0>();
 }
 }  // namespace
@@ -550,11 +552,14 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
+    auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
-    return ad_utility::vocabulary_merger::mergeVocabulary(
+    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
+    wordCallback.finish();
+    return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsExternalVector res;
@@ -975,7 +980,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(std::string_view object) const {
   return decltype(vocab_)::stringIsLiteral(object);
 }
 
@@ -1528,10 +1533,13 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
+RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
+  return vocab_[id];
+}
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType IndexImpl::indexToString(
+    WordVocabIndex id) const {
   return textVocab_[id];
 }
 

@@ -1,11 +1,16 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author:
+//  Authors: @DuDaAG,
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
+#include "../test/printers/UnitOfMeasurementPrinters.h"
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/Constants.h"
+#include "parser/GeoPoint.h"
+#include "parser/LiteralOrIri.h"
 
 // Common things used in multiple tests.
 namespace {
@@ -106,6 +111,79 @@ void checkLiteralContentAndDatatypeFromLiteralOrIri(
   return checkLiteralContentAndDatatype(literal, expectedContent,
                                         expectedDatatype);
 };
+
+// Test turtle for
+const std::string unitTtl = R"(
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+<x> <y> "http://example.com"^^xsd:anyURI, 
+        "http://qudt.org/vocab/unit/M"^^xsd:anyURI, 
+        "http://qudt.org/vocab/unit/KiloM"^^xsd:anyURI, 
+        "http://qudt.org/vocab/unit/MI"^^xsd:anyURI, 
+        "http://qudt.org/vocab/unit/example"^^xsd:anyURI, 
+        "http://qudt.org/vocab/unit/MI", 
+        <http://qudt.org/vocab/unit/M>, 
+        <http://qudt.org/vocab/unit/KiloM>, 
+        <http://qudt.org/vocab/unit/MI>, 
+        "1.5"^^<http://example.com>, 
+        "x".
+  )";
+
+// Helper to test UnitOfMeasurementValueGetter using ValueId input
+void checkUnitValueGetterFromId(
+    const std::string& fullLiteralOrIri, UnitOfMeasurement expectedResult,
+    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+  TestContextWithGivenTTl testContext{unitTtl};
+  auto actualResult =
+      getter(testContext.getId(fullLiteralOrIri), &testContext.context);
+  ASSERT_EQ(actualResult, expectedResult);
+};
+
+// Helper to test UnitOfMeasurementValueGetter using ValueId input where the
+// ValueId represents an encoded value
+void checkUnitValueGetterFromIdEncodedValue(
+    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+  TestContextWithGivenTTl testContext{unitTtl};
+  ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
+}
+
+// Helper to test UnitOfMeasurementValueGetter using ValueId input
+void checkUnitValueGetterFromLiteralOrIri(
+    const std::string& unitIriWithoutBrackets, UnitOfMeasurement expectedResult,
+    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
+  TestContextWithGivenTTl testContext{unitTtl};
+
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
+
+  auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
+                    bool expectSuccess) {
+    auto actualResult = getter(litOrIri, &testContext.context);
+    ASSERT_EQ(actualResult,
+              expectSuccess ? expectedResult : UnitOfMeasurement::UNKNOWN);
+  };
+
+  // Test xsd:anyURI literal method
+  auto litTest = [&](const std::string& lit, bool expectSuccess) {
+    doTest(LiteralOrIri{Literal::fromStringRepresentation(lit)}, expectSuccess);
+  };
+
+  auto litWithDatatype = "\"" + unitIriWithoutBrackets +
+                         "\"^^<http://www.w3.org/2001/XMLSchema#anyURI>";
+  litTest(litWithDatatype, true);
+
+  auto litWithoutDatatype = "\"" + unitIriWithoutBrackets + "\"";
+  litTest(litWithoutDatatype, false);
+
+  auto litWrongDatatype =
+      "\"" + unitIriWithoutBrackets + "\"^^<http://example.com/>";
+  litTest(litWrongDatatype, false);
+
+  // Test IRI method
+  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets)},
+         true);
+};
+
 };  // namespace
 
 // namespace
@@ -177,4 +255,79 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
   checkLiteralContentAndDatatypeFromLiteralOrIri("<x>", std::nullopt, true,
                                                  std::nullopt, std::nullopt,
                                                  literalValueGetter);
+}
+
+TEST(UnitOfMeasurementValueGetter, OperatorWithId) {
+  sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
+  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/M>",
+                             UnitOfMeasurement::METERS, unitValueGetter);
+  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/KiloM>",
+                             UnitOfMeasurement::KILOMETERS, unitValueGetter);
+  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/MI>",
+                             UnitOfMeasurement::MILES, unitValueGetter);
+  checkUnitValueGetterFromId(
+      "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      UnitOfMeasurement::METERS, unitValueGetter);
+  checkUnitValueGetterFromId(
+      "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      UnitOfMeasurement::KILOMETERS, unitValueGetter);
+  checkUnitValueGetterFromId(
+      "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      UnitOfMeasurement::MILES, unitValueGetter);
+
+  checkUnitValueGetterFromId(
+      "\"http://qudt.org/vocab/unit/example\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      UnitOfMeasurement::UNKNOWN, unitValueGetter);
+
+  checkUnitValueGetterFromId(
+      "\"http://example.com\"^^<http://www.w3.org/2001/XMLSchema#anyURI>",
+      UnitOfMeasurement::UNKNOWN, unitValueGetter);
+  checkUnitValueGetterFromId("\"x\"", UnitOfMeasurement::UNKNOWN,
+                             unitValueGetter);
+  checkUnitValueGetterFromId("\"1.5\"^^<http://example.com>",
+                             UnitOfMeasurement::UNKNOWN, unitValueGetter);
+  checkUnitValueGetterFromId("\"http://qudt.org/vocab/unit/MI\"",
+                             UnitOfMeasurement::UNKNOWN, unitValueGetter);
+}
+
+TEST(UnitOfMeasurementValueGetter, OperatorWithIdSkipEncodedValue) {
+  sparqlExpression::detail::UnitOfMeasurementValueGetter getter;
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(1000), getter);
+  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromDouble(1000.5),
+                                         getter);
+  checkUnitValueGetterFromIdEncodedValue(
+      ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
+}
+
+TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
+  sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
+  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/M",
+                                       UnitOfMeasurement::METERS,
+                                       unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/MI",
+                                       UnitOfMeasurement::MILES,
+                                       unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/KiloM",
+                                       UnitOfMeasurement::KILOMETERS,
+                                       unitValueGetter);
+
+  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/m",
+                                       UnitOfMeasurement::UNKNOWN,
+                                       unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/",
+                                       UnitOfMeasurement::UNKNOWN,
+                                       unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri(
+      "http://example.com/", UnitOfMeasurement::UNKNOWN, unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri("", UnitOfMeasurement::UNKNOWN,
+                                       unitValueGetter);
+  checkUnitValueGetterFromLiteralOrIri("x", UnitOfMeasurement::UNKNOWN,
+                                       unitValueGetter);
 }
