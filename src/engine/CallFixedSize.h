@@ -150,6 +150,24 @@ decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
                                  AD_FWD(args)...);
 }
 
+template <auto V>
+struct ValueIdentity {
+  static constexpr auto value = V;
+};
+
+template <typename F>
+struct ValueIdentityToTemplateParameter {
+  F function;
+
+  template <auto... Is, typename... Args>
+  decltype(auto) operator()(Args&&... args) const {
+    return function(ValueIdentity<Is>{}..., AD_FWD(args)...);
+  }
+};
+
+template <typename F>
+ValueIdentityToTemplateParameter(F&&) -> ValueIdentityToTemplateParameter<F>;
+
 }  // namespace ad_utility
 
 // The definitions of the macro for an easier syntax.

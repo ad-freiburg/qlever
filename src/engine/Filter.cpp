@@ -94,13 +94,16 @@ Result Filter::computeResult(bool requestLaziness) {
 
   LocalVocab resultLocalVocab{};
   ad_utility::callFixedSize(
-      width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
-        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
-                                   pair.localVocab_, subRes->sortedBy());
-          resultLocalVocab.mergeWith(pair.localVocab_);
-        }
-      });
+      width,
+      ad_utility::ValueIdentityToTemplateParameter{
+          [this, &subRes, &result, &resultLocalVocab](auto valueIdentity) {
+            static constexpr auto WIDTH = valueIdentity.value;
+            for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+              computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                                       pair.localVocab_, subRes->sortedBy());
+              resultLocalVocab.mergeWith(pair.localVocab_);
+            }
+          }});
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
