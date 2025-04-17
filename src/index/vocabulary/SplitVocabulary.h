@@ -73,17 +73,17 @@ class SplitVocabulary {
   }
 
   template <typename InternalStringType, typename Comparator>
-  std::vector<WordAndIndex> lower_bound(const InternalStringType& word,
-                                        Comparator comparator) const {
-    return {underlyingMain_.lower_bound(word, comparator),
-            underlyingSpecial_.lower_bound(word, comparator)};
+  WordAndIndex lower_bound(const InternalStringType& word,
+                           Comparator comparator) const {
+    // TODO
+    return underlyingMain_.lower_bound(word, comparator);
   }
 
   template <typename InternalStringType, typename Comparator>
-  std::vector<WordAndIndex> upper_bound(const InternalStringType& word,
-                                        Comparator comparator) const {
-    return {underlyingMain_.upper_bound(word, comparator),
-            underlyingSpecial_.upper_bound(word, comparator)};
+  WordAndIndex upper_bound(const InternalStringType& word,
+                           Comparator comparator) const {
+    // TODO
+    return underlyingMain_.upper_bound(word, comparator);
   }
 
   MainVocabulary& getUnderlyingMainVocabulary() { return underlyingMain_; }

@@ -9,7 +9,6 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
-#include "util/Exception.h"
 
 namespace sparqlExpression {
 using valueIdComparators::Comparison;
@@ -117,24 +116,18 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // the byte level can still logically be equal, depending on the chosen Unicode
 // collation level.
 // TODO<joka921> Make the collation level configurable.
-inline std::vector<std::pair<ValueId, ValueId>> getRangeFromVocab(
+inline std::pair<ValueId, ValueId> getRangeFromVocab(
     const ad_utility::triple_component::LiteralOrIri& s,
     const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
-
-  auto lowerVec = context->_qec.getIndex().getVocab().lower_bound(
-      s.toStringRepresentation(), level);
-  auto upperVec = context->_qec.getIndex().getVocab().upper_bound(
-      s.toStringRepresentation(), level);
-  std::vector<std::pair<ValueId, ValueId>> res;
-  AD_CORRECTNESS_CHECK(lowerVec.size() == upperVec.size());
-  for (size_t i = 0; i < lowerVec.size(); i++) {
-    const ValueId lower = Id::makeFromVocabIndex(lowerVec[i]);
-    const ValueId upper = Id::makeFromVocabIndex(upperVec[i]);
-    res.push_back(std::pair<ValueId, ValueId>{lower, upper});
-  }
-  return res;
+  const ValueId lower =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().lower_bound(
+          s.toStringRepresentation(), level));
+  const ValueId upper =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().upper_bound(
+          s.toStringRepresentation(), level));
+  return {lower, upper};
 }
 
 // A concept for various types that either represent a string, an ID or a

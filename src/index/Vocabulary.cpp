@@ -215,34 +215,27 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
   return std::nullopt;
 }
 
-// _____________________________________________________________________________
+// _______________________________________________________________
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
-    -> std::vector<IndexType> {
-  auto wordAndIndexVec = vocabulary_.upper_bound(word, level);
-  return boundsIdxFromVec(wordAndIndexVec);
+    -> IndexType {
+  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
+  // together. For WKT literals the result is therefore not correct.
+  auto wordAndIndex = vocabulary_.upper_bound(word, level);
+  return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
-    -> std::vector<IndexType> {
-  auto wordAndIndexVec = vocabulary_.lower_bound(word, level);
-  return boundsIdxFromVec(wordAndIndexVec);
+    -> IndexType {
+  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
+  // together. For WKT literals the result is therefore not correct.
+  auto wordAndIndex = vocabulary_.lower_bound(word, level);
+  return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
-
-// _____________________________________________________________________________
-template <typename S, typename C, typename I>
-std::vector<I> Vocabulary<S, C, I>::boundsIdxFromVec(
-    const std::vector<WordAndIndex>& vec) const {
-  std::vector<IndexType> res;
-  for (auto& wordAndIndex : vec) {
-    res.push_back(IndexType::make(wordAndIndex.indexOrDefault(size())));
-  }
-  return res;
-};
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
@@ -258,9 +251,12 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // Helper lambda to check if a given word and index object is a match.
-  auto checkWordAndIndex = [&word,
-                            &idx](const WordAndIndex& wordAndIndex) -> bool {
+  // return vocabulary_.getUnderlyingVocabulary().getId(word, &idx->get());
+
+  // Helper lambda to lookup a the word in a given vocabulary.
+  auto checkWord = [&word, &idx](const auto& vocab) -> bool {
+    // We need the TOTAL level because we want the unique word.
+    WordAndIndex wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
     if (wordAndIndex.isEnd()) {
       return false;
     }
@@ -268,12 +264,16 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     return wordAndIndex.word() == word;
   };
 
-  // We need the TOTAL level because we want the unique word.
-  for (auto& wordAndIndex : vocabulary_.lower_bound(word, SortLevel::TOTAL)) {
-    if (checkWordAndIndex(wordAndIndex)) {
-      return true;
-    }
+  // Check if the word is in the regular non-geometry vocabulary
+  if (checkWord(vocabulary_)) {
+    return true;
   }
+
+  // Not found in regular vocabulary: test if it is in the geometry vocabulary
+  // bool res = checkWord(underlyingSpecial_);
+  // // Index with special marker bit for geometry word
+  // *idx |= specialVocabMarker;
+  // return res;
   return false;
 }
 

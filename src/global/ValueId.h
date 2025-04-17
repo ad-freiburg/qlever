@@ -19,7 +19,6 @@
 #include "parser/GeoPoint.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
-#include "util/Exception.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
@@ -167,9 +166,7 @@ class ValueId {
     auto compareVocabAndLocalVocab =
         [](::VocabIndex vocabIndex,
            ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
-      auto p = localVocabIndex->positionInVocab();
-      AD_CORRECTNESS_CHECK(p.size() >= 1);
-      auto [lowerBound, upperBound] = p[0];  // Order should be same everywhere
+      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
         return std::strong_ordering::less;
       } else if (vocabIndex >= upperBound) {
@@ -359,10 +356,9 @@ class ValueId {
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
       return H::combine(std::move(h), id._bits, 0);
     }
-    for (auto& [lower, upper] : id.getLocalVocabIndex()->positionInVocab()) {
-      if (upper != lower) {
-        return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
-      }
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
     }
     return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
