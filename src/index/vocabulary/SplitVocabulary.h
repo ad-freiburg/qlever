@@ -133,9 +133,6 @@ class SplitVocabulary {
                                         filename);
   }
 
-  void createFromSet(const ad_utility::HashSet<std::string>& set,
-                     const std::string& filename);
-
   bool getId(std::string_view word, uint64_t* idx) const;
 };
 

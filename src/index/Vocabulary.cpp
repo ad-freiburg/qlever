@@ -62,24 +62,9 @@ void Vocabulary<S, C, I>::readFromFile(const string& filename) {
 template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
-  // vocabulary_.getUnderlyingVocabulary().createFromSet(set, filename);
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  // underlyingMain_.close();
-  // underlyingSpecial_.close();
   vocabulary_.close();
-
-  // Split words depending on whether they should be stored in the normal or
-  // geometry vocabulary
-  std::vector<std::string> words;
-  // std::vector<std::string> geoWords;
-  for (const auto& word : set) {
-    // if (SF(word)) {
-    //   geoWords.push_back(word);
-    // } else {
-    words.push_back(word);
-    // }
-  }
-
+  std::vector<std::string> words(set.begin(), set.end());
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };

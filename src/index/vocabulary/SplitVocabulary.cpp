@@ -88,14 +88,6 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::finish() {
 // _____________________________________________________________________________
 template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::createFromSet(
-    const ad_utility::HashSet<std::string>& set, const std::string& filename) {
-  // TODO
-}
-
-// _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
 bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
                                                        uint64_t* idx) const {
   // Todo move getid + lower upper bound to vocab.h again; and only look in main
