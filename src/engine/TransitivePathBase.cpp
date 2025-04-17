@@ -242,7 +242,7 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
   os << "TRANSITIVE PATH ";
   if (lhs_.isVariable() && lhs_.value_ == rhs_.value_) {
     // Use a different cache key if the same variable is used left and right,
-    // because that changes the behviour of this operation and variable names
+    // because that changes the behaviour of this operation and variable names
     // are not found in the children's cache keys.
     os << "symmetric ";
   }
