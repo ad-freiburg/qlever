@@ -28,7 +28,8 @@ template <typename StringType, typename ComparatorType, typename IndexT,
 class SplitVocabulary {
  private:
   MainVocabulary underlyingMain_;
-  SpecialVocabulary underlyingSpecial_;
+  SpecialVocabulary underlyingSpecial_;  // Should not hold conventional string
+                                         // literals (or iris)
 
   // The 5th highest bit of the vocabulary index is used as a marker to
   // determine whether the word is stored in the normal vocabulary or the
@@ -46,6 +47,10 @@ class SplitVocabulary {
     return static_cast<bool>(index & specialVocabMarker);
   }
 
+  static bool isSpecialLiteral(const std::string& input) {
+    return SplitFunction(input);
+  };
+
   void build(const std::vector<std::string>& words,
              const std::string& filename);
 
@@ -53,6 +58,11 @@ class SplitVocabulary {
 
   // Read the vocabulary from files.
   void readFromFile(const std::string& filename);
+
+  // Problem with getId is that it needs the Comparator which is from the
+  // UnicodeVocab above this splitvocab for the correct lower_bound. -> we cant
+  // do it here
+  // bool getId(std::string_view word, uint64_t* idx) const;
 
   // needs to be defined in header otherwise we get serious compiler trouble
   decltype(auto) operator[](uint64_t idx) const {
@@ -75,14 +85,11 @@ class SplitVocabulary {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    // TODO
     return underlyingMain_.lower_bound(word, comparator);
   }
-
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    // TODO
     return underlyingMain_.upper_bound(word, comparator);
   }
 

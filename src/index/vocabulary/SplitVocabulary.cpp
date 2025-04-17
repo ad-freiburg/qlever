@@ -31,6 +31,7 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
     vocab.close();
     vocab.open(filename);
     LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
+    // TODO additional logs for internalexternal removed. await #1986
   };
 
   auto [fnMain, fnSpecial] = SFN(filename);
@@ -88,21 +89,11 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::finish() {
 // _____________________________________________________________________________
 template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
-bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
-                                                       uint64_t* idx) const {
-  // Todo move getid + lower upper bound to vocab.h again; and only look in main
-  // vocab, when that works, start changing lower/upper bound to arrays
-  return false;
-};
-
-// _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
 void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::build(
     const std::vector<std::string>& words, const std::string& filename) {
   WWPtr writer = makeWordWriterPtr(filename);
   for (const auto& word : words) {
-    (*writer)(word, true);  // isExternal?
+    (*writer)(word, true);
   }
   writer->finish();
   open(filename);
