@@ -220,8 +220,6 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
-  // together. For WKT literals the result is therefore not correct.
   auto wordAndIndex = vocabulary_.upper_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
@@ -231,8 +229,6 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
-  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
-  // together. For WKT literals the result is therefore not correct.
   auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
