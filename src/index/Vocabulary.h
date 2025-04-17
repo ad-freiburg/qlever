@@ -231,12 +231,16 @@ class Vocabulary {
 
   // TODO migrate to arrays of indices
   // Wraps std::lower_bound and returns an index instead of an iterator
-  IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+  std::vector<IndexType> lower_bound(
+      std::string_view word,
+      const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  IndexType upper_bound(const string& word,
-                        SortLevel level = SortLevel::QUARTERNARY) const;
+  std::vector<IndexType> upper_bound(
+      const string& word, SortLevel level = SortLevel::QUARTERNARY) const;
+
+  std::vector<IndexType> boundsIdxFromVec(
+      const std::vector<WordAndIndex>& vec) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in

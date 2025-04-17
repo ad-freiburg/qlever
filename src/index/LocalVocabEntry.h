@@ -30,8 +30,11 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. However, we don't consider this case to be likely.
-  mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
-  mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
+  mutable std::vector<std::pair<ad_utility::CopyableAtomic<VocabIndex>,
+                                ad_utility::CopyableAtomic<VocabIndex>>>
+      boundsInVocab_;  // This is probably unsafe
+  // mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
+  // mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
@@ -54,16 +57,23 @@ class alignas(16) LocalVocabEntry
   // Note: We use `lowerBound` and `upperBound` because depending on the Local
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
-  struct PositionInVocab {
-    VocabIndex lowerBound_;
-    VocabIndex upperBound_;
-  };
+  // struct PositionInVocab {
+  //   VocabIndex lowerBound_;
+  //   VocabIndex upperBound_;
+  // };
+  using PositionInVocab = std::vector<std::pair<VocabIndex, VocabIndex>>;
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
     // position.
     if (positionInVocabKnown_.load(std::memory_order_acquire)) {
-      return {lowerBoundInVocab_.load(std::memory_order_relaxed),
-              upperBoundInVocab_.load(std::memory_order_relaxed)};
+      // TODO!
+      PositionInVocab x;
+      for (auto y : boundsInVocab_) {
+        x.push_back({y.first.load(std::memory_order_relaxed),
+                     y.second.load(std::memory_order_relaxed)});
+      }
+
+      return x;
     }
     return positionInVocabExpensiveCase();
   }

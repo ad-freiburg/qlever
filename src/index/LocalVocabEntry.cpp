@@ -5,6 +5,7 @@
 #include "LocalVocabEntry.h"
 
 #include "index/IndexImpl.h"
+#include "util/Exception.h"
 
 // ___________________________________________________________________________
 auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
@@ -14,17 +15,18 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
   using SortLevel = Index::Vocab::SortLevel;
-  positionInVocab.lowerBound_ =
-      vocab.lower_bound(toStringRepresentation(), SortLevel::TOTAL);
-  positionInVocab.upperBound_ =
-      vocab.upper_bound(toStringRepresentation(), SortLevel::TOTAL);
-  AD_CORRECTNESS_CHECK(positionInVocab.upperBound_.get() -
-                           positionInVocab.lowerBound_.get() <=
-                       1);
-  lowerBoundInVocab_.store(positionInVocab.lowerBound_,
-                           std::memory_order_relaxed);
-  upperBoundInVocab_.store(positionInVocab.upperBound_,
-                           std::memory_order_relaxed);
+
+  auto lowerVec = vocab.lower_bound(toStringRepresentation(), SortLevel::TOTAL);
+  auto upperVec = vocab.upper_bound(toStringRepresentation(), SortLevel::TOTAL);
+  AD_CORRECTNESS_CHECK(lowerVec.size() == upperVec.size());
+  for (size_t i = 0; i < lowerVec.size(); i++) {
+    std::pair<ad_utility::CopyableAtomic<VocabIndex>,
+              ad_utility::CopyableAtomic<VocabIndex>>
+        p;
+    AD_CORRECTNESS_CHECK(upperVec[i].get() - lowerVec[i].get() <= 1);
+    p.first.store(lowerVec[i], std::memory_order_relaxed);
+    p.second.store(upperVec[i], std::memory_order_relaxed);
+  }
   positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
 }

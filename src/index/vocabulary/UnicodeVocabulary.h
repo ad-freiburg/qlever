@@ -39,7 +39,7 @@ class UnicodeVocabulary {
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
   template <typename T>
-  WordAndIndex lower_bound(const T& word, SortLevel level) const {
+  std::vector<WordAndIndex> lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
@@ -53,7 +53,7 @@ class UnicodeVocabulary {
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
   template <typename T>
-  WordAndIndex upper_bound(const T& word, SortLevel level) const {
+  std::vector<WordAndIndex> upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
@@ -72,11 +72,12 @@ class UnicodeVocabulary {
       return {std::nullopt, std::nullopt};
     }
 
-    auto lb = lower_bound(prefix, SortLevel::PRIMARY);
+    // TODO fix
+    auto lb = lower_bound(prefix, SortLevel::PRIMARY)[0];
     auto transformed = _comparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
-    auto ub = lower_bound(transformed, SortLevel::PRIMARY);
+    auto ub = lower_bound(transformed, SortLevel::PRIMARY)[0];
 
     auto toOptionalIndex = [](const WordAndIndex& wi) {
       return wi.isEnd() ? std::nullopt : std::optional{wi.index()};
