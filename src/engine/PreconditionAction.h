@@ -8,7 +8,9 @@
 #include <memory>
 #include <variant>
 
+#include "backports/concepts.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -22,9 +24,11 @@ class QueryExecutionTree;
 // operation created a query execution tree that represents a modification of
 // itself that can fulfil the requirement.
 class PreconditionAction {
+ public:
   class ImplicitlySatisfied {};
   class MustBeSatisfiedExternally {};
 
+ private:
   // Hold the underlying state, or an alternative tree that satisfies the
   // condition.
   std::variant<ImplicitlySatisfied, MustBeSatisfiedExternally,
@@ -50,21 +54,25 @@ class PreconditionAction {
   explicit PreconditionAction(std::shared_ptr<QueryExecutionTree> tree)
       : value_{std::move(tree)} {}
 
-  // Check if the precondition is already implicitly satisfied.
-  bool isImplicitlySatisfied() const {
-    return std::holds_alternative<ImplicitlySatisfied>(value_);
+  // Return `*this` if the precondition is already satisfied or an execution
+  // tree has already been computed.
+  CPP_template(typename Func)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          Func, std::shared_ptr<QueryExecutionTree>>) PreconditionAction
+      handle(Func handler) && {
+    if (std::holds_alternative<MustBeSatisfiedExternally>(value_)) {
+      return PreconditionAction{std::invoke(handler)};
+    }
+    return std::move(*this);
   }
 
-  // Check if the precondition cannot be satisfied by the operation on its own.
-  bool mustBeSatisfiedExternally() const {
-    return std::holds_alternative<MustBeSatisfiedExternally>(value_);
-  }
-
-  // Get the tree that satisfies the precondition.
-  std::shared_ptr<QueryExecutionTree> getTree() && {
-    AD_CONTRACT_CHECK(
-        std::holds_alternative<std::shared_ptr<QueryExecutionTree>>(value_));
-    return std::move(std::get<std::shared_ptr<QueryExecutionTree>>(value_));
+  // Return an optional containing an execution tree if the tree has already
+  // been computed, `std::nullopt` otherwise.
+  std::optional<std::shared_ptr<QueryExecutionTree>> getTree() && {
+    if (std::holds_alternative<std::shared_ptr<QueryExecutionTree>>(value_)) {
+      return std::move(std::get<std::shared_ptr<QueryExecutionTree>>(value_));
+    }
+    return std::nullopt;
   }
 };
 

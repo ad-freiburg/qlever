@@ -179,15 +179,26 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0});
-    EXPECT_TRUE(sort.createSortedClone({0}).isImplicitlySatisfied());
-    EXPECT_TRUE(sort.createSortedClone({}).isImplicitlySatisfied());
+    EXPECT_FALSE(sort.createSortedClone({0})
+                     .handle([]() {
+                       ADD_FAILURE() << "This should not be called";
+                       return nullptr;
+                     })
+                     .getTree()
+                     .has_value());
+    EXPECT_FALSE(sort.createSortedClone({})
+                     .handle([]() {
+                       ADD_FAILURE() << "This should not be called";
+                       return nullptr;
+                     })
+                     .getTree()
+                     .has_value());
     auto clone = sort.createSortedClone({0, 1});
-    EXPECT_FALSE(clone.isImplicitlySatisfied());
-    EXPECT_FALSE(clone.mustBeSatisfiedExternally());
     // Check that we don't double sort
     auto operation = std::move(clone).getTree();
+    ASSERT_TRUE(operation.has_value());
     const auto& childReference =
-        *operation->getRootOperation()->getChildren().at(0);
+        *operation.value()->getRootOperation()->getChildren().at(0);
     EXPECT_NE(typeid(childReference), typeid(Sort));
   }
   {
@@ -195,12 +206,11 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0, 1});
     auto clone = sort.createSortedClone({1, 0});
-    EXPECT_FALSE(clone.isImplicitlySatisfied());
-    EXPECT_FALSE(clone.mustBeSatisfiedExternally());
     // Check that we don't double sort
     auto operation = std::move(clone).getTree();
+    ASSERT_TRUE(operation.has_value());
     const auto& childReference =
-        *operation->getRootOperation()->getChildren().at(0);
+        *operation.value()->getRootOperation()->getChildren().at(0);
     EXPECT_NE(typeid(childReference), typeid(Sort));
   }
 }
