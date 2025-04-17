@@ -21,19 +21,25 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
       milestoneDistance_{milestoneDistance} {}
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::WordWriter::operator()(std::string_view str,
-                                                        bool isExternal) {
+uint64_t VocabularyInternalExternal::WordWriter::operator()(
+    std::string_view str, bool isExternal) {
   externalWriter_(str);
   if (!isExternal || sinceMilestone_ >= milestoneDistance_ || idx_ == 0) {
     internalWriter_(str, idx_);
     sinceMilestone_ = 0;
   }
-  ++idx_;
   ++sinceMilestone_;
+  return idx_++;
 }
 
 // _____________________________________________________________________________
 void VocabularyInternalExternal::WordWriter::finish() {
   internalWriter_.finish();
   externalWriter_.finish();
+}
+
+// _____________________________________________________________________________
+void VocabularyInternalExternal::open(const string& filename) {
+  internalVocab_.open(filename + ".internal");
+  externalVocab_.open(filename + ".external");
 }

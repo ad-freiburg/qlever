@@ -1,14 +1,18 @@
-// Copyright 2022, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de,
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cmath>
 #include <string>
 
 #include "../src/util/GeoSparqlHelpers.h"
+#include "global/Constants.h"
 #include "parser/GeoPoint.h"
+#include "parser/Iri.h"
+#include "util/GTestHelpers.h"
 
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktLatitude;
@@ -81,4 +85,74 @@ TEST(GeoSparqlHelpers, WktDist) {
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
   ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral,
+                                 UnitOfMeasurement::KILOMETERS),
+              421.098, 0.01);
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, frCathedral, UnitOfMeasurement::METERS),
+      421098, 1);
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, frCathedral, UnitOfMeasurement::MILES),
+      261.658, 0.01);
+  ASSERT_NEAR(ad_utility::WktMetricDistGeoPoints()(eiffeltower, frCathedral),
+              421098, 1);
+
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, eiffeltower, UnitOfMeasurement::METERS),
+      0, 0.01);
+  ASSERT_NEAR(
+      WktDistGeoPoints()(eiffeltower, eiffeltower, UnitOfMeasurement::MILES), 0,
+      0.01);
+}
+
+TEST(GeoSparqlHelpers, KmToUnit) {
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(0.0, std::nullopt), 0.0,
+              0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::KILOMETERS),
+      0.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::METERS), 0.0,
+      0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(0.0, UnitOfMeasurement::MILES), 0.0,
+      0.0001);
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(
+                  -500.0, UnitOfMeasurement::KILOMETERS),
+              -500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::kilometerToUnit(-500.0, std::nullopt), -500.0,
+              0.0001);
+
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(500.0, UnitOfMeasurement::METERS),
+      500000.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(500.0, UnitOfMeasurement::MILES),
+      310.685595, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::MILES),
+      0.62137119, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::UNKNOWN),
+      ::testing::HasSubstr("Unsupported unit"));
+}
+
+TEST(GeoSparqlHelpers, IriToUnit) {
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(""),
+            UnitOfMeasurement::UNKNOWN);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement("http://example.com"),
+            UnitOfMeasurement::UNKNOWN);
+  ASSERT_EQ(
+      ad_utility::detail::iriToUnitOfMeasurement("http://qudt.org/vocab/unit/"),
+      UnitOfMeasurement::UNKNOWN);
+
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/M"),
+            UnitOfMeasurement::METERS);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/KiloM"),
+            UnitOfMeasurement::KILOMETERS);
+  ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
+                "http://qudt.org/vocab/unit/MI"),
+            UnitOfMeasurement::MILES);
 }
