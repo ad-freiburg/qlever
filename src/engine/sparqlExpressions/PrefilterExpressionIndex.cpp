@@ -531,7 +531,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     return evaluateMirroredImpl(vocab, idRange, blockRange);
   }
 
-  std::string_view prefixSv(prefix_);
+  std::string_view prefixSv(&prefix_.front(), prefix_.size());
   const auto& [beginIndex, endIndex] =
       vocab.prefixRanges(prefixSv).ranges().front();
   auto lowerId = Id::makeFromVocabIndex(beginIndex);
