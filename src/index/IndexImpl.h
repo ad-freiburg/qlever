@@ -164,7 +164,7 @@ class IndexImpl {
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
   // wordsFile.tsv starts with contextId 1 and is continuous.
-  size_t nofNonLiteralsInTextIndex_;
+  size_t lastTextRecordIndexOfNonLiterals_;
 
   TextScoringMetric textScoringMetric_;
   std::pair<float, float> bAndKParamForTextScoring_;
@@ -262,10 +262,7 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(
-      const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
-      std::pair<float, float> bAndKForBM25);
+  void buildTextIndexFile(TextIndexConfig config);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -451,8 +448,8 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
-  size_t getNofNonLiteralsInTextIndex() const {
-    return nofNonLiteralsInTextIndex_;
+  size_t getLastTextRecordIndexOfNonLiterals() const {
+    return lastTextRecordIndexOfNonLiterals_;
   }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
@@ -531,14 +528,12 @@ class IndexImpl {
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, auto isQLeverInternalTriple);
 
-  // Generator that returns all words in the given context file (if not empty)
-  // and then all words in all literals (if second argument is true).
+  // Generator that returns all words in all literals.
   //
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<WordsFileLine> wordsInTextRecords(
-      std::string contextFile, bool addWordsFromLiterals) const;
+  cppcoro::generator<WordsFileLine> wordsInLiterals(size_t startIndex) const;
 
   void processEntityCaseDuringInvertedListProcessing(
       const WordsFileLine& line,
@@ -553,11 +548,21 @@ class IndexImpl {
   static void logEntityNotFound(const string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
-  size_t processWordsForVocabulary(const string& contextFile,
-                                   bool addWordsFromLiterals);
+  size_t processWordsForVocabulary(const string& file,
+                                   bool addWordsFromLiterals,
+                                   bool useDocsFileForVocabulary);
 
-  void processWordsForInvertedLists(const string& contextFile,
-                                    bool addWordsFromLiterals, TextVec& vec);
+  void processWordsForInvertedLists(const string& wordsFile,
+                                    const string& docsFile,
+                                    bool addWordsFromLiterals,
+                                    bool useDocsFileForVocabulary,
+                                    bool addEntitiesFromWordsFile,
+                                    TextVec& vec);
+
+  template <typename T>
+  void wordsFromDocsFileEntitiesFromWordsFile(
+      const string& wordsFile, const string& docsFile,
+      const LocaleManager& localeManager, T processLine) const;
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.

@@ -26,12 +26,8 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase,
 }
 
 // ____________________________________________________________________________
-void Index::buildTextIndexFile(
-    const std::optional<std::pair<std::string, std::string>>& wordsAndDocsFile,
-    bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
-    std::pair<float, float> bAndKForBM25) {
-  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals,
-                             textScoringMetric, bAndKForBM25);
+void Index::buildTextIndexFile(TextIndexConfig config) {
+  pimpl_->buildTextIndexFile(config);
 }
 
 // ____________________________________________________________________________
@@ -252,8 +248,8 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getNofNonLiteralsInTextIndex() const {
-  return pimpl_->getNofNonLiteralsInTextIndex();
+size_t Index::getLastTextRecordIndexOfNonLiterals() const {
+  return pimpl_->getLastTextRecordIndexOfNonLiterals();
 }
 
 // ____________________________________________________________________________
