@@ -53,9 +53,10 @@ template <typename ST, typename CT, typename IT, class M, class S,
 SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
     const M& mainVocabulary, const S& specialVocabulary,
     const std::string& filename)
-    : underlyingWordWriter_{mainVocabulary.makeDiskWriter(SFN(filename).at(0))},
+    : underlyingWordWriter_{mainVocabulary.makeDiskWriterPtr(
+          SFN(filename).at(0))},
       underlyingSpecialWordWriter_{
-          specialVocabulary.makeDiskWriter(SFN(filename).at(1))} {};
+          specialVocabulary.makeDiskWriterPtr(SFN(filename).at(1))} {};
 
 // _____________________________________________________________________________
 template <typename ST, typename CT, typename IT, class M, class S,
@@ -67,10 +68,10 @@ uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::operator()(
     // to go to the special vocabulary. It needs an index with the marker bit
     // set to 1.
     return makeSpecialVocabIndex(
-        underlyingSpecialWordWriter_(word, isExternal));
+        (*underlyingSpecialWordWriter_)(word, isExternal));
   } else {
     // We have any other word: it goes to the normal vocabulary.
-    auto index = underlyingWordWriter_(word, isExternal);
+    auto index = (*underlyingWordWriter_)(word, isExternal);
     AD_CONTRACT_CHECK(index <= maxVocabIndex);
     return index;
   }
@@ -80,8 +81,8 @@ uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::operator()(
 template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
 void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::finish() {
-  underlyingWordWriter_.finish();
-  underlyingSpecialWordWriter_.finish();
+  underlyingWordWriter_->finish();
+  underlyingSpecialWordWriter_->finish();
 }
 
 // _____________________________________________________________________________
@@ -107,11 +108,11 @@ template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
 void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::build(
     const std::vector<std::string>& words, const std::string& filename) {
-  WordWriter writer = makeWordWriter(filename);
+  WWPtr writer = makeWordWriterPtr(filename);
   for (const auto& word : words) {
-    writer(word, true);  // isExternal?
+    (*writer)(word, true);  // isExternal?
   }
-  writer.finish();
+  writer->finish();
   open(filename);
 }
 

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string_view>
 
 #include "global/ValueId.h"
@@ -103,10 +104,12 @@ class SplitVocabulary {
 
   // This word writer writes words to different vocabularies depending on their
   // content.
+  using MainWWPtr = std::unique_ptr<typename MainVocabulary::WordWriter>;
+  using SpecialWWPtr = std::unique_ptr<typename SpecialVocabulary::WordWriter>;
   class WordWriter {
    private:
-    MainVocabulary::WordWriter underlyingWordWriter_;
-    SpecialVocabulary::WordWriter underlyingSpecialWordWriter_;
+    MainWWPtr underlyingWordWriter_;
+    SpecialWWPtr underlyingSpecialWordWriter_;
     std::string readableName_ = "";
 
    public:
@@ -124,8 +127,10 @@ class SplitVocabulary {
     std::string& readableName() { return readableName_; }
   };
 
-  WordWriter makeWordWriter(const std::string& filename) const {
-    return {underlyingMain_, underlyingSpecial_, filename};
+  using WWPtr = std::unique_ptr<WordWriter>;
+  WWPtr makeWordWriterPtr(const std::string& filename) const {
+    return std::make_unique<WordWriter>(underlyingMain_, underlyingSpecial_,
+                                        filename);
   }
 
   void createFromSet(const ad_utility::HashSet<std::string>& set,

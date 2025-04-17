@@ -202,20 +202,20 @@ TEST(Vocabulary, WordWriter) {
   // split words to two different vocabularies for geo and non-geo words. This
   // split is tested here.
   RdfsVocabulary vocabulary;
-  auto wordCallback = vocabulary.makeWordWriter("vocTest7.dat");
+  auto wordCallback = vocabulary.makeWordWriterPtr("vocTest7.dat");
 
-  ASSERT_EQ(wordCallback("a", true), 0);
-  ASSERT_EQ(wordCallback("ab", true), 1);
+  ASSERT_EQ((*wordCallback)("a", true), 0);
+  ASSERT_EQ((*wordCallback)("ab", true), 1);
   ASSERT_EQ(
-      wordCallback("\"LINESTRING(1 2, 3 "
-                   "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-                   true),
+      (*wordCallback)("\"LINESTRING(1 2, 3 "
+                      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                      true),
       (1ull << 59));
-  ASSERT_EQ(wordCallback("ba", true), 2);
-  ASSERT_EQ(wordCallback("car", true), 3);
-  ASSERT_EQ(
-      wordCallback("\"POLYGON((1 2, 3 "
-                   "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-                   true),
-      (1ull << 59) | 1);
+  ASSERT_EQ((*wordCallback)("ba", true), 2);
+  ASSERT_EQ((*wordCallback)("car", true), 3);
+  ASSERT_EQ((*wordCallback)(
+                "\"POLYGON((1 2, 3 "
+                "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                true),
+            (1ull << 59) | 1);
 }
