@@ -591,7 +591,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
 // _____________________________________________________________________________
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
-  AD_CORRECTNESS_CHECK(prefixAndBaseDisabled_);
+  AD_CORRECTNESS_CHECK(useSimplifiedGrammar_);
   raise(
       "@prefix or @base directives need to be at the beginning of the file "
       "when using the parallel parser. Later redundant redefinitions are "
@@ -605,7 +605,7 @@ void TurtleParser<Tokenizer_T>::raiseDisallowedPrefixOrBaseError() const {
 template <class Tokenizer_T>
 void TurtleParser<Tokenizer_T>::setPrefixOrThrow(
     const std::string& key, const ad_utility::triple_component::Iri& prefix) {
-  if (prefixAndBaseDisabled_ &&
+  if (useSimplifiedGrammar_ &&
       (!prefixMap_.contains(key) || prefixMap_[key] != prefix)) {
     raiseDisallowedPrefixOrBaseError();
   }
@@ -640,17 +640,24 @@ bool TurtleParser<T>::booleanLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
+  AD_CORRECTNESS_CHECK(!allowMultilineLiterals || !useSimplifiedGrammar_);
   // manually parse strings for efficiency
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  std::array<std::string_view, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
       if (!allowMultilineLiterals && q.size() > 1) {
+        if (useSimplifiedGrammar_) {
+          raise(
+              "Found a multiline string literal with the parallel parser. This "
+              "is not supported. Please use `--parse-parallel false` or remove "
+              "the multiline string literal.");
+        }
         return false;
       }
       endPos = view.find(q, startPos);
@@ -1081,7 +1088,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
   try {
     RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
-    parser.disablePrefixParsing();
+    parser.useSimplifiedGrammar();
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
