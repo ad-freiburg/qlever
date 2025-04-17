@@ -39,11 +39,13 @@ class UnicodeVocabulary {
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
   template <typename T>
-  WordAndIndex lower_bound(const T& word, SortLevel level) const {
+  WordAndIndex lower_bound(const T& word, SortLevel level,
+                           auto&&... args) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.lower_bound(word, actualComparator);
+    return _underlyingVocabulary.lower_bound(word, actualComparator,
+                                             AD_FWD(args)...);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -53,11 +55,13 @@ class UnicodeVocabulary {
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
   template <typename T>
-  WordAndIndex upper_bound(const T& word, SortLevel level) const {
+  WordAndIndex upper_bound(const T& word, SortLevel level,
+                           auto&&... args) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.upper_bound(word, actualComparator);
+    return _underlyingVocabulary.upper_bound(word, actualComparator,
+                                             AD_FWD(args)...);
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the

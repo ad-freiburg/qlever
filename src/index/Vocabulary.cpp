@@ -13,6 +13,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
@@ -247,10 +248,12 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // Helper lambda to lookup a the word in a given vocabulary.
-  auto checkWord = [&word, &idx](const auto& vocab) -> bool {
+  // Helper lambda to lookup a the word in a given vocabulary and pass
+  // arguments to the underlying vocabulary below the unicode support layer.
+  auto checkWord = [this, &word, &idx](auto&&... args) -> bool {
     // We need the TOTAL level because we want the unique word.
-    WordAndIndex wordAndIndex = vocab.lower_bound(word, SortLevel::TOTAL);
+    WordAndIndex wordAndIndex =
+        vocabulary_.lower_bound(word, SortLevel::TOTAL, AD_FWD(args)...);
     if (wordAndIndex.isEnd()) {
       return false;
     }
@@ -258,16 +261,14 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     return wordAndIndex.word() == word;
   };
 
-  // Check if the word is in the regular non-geometry vocabulary
-  if (checkWord(vocabulary_)) {
+  if (checkWord()) {
     return true;
   }
 
-  // Not found in regular vocabulary: test if it is in the geometry vocabulary
-  // bool res = checkWord(underlyingSpecial_);
-  // // Index with special marker bit for geometry word
-  // *idx |= specialVocabMarker;
-  // return res;
+  if (checkWord(false)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -275,8 +276,6 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
     -> Vocabulary<S, C, I>::PrefixRanges {
-  // TODO<ullingerc> This function currently ignores the geometry vocabulary all
-  // together. For WKT literals the result is therefore not correct.
   auto rangeInternal = vocabulary_.prefix_range(prefix);
   std::pair<I, I> indexRangeInternal{
       I::make(rangeInternal.first.value_or(size())),

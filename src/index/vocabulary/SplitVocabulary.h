@@ -84,13 +84,25 @@ class SplitVocabulary {
 
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    return underlyingMain_.lower_bound(word, comparator);
+                           Comparator comparator,
+                           bool useSpecial = false) const {
+    if (useSpecial) {
+      WordAndIndex subResult = underlyingSpecial_.lower_bound(word, comparator);
+      return {subResult.word(), subResult.index() | specialVocabMarker};
+    } else {
+      return underlyingMain_.lower_bound(word, comparator);
+    }
   }
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    return underlyingMain_.upper_bound(word, comparator);
+                           Comparator comparator,
+                           bool useSpecial = false) const {
+    if (useSpecial) {
+      WordAndIndex subResult = underlyingSpecial_.upper_bound(word, comparator);
+      return {subResult.word(), subResult.index() | specialVocabMarker};
+    } else {
+      return underlyingMain_.upper_bound(word, comparator);
+    }
   }
 
   MainVocabulary& getUnderlyingMainVocabulary() { return underlyingMain_; }
@@ -139,8 +151,6 @@ class SplitVocabulary {
     return std::make_unique<WordWriter>(underlyingMain_, underlyingSpecial_,
                                         filename);
   }
-
-  bool getId(std::string_view word, uint64_t* idx) const;
 };
 
 // Concrete implementations of split function and split filename function
