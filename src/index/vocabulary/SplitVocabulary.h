@@ -17,9 +17,9 @@
 
 // Func. to get filenames for each vocabulary
 
-using SplitFunctionT = const std::function<bool(std::string_view)>&;
-using SplitFilenameFunctionT =
-    const std::function<std::array<std::string, 2>(std::string)>&;
+// using SplitFunctionT = const std::function<bool(std::string_view)>&;
+// using SplitFilenameFunctionT =
+//     const std::function<std::array<std::string, 2>(std::string)>&;
 
 template <typename StringType, typename ComparatorType, typename IndexT,
           class MainVocabulary, class SpecialVocabulary,
@@ -41,31 +41,22 @@ class SplitVocabulary {
  public:
   static uint64_t makeSpecialVocabIndex(uint64_t vocabIndex);
 
-  bool isSpecialLiteral(uint64_t index) const {
+  static bool isSpecialVocabIndex(uint64_t index) {
     return static_cast<bool>(index & specialVocabMarker);
   }
 
   void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeWordWriter(filename);
-    for (const auto& word : words) {
-      writer(word, true);  // isExternal?
-    }
-    writer.finish();
-    open(filename);
-  }
+             const std::string& filename);
 
-  void close() {
-    underlyingMain_.close();
-    underlyingSpecial_.close();
-  }
+  void close();
 
   // Read the vocabulary from files.
   void readFromFile(const std::string& filename);
 
+  // needs to be defined in header otherwise we get serious compiler trouble
   decltype(auto) operator[](uint64_t idx) const {
     // Check marker bit to determine which vocabulary to use
-    if (idx & specialVocabMarker) {
+    if (isSpecialVocabIndex(idx)) {
       // The requested word is stored in the special vocabulary
       uint64_t unmarkedIdx = idx & specialVocabIndexMask;
       return underlyingSpecial_[unmarkedIdx];

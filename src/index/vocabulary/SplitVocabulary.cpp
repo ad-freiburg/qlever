@@ -47,16 +47,6 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::open(const string& filename) {
   underlyingSpecial_.open(fnSpecial);
 }
 
-// //
-// _____________________________________________________________________________
-// template <typename ST, typename CT, typename IT, class M, class S,
-// const auto &SF,
-//     const auto &SFN >
-// decltype(auto) SplitVocabulary<ST, CT, IT, M, S, SF,
-// SFN>::operator[](uint64_t idx) const
-// {
-// }
-
 // _____________________________________________________________________________
 template <typename ST, typename CT, typename IT, class M, class S,
           const auto& SF, const auto& SFN>
@@ -111,6 +101,27 @@ bool SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::getId(std::string_view word,
   // vocab, when that works, start changing lower/upper bound to arrays
   return false;
 };
+
+// _____________________________________________________________________________
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::build(
+    const std::vector<std::string>& words, const std::string& filename) {
+  WordWriter writer = makeWordWriter(filename);
+  for (const auto& word : words) {
+    writer(word, true);  // isExternal?
+  }
+  writer.finish();
+  open(filename);
+}
+
+// _____________________________________________________________________________
+template <typename ST, typename CT, typename IT, class M, class S,
+          const auto& SF, const auto& SFN>
+void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::close() {
+  underlyingMain_.close();
+  underlyingSpecial_.close();
+}
 
 // Explicit template instantiations
 template class SplitVocabulary<CompressedString, TripleComponentComparator,
