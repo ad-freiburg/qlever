@@ -9,8 +9,8 @@
 #include <string>
 #include <string_view>
 
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
@@ -41,10 +41,7 @@ class VocabularyInternalExternal {
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& filename) {
-    internalVocab_.open(filename + ".internal");
-    externalVocab_.open(filename + ".external");
-  }
+  void open(const string& filename);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
@@ -120,6 +117,11 @@ class VocabularyInternalExternal {
 
     std::string& readableName() { return readableName_; }
   };
+
+  // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
+  }
 
   /// Clear the vocabulary.
   void close() { internalVocab_.close(); }
