@@ -23,13 +23,13 @@
 #include "global/Pattern.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
-#include "util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -62,11 +62,6 @@ template <typename UnderlyingVocabulary, typename ComparatorType,
           typename IndexT>
 class Vocabulary {
  public:
-  // The type that is returned by the `operator[]` of this vocabulary. Typically
-  // either `std::string` or `std::string_view`.
-  using AccessReturnType =
-      decltype(std::declval<const UnderlyingVocabulary&>()[0]);
-
   // The index ranges for a prefix + a function to check whether a given index
   // is contained in one of them.
   //
@@ -113,7 +108,10 @@ class Vocabulary {
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
-  using AccessReturnType = AccessReturnType_t<StringType>;
+  // The type that is returned by the `operator[]` of this vocabulary. Typically
+  // either `std::string` or `std::string_view`.
+  using AccessReturnType =
+      decltype(std::declval<const UnderlyingVocabulary&>()[0]);
 
   Vocabulary() = default;
   Vocabulary& operator=(Vocabulary&&) noexcept = default;

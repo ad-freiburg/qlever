@@ -51,21 +51,22 @@ uint64_t PolymorphicVocabulary::WordWriter::operator()(std::string_view word,
 }
 
 // _____________________________________________________________________________
-auto PolymorphicVocabulary::makeDiskWriter(const std::string& filename) const
-    -> WordWriter {
-  return WordWriter{std::visit(
+auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
+    -> std::unique_ptr<WordWriter> {
+  return std::make_unique<WordWriter>(std::visit(
       [&filename](auto& vocab) -> WordWriters {
         return vocab.makeDiskWriterPtr(filename);
       },
-      vocab_)};
+      vocab_));
 }
 
 // _____________________________________________________________________________
-PolymorphicVocabulary::WordWriter PolymorphicVocabulary::makeDiskWriter(
-    const std::string& filename, VocabularyType type) {
+std::unique_ptr<PolymorphicVocabulary::WordWriter>
+PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename,
+                                         VocabularyType type) {
   PolymorphicVocabulary dummyVocab;
   dummyVocab.resetToType(type);
-  return dummyVocab.makeDiskWriter(filename);
+  return dummyVocab.makeDiskWriterPtr(filename);
 }
 
 // _____________________________________________________________________________

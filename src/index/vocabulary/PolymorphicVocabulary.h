@@ -100,6 +100,7 @@ class PolymorphicVocabulary {
   // sorted order).
   class WordWriter {
     WordWriters writer_;
+    std::string readableName_;
 
    public:
     // Constructor, used by the `makeDiskWriter` functions below.
@@ -110,14 +111,17 @@ class PolymorphicVocabulary {
 
     // Write the next word to the vocabulary.
     uint64_t operator()(std::string_view word, bool isExternal);
+
+    std::string& readableName() { return readableName_; }
   };
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
-  static WordWriter makeDiskWriter(const std::string& filename,
-                                   VocabularyType type);
+  static std::unique_ptr<WordWriter> makeDiskWriterPtr(
+      const std::string& filename, VocabularyType type);
 
   // Same as above, but the `VocabularyType` is the currently active type of
   // `this`.
-  WordWriter makeDiskWriter(const std::string& filename) const;
+  std::unique_ptr<WordWriter> makeDiskWriterPtr(
+      const std::string& filename) const;
 };
