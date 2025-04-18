@@ -23,4 +23,4 @@ add_library(sparqlExpressions
         PrefilterExpressionIndex.cpp
         BlankNodeExpression.cpp)
 
-qlever_target_link_libraries(sparqlExpressions util index Boost::url)
+qlever_target_link_libraries(sparqlExpressions util index Boost::url pb_util)
