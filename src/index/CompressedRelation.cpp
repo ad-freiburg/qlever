@@ -1390,7 +1390,7 @@ auto CompressedRelationWriter::createPermutationPair(
     return std::tie(a[c1Idx], a[c2Idx], a[ADDITIONAL_COLUMN_GRAPH_ID]) <
            std::tie(b[c1Idx], b[c2Idx], b[ADDITIONAL_COLUMN_GRAPH_ID]);
   };
-  // TODO<joka921> Use `CALL_FIXED_SIZE`.
+  // TODO<joka921> Use `ad_utility::callFixedSize`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
       twinRelationSorter(basename + ".twin-twinRelationSorter", numColumns,
                          4_GB, alloc);

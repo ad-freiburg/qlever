@@ -70,16 +70,28 @@ Result Distinct::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
   if (subRes->isFullyMaterialized()) {
-    IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::outOfPlaceDistinct,
-                                      this, subRes->idTable());
+    IdTable idTable = ad_utility::callFixedSize(
+        width,
+        ad_utility::ApplyAsValueIdentity{
+            [](auto valueIdentity, auto&&... args) -> decltype(auto) {
+              static constexpr size_t WIDTH = valueIdentity.value;
+              return std::invoke(&Distinct::outOfPlaceDistinct<WIDTH>,
+                                 AD_FWD(args)...);
+            }},
+        this, subRes->idTable());
     LOG(DEBUG) << "Distinct result computation done." << endl;
     return {std::move(idTable), resultSortedOn(),
             subRes->getSharedLocalVocab()};
   }
 
-  auto generator =
-      CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
-                      std::move(subRes->idTables()), !requestLaziness);
+  auto generator = ad_utility::callFixedSize(
+      width,
+      ad_utility::ApplyAsValueIdentity{
+          [](auto valueIdentity, auto&&... args) -> decltype(auto) {
+            static constexpr size_t WIDTH = valueIdentity.value;
+            return std::invoke(&Distinct::lazyDistinct<WIDTH>, AD_FWD(args)...);
+          }},
+      this, std::move(subRes->idTables()), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
              : Result{cppcoro::getSingleElement(std::move(generator)),

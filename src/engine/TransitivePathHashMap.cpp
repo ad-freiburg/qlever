@@ -14,9 +14,15 @@
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
-                         &TransitivePathHashMap::setupEdgesMap, this, dynSub,
-                         startSide, targetSide);
+  return ad_utility::callFixedSize(
+      std::array{dynSub.numColumns()},
+      ad_utility::ApplyAsValueIdentity{
+          [](auto valueIdentity, auto&&... args) -> decltype(auto) {
+            static constexpr size_t SUB_WIDTH = valueIdentity.value;
+            return std::invoke(&TransitivePathHashMap::setupEdgesMap<SUB_WIDTH>,
+                               AD_FWD(args)...);
+          }},
+      this, dynSub, startSide, targetSide);
 }
 
 // _____________________________________________________________________________

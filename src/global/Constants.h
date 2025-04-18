@@ -214,11 +214,12 @@ constexpr inline size_t MAKE_ROOM_SLACK_FACTOR = 2;
 // The maximal number of columns an `IdTable` (an intermediate result of
 // query evaluation) may have to be able to use the more efficient `static`
 // implementation (For details see `IdTable.h`, `CallFixedSize.h` and the
-// usage of `CALL_FIXED_SIZE` in the various subclasses of `Operation`.
-// Increasing this number improves the runtime for operations on tables with
-// more columns, but also increases compile times because more templates
-// have to be instantiated. It might also be necessary to increase some internal
-// compiler limits for the evaluation of constexpr functions and templates.
+// usage of `ad_utility::callFixedSize` in the various subclasses of
+// `Operation`. Increasing this number improves the runtime for operations on
+// tables with more columns, but also increases compile times because more
+// templates have to be instantiated. It might also be necessary to increase
+// some internal compiler limits for the evaluation of constexpr functions and
+// templates.
 constexpr inline int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 // Interval in which an enabled watchdog would check if

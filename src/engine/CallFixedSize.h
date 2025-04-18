@@ -161,20 +161,4 @@ decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
 
 }  // namespace ad_utility
 
-// The definitions of the macro for an easier syntax.
-// The first argument (an array of integers) has to be put in parentheses if
-// it is directly instantiated in the call, for example
-// `CALL_FIXED_SIZE((std::array{1, 2}), &funcThatTakesTwoIntegers, argument);`
-// This is necessary because macros do not correctly parse the curly braces.
-// TODO<joka921, C++23> In C++23 `std::array` and other aggregates can be
-// initialized with parentheses such that we can write
-// `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
-// simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
-// the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                      \
-  ad_utility::callFixedSize(                                      \
-      integers, []<int... Is>(auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<Is...>, AD_FWD(args)...);         \
-      } __VA_OPT__(, ) __VA_ARGS__)
-
 #endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H

@@ -268,8 +268,15 @@ Result::Generator Service::computeResultLazily(
         varsChecked = true;
       }
 
-      CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, &localVocab, rowIdx);
+      ad_utility::callFixedSize(
+          getResultWidth(),
+          ad_utility::ApplyAsValueIdentity{
+              [](auto valueIdentity, auto&&... args) -> decltype(auto) {
+                static constexpr size_t I = valueIdentity.value;
+                return std::invoke(&Service::writeJsonResult<I>,
+                                   AD_FWD(args)...);
+              }},
+          this, vars, partJson, &idTable, &localVocab, rowIdx);
       if (!singleIdTable) {
         Result::IdTableVocabPair pair{std::move(idTable),
                                       std::move(localVocab)};
