@@ -17,12 +17,19 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   // and use a generic comparison for a higher number of sort columns.
   // TODO<joka921> As soon as we have merged the benchmark, measure whether
   // this is in fact beneficial and whether it should also be applied for a
-  // higher number of columns, maybe even using `CALL_FIXED_SIZE` for the
-  // number of sort columns.
+  // higher number of columns, maybe even using `ad_utility::callFixedSize` for
+  // the number of sort columns.
   // TODO<joka921> Also experiment with sorting algorithms that take the
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
-    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
+    ad_utility::callFixedSize(
+        width,
+        ad_utility::ApplyAsValueIdentity{
+            [](auto valueIdentity, auto&&... args) -> decltype(auto) {
+              static constexpr auto WIDTH = valueIdentity.value;
+              return std::invoke(&Engine::sort<WIDTH>, AD_FWD(args)...);
+            }},
+        &idTable, sortCols.at(0));
   } else if (sortCols.size() == 2) {
     auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
                                                            const auto& row2) {
@@ -33,9 +40,12 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
       }
     };
     ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+                              ad_utility::ApplyAsValueIdentity{
+                                  [&idTable, comparison](auto valueIdentity) {
+                                    static constexpr int I =
+                                        valueIdentity.value;
+                                    Engine::sort<I>(&idTable, comparison);
+                                  }});
   } else {
     auto comparison = [&sortCols](const auto& row1, const auto& row2) {
       for (auto& col : sortCols) {
@@ -46,9 +56,12 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
       return false;
     };
     ad_utility::callFixedSize(idTable.numColumns(),
-                              [&idTable, comparison]<int I>() {
-                                Engine::sort<I>(&idTable, comparison);
-                              });
+                              ad_utility::ApplyAsValueIdentity{
+                                  [&idTable, comparison](auto valueIdentity) {
+                                    static constexpr int I =
+                                        valueIdentity.value;
+                                    Engine::sort<I>(&idTable, comparison);
+                                  }});
   }
 }
 

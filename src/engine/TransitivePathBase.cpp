@@ -167,10 +167,13 @@ Result::Generator TransitivePathBase::fillTableWithHull(
     size_t skipCol, bool yieldOnce, size_t inputWidth) const {
   return ad_utility::callFixedSize(
       std::array{inputWidth, getResultWidth()},
-      [&]<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>() {
+      ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity1,
+                                           auto valueIdentity2) {
+        static constexpr size_t INPUT_WIDTH = valueIdentity1.value;
+        static constexpr size_t OUTPUT_WIDTH = valueIdentity2.value;
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
             std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
-      });
+      }});
 }
 
 // _____________________________________________________________________________
@@ -178,10 +181,13 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         size_t startSideCol,
                                                         size_t targetSideCol,
                                                         bool yieldOnce) const {
-  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
-    return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
-                                           targetSideCol, yieldOnce);
-  });
+  return ad_utility::callFixedSize(
+      getResultWidth(),
+      ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
+        static constexpr size_t WIDTH = valueIdentity.value;
+        return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
+                                               targetSideCol, yieldOnce);
+      }});
 }
 
 // _____________________________________________________________________________
