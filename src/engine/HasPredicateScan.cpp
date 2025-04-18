@@ -306,8 +306,9 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // ___________________________________________________________________________
+template <typename HasPattern>
 void HasPredicateScan::computeFreeS(
-    IdTable* resultTable, Id objectId, auto& hasPattern,
+    IdTable* resultTable, Id objectId, HasPattern& hasPattern,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
   // TODO<joka921> This can be a much simpler and cheaper implementation that
@@ -351,8 +352,9 @@ void HasPredicateScan::computeFreeO(
 }
 
 // ___________________________________________________________________________
+template <typename HasPattern>
 void HasPredicateScan::computeFullScan(
-    IdTable* resultTable, auto& hasPattern,
+    IdTable* resultTable, HasPattern& hasPattern,
     const CompactVectorOfStrings<Id>& patterns, size_t resultSize) {
   IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
   result.reserve(resultSize);

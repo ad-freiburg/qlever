@@ -96,9 +96,10 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
 // `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
+template <typename Allocator>
 static IdTable getNewBlankNodes(
-    const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    std::span<Id> input) {
+    const Allocator& allocator,
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, std::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);

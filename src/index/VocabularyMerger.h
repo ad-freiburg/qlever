@@ -260,7 +260,8 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-void writeMappedIdsToExtVec(const auto& input,
+template <typename T>
+void writeMappedIdsToExtVec(const T& input,
                             const ad_utility::HashMap<Id, Id>& map,
                             std::unique_ptr<TripleVec>* writePtr);
 

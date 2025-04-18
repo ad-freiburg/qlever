@@ -1511,10 +1511,10 @@ static constexpr auto makeProcessGroupsVisitor =
     };
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupBy::computeGroupByForHashMapOptimization(
-    std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
-    const std::vector<size_t>& columnIndices) const {
+    std::vector<HashMapAliasInformation>& aggregateAliases,
+    SubResults subresults, const std::vector<size_t>& columnIndices) const {
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;

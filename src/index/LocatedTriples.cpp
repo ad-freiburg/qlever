@@ -61,9 +61,10 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
 // `std::tie(row[0], row[1], row[2])`.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
-    requires(numIndexColumns >= 1 &&
-             numIndexColumns <= 3)) auto tieIdTableRow(auto& row) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn,
+             typename T)(requires(numIndexColumns >= 1 &&
+                                  numIndexColumns <=
+                                      3)) auto tieIdTableRow(T& row) {
   return [&row]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(row[I]...);
   }(std::make_index_sequence<numIndexColumns +
@@ -75,9 +76,10 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
 // `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
 // returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
 // `lt->triple_`.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
-    requires(numIndexColumns >= 1 &&
-             numIndexColumns <= 3)) auto tieLocatedTriple(auto& lt) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn,
+             typename T)(requires(numIndexColumns >= 1 &&
+                                  numIndexColumns <=
+                                      3)) auto tieLocatedTriple(T& lt) {
   constexpr auto indices = []() {
     std::array<size_t,
                numIndexColumns + static_cast<size_t>(includeGraphColumn)>

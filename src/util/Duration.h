@@ -1,7 +1,7 @@
 //  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
-//
+
 //  Tests for this class can be found in DurationTest.cpp
 
 #ifndef QLEVER_DURATION_H
@@ -39,7 +39,8 @@ class DurationOverflowException : public std::exception {
 
 //______________________________________________________________________________
 namespace detail {
-constexpr void checkBoundDuration(const auto& value, const auto& max,
+template <typename T>
+constexpr void checkBoundDuration(const T& value, const T& max,
                                   std::string_view className,
                                   std::string_view xsdDatatype) {
   if (value >= max) {

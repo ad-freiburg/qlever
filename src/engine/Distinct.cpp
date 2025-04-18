@@ -87,7 +87,8 @@ Result Distinct::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-bool Distinct::matchesRow(const auto& a, const auto& b) const {
+template <typename T1, typename T2>
+bool Distinct::matchesRow(const T1& a, const T2& b) const {
   return ql::ranges::all_of(keepIndices_,
                             [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }

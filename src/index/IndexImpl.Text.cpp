@@ -446,7 +446,8 @@ static cppcoro::generator<std::string> fourLetterPrefixes() {
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-static bool areFourLetterPrefixesSorted(auto comparator) {
+template <typename T>
+static bool areFourLetterPrefixesSorted(T comparator) {
   std::string first;
   for (auto second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {

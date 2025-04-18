@@ -47,7 +47,8 @@ std::string SparqlValues::valuesToString() const {
 // Small anonymous helper function that is used in the definition of the member
 // functions of the `Subquery` class.
 namespace {
-auto m(auto&&... args) {
+template <typename... Args>
+auto m(Args&&... args) {
   return std::make_unique<ParsedQuery>(AD_FWD(args)...);
 }
 }  // namespace

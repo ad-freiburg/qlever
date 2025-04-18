@@ -28,8 +28,8 @@ TEST(TypeTraits, IsSimilar) {
 Call the given lambda with explicit types: `std::decay_t<T>`,`const
 std::decay_t<T>`,`std::decay_t<T>&`,`const std::decay_t<T>&`.
 */
-template <typename T>
-constexpr void callLambdaWithAllVariationsOfType(const auto& lambda) {
+template <typename T, typename F>
+constexpr void callLambdaWithAllVariationsOfType(const F& lambda) {
   using decayedT = std::decay_t<T>;
   lambda(ti<decayedT>);
   lambda(ti<const decayedT>);

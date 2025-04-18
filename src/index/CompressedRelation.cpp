@@ -27,7 +27,8 @@
 using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
-static auto getBeginAndEnd(auto& range) {
+template <typename T>
+static auto getBeginAndEnd(T& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
@@ -63,7 +64,8 @@ static auto isTripleInSpecification =
 // modify the `block` according to the `limitOffset`. Also modify the
 // `limitOffset` to reflect the parts of the LIMIT and OFFSET that have been
 // performed by pruning this `block`.
-static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
+template <typename T>
+static void pruneBlock(T& block, LimitOffsetClause& limitOffset) {
   auto& offset = limitOffset._offset;
   auto offsetInBlock = std::min(static_cast<size_t>(offset), block.size());
   if (offsetInBlock == block.size()) {
@@ -82,9 +84,10 @@ static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
 }
 
 // ____________________________________________________________________________
+template <typename T>
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
-    auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
+    T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
     CancellationHandle cancellationHandle,
     LimitOffsetClause& limitOffset) const {
   // Empty range.
@@ -1327,8 +1330,9 @@ class DistinctIdCounter {
 }  // namespace
 
 // __________________________________________________________________________
+template <typename T>
 CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
-    Id col0Id, auto&& sortedBlocks) {
+    Id col0Id, T&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
   for (auto& block : sortedBlocks) {
     ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));

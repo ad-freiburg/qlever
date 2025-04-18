@@ -818,7 +818,8 @@ class IdTable {
 
   // Common implementation for const and mutable overloads of `getColumns`
   // (see below).
-  static auto getColumnsImpl(auto&& self) {
+  template <typename Self>
+  static auto getColumnsImpl(Self&& self) {
     using Column = decltype(self.getColumn(0));
     if constexpr (isDynamic) {
       // TODO<joka921, for the dynamic case we could maybe use a vector with

@@ -113,11 +113,11 @@ CPP_template(typename Range, typename Serializer)(
 
 // Deserialize a range of Ids from the input stream. If an Id is of type
 // LocalVocabIndex, apply the mapping to the Id after reading it.
-CPP_template(typename BlankNodeFunc)(
+CPP_template(typename Serializer, typename BlankNodeFunc)(
     requires ad_utility::InvocableWithConvertibleReturnType<BlankNodeFunc,
                                                             BlankNodeIndex>)
     std::vector<Id> deserializeIds(
-        auto& serializer, const absl::flat_hash_map<Id::T, Id>& mapping,
+        Serializer& serializer, const absl::flat_hash_map<Id::T, Id>& mapping,
         BlankNodeFunc newBlankNodeIndex) {
   std::vector<Id> ids = readValue<std::vector<Id>>(serializer);
   absl::flat_hash_map<Id, BlankNodeIndex> blankNodeMapping;

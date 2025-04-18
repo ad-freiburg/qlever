@@ -632,11 +632,14 @@ class RdfParallelParser : public Parser {
   // interacts with the functions next to it.
   void finishTripleCollectorIfLastBatch();
   // Parse the single `batch` and push the result to the `triplesCollector_`.
-  void parseBatch(size_t parsePosition, auto batch);
+  template <typename Batch>
+  void parseBatch(size_t parsePosition, Batch batch);
+
   // Read all the batches from the file and feed them to the parallel parser
   // threads. The argument is the first batch which might have been leftover
   // from the initialization phase where the prefixes are parsed.
-  void feedBatchesToParser(auto remainingBatchFromInitialization);
+  template <typename Batch>
+  void feedBatchesToParser(Batch remainingBatchFromInitialization);
 
   using Parser::isParserExhausted_;
   using Parser::tok_;

@@ -85,7 +85,7 @@ CPP_concept BinaryIteratorFunction =
  * be exploited to fix the result in a cheaper way than a full sort.
  */
 CPP_template(typename Range1, typename Range2, typename LessThan,
-             typename FindSmallerUndefRangesLeft,
+             typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
              typename FindSmallerUndefRangesRight,
              typename ElFromFirstNotFoundAction = decltype(noop),
              typename CheckCancellation = decltype(noop))(
@@ -93,7 +93,7 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
         ql::ranges::random_access_range<Range2>)
     [[nodiscard]] auto zipperJoinWithUndef(
         const Range1& left, const Range2& right, const LessThan& lessThan,
-        const auto& compatibleRowAction,
+        const CompatibleRowAction& compatibleRowAction,
         const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
         const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
         ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
@@ -325,15 +325,15 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
  * a proper exception. Typically implementations will just
  * CancellationHandle::throwIfCancelled().
  */
-CPP_template(typename RangeSmaller, typename RangeLarger,
-             typename ElementFromSmallerNotFoundAction = Noop,
+CPP_template(typename RangeSmaller, typename RangeLarger, typename LessThan,
+             typename Action, typename ElementFromSmallerNotFoundAction = Noop,
              typename CheckCancellation = Noop)(
     requires ql::ranges::random_access_range<RangeSmaller> CPP_and
         ql::ranges::random_access_range<
             RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
                                              const RangeLarger& larger,
-                                             auto const& lessThan,
-                                             auto const& action,
+                                             LessThan const& lessThan,
+                                             Action const& action,
                                              ElementFromSmallerNotFoundAction
                                                  elementFromSmallerNotFoundAction =
                                                      {},
@@ -705,8 +705,8 @@ JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 // Create a `JoinSide` object from a range of `blocks` and a `projection`. Note
 // that the `blocks` are stored as a reference, so the caller is responsible for
 // keeping them valid until the join is completed.
-template <typename Blocks>
-auto makeJoinSide(Blocks& blocks, const auto& projection) {
+template <typename Blocks, typename Projection>
+auto makeJoinSide(Blocks& blocks, const Projection& projection) {
   return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection};
 }
@@ -716,7 +716,10 @@ template <typename T>
 CPP_concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
 struct AlwaysFalse {
-  bool operator()(const auto&) const { return false; }
+  template <typename T>
+  bool operator()(const T&) const {
+    return false;
+  }
 };
 
 // The class that actually performs the zipper join for blocks without UNDEF.
@@ -798,7 +801,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       !std::is_same_v<IsUndef, AlwaysFalse>;
 
   // Create an equality comparison from the `lessThan` predicate.
-  bool eq(const auto& el1, const auto& el2) {
+  template <typename T1, typename T2>
+  bool eq(const T1& el1, const T2& el2) {
     return !lessThan_(el1, el2) && !lessThan_(el2, el1);
   }
 
@@ -978,11 +982,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   }
 
   // Main implementation for `findUndefValues`.
-  template <bool left, typename T>
-  cppcoro::generator<T> findUndefValuesHelper(const auto& fullBlockLeft,
-                                              const auto& fullBlockRight,
-                                              T& begL, T& begR,
-                                              const auto& undefBlocks) {
+  template <bool left, typename T, typename B1, typename B2,
+            typename UndefBlocks>
+  cppcoro::generator<T> findUndefValuesHelper(const B1& fullBlockLeft,
+                                              const B2& fullBlockRight, T& begL,
+                                              T& begR,
+                                              const UndefBlocks& undefBlocks) {
     for (const auto& undefBlock : undefBlocks) {
       // Select proper input table from the stored undef blocks
       if constexpr (left) {
@@ -1012,8 +1017,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // beginning of the full blocks of the left and right side respectively so
   // that they can be used within `zipperJoinWithUndef` to compute the
   // distance from the yielded iterator to the beginning of the block.
-  template <bool left, typename T>
-  auto findUndefValues(const auto& fullBlockLeft, const auto& fullBlockRight,
+  template <bool left, typename T, typename B1, typename B2>
+  auto findUndefValues(const B1& fullBlockLeft, const B2& fullBlockRight,
                        T& begL, T& begR) {
     return [this, &fullBlockLeft, &fullBlockRight, &begL, &begR](
                const auto&, auto, auto, bool) {
@@ -1387,13 +1392,13 @@ BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
  * `flush`.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename LeftProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
 void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
-                                     auto& compatibleRowAction,
+                                     CompatibleRowAction& compatibleRowAction,
                                      LeftProjection leftProjection = {},
                                      RightProjection rightProjection = {},
                                      DoOptionalJoinTag = {}) {
@@ -1410,16 +1415,14 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
 // a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
-          typename LeftProjection = std::identity,
+          typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
-void zipperJoinForBlocksWithPotentialUndef(LeftBlocks&& leftBlocks,
-                                           RightBlocks&& rightBlocks,
-                                           const LessThan& lessThan,
-                                           auto& compatibleRowAction,
-                                           LeftProjection leftProjection = {},
-                                           RightProjection rightProjection = {},
-                                           DoOptionalJoinTag = {}) {
+void zipperJoinForBlocksWithPotentialUndef(
+    LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
+    const LessThan& lessThan, CompatibleRowAction& compatibleRowAction,
+    LeftProjection leftProjection = {}, RightProjection rightProjection = {},
+    DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
 
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);

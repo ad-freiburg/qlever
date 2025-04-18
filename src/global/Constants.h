@@ -47,7 +47,8 @@ constexpr std::string_view makeQleverInternalIriConst() {
   return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
                                      suffixes..., ">">();
 }
-inline std::string makeQleverInternalIri(const auto&... suffixes) {
+template <typename... T>
+inline std::string makeQleverInternalIri(const T&... suffixes) {
   return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
                       suffixes..., ">");
 }

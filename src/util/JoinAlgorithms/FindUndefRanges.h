@@ -36,9 +36,10 @@ namespace ad_utility {
 // is the number of matching elements.
 // TODO<joka921> This can be optimized when we also know which columns of
 // `[begin, end)` can possibly contain UNDEF values.
-CPP_template(typename It)(requires std::random_access_iterator<It>)  //
+CPP_template(typename R,
+             typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithoutUndef(
-        const auto& row, It begin, It end,
+        const R& row, It begin, It end,
         [[maybe_unused]] bool& resultMightBeUnsorted)
         -> cppcoro::generator<It> {
   using Row = typename std::iterator_traits<It>::value_type;
@@ -170,8 +171,9 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 // columns contain no UNDEF at all) and therefore a more specialized routine
 // should be chosen.
 struct FindSmallerUndefRanges {
-  CPP_template(typename It)(requires std::random_access_iterator<It>) auto
-  operator()(const auto& row, It begin, It end,
+  CPP_template(typename Row,
+               typename It)(requires std::random_access_iterator<It>) auto
+  operator()(const Row& row, It begin, It end,
              bool& resultMightBeUnsorted) const -> cppcoro::generator<It> {
     size_t numLastUndefined = 0;
     assert(row.size() > 0);

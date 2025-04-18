@@ -89,10 +89,11 @@ void LazyGroupBy::processBlock(
 }
 
 // _____________________________________________________________________________
+template <typename Visitor, typename... Args>
 void LazyGroupBy::visitAggregate(
-    const auto& visitor,
+    const Visitor& visitor,
     const GroupBy::HashMapAggregateInformation& aggregateInfo,
-    auto&&... additionalVariants) {
+    Args&&... additionalVariants) {
   std::visit(visitor,
              aggregationData_.getAggregationDataVariant(
                  aggregateInfo.aggregateDataIndex_),

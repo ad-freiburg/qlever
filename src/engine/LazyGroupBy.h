@@ -46,9 +46,10 @@ class LazyGroupBy {
   void resetAggregationData();
 
   // Helper function to visit the correct variant of the aggregation data.
-  void visitAggregate(const auto& visitor,
+  template <typename Visitor, typename... Args>
+  void visitAggregate(const Visitor& visitor,
                       const GroupBy::HashMapAggregateInformation& aggregateInfo,
-                      auto&&... additionalVariants);
+                      Args&&... additionalVariants);
 
   auto allAggregateInfoView() const {
     return aggregateAliases_ |

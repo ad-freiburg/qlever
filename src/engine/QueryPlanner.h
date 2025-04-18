@@ -269,16 +269,16 @@ class QueryPlanner {
                               const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanTwoVarsCase(const SparqlTripleSimple& triple,
                             const AddedIndexScanFunction& addIndexScan,
-                            const auto& addFilter);
+                            const AddedFilter& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanThreeVarsCase(const SparqlTripleSimple& triple,
                               const AddedIndexScanFunction& addIndexScan,
-                              const auto& addFilter);
+                              const AddedFilter& addFilter);
 
   /**
    * @brief Fills children with all operations that are associated with a single
@@ -586,8 +586,9 @@ class QueryPlanner {
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    template <typename Variables>
     bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const auto& variables);
+                                          const Variables& variables);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
@@ -606,7 +607,8 @@ class QueryPlanner {
     void optimizeCommutatively();
 
     // Find a single best candidate for a given graph pattern.
-    SubtreePlan optimizeSingle(const auto& pattern) {
+    template <typename Pattern>
+    SubtreePlan optimizeSingle(const Pattern& pattern) {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);

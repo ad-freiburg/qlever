@@ -185,7 +185,8 @@ auto testNumericNearLimits = []<size_t N>() {
   testBinaryFunctionNearLimits.operator()<N>(testNumeric);
 };
 
-void testAllN(auto function, auto... args) {
+template <typename F, typename... Args>
+void testAllN(F function, Args... args) {
   // Call function<N>(args) for all N in 1..64.
   // Note that the `(std::make_index_sequence...)` is the argument to the
   // unnamed lambda (immediately invoked lambda). Clang format wants the

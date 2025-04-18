@@ -48,7 +48,8 @@ struct IterationData {
 
   // Fetch the next element from the range, make a copy if it's a `Wrapper`.
   // Otherwise move it. If the range is exhausted, return `std::nullopt`.
-  std::optional<Result::IdTableVocabPair> passNext(auto applyPermutation) {
+  template <typename T>
+  std::optional<Result::IdTableVocabPair> passNext(T applyPermutation) {
     if (it_ == range_.end()) {
       return std::nullopt;
     }
@@ -136,7 +137,8 @@ struct SortedUnionImpl
   }
 
   // Always inline makes makes a huge difference on large datasets.
-  AD_ALWAYS_INLINE bool isSmaller(const auto& row1, const auto& row2) const {
+  template <typename T1, typename T2>
+  AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
     using StaticRange = std::span<const std::array<size_t, 2>, SPAN_SIZE>;
     for (auto [index1, index2] : StaticRange{targetOrder_}) {
       if (index1 == Union::NO_COLUMN) {
@@ -154,7 +156,8 @@ struct SortedUnionImpl
 
   // Write a new row to the result table. The parameter `left` controls which
   // permutation is used to write the row to the result table.
-  void pushRow(bool left, const auto& row) {
+  template <typename T>
+  void pushRow(bool left, const T& row) {
     resultTable_.emplace_back();
     for (size_t column = 0; column < resultTable_.numColumns(); column++) {
       ColumnIndex origin = columnOrigins_.at(column).at(!left);
