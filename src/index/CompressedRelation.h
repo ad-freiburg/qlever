@@ -169,6 +169,16 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.blockIndex_;
 }
 
+// `std::span` containing `CompressedBlockMetadata` values.
+using BlockMetadataSpan = std::span<const CompressedBlockMetadata>;
+// Iterator with respect to a `CompressedBlockMetadata` value of
+// `std::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
+using BlockMetadataIt = BlockMetadataSpan::iterator;
+// Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
+using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
+// Vector containing `BlockMetadataRange`s.
+using BlockMetadataRanges = std::vector<BlockMetadataRange>;
+
 // The metadata of a whole compressed "relation", where relation refers to a
 // maximal sequence of triples with equal first component (e.g., P for the PSO
 // permutation).
@@ -466,9 +476,33 @@ class CompressedRelationReader {
 
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
+  //
+  // Brief explanation of `ScanSpecAndBlocks` constructor.
+  // (1) The passed `ScanSpecification` remains as it is and is moved into
+  // member variable `scanSpec_`.
+  // (2) Member `blockMetadata_` is set to the `BlockMetadataRanges` computed
+  // via `getRelevantBlocks` for the provided `ScanSpecification` and
+  // `BlockMetadataRanges`.
+  // (3) `sizeBlockMetadata_` represents the number of
+  // `CompressedBlockMetadata` values contained over all subranges in member
+  // `BlockMetadataRanges_ blockMetadata_`.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
-    const std::span<const CompressedBlockMetadata> blockMetadata_;
+    BlockMetadataRanges blockMetadata_;
+    size_t sizeBlockMetadata_;
+
+    ScanSpecAndBlocks(ScanSpecification scanSpec,
+                      const BlockMetadataRanges& blockMetadataRanges)
+        : scanSpec_(std::move(scanSpec)),
+          blockMetadata_(getRelevantBlocks(scanSpec_, blockMetadataRanges)),
+          sizeBlockMetadata_(getNumberOfBlockMetadataValues(blockMetadata_)) {}
+
+    // Direct view access via `ql::views::join` over all
+    // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges
+    // blockMetadata_`.
+    auto getBlockMetadataView() const {
+      return ql::views::join(blockMetadata_);
+    }
   };
 
   // This struct additionally contains the first and last triple of the scan
@@ -575,8 +609,7 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const ScanSpecification& scanSpec,
-               std::span<const CompressedBlockMetadata> blocks,
+  IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
@@ -587,7 +620,7 @@ class CompressedRelationReader {
   // The blocks are guaranteed to be in order.
   CompressedRelationReader::IdTableGenerator lazyScan(
       ScanSpecification scanSpec,
-      std::vector<CompressedBlockMetadata> blockMetadata,
+      std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
@@ -596,16 +629,14 @@ class CompressedRelationReader {
   // triples into account. This requires locating the triples exactly in each
   // of the relevant blocks.
   size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
   // it belongs (which is the case for `LocatedTriplesPerBlock`).
   std::pair<size_t, size_t> getSizeEstimateForScan(
-      const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  private:
@@ -613,8 +644,7 @@ class CompressedRelationReader {
   // above.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
-      const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
       const;
 
@@ -622,33 +652,39 @@ class CompressedRelationReader {
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
-      Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
+      const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
       const LocatedTriplesPerBlock&) const;
 
-  // Get the contiguous subrange of the given `blockB` for the blocks
-  // that contain the triples that have the relationId/col0Id that was specified
-  // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
-  // blocks are additionally filtered by the given `col1Id`.
-  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
-      const ScanSpecification& blockA,
-      std::span<const CompressedBlockMetadata> blockB);
+  // Return the number of `CompressedBlockMetadata` values contained in given
+  // `BlockMetadataRanges` object.
+  static size_t getNumberOfBlockMetadataValues(
+      const BlockMetadataRanges& blockMetadata);
 
-  // The same function, but specify the arguments as the
-  // `ScanSpecAndBlocksAndBounds` struct.
-  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const ScanSpecAndBlocks& metadataAndBlocks);
+  // Retrieves the corresponding materialized `CompressedBlockMetadata` vector
+  // to the given `BlockMetadataRanges blockMetadata`.
+  static std::vector<CompressedBlockMetadata>
+  convertBlockMetadataRangesToVector(const BlockMetadataRanges& blockMetadata);
+
+  // Get the relevant `BlockMetadataRanges` sections of the given
+  // `BlockMetadataRanges blockMetadata` for the blocks that contain the
+  // triples that have the relationId/col0Id specified by
+  // `ScanSpecification scanSpec`. If the `col1Id` is specified (not `nullopt`),
+  // then the blocks are additionally filtered by the given `col1Id`.
+  static BlockMetadataRanges getRelevantBlocks(
+      const ScanSpecification& scanSpec,
+      const BlockMetadataRanges& blockMetadata);
 
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to. Return `nullopt` if the scan result would
@@ -752,8 +788,7 @@ class CompressedRelationReader {
       requires ad_utility::InvocableWithConvertibleReturnType<
           IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
       getDistinctColIdsAndCountsImpl(
-          IdGetter idGetter, const ScanSpecification& scanSpec,
-          const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+          IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
           const CancellationHandle& cancellationHandle,
           const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 };

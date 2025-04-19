@@ -33,18 +33,6 @@ using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 constexpr size_t maxInfoRecursion = 3;
 
 //______________________________________________________________________________
-// `std::span` containing `CompressedBlockMetadata` (defined in
-// CompressedRelation.h) values.
-using BlockMetadataSpan = std::span<const CompressedBlockMetadata>;
-// Iterator with respect to a `CompressedBlockMetadata` value of
-// `std::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
-using BlockMetadataIt = BlockMetadataSpan::iterator;
-// Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
-using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
-// Vector containing `BlockMetadataRange`s.
-using BlockMetadataRanges = std::vector<BlockMetadataRange>;
-
-//______________________________________________________________________________
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
 // containerized `std::span<cont CompressedBlockMetadata>` objects. This
 // (indexable) containerization procedure allows us to efficiently define

@@ -268,7 +268,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
-    std::vector<CompressedBlockMetadata> blockMetadata,
+    std::vector<CompressedBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     LimitOffsetClause limitOffset) const {
@@ -278,15 +278,13 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   // value for some sanity checks at the end of the function.
   const auto originalLimit = limitOffset;
 
-  // Compute the sequence of relevant blocks. If the sequence is empty, there
-  // is nothing to yield.
-  auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
-  if (ql::ranges::empty(relevantBlocks)) {
+  if (relevantBlockMetadata.empty()) {
     co_return;
   }
 
   // Some preparation.
-  auto [beginBlockMetadata, endBlockMetadata] = getBeginAndEnd(relevantBlocks);
+  auto [beginBlockMetadata, endBlockMetadata] =
+      getBeginAndEnd(relevantBlockMetadata);
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
   auto config =
@@ -428,9 +426,6 @@ struct BlockLessThanBlock {
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
-  // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
-  auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
-
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
                              Id id, const CompressedBlockMetadata& block) {
@@ -449,12 +444,15 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
   // this doesn't work because the implicit equality defined by
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
-  std::vector<CompressedBlockMetadata> result;
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
     return !ql::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
-  ql::ranges::copy(relevantBlocks | ql::views::filter(blockIsNeeded),
+
+  std::vector<CompressedBlockMetadata> result;
+  ql::ranges::copy(metadataAndBlocks.getBlockMetadataView() |
+                       ql::views::filter(blockIsNeeded),
                    std::back_inserter(result));
+
   // The following check is cheap as there are only few blocks.
   AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
                        result.end());
@@ -492,8 +490,8 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-        auto result = ql::views::transform(
-            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        auto result = metadataAndBlocks.getBlockMetadataView() |
+                      ql::views::transform(getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
       };
@@ -529,20 +527,18 @@ CompressedRelationReader::getBlocksForJoin(
 
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
-    const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blocks,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
-
   // Compute an upper bound for the size and reserve enough space in the
   // result.
-  auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto sizes =
-      relevantBlocks | ql::views::transform(&CompressedBlockMetadata::numRows_);
+  auto sizes = scanSpecAndBlocks.getBlockMetadataView() |
+               ql::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
     upperBoundSize = std::min(upperBoundSize,
@@ -550,10 +546,11 @@ IdTable CompressedRelationReader::scan(
   }
   result.reserve(upperBoundSize);
 
-  for (const auto& block :
-       lazyScan(scanSpec, {relevantBlocks.begin(), relevantBlocks.end()},
-                {additionalColumns.begin(), additionalColumns.end()},
-                cancellationHandle, locatedTriplesPerBlock, limitOffset)) {
+  for (const auto& block : lazyScan(
+           scanSpec,
+           convertBlockMetadataRangesToVector(scanSpecAndBlocks.blockMetadata_),
+           {additionalColumns.begin(), additionalColumns.end()},
+           cancellationHandle, locatedTriplesPerBlock, limitOffset)) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();
@@ -652,15 +649,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 // ____________________________________________________________________________
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
-    const ScanSpecification& scanSpec,
-    const vector<CompressedBlockMetadata>& blocks,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
-  auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
-
+  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
+  auto [beginBlock, endBlock] = getBeginAndEnd(blocks);
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
 
   // The first and the last block might be incomplete (that is, only
@@ -701,12 +697,12 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
-  if (beginBlock < endBlock) {
+  if (beginBlock != endBlock) {
     readSizeOfPossiblyIncompleteBlock(*beginBlock);
     ++beginBlock;
   }
-  if (beginBlock < endBlock) {
-    readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
+  if (beginBlock != endBlock) {
+    readSizeOfPossiblyIncompleteBlock(*(std::prev(endBlock)));
     --endBlock;
   }
 
@@ -730,20 +726,18 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
 // ____________________________________________________________________________
 std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
-    const ScanSpecification& scanSpec,
-    const vector<CompressedBlockMetadata>& blocks,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  return getResultSizeImpl<false>(scanSpec, blocks, locatedTriplesPerBlock);
+  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock);
 }
 
 // ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
-    const ScanSpecification& scanSpec,
-    const vector<CompressedBlockMetadata>& blocks,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
   auto [lower, upper] =
-      getResultSizeImpl<true>(scanSpec, blocks, locatedTriplesPerBlock);
+      getResultSizeImpl<true>(scanSpecAndBlocks, locatedTriplesPerBlock);
   AD_CORRECTNESS_CHECK(lower == upper);
   return lower;
 }
@@ -753,8 +747,7 @@ CPP_template_def(typename IdGetter)(
     requires ad_utility::InvocableWithConvertibleReturnType<
         IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
     CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-        IdGetter idGetter, const ScanSpecification& scanSpec,
-        const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+        IdGetter idGetter, const ScanSpecAndBlocks& scanSpecAndBlocks,
         const CancellationHandle& cancellationHandle,
         const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   // The result has two columns: one for the distinct `Id`s and one for their
@@ -780,9 +773,8 @@ CPP_template_def(typename IdGetter)(
     currentCount += colIdCount;
   };
 
-  // Get the blocks needed for the scan.
-  std::span<const CompressedBlockMetadata> relevantBlocksMetadata =
-      getRelevantBlocks(scanSpec, allBlocksMetadata);
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
+  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
 
   // TODO<joka921> We have to read the other columns for the merging of the
   // located triples. We could skip this for blocks with no updates, but that
@@ -791,8 +783,7 @@ CPP_template_def(typename IdGetter)(
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
-  for (size_t i = 0; i < relevantBlocksMetadata.size(); ++i) {
-    const auto& blockMetadata = relevantBlocksMetadata[i];
+  for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
     Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
     Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
     if (firstColId == lastColId) {
@@ -835,27 +826,24 @@ CPP_template_def(typename IdGetter)(
 
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
-    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
-  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return getDistinctColIdsAndCountsImpl(
-      &CompressedBlockMetadata::PermutedTriple::col0Id_, scanSpec,
-      allBlocksMetadata, cancellationHandle, locatedTriplesPerBlock);
+      &CompressedBlockMetadata::PermutedTriple::col0Id_, scanSpecAndBlocks,
+      cancellationHandle, locatedTriplesPerBlock);
 }
 
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
-    Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
-  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
-
   return getDistinctColIdsAndCountsImpl(
-      &CompressedBlockMetadata::PermutedTriple::col1Id_, scanSpec,
-      allBlocksMetadata, cancellationHandle, locatedTriplesPerBlock);
+      &CompressedBlockMetadata::PermutedTriple::col1Id_, scanSpecAndBlocks,
+      cancellationHandle, locatedTriplesPerBlock);
 }
 
 // ____________________________________________________________________________
@@ -1052,10 +1040,27 @@ void CompressedRelationWriter::compressAndWriteBlock(
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
-CompressedRelationReader::getRelevantBlocks(
+size_t CompressedRelationReader::getNumberOfBlockMetadataValues(
+    const BlockMetadataRanges& blockMetadata) {
+  return std::transform_reduce(blockMetadata.begin(), blockMetadata.end(), 0ULL,
+                               std::plus{}, ql::ranges::size);
+};
+
+// _____________________________________________________________________________
+std::vector<CompressedBlockMetadata>
+CompressedRelationReader::convertBlockMetadataRangesToVector(
+    const BlockMetadataRanges& blockMetadata) {
+  std::vector<CompressedBlockMetadata> blocksMaterialized;
+  blocksMaterialized.reserve(getNumberOfBlockMetadataValues(blockMetadata));
+  ql::ranges::copy(blockMetadata | ql::views::join,
+                   std::back_inserter(blocksMaterialized));
+  return blocksMaterialized;
+}
+
+// _____________________________________________________________________________
+BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
     const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blockMetadata) {
+    const BlockMetadataRanges& blockMetadata) {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   CompressedBlockMetadata key;
@@ -1085,14 +1090,16 @@ CompressedRelationReader::getRelevantBlocks(
     return blockA.lastTriple_ < blockB.firstTriple_;
   };
 
-  return ql::ranges::equal_range(blockMetadata, key, comp);
-}
-
-// _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
-CompressedRelationReader::getBlocksFromMetadata(
-    const ScanSpecAndBlocks& metadata) {
-  return getRelevantBlocks(metadata.scanSpec_, metadata.blockMetadata_);
+  BlockMetadataRanges resultBlocks;
+  ql::ranges::for_each(
+      blockMetadata, [&resultBlocks, &key,
+                      &comp](const BlockMetadataRange& blockMetadataSubrange) {
+        auto result = ql::ranges::equal_range(blockMetadataSubrange, key, comp);
+        if (result.begin() != result.end()) {
+          resultBlocks.emplace_back(result.begin(), result.end());
+        }
+      });
+  return resultBlocks;
 }
 
 // _____________________________________________________________________________
@@ -1100,10 +1107,10 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     const CompressedRelationReader::ScanSpecAndBlocks& metadataAndBlocks,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
-  auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
-  if (relevantBlocks.empty()) {
+  if (metadataAndBlocks.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
+  auto blocks = metadataAndBlocks.getBlockMetadataView();
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   ScanSpecification scanSpecForAllColumns{
@@ -1126,8 +1133,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
-  auto firstBlock = scanBlock(relevantBlocks.front());
-  auto lastBlock = scanBlock(relevantBlocks.back());
+  auto firstBlock = scanBlock(blocks.front());
+  auto lastBlock = scanBlock(blocks.back());
   if (firstBlock.empty()) {
     return std::nullopt;
   }
@@ -1557,20 +1564,20 @@ auto CompressedRelationWriter::createPermutationPair(
 // _____________________________________________________________________________
 std::optional<CompressedRelationMetadata>
 CompressedRelationReader::getMetadataForSmallRelation(
-    const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
+    const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
   metadata.offsetInBlock_ = 0;
-  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
-  auto blocks = getRelevantBlocks(scanSpec, allBlocksMetadata);
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  AD_CONTRACT_CHECK(blocks.size() <= 1,
-                    "Should only be called for small relations");
-  if (blocks.empty()) {
+  if (scanSpecAndBlocks.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
+  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
+  AD_CONTRACT_CHECK(std::distance(blocks.begin(), blocks.end()) <= 1,
+                    "Should only be called for small relations");
   auto block = readPossiblyIncompleteBlock(
       scanSpec, config, blocks.front(), std::nullopt, locatedTriplesPerBlock);
   if (block.empty()) {

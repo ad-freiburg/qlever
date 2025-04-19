@@ -140,7 +140,6 @@ static std::vector<CompressedBlockMetadata> getRelevantBlocks(
 }
 
 namespace detail {
-
 //______________________________________________________________________________
 // Merge `BlockMetadataRange blockRange` with the previous (relevant)
 // `BlockMetadataRange`s.
@@ -460,8 +459,8 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
-    result =
-        getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
+    result = CompressedRelationReader::convertBlockMetadataRangesToVector(
+        detail::logicalOps::mergeRelevantBlockItRanges<true>(
             evaluateImpl(idRange, blockRange),
             // always add mixed datatype blocks
             getRangesMixedDatatypeBlocks(idRange, blockRange)));
