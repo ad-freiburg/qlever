@@ -260,6 +260,22 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     return std::nullopt;
   }
 }
+
+//______________________________________________________________________________
+// Given a `SparqlExpression*` pointing to a `LiteralExpression`, return the
+// corresponding content as `NormalizedStringView` without quotation marks for
+// `StringLiteralExpression` type. For all other `LiteralExpression` types,
+// `std::nullopt` is returned.
+inline std::optional<NormalizedStringView> getStringViewFromLiteralExpression(
+    const SparqlExpression* child) {
+  using enum Datatype;
+  if (const auto* literalExpr =
+          dynamic_cast<const StringLiteralExpression*>(child)) {
+    return literalExpr->value().getContent();
+  }
+  return std::nullopt;
+}
+
 }  // namespace detail
 
 }  // namespace sparqlExpression

@@ -10,6 +10,7 @@
 #include "./engine/sparqlExpressions/LiteralExpression.h"
 #include "./engine/sparqlExpressions/NaryExpression.h"
 #include "./engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "./engine/sparqlExpressions/RegexExpression.h"
 #include "./engine/sparqlExpressions/RelationalExpressions.h"
 #include "./engine/sparqlExpressions/SparqlExpression.h"
 #include "util/DateYearDuration.h"
@@ -51,6 +52,14 @@ auto notPrefilterExpression = [](std::unique_ptr<PrefilterExpression> child)
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<NotExpression>(std::move(child));
 };
+
+// Make PrefixRegexExpression
+auto makePrefixRegexExpression = [](const std::string& prefix,
+                                    bool mirrored = false,
+                                    bool isNegated = false) {
+  return std::make_unique<PrefixRegexExpression>(prefix, mirrored, isNegated);
+};
+
 }  // namespace
 
 // Make PrefilterExpression
@@ -82,6 +91,8 @@ constexpr auto andExpr = logExpr<AndExpression>;
 constexpr auto orExpr = logExpr<OrExpression>;
 // NOT (`!`)
 constexpr auto notExpr = notPrefilterExpression;
+// PREFIX REGEX
+constexpr auto prefixRegex = makePrefixRegexExpression;
 
 namespace filterHelper {
 
@@ -185,6 +196,14 @@ std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
 };
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
+    VariantArgs varExpr, VariantArgs litExpr) {
+  return sparqlExpression::makeRegexExpression(
+      std::visit(getExpr, std::move(varExpr)),
+      std::visit(getExpr, std::move(litExpr)), nullptr);
+}
+
+//______________________________________________________________________________
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
@@ -233,6 +252,8 @@ constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
+// Create SparqlExpression `REGEX`.
+constexpr auto regexSparql = &makePrefixRegexExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`
