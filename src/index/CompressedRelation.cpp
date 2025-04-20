@@ -1690,7 +1690,8 @@ auto createErrorMessage = [](const auto& b1, const auto& b2,
 };
 
 // _____________________________________________________________________________
-template <ql::ranges::input_range Range>
+template <typename Range>
+requires ranges::input_range<Range>
 static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
     const Range& blockMetadataRange) {
   auto checkUniquenessAndOrder = [](const auto& blockPair) {
@@ -1707,22 +1708,26 @@ static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
                                     "Found block metadata order violation\n");
         });
   };
-  ql::ranges::for_each(
-      ranges::views::zip(blockMetadataRange,
-                         blockMetadataRange | ranges::views::drop(1)),
-      checkUniquenessAndOrder);
+  auto blockMetadataRangeShifted = blockMetadataRange | ranges::views::drop(1);
+  auto zippedBlockPairs =
+      ranges::views::zip(blockMetadataRange, blockMetadataRangeShifted);
+  ql::ranges::for_each(zippedBlockPairs, checkUniquenessAndOrder);
 }
 
 // ____________________________________________________________________________
-template <ql::ranges::input_range Range>
+template <typename Range>
+requires ranges::input_range<Range>
 static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
   if (firstFreeColIndex == 0) {
     return;
   }
+  auto blockMetadataRangeShifted = blockMetadataRange | ranges::views::drop(1);
+  auto zippedBlockPairs =
+      ranges::views::zip(blockMetadataRange, blockMetadataRangeShifted);
 
-  for (const auto& [i, blockPair] : ranges::views::enumerate(ranges::views::zip(
-           blockMetadataRange, blockMetadataRange | ranges::views::drop(1)))) {
+  for (const auto& [i, blockPair] :
+       ranges::views::enumerate(zippedBlockPairs)) {
     const auto& [b1, b2] = blockPair;
     // Consecutive blocks must contain equivalent values over the fixed
     // columns.
