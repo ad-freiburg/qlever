@@ -111,6 +111,17 @@ struct CompressedBlockMetadataNoBlockIndex {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  // Check for constant values in `firstTriple_` and `lastTriple` over all
+  // columns `< columnIndex`.
+  // Returns `true` if the respective column values of `firstTriple_` and
+  // `lastTriple_` differ.
+  bool containsInconsistentTriples(size_t columnIndex) const;
+
+  // Check if `lastTriple_` of this block contains consistent `ValueId`s up to
+  // `columnIndex` compared to `firstTriple_` of block `other`.
+  bool isConsistentWith(const CompressedBlockMetadataNoBlockIndex& other,
+                        size_t columnIndex) const;
+
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
 
@@ -486,16 +497,25 @@ class CompressedRelationReader {
   // (3) `sizeBlockMetadata_` represents the number of
   // `CompressedBlockMetadata` values contained over all subranges in member
   // `BlockMetadataRanges_ blockMetadata_`.
+  // (4) `checkCompleteInvariant` is by default set to `false`. Setting it to
+  // `true` will assert the following three conditions on the provided
+  // `BlockMetadataRanges`:
+  //   - All contained `CompressedBlockMetadata` values  must be unique.
+  //   - The `CompressedBlockMetadata` values must be contained in sorted
+  //     order with respect to the first free scan column defined by
+  //     `scanSpec_`.
+  //   - The columns up to the first free column contain constant values
+  //     over all blocks.
+  // `checkCompleteInvariant = false` only asserts the first two conditions and
+  // retrieves the relevant metadata in the following.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     BlockMetadataRanges blockMetadata_;
     size_t sizeBlockMetadata_;
 
     ScanSpecAndBlocks(ScanSpecification scanSpec,
-                      const BlockMetadataRanges& blockMetadataRanges)
-        : scanSpec_(std::move(scanSpec)),
-          blockMetadata_(getRelevantBlocks(scanSpec_, blockMetadataRanges)),
-          sizeBlockMetadata_(getNumberOfBlockMetadataValues(blockMetadata_)) {}
+                      const BlockMetadataRanges& blockMetadataRanges,
+                      bool checkCompleteInvariant = false);
 
     // Direct view access via `ql::views::join` over all
     // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges
@@ -503,6 +523,27 @@ class CompressedRelationReader {
     auto getBlockMetadataView() const {
       return ql::views::join(blockMetadata_);
     }
+
+    // If this `ScanSpecAndBlocks` holds exactly one `BlockMetadataRange` within
+    // its `BlockMetadataRanges blockMetadata_` member, the corresponding
+    // `CompressedBlockMetadata` values are accessible here over the returned
+    // `std::span<CompressedBlockMetadata>` object.
+    // Returns `std::nullopt` if member `blockMetadata_` holds multiple
+    // `BlockMetadataRange`s. This is because those `BlockMetadataRange`s
+    // (`BlockMetadataRange` is a `std::subrange`) represent non-contiguous
+    // memory ranges, hence no `std::span<const CompressedBlockMetadata>` view
+    // can be created.
+    std::optional<std::span<const CompressedBlockMetadata>>
+    getBlockMetadataSpan() const;
+
+    // Check the provided `BlockMetadataRange`s for the following invariants:
+    //   - All contained `CompressedBlockMetadata` values must be unique.
+    //   - The `CompressedBlockMetadata` values must adhere to ascending order.
+    //   - `firstFreeColIndex` is the column index up to which we expect
+    //      constant values in `columns < firstFreeColIndex` over all blocks.
+    static void checkBlockMetadataInvariant(
+        std::span<const CompressedBlockMetadata> blocks,
+        size_t firstFreeColIndex);
   };
 
   // This struct additionally contains the first and last triple of the scan

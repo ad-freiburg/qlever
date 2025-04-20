@@ -31,6 +31,42 @@ static auto getBeginAndEnd(auto& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+// Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
+// position (column index) defined by `ignoreIndex`. The ignored positions are
+// filled with Ids `Id::min()`. `Id::min()` is guaranteed
+// to be smaller than Ids of all other types.
+static auto getMaskedTriple(
+    const CompressedBlockMetadata::PermutedTriple& triple,
+    size_t ignoreIndex = 3) {
+  const Id& undefined = Id::min();
+  switch (ignoreIndex) {
+    case 3:
+      return std::make_tuple(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+    case 2:
+      return std::make_tuple(triple.col0Id_, triple.col1Id_, undefined);
+    case 1:
+      return std::make_tuple(triple.col0Id_, undefined, undefined);
+    case 0:
+      return std::make_tuple(undefined, undefined, undefined);
+    default:
+      // ignoreIndex out of bounds
+      AD_FAIL();
+  }
+};
+
+bool CompressedBlockMetadataNoBlockIndex::containsInconsistentTriples(
+    size_t columnIndex) const {
+  return getMaskedTriple(firstTriple_, columnIndex) !=
+         getMaskedTriple(lastTriple_, columnIndex);
+};
+
+bool CompressedBlockMetadataNoBlockIndex::isConsistentWith(
+    const CompressedBlockMetadataNoBlockIndex& other,
+    size_t columnIndex) const {
+  return getMaskedTriple(lastTriple_, columnIndex) ==
+         getMaskedTriple(other.firstTriple_, columnIndex);
+};
+
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
 // but not in `42 2 U` where `U` means "scan for all possible values".
@@ -652,9 +688,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
-  // Get all the blocks  that possibly might contain our pair of col0Id and
-  // col1Id
-  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
+  const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   auto [beginBlock, endBlock] = getBeginAndEnd(blocks);
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
@@ -774,7 +808,7 @@ CPP_template_def(typename IdGetter)(
   };
 
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
+  const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
 
   // TODO<joka921> We have to read the other columns for the merging of the
   // located triples. We could skip this for blocks with no updates, but that
@@ -1090,6 +1124,12 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
     return blockA.lastTriple_ < blockB.firstTriple_;
   };
 
+  // TODO:
+  // Optionally implement a free function like `equal_range(YourRangeType, key,
+  // comp)` that implements the equal range correctly.
+  // (1) Perform binary search on the inner blocks with respect to the first and
+  //     last triple.
+  // (2) Perform binary search regarding the outer blocks.
   BlockMetadataRanges resultBlocks;
   ql::ranges::for_each(
       blockMetadata, [&resultBlocks, &key,
@@ -1110,7 +1150,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   if (metadataAndBlocks.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
-  auto blocks = metadataAndBlocks.getBlockMetadataView();
+  const auto& blocks = metadataAndBlocks.getBlockMetadataView();
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   ScanSpecification scanSpecForAllColumns{
@@ -1575,7 +1615,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
   if (scanSpecAndBlocks.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
-  auto blocks = scanSpecAndBlocks.getBlockMetadataView();
+  const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   AD_CONTRACT_CHECK(std::distance(blocks.begin(), blocks.end()) <= 1,
                     "Should only be called for small relations");
   auto block = readPossiblyIncompleteBlock(
@@ -1637,6 +1677,111 @@ auto CompressedRelationReader::getScanConfig(
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
                                         graphColumnIndex, deleteGraphColumn};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
+}
+
+// _____________________________________________________________________________
+// Helper to the following block-invariant-check Impls for informative error
+// message construction.
+auto createErrorMessage = [](const auto& b1, const auto& b2,
+                             std::string errCause) {
+  std::stringstream errBlocks;
+  errBlocks << "First Block:\n" << b1 << "Second Block:\n" << b2 << std::endl;
+  return absl::StrCat(errCause, errBlocks.str());
+};
+
+// _____________________________________________________________________________
+template <ql::ranges::input_range Range>
+static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
+    const Range& blockMetadataRange) {
+  auto checkUniquenessAndOrder = [](const auto& blockPair) {
+    const auto& [b1, b2] = blockPair;
+    // Blocks must be unique.
+    AD_CONTRACT_CHECK(b1 != b2 && b1.blockIndex_ != b2.blockIndex_, [&] {
+      return createErrorMessage(b1, b2, "Found block metadata duplicates\n");
+    });
+    // Blocks must adhere to ascending order.
+    AD_CONTRACT_CHECK(
+        b1.lastTriple_ < b2.lastTriple_ && b1.blockIndex_ < b2.blockIndex_,
+        [&] {
+          return createErrorMessage(b1, b2,
+                                    "Found block metadata order violation\n");
+        });
+  };
+  ql::ranges::for_each(
+      ranges::views::zip(blockMetadataRange,
+                         blockMetadataRange | ranges::views::drop(1)),
+      checkUniquenessAndOrder);
+}
+
+// ____________________________________________________________________________
+template <ql::ranges::input_range Range>
+static void checkBlockMetadataInvariantBlockConsistencyImpl(
+    const Range& blockMetadataRange, size_t firstFreeColIndex) {
+  if (firstFreeColIndex == 0) {
+    return;
+  }
+
+  for (const auto& [i, blockPair] : ranges::views::enumerate(ranges::views::zip(
+           blockMetadataRange, blockMetadataRange | ranges::views::drop(1)))) {
+    const auto& [b1, b2] = blockPair;
+    // Consecutive blocks must contain equivalent values over the fixed
+    // columns.
+    AD_CONTRACT_CHECK(b1.isConsistentWith(b2, firstFreeColIndex), [&] {
+      return createErrorMessage(
+          b1, b2, "Found column inconsistency between two blocks\n");
+    });
+    // All blocks, except the first and last, must contain consistent column
+    // values over their triples up to the first free column.
+    if (i > 0) {
+      AD_CONTRACT_CHECK(
+          !b1.containsInconsistentTriples(firstFreeColIndex), [&] {
+            return createErrorMessage(
+                b1, b2,
+                absl::StrCat("The following First Block contains non-constant "
+                             "column values up to defined column index: ",
+                             firstFreeColIndex));
+          });
+    }
+  }
+}
+
+// _____________________________________________________________________________
+CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
+    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges,
+    bool checkCompleteInvariant)
+    : scanSpec_(std::move(scanSpec)) {
+  const auto& blockRangeView = blockMetadataRanges | ql::views::join;
+  if (checkCompleteInvariant) {
+    checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
+    checkBlockMetadataInvariantBlockConsistencyImpl(
+        blockRangeView, scanSpec_.firstFreeColIndex());
+    blockMetadata_ = blockMetadataRanges;
+  } else {
+    checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
+    blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
+  }
+  sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
+}
+
+// _____________________________________________________________________________
+std::optional<std::span<const CompressedBlockMetadata>>
+CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
+  // ScanSpecAndBlocks should contain at least one BlockMetadataRange.
+  AD_CONTRACT_CHECK(blockMetadata_.size() >= 1);
+  if (blockMetadata_.size() > 1) {
+    return std::nullopt;
+  }
+  // `std::span` object requires contiguous range.
+  static_assert(ql::ranges::contiguous_range<BlockMetadataRange>);
+  const auto& blockMetadataRange = blockMetadata_.front();
+  return std::span(blockMetadataRange.begin(), blockMetadataRange.end());
+}
+
+// _____________________________________________________________________________
+void CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+    std::span<const CompressedBlockMetadata> blocks, size_t firstFreeColIndex) {
+  checkBlockMetadataInvariantOrderAndUniquenessImpl(blocks);
+  checkBlockMetadataInvariantBlockConsistencyImpl(blocks, firstFreeColIndex);
 }
 
 // _____________________________________________________________________________

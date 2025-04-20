@@ -35,8 +35,12 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const std::optional<std::vector<CompressedBlockMetadata>>& optBlocks)
     const {
+  // Set the `checkInvariant` flag of `ScanSpecAndBlocks` to false given that we
+  // access a single `BlockMetadataRange` directly from the permutation here
+  // (over `getBlockMetdataRanges`) when `optBlocks = std::nullopt`.
   return {scanSpec,
-          getBlockMetadataRanges(perm, locatedTriplesSnapshot, optBlocks)};
+          getBlockMetadataRanges(perm, locatedTriplesSnapshot, optBlocks),
+          optBlocks.has_value() ? true : false};
 }
 
 // _____________________________________________________________________

@@ -332,13 +332,9 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 // _____________________________________________________________________________
 std::optional<std::span<const CompressedBlockMetadata>>
 IndexScan::getBlockMetadata() const {
-  auto metadata = getMetadataForScan();
+  const auto& metadata = getMetadataForScan();
   if (metadata.has_value()) {
-    const auto& blockMetadata = metadata.value().blockMetadata_;
-    AD_CORRECTNESS_CHECK(blockMetadata.size() == 1);
-    const auto& contigousBlockRange = blockMetadata.front();
-    AD_CORRECTNESS_CHECK(ql::ranges::contiguous_range<BlockMetadataRange>);
-    return std::span(contigousBlockRange.begin(), contigousBlockRange.end());
+    return metadata.value().getBlockMetadataSpan();
   }
   return std::nullopt;
 }
