@@ -498,7 +498,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t.p_.iri_ == CONTAINS_WORD_PREDICATE) {
+    if (std::holds_alternative<PropertyPath>(t.p_) &&
+        std::get<PropertyPath>(t.p_).iri_ == CONTAINS_WORD_PREDICATE) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -517,7 +518,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (t.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
+    } else if (std::holds_alternative<PropertyPath>(t.p_) &&
+               std::get<PropertyPath>(t.p_).iri_ == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(
@@ -609,9 +611,9 @@ void QueryPlanner::indexScanSingleVarCase(
     const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
-  if (isVariable(triple.s_)) {
+  if (triple.s_.isVariable()) {
     addIndexScan(POS);
-  } else if (isVariable(triple.p_)) {
+  } else if (triple.p_.isVariable()) {
     addIndexScan(SOP);
   } else {
     addIndexScan(PSO);
@@ -644,14 +646,14 @@ void QueryPlanner::indexScanTwoVarsCase(
   const auto& [s, p, o, _] = triple;
 
   using Tr = SparqlTripleSimple;
-  if (!isVariable(s)) {
+  if (!s.isVariable()) {
     if (p == o) {
       handleRepeatedVariables({{SPO}}, &Tr::o_);
     } else {
       addIndexScan(SPO);
       addIndexScan(SOP);
     }
-  } else if (!isVariable(p)) {
+  } else if (!p.isVariable()) {
     if (s == o) {
       handleRepeatedVariables({{PSO}}, &Tr::o_);
     } else {
@@ -659,7 +661,7 @@ void QueryPlanner::indexScanTwoVarsCase(
       addIndexScan(POS);
     }
   } else {
-    AD_CORRECTNESS_CHECK(!isVariable(o));
+    AD_CORRECTNESS_CHECK(!o.isVariable());
     if (s == p) {
       handleRepeatedVariables({{OPS}}, &Tr::s_);
     } else {
@@ -726,9 +728,9 @@ void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
   auto triple = node.triple_.getSimple();
-  const size_t numVars = static_cast<size_t>(isVariable(triple.s_)) +
-                         static_cast<size_t>(isVariable(triple.p_)) +
-                         static_cast<size_t>(isVariable(triple.o_));
+  const size_t numVars = static_cast<size_t>(triple.s_.isVariable()) +
+                         static_cast<size_t>(triple.p_.isVariable()) +
+                         static_cast<size_t>(triple.o_.isVariable());
   if (numVars == 0) {
     // We could read this from any of the permutations.
     addIndexScan(Permutation::Enum::PSO);
@@ -783,13 +785,8 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    // Property paths must have been handled previously.
-    AD_CORRECTNESS_CHECK(node.triple_.p_.operation_ ==
-                         PropertyPath::Operation::IRI);
-    // At this point, we know that the predicate is a simple IRI or a variable.
-
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        isVariable(node.triple_.p_.iri_)) {
+        std::holds_alternative<Variable>(node.triple_.p_)) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -798,7 +795,17 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     // Backward compatibility with spatial search predicates
-    const auto& input = node.triple_.p_.iri_;
+    const auto& input = std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const PropertyPath& propertyPath) -> const std::string& {
+              AD_CORRECTNESS_CHECK(propertyPath.operation_ ==
+                                   PropertyPath::Operation::IRI);
+              return propertyPath.iri_;
+            },
+            [](const Variable& var) -> const std::string& {
+              return var.name();
+            }},
+        node.triple_.p_);
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
@@ -818,7 +825,7 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    if (node.triple_.p_.iri_ == HAS_PREDICATE_PREDICATE) {
+    if (input == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
     }
@@ -882,7 +889,9 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     case PropertyPath::Operation::NEGATED:
       return seedFromNegated(left, path, right);
     case PropertyPath::Operation::IRI:
-      return seedFromIri(left, path, right);
+      return seedFromVarOrIri(
+          left, ad_utility::triple_component::Iri::fromIriref(path.iri_),
+          right);
     case PropertyPath::Operation::SEQUENCE:
       return seedFromSequence(left, path, right);
     case PropertyPath::Operation::ZERO_OR_MORE:
@@ -1024,8 +1033,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
                                   const std::vector<string_view>& iris) {
     using namespace sparqlExpression;
     Variable variable = generateUniqueVarName();
-    ParsedQuery::GraphPattern pattern =
-        seedFromIri(left, PropertyPath::fromVariable(variable), right);
+    ParsedQuery::GraphPattern pattern = seedFromVarOrIri(left, variable, right);
     std::ostringstream descriptor;
     auto expression = makeNotEqualExpression(variable, iris.at(0));
     appendNotEqualString(descriptor, iris.at(0), variable);
@@ -1053,12 +1061,24 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern QueryPlanner::seedFromIri(
-    const TripleComponent& left, const PropertyPath& path,
+ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
+    const TripleComponent& left,
+    const ad_utility::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
-  basic._triples.push_back(SparqlTriple(left, path, right));
+  basic._triples.push_back(SparqlTriple(
+      left,
+      std::visit(
+          ad_utility::OverloadCallOperator{
+              [](const Variable& variable)
+                  -> ad_utility::sparql_types::VarOrPath { return variable; },
+              [](const ad_utility::triple_component::Iri& iri)
+                  -> ad_utility::sparql_types::VarOrPath {
+                return PropertyPath::fromIri(iri.toStringRepresentation());
+              }},
+          varOrIri),
+      right));
   p._graphPatterns.emplace_back(std::move(basic));
 
   return p;
@@ -1098,7 +1118,9 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (node.triple_.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
+  if (std::holds_alternative<PropertyPath>(node.triple_.p_) &&
+      std::get<PropertyPath>(node.triple_.p_).iri_ ==
+          CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
@@ -1667,10 +1689,15 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->triple_.p_.iri_ ==
-              CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->triple_.p_.iri_ == CONTAINS_WORD_PREDICATE);
+  auto it = _nodeMap.find(i);
+  if (it == _nodeMap.end()) {
+    return false;
+  }
+  if (std::holds_alternative<Variable>(it->second->triple_.p_)) {
+    return false;
+  }
+  const auto& iri = std::get<PropertyPath>(it->second->triple_.p_).iri_;
+  return iri == CONTAINS_ENTITY_PREDICATE || iri == CONTAINS_WORD_PREDICATE;
 }
 
 // _____________________________________________________________________________
@@ -2715,13 +2742,13 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // A basic graph patterns consists only of triples. First collect all
   // the bound variables.
   for (const SparqlTriple& t : v._triples) {
-    if (isVariable(t.s_)) {
+    if (t.s_.isVariable()) {
       boundVariables_.insert(t.s_.getVariable());
     }
-    if (isVariable(t.p_)) {
-      boundVariables_.insert(Variable{t.p_.iri_});
+    if (std::holds_alternative<Variable>(t.p_)) {
+      boundVariables_.insert(std::get<Variable>(t.p_));
     }
-    if (isVariable(t.o_)) {
+    if (t.o_.isVariable()) {
       boundVariables_.insert(t.o_.getVariable());
     }
   }
@@ -2729,11 +2756,13 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
-    if (triple.p_.operation_ == PropertyPath::Operation::IRI) {
+    if (std::holds_alternative<Variable>(triple.p_) ||
+        std::get<PropertyPath>(triple.p_).operation_ ==
+            PropertyPath::Operation::IRI) {
       candidateTriples_._triples.push_back(triple);
     } else {
-      auto children =
-          planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
+      auto children = planner_.seedFromPropertyPath(
+          triple.s_, std::get<PropertyPath>(triple.p_), triple.o_);
       for (auto& child : children._graphPatterns) {
         std::visit([self = this](
                        auto& arg) { self->graphPatternOperationVisitor(arg); },

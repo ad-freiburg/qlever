@@ -139,27 +139,25 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   using namespace sparqlExpression;
   // Create `SparqlExpression` with one child.
-  auto createUnary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     checkNumArgs(1);  // Check is unary.
     return function(std::move(argList[0]));
   };
   // Create `SparqlExpression` with two children.
-  auto createBinary =
-      CPP_template_lambda(&argList, &checkNumArgs)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList, &checkNumArgs)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
-  auto createBinaryOrTernary =
-      CPP_template_lambda(&argList)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr,
-                                         std::optional<ExpressionPtr>>) {
+  auto createBinaryOrTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr,
+                  std::optional<ExpressionPtr>>) {
     if (argList.size() == 2) {
       return function(std::move(argList[0]), std::move(argList[1]),
                       std::nullopt);
@@ -360,10 +358,10 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+  auto toPredicate = [](const auto& item) -> VarOrPath {
     using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
-      return PropertyPath::fromVariable(item);
+      return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(item.toSparql());
     } else {
@@ -374,7 +372,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
   };
   for (const auto& triple : triples) {
     auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto predicate = std::visit(toPredicate, triple.at(1));
     auto object = std::visit(toTripleComponent, triple.at(2));
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
@@ -889,32 +887,19 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto varToPropertyPath = [](const Variable& var) {
-    return PropertyPath::fromVariable(var);
-  };
-  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
-  auto visitVarOrPath =
-      [&varToPropertyPath, &propertyPathIdentity](
-          const ad_utility::sparql_types::VarOrPath& varOrPath) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{varToPropertyPath,
-                                             propertyPathIdentity},
-            varOrPath);
-      };
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
   auto convertAndRegisterTriple =
-      [&visitVarOrPath, &registerIfVariable](
+      [&registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {triple.subject_.toTripleComponent(),
-            visitVarOrPath(triple.predicate_),
+    return {triple.subject_.toTripleComponent(), triple.predicate_,
             triple.object_.toTripleComponent()};
   };
 
@@ -2362,22 +2347,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
 
-  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
 
-  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr>) {
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr, ExpressionPtr,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
