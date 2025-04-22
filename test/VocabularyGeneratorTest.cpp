@@ -1,3 +1,8 @@
+// Copyright 2018 - 2025, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 
 #include <cstdlib>

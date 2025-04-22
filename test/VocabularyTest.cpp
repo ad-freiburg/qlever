@@ -1,6 +1,7 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2011 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Authors: Björn Buchhold <buchholb>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
