@@ -12,6 +12,7 @@
 
 #include "global/ValueId.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 #include "util/HashSet.h"
 
 // Func. to decide where a literal goes
@@ -69,10 +70,11 @@ class SplitVocabulary {
     if (isSpecialVocabIndex(idx)) {
       // The requested word is stored in the special vocabulary
       uint64_t unmarkedIdx = idx & specialVocabIndexMask;
+      AD_CONTRACT_CHECK(unmarkedIdx <= underlyingSpecial_.size());
       return underlyingSpecial_[unmarkedIdx];
     } else {
       // The requested word is stored in the vocabulary for normal words
-      AD_CONTRACT_CHECK(idx <= maxVocabIndex);
+      AD_CONTRACT_CHECK(idx <= maxVocabIndex && idx <= underlyingMain_.size());
       return underlyingMain_[idx];
     }
   }
