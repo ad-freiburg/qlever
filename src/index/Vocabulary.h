@@ -212,11 +212,13 @@ class Vocabulary {
 
   // Wraps std::lower_bound and returns an index instead of an iterator
   IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+                        const SortLevel level = SortLevel::QUARTERNARY,
+                        auto&&... args) const;
 
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
-                        SortLevel level = SortLevel::QUARTERNARY) const;
+                        SortLevel level = SortLevel::QUARTERNARY,
+                        auto&&... args) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
