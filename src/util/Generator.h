@@ -1,7 +1,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Copyright (c) Lewis Baker, Johannes Kalmbach (functionality to add details).
 // Licenced under MIT license. See LICENSE.txt for details.
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 ///////////////////////////////////////////////////////////////////////////////
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED

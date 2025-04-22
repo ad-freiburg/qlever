@@ -26,7 +26,7 @@ namespace ad_utility {
 // 3. This class only yields an input range, independent of the range category
 // of the input.
 CPP_class_template(typename View, typename F)(requires(
-    ql::ranges::input_range<View>//&& ql::ranges::view<View>&&
+    ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>&&
             ranges::invocable<F, ql::ranges::range_reference_t<
                                      View>>)) struct CachingTransformInputRange
@@ -48,17 +48,6 @@ CPP_class_template(typename View, typename F)(requires(
   // Constructor.
   explicit CachingTransformInputRange(View view, F transformation = {})
       : view_{std::move(view)}, transfomation_(std::move(transformation)) {}
-
-  // Constructor for creating an InputRange from a subrange, which takes an
-  // iterator to the beginning of the subrange. This allows for omitting
-  // elements at the beginning of the original range, but it does not make it
-  // possible to omit elements at the end of the range.
-  explicit CachingTransformInputRange(View view,
-                                      ql::ranges::iterator_t<View> view_begin,
-                                      F transformation = {})
-      : view_{std::move(view)},
-        transfomation_(std::move(transformation)),
-        it_(std::move(view_begin)) {}
 
   // TODO<joka921> Make this private again and give explicit access to low-level
   // tools like the ones below.
@@ -240,6 +229,12 @@ template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
 
+// This class can be used to concatenate input ranges into a single range.
+// Elements within ranges are iterated in order until their end, at which point
+// the next element will be the first element of the next range. When all
+// elements of all ranges have been iterated, nullopt is returned for all
+// subsequent get() calls. Note: This class only works with Views that implement
+// "get()" like the InputRangeFromGet subclasses.
 CPP_class_template(typename ViewType)(
     requires(ql::ranges::input_range<ViewType>)) struct ConcatenatedInputRange
     : ad_utility::InputRangeFromGet<ql::ranges::range_value_t<ViewType>> {
@@ -259,7 +254,7 @@ CPP_class_template(typename ViewType)(
         return elementOpt;
       }
       // Done with current view, but not all views
-      collectionIt_++;
+      ++collectionIt_;
     }
     // Done iterating over all views
     return std::nullopt;

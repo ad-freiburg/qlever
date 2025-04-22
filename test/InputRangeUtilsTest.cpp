@@ -214,4 +214,65 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
   testTransformView<ad_utility::CachingContinuableTransformInputRange>(
       helpers, applyLimit4Offset3);
 }
+
+// Test for iterating past the end of a CachingTransformInput range
+TEST(ConcatenatedInputRange, IterateMultipleViews) {
+  // This test ensures that all values are returned in the order they are given
+  // and that nullopt is returned for all subsequent calls
+  std::vector<
+      std::unique_ptr<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>>
+      viewCollection;
+  viewCollection.push_back(
+      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
+          std::vector<int>{42}));
+  viewCollection.push_back(
+      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
+          std::vector<int>{43, 44}));
+  viewCollection.push_back(
+      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
+          std::vector<int>{24, 25}));
+
+  ad_utility::ConcatenatedInputRange range{std::move(viewCollection)};
+
+  // The first five elements shall be returned in order
+  std::optional<int> element = range.get();
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(42, element.value());
+
+  element = range.get();
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(43, element.value());
+
+  element = range.get();
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(44, element.value());
+
+  element = range.get();
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(24, element.value());
+
+  element = range.get();
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(25, element.value());
+
+  // Subsequent calls shall return nullopt
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+}
+
+// Test for iterating past the end of a CachingTransformInput range
+TEST(ConcatenatedInputRange, EmptyInput) {
+  // This test ensures that empty views do not result in errors and simply return nullopt
+  std::vector<
+      std::unique_ptr<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>>
+      viewCollection;
+
+  ad_utility::ConcatenatedInputRange range{std::move(viewCollection)};
+
+  // Calls shall return nullopt
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+}
 }  // namespace

@@ -255,17 +255,16 @@ Result::LazyResult Service::computeResultLazily(
               rowIdx = size_t{0}, varsChecked = false, resultExists = false,
               singleIdTableReturned =
                   false]() mutable -> std::optional<Result::IdTableVocabPair> {
+    auto& details = inputRange.view().base().details();
     if (singleIdTableReturned) {
       return std::nullopt;
     }
     try {
-      auto partJsonOpt = inputRange.get();
-      while (partJsonOpt.has_value()) {
+      while (auto partJsonOpt = inputRange.get()) {
         const nlohmann::json& partJson = partJsonOpt.value();
         if (partJson.contains("head")) {
           AD_CORRECTNESS_CHECK(!varsChecked);
-          service->verifyVariables(partJson["head"],
-                                   inputRange.view().base().details());
+          service->verifyVariables(partJson["head"], details);
           varsChecked = true;
         }
 
@@ -280,13 +279,11 @@ Result::LazyResult Service::computeResultLazily(
           rowIdx = 0;
           return pair;
         }
-        partJsonOpt = inputRange.get();
       }
     } catch (const ad_utility::LazyJsonParser::Error& e) {
       service->throwErrorWithContext(
           absl::StrCat("Parser failed with error: '", e.what(), "'"),
-          inputRange.view().base().details().first100_,
-          inputRange.view().base().details().last100_);
+          details.first100_, details.last100_);
     }
 
     // As the LazyJsonParser only passes parts of the result that match
@@ -297,8 +294,7 @@ Result::LazyResult Service::computeResultLazily(
           "JSON result does not have the expected structure (results "
           "section "
           "missing)",
-          inputRange.view().base().details().first100_,
-          inputRange.view().base().details().last100_);
+          details.first100_, details.last100_);
     }
 
     if (!varsChecked) {
@@ -306,8 +302,7 @@ Result::LazyResult Service::computeResultLazily(
           "JSON result does not have the expected structure (head "
           "section "
           "missing)",
-          inputRange.view().base().details().first100_,
-          inputRange.view().base().details().last100_);
+          details.first100_, details.last100_);
     }
 
     if (singleIdTable) {
@@ -587,11 +582,17 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
-  auto generator = std::move(siblingResult->idTables());
+  constexpr auto identityFunction = [](auto& p) { return std::move(p); };
+  // We move the results into a `CachingTransformInputRange` because it will
+  // track the last accessed result and continue at the first unaccessed
+  // result with subsequent calls to get(). Therefore, we do not need to
+  // keep and pass an iterator to the sibling result if the max row threshold
+  // is exceeded
+  auto generator = ad_utility::CachingTransformInputRange(std::move(siblingResult->idTables()), identityFunction);
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
-  for (auto it = generator.begin(); it != generator.end(); ++it) {
-    auto& pair = *it;
+  while (auto pairOpt = generator.get()) {
+    auto& pair = pairOpt.value();
     rows += pair.idTable_.size();
     resultPairs.push_back(std::move(pair));
 
@@ -599,16 +600,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Stop precomputation as the size of `siblingResult` exceeds the
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
-      auto identityFunction = [](auto& p) { return std::move(p); };
       std::vector<std::unique_ptr<Result::LazyResult>> viewCollection;
       viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
-        ad_utility::CachingTransformInputRange(
-            Result::LazyResult{std::move(resultPairs)},
-            identityFunction)));
-      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
-        ad_utility::CachingTransformInputRange(
-            Result::LazyResult{std::move(generator)}, std::move(++it),
-            std::move(identityFunction))));
+          ad_utility::CachingTransformInputRange(std::move(resultPairs),
+                                                 identityFunction)));
+      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(std::move(generator)));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
               Result::LazyResult{
