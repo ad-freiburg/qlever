@@ -318,10 +318,10 @@ class IndexImpl {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
-  std::string indexToString(VocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  std::string_view indexToString(WordVocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
   // ___________________________________________________________________________
@@ -650,7 +650,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  bool isLiteral(const string& object) const;
+  bool isLiteral(std::string_view object) const;
 
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;

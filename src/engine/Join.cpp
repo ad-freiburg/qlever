@@ -685,10 +685,6 @@ Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
         rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
 
-        AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
-                             rightBlocks.details().numElementsRead_);
-        AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
-                             leftBlocks.details().numElementsRead_);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};

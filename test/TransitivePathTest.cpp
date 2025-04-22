@@ -702,6 +702,171 @@ TEST_P(TransitivePathTest, zeroLength) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, zeroLengthWithLiteralsNotInIndex) {
+  std::string index = "<a> a 0 , 1 , 2 , 4 .";
+
+  auto sub = makeIdTableFromVector(
+      {
+          {0, 2},
+          {2, 4},
+      },
+      Id::makeFromInt);
+
+  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, 1337, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 0,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 0,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, 1337, 1);
+    auto T = makePathUnbound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right,
+        0, std::numeric_limits<size_t>::max(), std::move(index));
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, literalsNotInIndex) {
+  std::string index = "<a> a 0 , 1 , 2 , 4 .";
+
+  auto sub = makeIdTableFromVector(
+      {
+          {0, 2},
+          {2, 4},
+      },
+      Id::makeFromInt);
+
+  auto expected = IdTable{2, ad_utility::testing::makeAllocator()};
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, 1337, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1337, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, 1337, 1);
+    auto T = makePathUnbound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), std::move(index));
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
+  using ad_utility::triple_component::Literal;
+  std::string index = "<a> a 0 , 1 , 2 , 4 .";
+  std::string literal = "my-literal";
+
+  // Simulate entries in the delta triples by using entries that are not in the
+  // index
+  LocalVocab localVocab;
+  auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{Literal::literalWithoutQuotes(literal)}));
+  auto sub = makeIdTableFromVector({
+      {id, id},
+  });
+
+  IdTable expected = sub.clone();
+
+  TripleComponent reference = Literal::literalWithoutQuotes(literal);
+
+  {
+    TransitivePathSide left(std::nullopt, 0, reference, 0);
+    TransitivePathSide right(std::nullopt, 1, reference, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, reference, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}}, left, right, 1,
+        std::numeric_limits<size_t>::max(), index);
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, reference, 1);
+    auto T = makePathUnbound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right,
+        1, std::numeric_limits<size_t>::max(), std::move(index));
+
+    EXPECT_TRUE(T->isBoundOrId());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, clone) {
   auto sub = makeIdTableFromVector({{0, 2}});
 

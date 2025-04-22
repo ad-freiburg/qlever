@@ -82,26 +82,15 @@ class VocabularyInMemory
     std::string& readableName() { return readableName_; }
   };
 
-  // Return a `WordWriter` that directly writes the words to the given
-  // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initizlied via `open(filename)`.
-  WordWriter makeDiskWriter(const std::string& filename) const {
-    return WordWriter{filename};
+  // Return a `unique_ptr<WordWriter>` that directly writes the words to the
+  // given `filename`. The words are not materialized in RAM, but the vocabulary
+  // later has to be explicitly initialized via `open(filename)`.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
   }
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
-
-  /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
-  }
 
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }

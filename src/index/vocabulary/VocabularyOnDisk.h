@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "global/Id.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
@@ -90,8 +89,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
 
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
-    uint64_t _offset;
-    uint64_t _size;
+    uint64_t offset_;
+    uint64_t size_;
   };
 
   // Helper function for implementing a random access iterator.
