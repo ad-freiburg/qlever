@@ -210,18 +210,19 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
 
 // _______________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::upper_bound(const string& word, const SortLevel level,
-                                      auto&&... args) const -> IndexType {
-  auto wordAndIndex = vocabulary_.upper_bound(word, level, AD_FWD(args)...);
+auto Vocabulary<S, C, I>::upper_bound(const string& word,
+                                      const SortLevel level) const
+    -> IndexType {
+  auto wordAndIndex = vocabulary_.upper_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
-                                      const SortLevel level,
-                                      auto&&... args) const -> IndexType {
-  auto wordAndIndex = vocabulary_.lower_bound(word, level, AD_FWD(args)...);
+                                      const SortLevel level) const
+    -> IndexType {
+  auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
 
