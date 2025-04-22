@@ -153,6 +153,7 @@ decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
 template <auto V>
 struct ValueIdentity {
   static constexpr auto value = V;
+  explicit(false) constexpr operator decltype(V)() { return value; }
 };
 
 template <typename F>
@@ -168,6 +169,37 @@ struct ValueIdentityToTemplateParameter {
 template <typename F>
 ValueIdentityToTemplateParameter(F&&) -> ValueIdentityToTemplateParameter<F>;
 
+template <typename F>
+struct ValueIdentitiesAndArgumentTupleToTemplateParameter {
+  F function;
+
+  template <auto... Is, typename... Args>
+  decltype(auto) operator()(Args&&... args) const {
+    return function(std::forward_as_tuple(AD_FWD(args)...),
+                    ValueIdentity<Is>{}...);
+  }
+};
+
+template <typename F>
+ValueIdentitiesAndArgumentTupleToTemplateParameter(F&&)
+    -> ValueIdentitiesAndArgumentTupleToTemplateParameter<F>;
+
+// TODO Comment.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+          size_t NumIntegers, std::integral Int>
+decltype(auto) callFixedSizeVi(std::array<Int, NumIntegers> ints,
+                               auto&& functor, auto&&... args) {
+  return callFixedSize<MaxValue>(
+      ints, ValueIdentityToTemplateParameter{AD_FWD(functor)}, AD_FWD(args)...);
+}
+// Overload for a single integer.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+          std::integral Int>
+decltype(auto) callFixedSizeVi(Int i, auto&& functor, auto&&... args) {
+  return callFixedSizeVi<MaxValue>(std::array{i}, AD_FWD(functor),
+                                   AD_FWD(args)...);
+}
+
 }  // namespace ad_utility
 
 // The definitions of the macro for an easier syntax.
@@ -180,10 +212,13 @@ ValueIdentityToTemplateParameter(F&&) -> ValueIdentityToTemplateParameter<F>;
 // `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
 // simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
 // the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                      \
-  ad_utility::callFixedSize(                                      \
-      integers, []<int... Is>(auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<Is...>, AD_FWD(args)...);         \
-      } __VA_OPT__(, ) __VA_ARGS__)
+#define CALL_FIXED_SIZE(integers, func, ...)                          \
+  ad_utility::callFixedSize(                                          \
+      integers,                                                       \
+      ad_utility::ValueIdentitiesAndArgumentTupleToTemplateParameter( \
+          [](auto argsTuple, auto... Is) -> decltype(auto) {          \
+            return std::apply(func<static_cast<int>(Is)...>,          \
+                              std::move(argsTuple));                  \
+          }) __VA_OPT__(, ) __VA_ARGS__)
 
 #endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
