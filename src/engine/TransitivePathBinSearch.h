@@ -54,6 +54,17 @@ struct BinSearchMap {
 
     return targetIds_.subspan(startIndex, range.size());
   }
+
+  // Retrieve pointer to equal id from `startIds_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto range = ql::ranges::equal_range(startIds_, node);
+    if (range.empty()) {
+      return nullptr;
+    }
+    return &range.front();
+  }
 };
 
 /**

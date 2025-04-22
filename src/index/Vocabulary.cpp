@@ -93,19 +93,10 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
-  // TODO<joka921> Completely refactor the Vocabulary on the different
-  // Types, it is a mess.
-
-  // If the string is not compressed, this means that this is a text vocabulary
-  // and thus doesn't support externalization.
-  if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!stringIsLiteral(s)) {
-      return shouldEntityBeExternalized(s);
-    } else {
-      return shouldLiteralBeExternalized(s);
-    }
+  if (!stringIsLiteral(s)) {
+    return shouldEntityBeExternalized(s);
   } else {
-    return false;
+    return shouldLiteralBeExternalized(s);
   }
 }
 
@@ -114,7 +105,7 @@ template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
     std::string_view word) const {
   // Never externalize the internal IRIs as they are sometimes added before or
-  // after the externalization happens and we thus get inconsistent behavior
+  // after the externalization happens, and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
   if (word.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
     return false;
@@ -285,15 +276,16 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::operator[](IndexType idx) const
-    -> AccessReturnType_t<S> {
+auto Vocabulary<S, C, I>::operator[](IndexType idx) const -> AccessReturnType {
+  AD_CONTRACT_CHECK(idx.get() < size());
   return vocabulary_[idx.get()];
 }
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator,
-                          VocabIndex>;
-template class Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
+                          TripleComponentComparator, VocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabTextVocabulary,
+                          SimpleStringComparator, WordVocabIndex>;
 
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
