@@ -138,7 +138,6 @@ class MergeVocabularyTest : public ::testing::Test {
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
                 using GeoVocab = SplitGeoVocabulary<
-                    CompressedString, TripleComponentComparator, VocabIndex,
                     CompressedVocabulary<VocabularyInternalExternal>>;
                 if (GeoVocab::isSpecialLiteral(w.iriOrLiteral())) {
                   globalId = GeoVocab::makeSpecialVocabIndex(globalId);

@@ -22,8 +22,7 @@
 // using SplitFilenameFunctionT =
 //     const std::function<std::array<std::string, 2>(std::string)>&;
 
-template <typename StringType, typename ComparatorType, typename IndexT,
-          class MainVocabulary, class SpecialVocabulary,
+template <class MainVocabulary, class SpecialVocabulary,
           const auto& SplitFunction, const auto& SplitFilenameFunction>
 class SplitVocabulary {
  private:
@@ -174,10 +173,9 @@ inline std::array<std::string, 2> geoFilenameFunc(std::string base) {
   return {base, base + ".geometry"};
 };
 
-template <typename StringType, typename ComparatorType, typename IndexT,
-          class UnderlyingVocabulary>
+template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<StringType, ComparatorType, IndexT, UnderlyingVocabulary,
-                    UnderlyingVocabulary, geoSplitFunc, geoFilenameFunc>;
+    SplitVocabulary<UnderlyingVocabulary, UnderlyingVocabulary, geoSplitFunc,
+                    geoFilenameFunc>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

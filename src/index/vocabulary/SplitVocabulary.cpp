@@ -12,26 +12,33 @@
 #include "util/Log.h"
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::makeSpecialVocabIndex(
+template <class M, class S, const auto& SF, const auto& SFN>
+uint64_t SplitVocabulary<M, S, SF, SFN>::makeSpecialVocabIndex(
     uint64_t vocabIndex) {
   AD_CORRECTNESS_CHECK(vocabIndex < maxVocabIndex);
   return vocabIndex | specialVocabMarker;
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
-    const string& filename) {
+template <class M, class S, const auto& SF, const auto& SFN>
+void SplitVocabulary<M, S, SF, SFN>::readFromFile(const string& filename) {
   auto readSingle = [](auto& vocab, const string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
     vocab.close();
     vocab.open(filename);
-    LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
-    // TODO additional logs for internalexternal removed. await #1986
+
+    if constexpr (std::is_same_v<decltype(vocab),
+                                 detail::UnderlyingVocabRdfsVocabulary>) {
+      const auto& internalExternalVocab =
+          vocab.getUnderlyingVocabulary().getUnderlyingVocabulary();
+      LOG(INFO) << "Done, number of words: "
+                << internalExternalVocab.internalVocab().size() << std::endl;
+      LOG(INFO) << "Number of words in external vocabulary: "
+                << internalExternalVocab.externalVocab().size() << std::endl;
+    } else {
+      LOG(INFO) << "Done, number of words: " << vocab.size() << std::endl;
+    }
   };
 
   auto [fnMain, fnSpecial] = SFN(filename);
@@ -40,18 +47,16 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::readFromFile(
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::open(const string& filename) {
+template <class M, class S, const auto& SF, const auto& SFN>
+void SplitVocabulary<M, S, SF, SFN>::open(const string& filename) {
   auto [fnMain, fnSpecial] = SFN(filename);
   underlyingMain_.open(fnMain);
   underlyingSpecial_.open(fnSpecial);
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
+template <class M, class S, const auto& SF, const auto& SFN>
+SplitVocabulary<M, S, SF, SFN>::WordWriter::WordWriter(
     const M& mainVocabulary, const S& specialVocabulary,
     const std::string& filename)
     : underlyingWordWriter_{mainVocabulary.makeDiskWriterPtr(
@@ -60,9 +65,8 @@ SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::WordWriter(
           specialVocabulary.makeDiskWriterPtr(SFN(filename).at(1))} {};
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::operator()(
+template <class M, class S, const auto& SF, const auto& SFN>
+uint64_t SplitVocabulary<M, S, SF, SFN>::WordWriter::operator()(
     std::string_view word, bool isExternal) {
   if (SF(word)) {
     // The word to be stored in the vocabulary is selected by the split function
@@ -79,17 +83,15 @@ uint64_t SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::WordWriter::finish() {
+template <class M, class S, const auto& SF, const auto& SFN>
+void SplitVocabulary<M, S, SF, SFN>::WordWriter::finish() {
   underlyingWordWriter_->finish();
   underlyingSpecialWordWriter_->finish();
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::build(
+template <class M, class S, const auto& SF, const auto& SFN>
+void SplitVocabulary<M, S, SF, SFN>::build(
     const std::vector<std::string>& words, const std::string& filename) {
   WWPtr writer = makeWordWriterPtr(filename);
   for (const auto& word : words) {
@@ -100,27 +102,15 @@ void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::build(
 }
 
 // _____________________________________________________________________________
-template <typename ST, typename CT, typename IT, class M, class S,
-          const auto& SF, const auto& SFN>
-void SplitVocabulary<ST, CT, IT, M, S, SF, SFN>::close() {
+template <class M, class S, const auto& SF, const auto& SFN>
+void SplitVocabulary<M, S, SF, SFN>::close() {
   underlyingMain_.close();
   underlyingSpecial_.close();
 }
 
 // Explicit template instantiations
-template class SplitVocabulary<CompressedString, TripleComponentComparator,
-                               VocabIndex,
-                               CompressedVocabulary<VocabularyInternalExternal>,
+template class SplitVocabulary<CompressedVocabulary<VocabularyInternalExternal>,
                                CompressedVocabulary<VocabularyInternalExternal>,
                                geoSplitFunc, geoFilenameFunc>;
-template class SplitVocabulary<std::string, SimpleStringComparator,
-                               WordVocabIndex,
-                               CompressedVocabulary<VocabularyInternalExternal>,
-                               CompressedVocabulary<VocabularyInternalExternal>,
+template class SplitVocabulary<VocabularyInMemory, VocabularyInMemory,
                                geoSplitFunc, geoFilenameFunc>;
-template class SplitVocabulary<
-    CompressedString, TripleComponentComparator, VocabIndex, VocabularyInMemory,
-    VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
-template class SplitVocabulary<
-    std::string, SimpleStringComparator, WordVocabIndex, VocabularyInMemory,
-    VocabularyInMemory, geoSplitFunc, geoFilenameFunc>;
