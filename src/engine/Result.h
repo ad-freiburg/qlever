@@ -1,9 +1,17 @@
-// Copyright 2015 - 2023, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <b.buchhold@gmail.com>
+// Copyright 2015 - 2025 University of Freiburg, Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Copyright 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Authors: Brandon Harris (BMW)
+
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not
+// use this file except in compliance with the License. You may obtain a copy of
+// the License at http://www.apache.org/licenses/LICENSE-2.0 . Unless required
+// by applicable law or agreed to in writing, software distributed under the
+// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+// OF ANY KIND, either express or implied. See the License for the specific
+// language governing permissions and limitations under the License.
 
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
@@ -19,12 +27,12 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
 
-// The result of an `Operation`. This is the class QLever uses for all
-// intermediate or final results when processing a SPARQL query. The actual data
-// is either a table and contained in the member `idTable()` or can be consumed
-// through a generator via `idTables()` when it is supposed to be lazily
-// evaluated.
-class Result {
+    // The result of an `Operation`. This is the class QLever uses for all
+    // intermediate or final results when processing a SPARQL query. The
+    // actual data is either a table and contained in the member `idTable()`
+    // or can be consumed through a generator via `idTables()` when it is
+    // supposed to be lazily evaluated.
+    class Result {
  public:
   struct IdTableVocabPair {
     IdTable idTable_;
