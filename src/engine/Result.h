@@ -27,12 +27,12 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/InputRangeUtils.h"
 
-    // The result of an `Operation`. This is the class QLever uses for all
-    // intermediate or final results when processing a SPARQL query. The
-    // actual data is either a table and contained in the member `idTable()`
-    // or can be consumed through a generator via `idTables()` when it is
-    // supposed to be lazily evaluated.
-    class Result {
+// The result of an `Operation`. This is the class QLever uses for all
+// intermediate or final results when processing a SPARQL query. The actual data
+// is either a table and contained in the member `idTable()` or can be consumed
+// through a generator via `idTables()` when it is supposed to be lazily
+// evaluated.
+class Result {
  public:
   struct IdTableVocabPair {
     IdTable idTable_;
