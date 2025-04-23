@@ -1687,10 +1687,24 @@ auto CompressedRelationReader::getScanConfig(
 // Helper to the following block-invariant-check Impls for informative error
 // message construction.
 auto createErrorMessage = [](const auto& b1, const auto& b2,
-                             std::string errCause) {
+                             const std::string& errCause) {
   std::stringstream errBlocks;
   errBlocks << "First Block:\n" << b1 << "Second Block:\n" << b2 << std::endl;
   return absl::StrCat(errCause, errBlocks.str());
+};
+
+// _____________________________________________________________________________
+// Check if the provided `Range` holds less than two `CompressedBlockMetadata`
+// values.
+template <typename Range>
+requires ranges::input_range<Range>
+static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
+  auto begin = ranges::begin(blockMetadataRange);
+  auto end = ranges::end(blockMetadataRange);
+  if (begin == end || ranges::next(begin) == end) {
+    return true;
+  }
+  return false;
 };
 
 // _____________________________________________________________________________
@@ -1698,6 +1712,10 @@ template <typename Range>
 requires ranges::input_range<Range>
 static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
     const Range& blockMetadataRange) {
+  if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
+    return;
+  }
+
   auto checkUniquenessAndOrder = [](const auto& blockPair) {
     const auto& [b1, b2] = blockPair;
     // Blocks must be unique.
@@ -1723,7 +1741,7 @@ template <typename Range>
 requires ranges::input_range<Range>
 static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
-  if (firstFreeColIndex == 0) {
+  if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
   }
   auto blockMetadataRangeShifted = blockMetadataRange | ranges::views::drop(1);
@@ -1764,11 +1782,8 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
     checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
     checkBlockMetadataInvariantBlockConsistencyImpl(
         blockRangeView, scanSpec_.firstFreeColIndex());
-    blockMetadata_ = blockMetadataRanges;
-  } else {
-    checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
-    blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
   }
+  blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
 }
 

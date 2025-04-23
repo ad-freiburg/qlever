@@ -507,10 +507,10 @@ class CompressedRelationReader {
   //   - The `CompressedBlockMetadata` values must be contained in sorted
   //     order with respect to the first free scan column defined by
   //     `scanSpec_`.
-  //   - The columns up to the first free column contain constant values
+  //   - The columns up to the first free column must contain constant values
   //     over all blocks.
-  // `checkCompleteInvariant = false` only asserts the first two conditions and
-  // retrieves the relevant metadata in the following.
+  // `checkCompleteInvariant` should be set to `true` if the provided
+  // `BlockMetadataRanges` are prefiltered or modified.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     BlockMetadataRanges blockMetadata_;

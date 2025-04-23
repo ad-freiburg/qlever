@@ -983,9 +983,6 @@ TEST_F(PrefilterExpressionOnMetadataTest,
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges,
       true));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges,
-      false));
-  ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, std::nullopt, std::nullopt}, blockRanges,
       true));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
