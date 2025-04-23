@@ -98,8 +98,6 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
 template <typename Allocator>
 static IdTable getNewBlankNodes(
-    const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    absl::Span<Id> input) {
     const Allocator& allocator,
     ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, absl::Span<Id> input) {
   IdTable result{1, allocator};
