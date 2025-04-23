@@ -10,7 +10,8 @@
 namespace {
 static constexpr auto U = Id::makeUndefined();
 
-void testWithAllBuffersizes(const auto& testFunction) {
+template <typename F>
+void testWithAllBuffersizes(const F& testFunction) {
   for (auto bufferSize : ql::views::iota(0, 10)) {
     testFunction(bufferSize);
   }

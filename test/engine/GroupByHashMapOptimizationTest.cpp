@@ -30,7 +30,8 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   Id calculate(const auto& data) { return data.calculateResult(&localVocab_); }
 
-  auto makeCalcAndAddValue(auto& data) {
+  template <typename T>
+  auto makeCalcAndAddValue(T& data) {
     auto calc = [this, &data]() { return calculate(data); };
     auto addValue = [this, &data](auto&& x) {
       data.addValue(AD_FWD(x), &context_);
