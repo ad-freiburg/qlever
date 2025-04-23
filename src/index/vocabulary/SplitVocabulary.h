@@ -16,20 +16,25 @@
 #include "util/HashSet.h"
 
 // Func. to decide where a literal goes
+template <const auto& T>
+CPP_concept SplitFunctionT =
+    ad_utility::InvocableWithExactReturnType<decltype(T), bool,
+                                             std::string_view>;
 
 // Func. to get filenames for each vocabulary
+template <const auto& T>
+CPP_concept SplitFilenameFunctionT = ad_utility::InvocableWithExactReturnType<
+    decltype(T), std::array<std::string, 2>, std::string>;
 
-// using SplitFunctionT = const std::function<bool(std::string_view)>&;
-// using SplitFilenameFunctionT =
-//     const std::function<std::array<std::string, 2>(std::string)>&;
-
-template <class MainVocabulary, class SpecialVocabulary,
-          const auto& SplitFunction, const auto& SplitFilenameFunction>
-class SplitVocabulary {
+CPP_template(class MainVocabulary, class SpecialVocabulary,
+             const auto& SplitFunction, const auto& SplitFilenameFunction)(
+    requires SplitFunctionT<SplitFunction> CPP_and
+        SplitFilenameFunctionT<SplitFilenameFunction>) class SplitVocabulary {
  private:
   MainVocabulary underlyingMain_;
   SpecialVocabulary underlyingSpecial_;  // Should not hold conventional string
-                                         // literals (or iris)
+                                         // literals (that is, without a special
+                                         // data type) or IRIs
 
   // The 5th highest bit of the vocabulary index is used as a marker to
   // determine whether the word is stored in the normal vocabulary or the
