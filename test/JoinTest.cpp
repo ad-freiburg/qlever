@@ -20,6 +20,7 @@
 #include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/JoinHelpers.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Values.h"
@@ -674,8 +675,8 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
 
   leftTables.push_back(makeIdTableFromVector({{U}}));
   leftTables.push_back(makeIdTableFromVector({{I(2)}}));
-  rightTables.push_back(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
+  rightTables.push_back(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)));
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
   performJoin(std::move(leftTables), std::move(rightTables), expected7, false);
 }
 
@@ -752,8 +753,8 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
 
   rightTables.push_back(makeIdTableFromVector({{U}}));
   rightTables.push_back(makeIdTableFromVector({{I(2)}}));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
-  performJoin(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)),
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
+  performJoin(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)),
               std::move(rightTables), expected7, false);
 }
 
