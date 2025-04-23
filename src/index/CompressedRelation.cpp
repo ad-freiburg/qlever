@@ -492,8 +492,8 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-        auto result = ql::views::transform(
-            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        auto blocks = getBlocksFromMetadata(metadataAndBlocks);
+        auto result = ql::views::transform(blocks, getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
       };

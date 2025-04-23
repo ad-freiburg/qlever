@@ -66,7 +66,7 @@ class DeviationAggExpression
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct, std::make_unique<DeviationExpression>(std::move(child)),
-            aggregateOp) {};
+            aggregateOp){};
 };
 
 // The final operation for dividing by degrees of freedom and calculation square

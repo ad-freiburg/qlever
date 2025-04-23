@@ -128,13 +128,13 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin) ()(
+  CPP_auto_member constexpr auto CPP_fun(begin)()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end) ()(
+  CPP_auto_member constexpr auto CPP_fun(end)()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
@@ -155,12 +155,12 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto
-      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto CPP_fun(data)()(
+      requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data) ()(
+  CPP_auto_member constexpr auto CPP_fun(data)()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
