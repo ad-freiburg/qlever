@@ -75,12 +75,12 @@ size_t Index::getCardinality(
 }
 
 // ____________________________________________________________________________
-std::string Index::indexToString(VocabIndex id) const {
+RdfsVocabulary::AccessReturnType Index::indexToString(VocabIndex id) const {
   return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
-std::string_view Index::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType Index::indexToString(WordVocabIndex id) const {
   return pimpl_->indexToString(id);
 }
 

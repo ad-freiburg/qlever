@@ -19,6 +19,7 @@
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfEscaping.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -177,11 +178,12 @@ CPP_template_def(typename C, typename L)(
       // idVecs to have a more useful external access pattern.
 
       // Write the new word to the vocabulary.
-      const auto& nextWord = lastTripleComponent_.value();
+      auto& nextWord = lastTripleComponent_.value();
       if (nextWord.isBlankNode()) {
-        lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
+        nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
-        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+        nextWord.index_ =
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
@@ -256,8 +258,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
 }
 
 // ________________________________________________________________________________________________________
+template <typename T>
 inline void writeMappedIdsToExtVec(
-    const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {

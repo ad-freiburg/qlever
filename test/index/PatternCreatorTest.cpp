@@ -95,8 +95,8 @@ auto createExamplePatterns(PatternCreator& creator) {
 
   // All the triples for subject `V(2)` are ignored, so it will not have a
   // pattern.
-  push({V(2), V(13), V(18)}, true, NO_PATTERN);
-  push({V(2), V(14), V(18)}, true, NO_PATTERN);
+  push({V(2), V(13), V(18)}, true, Pattern::NoPattern);
+  push({V(2), V(14), V(18)}, true, Pattern::NoPattern);
 
   // New subject, but has the same predicate and therefore patterns as `V(0)`.
   // We have an ignored triple at the beginning, which doesn't count towards

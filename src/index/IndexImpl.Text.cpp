@@ -1,4 +1,4 @@
-// Copyright 2015 - 2022, University of Freiburg,
+// Copyright 2015 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
 //          Johannes Kalmbach <johannes.kalmbach@gmail.com>
@@ -446,7 +446,8 @@ static cppcoro::generator<std::string> fourLetterPrefixes() {
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-static bool areFourLetterPrefixesSorted(auto comparator) {
+template <typename T>
+static bool areFourLetterPrefixesSorted(T comparator) {
   std::string first;
   for (auto second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {

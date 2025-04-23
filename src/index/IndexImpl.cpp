@@ -1,10 +1,7 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// Copyright 2014 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "./IndexImpl.h"
 
@@ -23,6 +20,8 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -70,18 +69,7 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
-  auto makeRdfParserImpl =
-      [this, &files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
-    using TokenizerT =
-        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    return std::make_unique<RdfMultifileParser<TokenizerT>>(
-        files, this->parserBufferSize());
-  };
-
-  // `callFixedSize` litfts runtime integers to compile time integers. We use it
-  // here to create the correct combinations of template arguments.
-  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
-                                   makeRdfParserImpl);
+  return std::make_unique<RdfMultifileParser>(files, parserBufferSize());
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -89,7 +77,8 @@ namespace {
 // Return an input range of the blocks that are returned by the external sorter
 // to which `sorterPtr` points. Only the subset/permutation specified by the
 // `columnIndices` will be returned for each block.
-auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
+template <typename T1, typename T2>
+static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
   };
@@ -102,8 +91,9 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 // `rightInput`. The `resultCallback` will be called for each block of resulting
 // rows. Assumes that `leftInput` and `rightInput` have 6 columns in total, so
 // the result will have 5 columns.
-auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
-                                   auto resultCallback) {
+template <typename T1, typename T2, typename F>
+static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
+                                          F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
   auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
     using T = std::decay_t<decltype(rowOrId)>;
@@ -144,9 +134,10 @@ constexpr auto makePermutationFirstThirdSwitched = []() {
   return permutation;
 };
 // In the pattern column replace UNDEF (which is created by the optional join)
-// by the special `NO_PATTERN` ID and undo the permutation of the columns that
+// by the special `NoPattern` ID and undo the permutation of the columns that
 // was only needed for the join algorithm.
-auto fixBlockAfterPatternJoin(auto block) {
+template <typename T>
+static auto fixBlockAfterPatternJoin(T block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
@@ -155,16 +146,19 @@ auto fixBlockAfterPatternJoin(auto block) {
   block.value().setColumnSubset(permutation);
   ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
-      [](Id& id) { id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id; });
+      [](Id& id) {
+        id = id.isUndefined() ? Id::makeFromInt(Pattern::NoPattern) : id;
+      });
   return std::move(block.value()).template toStatic<0>();
 }
 }  // namespace
 
 // ____________________________________________________________________________
+template <typename InternalTripleSorter>
 std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
 IndexImpl::buildOspWithPatterns(
     PatternCreator::TripleSorter sortersFromPatternCreator,
-    auto& internalTripleSorter) {
+    InternalTripleSorter& internalTripleSorter) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
   // We need the patterns twice: once for the additional column, and once for
@@ -267,8 +261,9 @@ IndexImpl::buildOspWithPatterns(
 }
 
 // _____________________________________________________________________________
+template <typename InternalTriplePsoSorter>
 std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
-    auto&& internalTriplesPsoSorter) {
+    InternalTriplePsoSorter&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
@@ -562,11 +557,14 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
+    auto& wordCallback = *wordCallbackPtr;
     wordCallback.readableName() = "internal vocabulary";
-    return ad_utility::vocabulary_merger::mergeVocabulary(
+    auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
+    wordCallback.finish();
+    return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsExternalVector res;
@@ -592,9 +590,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
+template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-    size_t linesPerPartial, auto isQLeverInternalTriple)
+    size_t linesPerPartial, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
@@ -767,13 +766,13 @@ auto IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
+template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                                     const string& fileName2,
-                                     auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
-                                     auto&&... perTripleCallbacks) {
+                                     const string& fileName2, T&& sortedTriples,
+                                     Permutation::KeyOrder permutation,
+                                     Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   static_assert(MetaData::isMmapBased_);
@@ -817,11 +816,12 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
 }
 
 // ________________________________________________________________________
+template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
+IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
-                              auto&&... perTripleCallbacks) {
+                              Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
@@ -987,7 +987,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(std::string_view object) const {
   return decltype(vocab_)::stringIsLiteral(object);
 }
 
@@ -1540,10 +1540,13 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
+RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
+  return vocab_[id];
+}
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType IndexImpl::indexToString(
+    WordVocabIndex id) const {
   return textVocab_[id];
 }
 
@@ -1569,15 +1572,16 @@ vector<float> IndexImpl::getMultiplicities(
   return {1.0f, 1.0f};
 }
 
-// ___________________________________________________________________
+// _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array<float, 3> m{numTriples / numDistinctSubjects().normal,
-                         numTriples / numDistinctPredicates().normal,
-                         numTriples / numDistinctObjects().normal};
-  return {m[p.keyOrder()[0]], m[p.keyOrder()[1]], m[p.keyOrder()[2]]};
+  std::array multiplicities{numTriples / numDistinctSubjects().normal,
+                            numTriples / numDistinctPredicates().normal,
+                            numTriples / numDistinctObjects().normal};
+  auto permuted = p.keyOrder().permuteTriple(multiplicities);
+  return {permuted.begin(), permuted.end()};
 }
 
 // _____________________________________________________________________________

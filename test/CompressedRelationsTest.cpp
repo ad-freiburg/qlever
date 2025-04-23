@@ -102,10 +102,11 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
 // Note: This function can't be declared in the anonymous namespace, because it
 // has to be a `friend` of the `CompressedRelationWriter` class. We therefore
 // give it a rather long name.
+template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
 compressedRelationTestWriteCompressedRelations(
-    auto inputs, std::string filename, ad_utility::MemorySize blocksize) {
+    T inputs, std::string filename, ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -272,7 +273,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
   auto locatedTriples = LocatedTriplesPerBlock{};
   auto loc = LocatedTriple::locateTriplesInPermutation(
-      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+      locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();

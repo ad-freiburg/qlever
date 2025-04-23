@@ -31,6 +31,7 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
+#include "parser/Iri.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/AllocatorTestHelpers.h"
@@ -1869,9 +1870,50 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeLongitudeExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+
+  // The different distance functions:
+  expectFunctionCall(
+      absl::StrCat(geof, "metricDistance>(?a, ?b)"),
+      matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
+  // Compatibility version of geof:distance with two arguments
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
+  // geof:distance with IRI as unit in third argument
+  expectFunctionCall(
+      absl::StrCat(geof, "distance>(?a, ?b, <http://qudt.org/vocab/unit/M>)"),
+      matchNaryWithChildrenMatchers(
+          &makeDistWithUnitExpression,
+          variableExpressionMatcher(Variable{"?a"}),
+          variableExpressionMatcher(Variable{"?b"}),
+          matchLiteralExpression<ad_utility::triple_component::Iri>(
+              ad_utility::triple_component::Iri::fromIriref(
+                  "<http://qudt.org/vocab/unit/M>"))));
+
+  // geof:distance with xsd:anyURI literal as unit in third argument
+  expectFunctionCall(
+      absl::StrCat(geof,
+                   "distance>(?a, ?b, "
+                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+                   "XMLSchema#anyURI>)"),
+      matchNaryWithChildrenMatchers(
+          &makeDistWithUnitExpression,
+          variableExpressionMatcher(Variable{"?a"}),
+          variableExpressionMatcher(Variable{"?b"}),
+          matchLiteralExpression<ad_utility::triple_component::Literal>(
+              ad_utility::triple_component::Literal::fromStringRepresentation(
+                  "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+                  "XMLSchema#anyURI>"))));
+
+  // geof:distance with variable as unit in third argument
+  expectFunctionCall(absl::StrCat(geof, "distance>(?a, ?b, ?unit)"),
+                     matchNaryWithChildrenMatchers(
+                         &makeDistWithUnitExpression,
+                         variableExpressionMatcher(Variable{"?a"}),
+                         variableExpressionMatcher(Variable{"?b"}),
+                         variableExpressionMatcher(Variable{"?unit"})));
+
+  // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
                      matchUnary(&makeLogExpression));
   expectFunctionCall(absl::StrCat(math, "exp>(?x)"),
@@ -1909,7 +1951,10 @@ TEST(SparqlParser, FunctionCall) {
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
