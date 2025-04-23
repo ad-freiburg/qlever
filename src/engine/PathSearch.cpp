@@ -270,15 +270,9 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto searchTime = timer.msecs();
     timer.start();
 
-    ad_utility::callFixedSize(
-        std::array{getResultWidth()},
-        ad_utility::ApplyAsValueIdentity{
-            [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-              static constexpr size_t WIDTH = valueIdentity.value;
-              return std::invoke(&PathSearch::pathsToResultTable<WIDTH>,
-                                 AD_FWD(args)...);
-            }},
-        this, idTable, paths, binSearch);
+    CALL_FIXED_SIZE(std::array{getResultWidth()},
+                    &PathSearch::pathsToResultTable, this, idTable, paths,
+                    binSearch);
 
     timer.stop();
     auto fillTime = timer.msecs();

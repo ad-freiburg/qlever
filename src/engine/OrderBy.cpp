@@ -116,6 +116,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
     return false;
   };
 
+  // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
+  // is templated not only on the integer `I` (which the `callFixedSize`
+  // function deals with) but also on the `comparison`.
   ad_utility::callFixedSize(
       width, ad_utility::ApplyAsValueIdentity{
                  [&idTable, &comparison](auto valueIdentity) {

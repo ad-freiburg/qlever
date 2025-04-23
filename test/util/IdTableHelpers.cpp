@@ -61,14 +61,8 @@ void compareIdTableWithExpectedContent(
 
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  ad_utility::callFixedSize(
-      std::array{table.idTable.numColumns()},
-      ad_utility::ApplyAsValueIdentity{
-          [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-            static constexpr auto WIDTH = valueIdentity.value;
-            return std::invoke(&Engine::sort<WIDTH>, AD_FWD(args)...);
-          }},
-      &table.idTable, table.joinColumn);
+  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
+                  &table.idTable, table.joinColumn);
 }
 
 // ____________________________________________________________________________

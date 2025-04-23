@@ -75,15 +75,15 @@ auto lambda = ad_utility::ApplyAsValueIdentity{
     }};
 
 // A plain function templated on integer arguments to demonstrate the usage
-// of the `ad_utility::callFixedSize` function. Note that here we have to state
-// all the types of the arguments explicitly and default values do not work.
+// of the `CALL_FIXED_SIZE` macro. Note that here we have to state all the
+// types of the arguments explicitly and default values do not work.
 template <int I>
 auto freeFunction(int arg1 = 0, int arg2 = 0) {
   return I + arg1 + arg2;
 }
 
 // A static and non-static member function that can be also used with the
-// `ad_utility::callFixedSize` function
+// `CALL_FIXED_SIZE` macro
 struct S {
   template <int I>
   auto memberFunction(int arg1 = 0, int arg2 = 0) {
@@ -106,39 +106,10 @@ TEST(CallFixedSize, CallFixedSize1) {
       ASSERT_EQ(callFixedSize<m>(i, lambda), i);
       ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), i + 5);
       if (useMacro) {
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(freeFunction<I>, AD_FWD(args)...);
-                    }},
-                2, 3),
-            i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), i + 5);
         S s;
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(&S::memberFunction<I>,
-                                         AD_FWD(args)...);
-                    }},
-                &s, 2, 3),
-            i + 5);
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(&S::staticFunction<I>,
-                                         AD_FWD(args)...);
-                    }},
-                2, 3),
-            i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), i + 5);
       }
     }
 
@@ -148,39 +119,10 @@ TEST(CallFixedSize, CallFixedSize1) {
       ASSERT_EQ(callFixedSize<m>(i, lambda), 0);
       ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), 5);
       if (useMacro) {
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(freeFunction<I>, AD_FWD(args)...);
-                    }},
-                2, 3),
-            5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), 5);
         S s;
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(&S::memberFunction<I>,
-                                         AD_FWD(args)...);
-                    }},
-                &s, 2, 3),
-            5);
-        ASSERT_EQ(
-            ad_utility::callFixedSize(
-                i,
-                ad_utility::ApplyAsValueIdentity{
-                    [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-                      static constexpr int I = valueIdentity.value;
-                      return std::invoke(&S::staticFunction<I>,
-                                         AD_FWD(args)...);
-                    }},
-                2, 3),
-            5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), 5);
       }
     }
   };
@@ -212,7 +154,7 @@ auto freeFunction(int arg1 = 0, int arg2 = 0) {
 }
 
 // A static and non-static member function that can be also used with the
-// `ad_utility::callFixedSize` function
+// `CALL_FIXED_SIZE` macro
 struct S {
   template <int I, int J>
   auto memberFunction(int arg1 = 0, int arg2 = 0) {
@@ -238,42 +180,11 @@ TEST(CallFixedSize, CallFixedSize2) {
       ASSERT_EQ(callFixedSize<m>(array, lambda), resultOfIJ);
       ASSERT_EQ(callFixedSize<m>(array, lambda, 2, 3), resultOfIJ + 5);
       if (useMacro) {
-        ASSERT_EQ(ad_utility::callFixedSize(
-                      array,
-                      ad_utility::ApplyAsValueIdentity{
-                          [](auto valueIdentityI, auto valueIdentityJ,
-                             auto&&... args) -> decltype(auto) {
-                            static constexpr int I = valueIdentityI.value;
-                            static constexpr int J = valueIdentityJ.value;
-                            return std::invoke(freeFunction<I, J>,
-                                               AD_FWD(args)...);
-                          }},
-                      2, 3),
-                  resultOfIJ + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(array, freeFunction, 2, 3), resultOfIJ + 5);
         S s;
-        ASSERT_EQ(ad_utility::callFixedSize(
-                      array,
-                      ad_utility::ApplyAsValueIdentity{
-                          [](auto valueIdentityI, auto valueIdentityJ,
-                             auto&&... args) -> decltype(auto) {
-                            static constexpr int I = valueIdentityI.value;
-                            static constexpr int J = valueIdentityJ.value;
-                            return std::invoke(&S::memberFunction<I, J>,
-                                               AD_FWD(args)...);
-                          }},
-                      &s, 2, 3),
+        ASSERT_EQ(CALL_FIXED_SIZE(array, &S::memberFunction, &s, 2, 3),
                   resultOfIJ + 5);
-        ASSERT_EQ(ad_utility::callFixedSize(
-                      array,
-                      ad_utility::ApplyAsValueIdentity{
-                          [](auto valueIdentityI, auto valueIdentityJ,
-                             auto&&... args) -> decltype(auto) {
-                            static constexpr int I = valueIdentityI.value;
-                            static constexpr int J = valueIdentityJ.value;
-                            return std::invoke(&S::staticFunction<I, J>,
-                                               AD_FWD(args)...);
-                          }},
-                      2, 3),
+        ASSERT_EQ(CALL_FIXED_SIZE(array, &S::staticFunction, 2, 3),
                   resultOfIJ + 5);
       }
     };

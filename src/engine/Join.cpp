@@ -623,18 +623,9 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 // ______________________________________________________________________________
 void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
-  ad_utility::callFixedSize(
-      std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()},
-      ad_utility::ApplyAsValueIdentity{
-          [](auto valueIdentityL, auto valueIdentityR, auto valueIdentityOut,
-             auto&&... args) -> decltype(auto) {
-            static constexpr int L_WIDTH = valueIdentityL.value;
-            static constexpr int R_WIDTH = valueIdentityR.value;
-            static constexpr int OUT_WIDTH = valueIdentityOut.value;
-            return std::invoke(&Join::hashJoinImpl<L_WIDTH, R_WIDTH, OUT_WIDTH>,
-                               AD_FWD(args)...);
-          }},
-      dynA, jc1, dynB, jc2, dynRes);
+  CALL_FIXED_SIZE(
+      (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________

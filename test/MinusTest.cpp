@@ -21,15 +21,6 @@ auto table(size_t cols) {
   return IdTable(cols, ad_utility::testing::makeAllocator());
 }
 auto V = ad_utility::testing::VocabId;
-
-auto invokeComputeMinus = ad_utility::ApplyAsValueIdentity{
-    [](auto valueIdentityA, auto valueIdentityB,
-       auto&&... args) -> decltype(auto) {
-      static constexpr int A_WIDTH = valueIdentityA.value;
-      static constexpr int B_WIDTH = valueIdentityB.value;
-      return std::invoke(&Minus::computeMinus<A_WIDTH, B_WIDTH>,
-                         AD_FWD(args)...);
-    }};
 }  // namespace
 
 TEST(EngineTest, minusTest) {
@@ -64,8 +55,8 @@ TEST(EngineTest, minusTest) {
   int aWidth = a.numColumns();
   int bWidth = b.numColumns();
   Minus m{Minus::OnlyForTestingTag{}};
-  ad_utility::callFixedSize(std::array{aWidth, bWidth}, invokeComputeMinus, m,
-                            a, b, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
+                  jcls, &res);
 
   ASSERT_EQ(wantedRes.size(), res.size());
 
@@ -76,8 +67,8 @@ TEST(EngineTest, minusTest) {
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
-  ad_utility::callFixedSize(std::array{aWidth, bWidth}, invokeComputeMinus, m,
-                            a, b, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
+                  jcls, &res);
   ASSERT_EQ(a.size(), res.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], res[i]);
@@ -103,8 +94,8 @@ TEST(EngineTest, minusTest) {
   // of fixed size columns plus one).
   aWidth = va.numColumns();
   bWidth = vb.numColumns();
-  ad_utility::callFixedSize(std::array{aWidth, bWidth}, invokeComputeMinus, m,
-                            va, vb, jcls, &vres);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, va, vb,
+                  jcls, &vres);
 
   wantedRes = table(6);
   wantedRes.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});

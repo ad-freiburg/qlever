@@ -117,14 +117,7 @@ Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  ad_utility::callFixedSize(
-      resWidth,
-      ad_utility::ApplyAsValueIdentity{
-          [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-            static constexpr size_t I = valueIdentity.value;
-            return std::invoke(&Values::writeValues<I>, AD_FWD(args)...);
-          }},
-      this, &idTable, &localVocab);
+  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 

@@ -408,17 +408,9 @@ Result GroupBy::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    Result::Generator generator = ad_utility::callFixedSize(
-        std::array{inWidth, outWidth},
-        ad_utility::ApplyAsValueIdentity{[](auto valueIdentityIn,
-                                            auto valueIdentityOut,
-                                            auto&&... args) -> decltype(auto) {
-          static constexpr size_t IN_WIDTH = valueIdentityIn.value;
-          static constexpr size_t OUT_WIDTH = valueIdentityOut.value;
-          return std::invoke(&GroupBy::computeResultLazily<IN_WIDTH, OUT_WIDTH>,
-                             AD_FWD(args)...);
-        }},
-        this, std::move(subresult), std::move(aggregates),
+    Result::Generator generator = CALL_FIXED_SIZE(
+        (std::array{inWidth, outWidth}), &GroupBy::computeResultLazily, this,
+        std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), !requestLaziness);
 
@@ -435,17 +427,9 @@ Result GroupBy::computeResult(bool requestLaziness) {
 
   auto localVocab = subresult->getCopyOfLocalVocab();
 
-  IdTable idTable = ad_utility::callFixedSize(
-      std::array{inWidth, outWidth},
-      ad_utility::ApplyAsValueIdentity{[](auto valueIdentityIn,
-                                          auto valueIdentityOut,
-                                          auto&&... args) -> decltype(auto) {
-        static constexpr size_t IN_WIDTH = valueIdentityIn.value;
-        static constexpr size_t OUT_WIDTH = valueIdentityOut.value;
-        return std::invoke(&GroupBy::doGroupBy<IN_WIDTH, OUT_WIDTH>,
-                           AD_FWD(args)...);
-      }},
-      this, subresult->idTable(), groupByCols, aggregates, &localVocab);
+  IdTable idTable = CALL_FIXED_SIZE(
+      (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
+      subresult->idTable(), groupByCols, aggregates, &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};

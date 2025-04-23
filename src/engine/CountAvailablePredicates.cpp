@@ -144,15 +144,9 @@ Result CountAvailablePredicates::computeResult(
 
     size_t width = subresult->idTable().numColumns();
     size_t patternColumn = subtree_->getVariableColumn(predicateVariable_);
-    ad_utility::callFixedSize(
-        width,
-        ad_utility::ApplyAsValueIdentity{
-            [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-              static constexpr size_t WIDTH = valueIdentity.value;
-              return std::invoke(&computePatternTrick<WIDTH>, AD_FWD(args)...);
-            }},
-        subresult->idTable(), &idTable, patterns, subjectColumnIndex_,
-        patternColumn, runtimeInfo());
+    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
+                    patterns, subjectColumnIndex_, patternColumn,
+                    runtimeInfo());
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
   }

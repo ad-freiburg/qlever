@@ -48,14 +48,7 @@ auto SortPerformanceEstimator::measureSortingTime(
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
-  ad_utility::callFixedSize(
-      numColumns,
-      ad_utility::ApplyAsValueIdentity{
-          [](auto valueIdentity, auto&&... args) -> decltype(auto) {
-            static constexpr auto WIDTH = valueIdentity.value;
-            return std::invoke(&Engine::sort<WIDTH>, AD_FWD(args)...);
-          }},
-      &randomTable, 0ull);
+  CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
   return timer.value();
 }
 

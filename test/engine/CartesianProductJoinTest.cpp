@@ -139,8 +139,7 @@ TEST(CartesianProductJoin, computeResult) {
       {{0, 2, 4}, {1, 2, 4}, {0, 2, 5}, {1, 2, 5}, {0, 2, 6}, {1, 2, 6}},
       {{{0}, {1}}, {{2}}, {{4}, {5}, {6}}});
 
-  // A larger input to cover the `ad_utility::callFixedSize` optimization for
-  // the stride.
+  // A larger input to cover the `CALL_FIXED_SIZE` optimization for the stride.
   testCartesianProduct(
       {{0, 0},
        {1, 0},

@@ -56,18 +56,9 @@ Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
 
   int leftWidth = leftResult->idTable().numColumns();
   int rightWidth = rightResult->idTable().numColumns();
-  ad_utility::callFixedSize(
-      std::array{leftWidth, rightWidth},
-      ad_utility::ApplyAsValueIdentity{[](auto valueIdentityA,
-                                          auto valueIdentityB,
-                                          auto&&... args) -> decltype(auto) {
-        static constexpr int A_WIDTH = valueIdentityA.value;
-        static constexpr int B_WIDTH = valueIdentityB.value;
-        return std::invoke(&Minus::computeMinus<A_WIDTH, B_WIDTH>,
-                           AD_FWD(args)...);
-      }},
-      this, leftResult->idTable(), rightResult->idTable(), _matchedColumns,
-      &idTable);
+  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
+                  this, leftResult->idTable(), rightResult->idTable(),
+                  _matchedColumns, &idTable);
 
   LOG(DEBUG) << "Minus result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
