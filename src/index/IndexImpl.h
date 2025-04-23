@@ -527,9 +527,10 @@ class IndexImpl {
   std::unique_ptr<RdfParserBase> makeRdfParser(
       const std::vector<Index::InputFileSpecification>& files) const;
 
+  template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, auto isQLeverInternalTriple);
+      size_t linesPerPartial, Func isQLeverInternalTriple);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -561,12 +562,13 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
+  template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                            const string& fileName2, auto&& sortedTriples,
+                            const string& fileName2, T&& sortedTriples,
                             Permutation::KeyOrder permutation,
-                            auto&&... perTripleCallbacks);
+                            Callbacks&&... perTripleCallbacks);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -597,11 +599,12 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
+  template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
              IndexMetaDataMmapDispatcher::WriteType>
-  createPermutations(size_t numColumns, auto&& sortedTriples,
+  createPermutations(size_t numColumns, T&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
-                     auto&&... perTripleCallbacks);
+                     Callbacks&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, TextVec& vec);
 
@@ -725,8 +728,9 @@ class IndexImpl {
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
+  template <typename InternalTriplePsoSorter>
   std::pair<size_t, size_t> createInternalPSOandPOS(
-      auto&& internalTriplesPsoSorter);
+      InternalTriplePsoSorter&& internalTriplesPsoSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
@@ -763,12 +767,14 @@ class IndexImpl {
     }
   }
 
-  void createSecondPermutationPair(auto&&... args) {
+  template <typename... Args>
+  void createSecondPermutationPair(Args&&... args) {
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     return createOSPAndOPS(AD_FWD(args)...);
   }
 
-  void createThirdPermutationPair(auto&&... args) {
+  template <typename... Args>
+  void createThirdPermutationPair(Args&&... args) {
     static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
     return createPSOAndPOS(AD_FWD(args)...);
   }
@@ -779,9 +785,10 @@ class IndexImpl {
   // subject pattern of the object (which is created by this function). Return
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
+  template <typename InternalTripleSorter>
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
-                       auto& internalTripleSorter);
+                       InternalTripleSorter& internalTripleSorter);
 
   // During the index, building add the number of internal triples and internal
   // predicates to the configuration. Note: the number of internal objects and

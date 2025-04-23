@@ -71,8 +71,8 @@ CPP_concept AreComparable =
 // is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
 // only needed to make the static check for the exhaustiveness of the if-else
 // cascade possible.
-template <Comparison Comp, typename Dummy = int>
-bool applyComparison(const auto& a, const auto& b) {
+template <Comparison Comp, typename Dummy = int, typename A, typename B>
+bool applyComparison(const A& a, const B& b) {
   using enum Comparison;
   if constexpr (Comp == LT) {
     return a < b;

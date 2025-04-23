@@ -231,8 +231,9 @@ auto typeToStringFactoryWithTI(std::vector<std::string>* typeToStringVector) {
 parameter pack and a lambda function argument, which it passes to a
 `constExprForEachType` function in the correct form.
 */
+template <typename F>
 void testConstExprForEachNormalCall(
-    const auto& callToForEachWrapper, auto callToTypeToStringFactory,
+    const F& callToForEachWrapper, auto callToTypeToStringFactory,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "testConstExprForEachNormalCall")};
@@ -255,8 +256,8 @@ void testConstExprForEachNormalCall(
 }
 
 struct TestForEachTypeInParameterPack {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     forEachTypeInParameterPack<Ts...>(func);
   }
 };
@@ -274,8 +275,8 @@ TEST(ConstexprUtils, ForEachTypeInParameterPack) {
 }
 
 struct TestForEachTypeInParameterPackWithTI {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     forEachTypeInParameterPackWithTI<Ts...>(func);
   }
 };
@@ -293,15 +294,15 @@ TEST(ConstexprUtils, ForEachTypeInParameterPackWithTI) {
 }
 
 struct TestForEachTypeInTemplateTypeOfVariant {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     forEachTypeInTemplateType<std::variant<Ts...>>(func);
   }
 };
 
 struct TestForEachTypeInTemplateTypeOfTuple {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     forEachTypeInTemplateType<std::tuple<Ts...>>(func);
   }
 };
@@ -317,16 +318,16 @@ TEST(ConstexprUtils, forEachTypeInTemplateType) {
 }
 
 struct TestForEachTypeInTemplateTypeWithTIOfVariant {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     using use_type_identity::ti;
     forEachTypeInTemplateTypeWithTI(ti<std::variant<Ts...>>, func);
   }
 };
 
 struct TestForEachTypeInTemplateTypeWithTIOfTuple {
-  template <typename... Ts>
-  void operator()(const auto& func) const {
+  template <typename... Ts, typename F>
+  void operator()(const F& func) const {
     using use_type_identity::ti;
     forEachTypeInTemplateTypeWithTI(ti<std::tuple<Ts...>>, func);
   }

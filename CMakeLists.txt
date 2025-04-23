@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.27)
+cmake_policy(SET CMP0167 NEW)
 project(QLever C CXX)
 
 # C/C++ Versions
