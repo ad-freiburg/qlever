@@ -74,10 +74,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
-                       targetSide.isVariable()
-                           ? std::nullopt
-                           : std::optional{std::get<Id>(targetSide.value_)},
-                       yieldOnce);
+                       targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(
         std::move(hull), startSide.outputCol_, targetSide.outputCol_,
@@ -109,7 +106,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
     auto nodesWithDuplicates =
-        setupNodes(sub->idTable(), startSide, targetSide);
+        setupNodes(sub->idTable(), startSide, targetSide, edges);
     Set nodesWithoutDuplicates{allocator()};
     for (const auto& span : nodesWithDuplicates) {
       nodesWithoutDuplicates.insert(span.begin(), span.end());
@@ -122,12 +119,9 @@ class TransitivePathImpl : public TransitivePathBase {
     detail::TableColumnWithVocab<const Set&> tableInfo{
         nullptr, nodesWithoutDuplicates, LocalVocab{}};
 
-    NodeGenerator hull = transitiveHull(
-        edges, sub->getCopyOfLocalVocab(), std::span{&tableInfo, 1},
-        targetSide.isVariable()
-            ? std::nullopt
-            : std::optional{std::get<Id>(targetSide.value_)},
-        yieldOnce);
+    NodeGenerator hull =
+        transitiveHull(edges, sub->getCopyOfLocalVocab(),
+                       std::span{&tableInfo, 1}, targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
@@ -222,8 +216,8 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param edgesVocab The `LocalVocab` holding the vocabulary of the edges.
    * @param startNodes A range that yields an instantiation of
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
-   * @param target Optional target Id. If supplied, only paths which end
-   * in this Id are added to the hull.
+   * @param target Target `TripleComponent`. If it's not a variable, paths that
+   * don't end with a matching value are discarded.
    * @param yieldOnce This has to be set to the same value as the consuming
    * code. When set to true, this will prevent yielding the same LocalVocab over
    * and over again to make merging faster (because merging with an empty
@@ -232,15 +226,23 @@ class TransitivePathImpl : public TransitivePathBase {
    */
   CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
       transitiveHull(const T& edges, LocalVocab edgesVocab, Node startNodes,
-                     std::optional<Id> target, bool yieldOnce) const {
+                     TripleComponent target, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
+    // `targetId` is only ever used for comparisons, and never stored in the
+    // result, so we use a separate local vocabulary.
+    LocalVocab targetHelper;
+    std::optional<Id> targetId =
+        target.isVariable()
+            ? std::nullopt
+            : std::optional{std::move(target).toValueId(
+                  _executionContext->getIndex().getVocab(), targetHelper)};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
-        Set connectedNodes = findConnectedNodes(edges, startNode, target);
+        Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
         if (!connectedNodes.empty()) {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           timer.stop();
@@ -271,12 +273,23 @@ class TransitivePathImpl : public TransitivePathBase {
    */
   std::vector<std::span<const Id>> setupNodes(
       const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide) const {
+      const TransitivePathSide& targetSide, const T& edges) const {
     std::vector<std::span<const Id>> result;
 
     // id -> var|id
     if (!startSide.isVariable()) {
-      result.emplace_back(&std::get<Id>(startSide.value_), 1);
+      AD_CORRECTNESS_CHECK(minDist_ != 0,
+                           "If minDist_ is 0 with a hardcoded side, we should "
+                           "call the overload for a bound transitive path.");
+      LocalVocab helperVocab;
+      Id startId = TripleComponent{startSide.value_}.toValueId(
+          _executionContext->getIndex().getVocab(), helperVocab);
+      // Make sure we retrieve the Id from an IndexScan, so we don't have to
+      // pass this LocalVocab around. If it's not present then no result needs
+      // to be returned anyways.
+      if (const Id* id = edges.getEquivalentId(startId)) {
+        result.emplace_back(id, 1);
+      }
       // var -> var
     } else {
       std::span<const Id> startNodes = sub.getColumn(startSide.subCol_);

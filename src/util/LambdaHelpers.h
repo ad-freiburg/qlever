@@ -29,12 +29,14 @@ struct AssignableLambdaImpl<Lambda, false, false> {
       : _lambda{std::move(lambda)} {}
   AssignableLambdaImpl() = default;
 
-  decltype(auto) operator()(auto&&... args) noexcept(
+  template <typename... Args>
+  decltype(auto) operator()(Args&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 
-  decltype(auto) constexpr operator()(auto&&... args) const
+  template <typename... Args>
+  decltype(auto) constexpr operator()(Args&&... args) const
       noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }

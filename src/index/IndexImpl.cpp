@@ -77,7 +77,8 @@ namespace {
 // Return an input range of the blocks that are returned by the external sorter
 // to which `sorterPtr` points. Only the subset/permutation specified by the
 // `columnIndices` will be returned for each block.
-auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
+template <typename T1, typename T2>
+static auto lazyScanWithPermutedColumns(T1& sorterPtr, T2 columnIndices) {
   auto setSubset = [columnIndices](auto& idTable) {
     idTable.setColumnSubset(columnIndices);
   };
@@ -90,8 +91,9 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 // `rightInput`. The `resultCallback` will be called for each block of resulting
 // rows. Assumes that `leftInput` and `rightInput` have 6 columns in total, so
 // the result will have 5 columns.
-auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
-                                   auto resultCallback) {
+template <typename T1, typename T2, typename F>
+static auto lazyOptionalJoinOnFirstColumn(T1& leftInput, T2& rightInput,
+                                          F resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
   auto projectionForComparator = [](const auto& rowOrId) -> const Id& {
     using T = std::decay_t<decltype(rowOrId)>;
@@ -134,7 +136,8 @@ constexpr auto makePermutationFirstThirdSwitched = []() {
 // In the pattern column replace UNDEF (which is created by the optional join)
 // by the special `NoPattern` ID and undo the permutation of the columns that
 // was only needed for the join algorithm.
-auto fixBlockAfterPatternJoin(auto block) {
+template <typename T>
+static auto fixBlockAfterPatternJoin(T block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
@@ -151,10 +154,11 @@ auto fixBlockAfterPatternJoin(auto block) {
 }  // namespace
 
 // ____________________________________________________________________________
+template <typename InternalTripleSorter>
 std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
 IndexImpl::buildOspWithPatterns(
     PatternCreator::TripleSorter sortersFromPatternCreator,
-    auto& internalTripleSorter) {
+    InternalTripleSorter& internalTripleSorter) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
   // We need the patterns twice: once for the additional column, and once for
@@ -257,8 +261,9 @@ IndexImpl::buildOspWithPatterns(
 }
 
 // _____________________________________________________________________________
+template <typename InternalTriplePsoSorter>
 std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
-    auto&& internalTriplesPsoSorter) {
+    InternalTriplePsoSorter&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
@@ -585,9 +590,10 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
+template <typename Func>
 auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-    size_t linesPerPartial, auto isQLeverInternalTriple)
+    size_t linesPerPartial, Func isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
               << std::endl;
@@ -760,13 +766,13 @@ auto IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
+template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                                     const string& fileName2,
-                                     auto&& sortedTriples,
+                                     const string& fileName2, T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
-                                     auto&&... perTripleCallbacks) {
+                                     Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   static_assert(MetaData::isMmapBased_);
@@ -810,11 +816,12 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
 }
 
 // ________________________________________________________________________
+template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
+IndexImpl::createPermutations(size_t numColumns, T&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
-                              auto&&... perTripleCallbacks) {
+                              Callbacks&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
