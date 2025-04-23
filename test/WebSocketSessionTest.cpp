@@ -92,7 +92,8 @@ struct WebSocketTestContainer {
   tcp::socket client_;
   QueryHub& queryHub() { return *queryHub_; }
 
-  net::awaitable<void> serverLogic(auto&& completionToken) {
+  template <typename T>
+  net::awaitable<void> serverLogic(T&& completionToken) {
     boost::beast::tcp_stream stream{std::move(server_)};
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;

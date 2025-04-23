@@ -258,8 +258,9 @@ look like this: `void func(std::string errorMessage, std::string descriptor,
 auto translationFunction, std::same_as<ConstConfigOptionProxy<bool>> auto...
 args)`.
 */
+template <typename F>
 void doConstructorTest(
-    auto generateValidatorManager,
+    F generateValidatorManager,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doConstructorTest")};

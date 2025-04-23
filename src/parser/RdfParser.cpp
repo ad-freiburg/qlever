@@ -1077,7 +1077,8 @@ void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
 
 // __________________________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
+template <typename Batch>
+void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
@@ -1100,8 +1101,9 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
 
 // _______________________________________________________________________
 template <typename T>
+template <typename Batch>
 void RdfParallelParser<T>::feedBatchesToParser(
-    auto remainingBatchFromInitialization) {
+    Batch remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
   auto cleanup =
