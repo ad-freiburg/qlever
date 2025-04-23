@@ -145,17 +145,20 @@ class RangeFilter {
   // Let X be the set of numbers x for which x _comparison _value is true. The
   // given range for `addEqualRange` are numbers that are equal to `_value` (not
   // necessarily all of them). The function adds them if they are a subset of X.
-  void addEqual(auto begin, auto end) {
+  template <typename T>
+  void addEqual(T begin, T end) {
     addImpl<Comparison::LE, Comparison::EQ, Comparison::GE>(begin, end);
   };
 
   // Analogous to `addEqual`.
-  void addSmaller(auto begin, auto end) {
+  template <typename T>
+  void addSmaller(T begin, T end) {
     addImpl<Comparison::LT, Comparison::LE, Comparison::NE>(begin, end);
   }
 
   // Analogous to `addEqual`.
-  void addGreater(auto begin, auto end) {
+  template <typename T>
+  void addGreater(T begin, T end) {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
   }
 
@@ -485,8 +488,9 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 
 // This function is part of the implementation of `compareIds` (see below).
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
-ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
+              ComparisonForIncompatibleTypes::AlwaysUndef,
+          typename Comparator>
+ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
   using enum ComparisonResult;

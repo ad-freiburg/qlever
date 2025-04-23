@@ -1144,8 +1144,8 @@ struct CallGivenLambdaWithAllCombinationsOfTypes {
     }
   };
 
-  template <size_t NumTemplateParameter, typename... Ts>
-  void operator()(auto&& func) const {
+  template <size_t NumTemplateParameter, typename... Ts, typename F>
+  void operator()(F&& func) const {
     if constexpr (NumTemplateParameter == 0) {
       func.template operator()<Ts...>();
     } else {
@@ -1631,8 +1631,9 @@ ConstConfigOptionProxy...)`. With `variant` being for the invariant of
 well as adding, of a new validator function.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doValidatorTest(
-    auto addValidatorFunction,
+    F addValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorTest")};
@@ -1879,8 +1880,9 @@ signature should look like this: `void func(ConfigManager& m,
 ConstConfigOptionProxy... validatorArguments)`.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doValidatorExceptionTest(
-    auto addAlwaysValidValidatorFunction,
+    F addAlwaysValidValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};
@@ -1918,8 +1920,9 @@ this: `void func(Validator validatorFunction, std::string_view
 validatorExceptionMessage, ConfigManager& m, ConstConfigOptionProxy...)`.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doAddOptionValidatorTest(
-    auto addNonExceptionValidatorFunction,
+    F addNonExceptionValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doAddOptionValidatorTest")};
@@ -2091,8 +2094,9 @@ signature should look like this: `void func(ConfigManager& m,
 ConstConfigOptionProxy... validatorArguments)`.
 @param l For better error messages, when the tests fail.
 */
+template <typename F>
 void doAddOptionValidatorExceptionTest(
-    auto addAlwaysValidValidatorFunction,
+    F addAlwaysValidValidatorFunction,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "doValidatorExceptionTest")};

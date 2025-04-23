@@ -94,7 +94,8 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
 namespace detail {
 // The common implementation of `utf8ToLower` and `utf8ToUpper` (for
 // details see below).
-std::string utf8StringTransform(std::string_view s, auto transformation) {
+template <typename F>
+std::string utf8StringTransform(std::string_view s, F transformation) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
