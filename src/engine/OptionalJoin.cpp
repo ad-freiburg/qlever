@@ -114,15 +114,15 @@ Result OptionalJoin::computeResult(bool requestLaziness) {
 
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
-  LOG(DEBUG) << "Computing optional join between results of size "
-             << leftResult->idTable().size() << " and "
-             << rightResult->idTable().size() << endl;
-
   if (!leftResult->isFullyMaterialized() ||
       !rightResult->isFullyMaterialized()) {
     return lazyOptionalJoin(std::move(leftResult), std::move(rightResult),
                             requestLaziness);
   }
+
+  LOG(DEBUG) << "Computing optional join between results of size "
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
                &idTable, implementation_);
