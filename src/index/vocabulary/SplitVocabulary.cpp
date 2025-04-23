@@ -99,19 +99,6 @@ CPP_template(class M, class S, const auto& SF, const auto& SFN)(
 
 // _____________________________________________________________________________
 CPP_template(class M, class S, const auto& SF, const auto& SFN)(
-    requires SplitFunctionT<SF> CPP_and
-        SplitFilenameFunctionT<SFN>) void SplitVocabulary<M, S, SF, SFN>::
-    build(const std::vector<std::string>& words, const std::string& filename) {
-  WWPtr writer = makeWordWriterPtr(filename);
-  for (const auto& word : words) {
-    (*writer)(word, true);
-  }
-  writer->finish();
-  open(filename);
-}
-
-// _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
         SFN>) void SplitVocabulary<M, S, SF, SFN>::close() {
   underlyingMain_.close();

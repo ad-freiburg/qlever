@@ -15,17 +15,20 @@
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
+// TODO docs
 // Func. to decide where a literal goes
 template <const auto& T>
 CPP_concept SplitFunctionT =
     ad_utility::InvocableWithExactReturnType<decltype(T), bool,
                                              std::string_view>;
 
+// TODO docs
 // Func. to get filenames for each vocabulary
 template <const auto& T>
 CPP_concept SplitFilenameFunctionT = ad_utility::InvocableWithExactReturnType<
     decltype(T), std::array<std::string, 2>, std::string>;
 
+// TODO docs
 CPP_template(class MainVocabulary, class SpecialVocabulary,
              const auto& SplitFunction, const auto& SplitFilenameFunction)(
     requires SplitFunctionT<SplitFunction> CPP_and
@@ -55,9 +58,6 @@ CPP_template(class MainVocabulary, class SpecialVocabulary,
   static bool isSpecialLiteral(const std::string& input) {
     return SplitFunction(input);
   };
-
-  void build(const std::vector<std::string>& words,
-             const std::string& filename);
 
   void close();
 
@@ -180,6 +180,7 @@ inline std::array<std::string, 2> geoFilenameFunc(std::string base) {
   return {base, base + ".geometry"};
 };
 
+// TODO docs
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<UnderlyingVocabulary, UnderlyingVocabulary, geoSplitFunc,
