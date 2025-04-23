@@ -29,7 +29,6 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
-#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"

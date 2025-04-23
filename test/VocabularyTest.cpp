@@ -8,12 +8,12 @@
 #include <cstdio>
 #include <vector>
 
-#include "../src/index/Vocabulary.h"
-#include "../src/util/json.h"
 #include "global/IndexTypes.h"
+#include "index/Vocabulary.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "util/json.h"
 
 using json = nlohmann::json;
 using std::string;
