@@ -673,3 +673,19 @@ std::unique_ptr<Operation> Operation::clone() const {
   AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
   return result;
 }
+
+// _____________________________________________________________________________
+bool Operation::columnOriginatesFromGraph(Variable variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // Returning false does never lead to a wrong result, but it might be
+  // inefficient.
+  if (ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
+        return child->getVariableColumnOrNullopt(variable).has_value();
+      })) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [&variable](const auto* child) {
+    return !child->getVariableColumnOrNullopt(variable).has_value() ||
+           child->getRootOperation()->columnOriginatesFromGraph(variable);
+  });
+}

@@ -127,6 +127,10 @@ class TransitivePathBase : public Operation {
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
 
+  // Store the active graphs for the transitive path operation. This is used to
+  // correctly match against the proper graph when the minimum distance is 0.
+  Graphs activeGraphs_;
+
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
@@ -260,7 +264,8 @@ class TransitivePathBase : public Operation {
   // Return an execution tree that represents one side of an empty path. This is
   // used as a starting point for evaluating the empty path.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
-      QueryExecutionContext* qec, Graphs activeGraphs);
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      std::optional<Variable> variable = std::nullopt);
 
  public:
   size_t getCostEstimate() override;
