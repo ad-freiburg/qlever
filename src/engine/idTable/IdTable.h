@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"

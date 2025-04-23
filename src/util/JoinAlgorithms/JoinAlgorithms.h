@@ -13,6 +13,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
@@ -587,7 +588,7 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 namespace detail {
 using Range = std::pair<size_t, size_t>;
 
-// Store a contiguous random-access range (e.g. `std::vector`or `std::span`,
+// Store a contiguous random-access range (e.g. `std::vector`or `ql::span`,
 // together with a pair of indices `[beginIndex, endIndex)` that denote a
 // contiguous subrange of the range. Note that this approach is more robust
 // than storing iterators or subranges directly instead of indices, because many

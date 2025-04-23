@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
@@ -214,8 +215,7 @@ class Result {
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());
     }
-    absl::Span<const LocalVocab*> vocabsSpan(vocabs.data(), vocabs.size());
-    return SharedLocalVocabWrapper{LocalVocab::merge(vocabsSpan)};
+    return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
   }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
