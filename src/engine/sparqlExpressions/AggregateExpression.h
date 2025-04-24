@@ -87,7 +87,7 @@ class AggregateExpression : public SparqlExpression {
 
  private:
   // _________________________________________________________________________
-  absl::Span<SparqlExpression::Ptr> childrenImpl() override;
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
 
  protected:
   bool _distinct;

@@ -8,18 +8,16 @@
 
 #include "backports/cppTemplate2.h"
 
-#ifndef QLEVER_CPP_17
-// In C++20 mode, use std::span
-#include <span>
-namespace ql {
-using std::span;
-}  // namespace ql
-
-#else
-// In C++17 mode, use range-v3's span implementation
+#ifdef QLEVER_CPP_17
 #include <range/v3/view/span.hpp>
 namespace ql {
 using ranges::span;
+}  // namespace ql
+
+#else
+#include <span>
+namespace ql {
+using std::span;
 }  // namespace ql
 
 #endif

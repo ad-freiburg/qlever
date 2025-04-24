@@ -43,8 +43,8 @@ class VariadicExpression : public SparqlExpression {
 
  private:
   // ___________________________________________________
-  absl::Span<SparqlExpression::Ptr> childrenImpl() override {
-    return absl::MakeSpan(children_.data(), children_.size());
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {children_.data(), children_.size()};
   }
 };
 

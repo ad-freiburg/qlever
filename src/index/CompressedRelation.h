@@ -261,7 +261,7 @@ class CompressedRelationWriter {
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
-      std::function<void(absl::Span<const CompressedRelationMetadata>)>;
+      std::function<void(std::span<const CompressedRelationMetadata>)>;
 
   struct WriterAndCallback {
     CompressedRelationWriter& writer_;
@@ -353,7 +353,7 @@ class CompressedRelationWriter {
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      absl::Span<const Id> column);
+      std::span<const Id> column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -418,7 +418,7 @@ class CompressedRelationReader {
 
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
-  using ColumnIndicesRef = absl::Span<const ColumnIndex>;
+  using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
@@ -471,7 +471,7 @@ class CompressedRelationReader {
   // to be performed.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
-    const absl::Span<const CompressedBlockMetadata> blockMetadata_;
+    const std::span<const CompressedBlockMetadata> blockMetadata_;
   };
 
   // This struct additionally contains the first and last triple of the scan
@@ -546,7 +546,7 @@ class CompressedRelationReader {
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
-      absl::Span<const Id> joinColumn,
+      std::span<const Id> joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an
@@ -579,7 +579,7 @@ class CompressedRelationReader {
    * The same `CompressedRelationWriter` (see below).
    */
   IdTable scan(const ScanSpecification& scanSpec,
-               absl::Span<const CompressedBlockMetadata> blocks,
+               std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
@@ -644,13 +644,13 @@ class CompressedRelationReader {
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
-  static absl::Span<const CompressedBlockMetadata> getRelevantBlocks(
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
       const ScanSpecification& blockA,
-      absl::Span<const CompressedBlockMetadata> blockB);
+      std::span<const CompressedBlockMetadata> blockB);
 
   // The same function, but specify the arguments as the
   // `ScanSpecAndBlocksAndBounds` struct.
-  static absl::Span<const CompressedBlockMetadata> getBlocksFromMetadata(
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
       const ScanSpecAndBlocks& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the

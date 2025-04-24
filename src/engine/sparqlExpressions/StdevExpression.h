@@ -49,8 +49,8 @@ class DeviationExpression : public SparqlExpression {
 
  private:
   // _________________________________________________________________________
-  absl::Span<SparqlExpression::Ptr> childrenImpl() override {
-    return absl::Span<SparqlExpression::Ptr>(&child_, 1);
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
+    return {&child_, 1};
   }
 };
 

@@ -159,8 +159,7 @@ TEST(LocalVocab, merge) {
 
   // Clone it and test that the clone contains the same words.
   auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
-  absl::Span<const LocalVocab*> vocabsSpan(vocabs.data(), vocabs.size());
-  LocalVocab localVocabMerged = LocalVocab::merge(vocabsSpan);
+  LocalVocab localVocabMerged = LocalVocab::merge(vocabs);
   ASSERT_EQ(localVocabMerged.size(), 4u);
   ASSERT_THAT(localVocabMerged.getAllWordsForTesting(),
               ::testing::UnorderedElementsAre(lit("oneA"), lit("twoA"),
@@ -180,8 +179,7 @@ TEST(LocalVocab, merge) {
     LocalVocab vocC, vocD;
     id = vocC.getBlankNodeIndex(&bnm);
     auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
-    absl::Span<const LocalVocab*> vocabs2Span(vocabs2.data(), vocabs2.size());
-    localVocabMerged2 = LocalVocab::merge(vocabs2Span);
+    localVocabMerged2 = LocalVocab::merge(vocabs2);
   }
   EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
 

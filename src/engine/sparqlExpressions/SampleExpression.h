@@ -25,9 +25,7 @@ class SampleExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  absl::Span<Ptr> childrenImpl() override {
-    return absl::Span<Ptr>(&_child, 1);
-  }
+  std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
   // SAMPLE is an aggregate, the distinctness doesn't matter, so we return "not
   // distinct", because that allows for more efficient implementations in GROUP

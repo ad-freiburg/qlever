@@ -41,8 +41,8 @@ struct LocatedTriple {
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      absl::Span<const IdTriple<0>> triples,
-      absl::Span<const CompressedBlockMetadata> blockMetadata,
+      std::span<const IdTriple<0>> triples,
+      std::span<const CompressedBlockMetadata> blockMetadata,
       const qlever::KeyOrder& keyOrder, bool shouldExist,
       ad_utility::SharedCancellationHandle cancellationHandle);
   bool operator==(const LocatedTriple&) const = default;
@@ -148,7 +148,7 @@ class LocatedTriplesPerBlock {
   // PRECONDITION: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      absl::Span<const LocatedTriple> locatedTriples);
+      std::span<const LocatedTriple> locatedTriples);
 
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 

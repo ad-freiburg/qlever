@@ -45,7 +45,7 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
 // Convert `IdxPairRanges` to `BlockMetadataRanges` with respect to
-// `BlockMetadataIt beginBlockSpan` (first possible `absl::Span<const
+// `BlockMetadataIt beginBlockSpan` (first possible `std::span<const
 // CompressedBlockMetadata>::iterator`).
 static BlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
     const BlockMetadataIt& beginBlockSpan, const IdxPairRanges idxRanges) {
@@ -380,13 +380,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Test the `mapValueIdItRangesToBlockItRangesComplemented` (if
   // `testComplement = true`) or `mapValueIdItRangesToBlockItRanges` helper
   // function of `PrefilterExpression`s. We assert that the retrieved
-  // relevant iterators with respect to the containerized `absl::Span<const
+  // relevant iterators with respect to the containerized `std::span<const
   // CompressedBlockMetadata> evalBlocks` are correctly mapped back to
   // `RelevantBlockRange`s (index values regarding `evalBlocks`).
   auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
                                   IdxPairRanges&& relevantIdxRanges,
                                   bool testComplement) {
-    absl::Span<const CompressedBlockMetadata> evalBlocks(
+    std::span<const CompressedBlockMetadata> evalBlocks(
         allTestBlocksIsDatatype);
     // Make `ValueId`s of `evalBlocks` accessible by iterators.
     // For the defined `CompressedBlockMetadata` values above, evaluation column
@@ -423,8 +423,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   template <bool TestUnion>
   auto makeTestAndOrOrMergeBlocks(IdxPairRanges&& r1, IdxPairRanges&& r2,
                                   IdxPairRanges&& rExpected) {
-    absl::Span<const CompressedBlockMetadata> blockSpan(
-        allTestBlocksIsDatatype);
+    std::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
     auto mergedBlockItRanges =
         prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<

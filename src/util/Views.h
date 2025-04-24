@@ -352,14 +352,14 @@ CPP_template(typename Range, typename Transformation)(
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<absl::Span<ElementType>> reChunkAtSeparator(
+    generator<std::span<ElementType>> reChunkAtSeparator(
         Range generator, ElementType separator) {
   std::vector<ElementType> buffer;
   for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
        generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
-        co_yield absl::Span{buffer.data(), buffer.size()};
+        co_yield std::span{buffer.data(), buffer.size()};
         buffer.clear();
       } else {
         buffer.push_back(c);
@@ -367,7 +367,7 @@ CPP_template(typename Range, typename ElementType)(
     }
   }
   if (!buffer.empty()) {
-    co_yield absl::Span{buffer.data(), buffer.size()};
+    co_yield std::span{buffer.data(), buffer.size()};
   }
 }
 }  // namespace ad_utility

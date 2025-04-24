@@ -1,8 +1,6 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -31,14 +29,7 @@ auto vectorsEqual = [](const auto& compactVector, const auto& compareVector) {
   for (size_t i = 0; i < compactVector.size(); ++i) {
     using value_type =
         typename std::decay_t<decltype(compareVector)>::value_type;
-    value_type a = [&]() {
-      if constexpr (std::is_same_v<value_type, std::vector<int>> ||
-                    std::is_same_v<value_type, std::vector<char>>) {
-        return value_type(compactVector[i].begin(), compactVector[i].end());
-      } else {
-        return value_type(compactVector[i].data(), compactVector[i].size());
-      }
-    }();
+    value_type a(compactVector[i].begin(), compactVector[i].end());
     iterablesEqual(a, compareVector[i]);
   }
 };

@@ -17,7 +17,7 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline absl::Span<const ValueId> getIdsFromVariable(
+inline std::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
@@ -28,17 +28,17 @@ inline absl::Span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  absl::Span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
-  return absl::Span<const ValueId>(completeColumn.data() + beginIndex,
-                                   endIndex - beginIndex);
+  return {completeColumn.begin() + beginIndex,
+          completeColumn.begin() + endIndex};
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline absl::Span<const ValueId> getIdsFromVariable(
+inline std::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);

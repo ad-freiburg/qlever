@@ -89,7 +89,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 
   auto pushToBuffer =
       absl::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
-                       std::ref(buffer), std::ref(sizeOfCurrentBlock));
+                      std::ref(buffer), std::ref(sizeOfCurrentBlock));
 
   auto isBufferLargeEnough = [&] {
     return buffer.size() >= maxBlockSize || sizeOfCurrentBlock >= maxMem;

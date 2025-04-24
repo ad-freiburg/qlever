@@ -52,9 +52,7 @@ class StringExpressionImplImpl : public SparqlExpression {
   }
 
  private:
-  absl::Span<Ptr> childrenImpl() override {
-    return absl::MakeSpan(impl_->children().data(), impl_->children().size());
-  }
+  std::span<Ptr> childrenImpl() override { return impl_->children(); }
 };
 
 // Impl class for expressions that work on plain strings.

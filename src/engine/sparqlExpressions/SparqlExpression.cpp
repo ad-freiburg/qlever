@@ -131,7 +131,7 @@ bool SparqlExpression::isConstantExpression() const { return false; }
 bool SparqlExpression::isStrExpression() const { return false; }
 
 // _____________________________________________________________________________
-absl::Span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
+std::span<const SparqlExpression::Ptr> SparqlExpression::childrenForTesting()
     const {
   return children();
 }
@@ -144,19 +144,18 @@ std::vector<SparqlExpression::Ptr> SparqlExpression::moveChildrenOut() && {
 }
 
 // _____________________________________________________________________________
-absl::Span<SparqlExpression::Ptr> SparqlExpression::children() {
+std::span<SparqlExpression::Ptr> SparqlExpression::children() {
   return childrenImpl();
 }
 
 // _____________________________________________________________________________
-absl::Span<const SparqlExpression::Ptr> SparqlExpression::children() const {
+std::span<const SparqlExpression::Ptr> SparqlExpression::children() const {
   auto children = const_cast<SparqlExpression&>(*this).children();
-  return absl::Span<const SparqlExpression::Ptr>(children.data(),
-                                                 children.size());
+  return {children.data(), children.size()};
 }
 
 // _____________________________________________________________________________
-absl::Span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
+std::span<const Variable> SparqlExpression::getContainedVariablesNonRecursive()
     const {
   // Default implementation: This expression adds no strings or variables.
   return {};

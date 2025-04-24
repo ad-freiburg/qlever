@@ -198,7 +198,7 @@ class DeltaTriples {
   // maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       CancellationHandle cancellationHandle,
-      absl::Span<const IdTriple<0>> idTriples, bool shouldExist);
+      std::span<const IdTriple<0>> idTriples, bool shouldExist);
 
   // Common implementation for `insertTriples` and `deleteTriples`.
   // `shouldExist` specifies the action: insert or delete. `targetMap` contains

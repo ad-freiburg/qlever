@@ -58,7 +58,7 @@ class PrefixRegexExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  absl::Span<Ptr> childrenImpl() override;
+  std::span<Ptr> childrenImpl() override;
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.

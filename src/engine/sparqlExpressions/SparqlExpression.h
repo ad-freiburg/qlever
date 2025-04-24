@@ -144,14 +144,14 @@ class SparqlExpression {
 
   // Returns all the children of this expression. Typically only used for
   // testing
-  virtual absl::Span<const SparqlExpression::Ptr> childrenForTesting()
+  virtual std::span<const SparqlExpression::Ptr> childrenForTesting()
       const final;
 
   virtual std::vector<SparqlExpression::Ptr> moveChildrenOut() && final;
 
   // Get the direct child expressions.
-  virtual absl::Span<SparqlExpression::Ptr> children() final;
-  virtual absl::Span<const SparqlExpression::Ptr> children() const final;
+  virtual std::span<SparqlExpression::Ptr> children() final;
+  virtual std::span<const SparqlExpression::Ptr> children() const final;
 
   // Return true if this expression or any of its ancestors in the expression
   // tree is an aggregate. For an example usage see the `LiteralExpression`
@@ -159,12 +159,12 @@ class SparqlExpression {
   bool isInsideAggregate() const;
 
  private:
-  virtual absl::Span<SparqlExpression::Ptr> childrenImpl() = 0;
+  virtual std::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child
   // expressions.
-  virtual absl::Span<const Variable> getContainedVariablesNonRecursive() const;
+  virtual std::span<const Variable> getContainedVariablesNonRecursive() const;
 
  protected:
   // After calling this function, `isInsideAlias()` (see below) returns true for

@@ -69,7 +69,7 @@ class UuidExpressionImpl : public SparqlExpression {
   }
 
  private:
-  absl::Span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  //  namespace detail::uuidExpression

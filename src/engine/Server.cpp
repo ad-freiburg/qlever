@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <absl/functional/bind_front.h>
 
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
@@ -302,8 +303,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter = absl::bind_front(
-      &ad_utility::url_parser::checkParameter, std::cref(parameters));
+  auto checkParameter = absl::bind_front(&ad_utility::url_parser::checkParameter,
+                                        std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the

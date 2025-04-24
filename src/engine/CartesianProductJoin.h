@@ -89,8 +89,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(absl::Span<Id> targetColumn,
-                         absl::Span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(std::span<Id> targetColumn,
+                         std::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
