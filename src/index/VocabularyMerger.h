@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_VOCABULARYMERGER_H
+#define QLEVER_SRC_INDEX_VOCABULARYMERGER_H
 
 #include <string>
 #include <utility>
@@ -16,6 +18,7 @@
 #include "util/HashMap.h"
 #include "util/MmapVector.h"
 #include "util/ProgressBar.h"
+#include "util/TypeTraits.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
@@ -28,8 +31,10 @@ namespace ad_utility::vocabulary_merger {
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
 template <typename T>
-CPP_concept WordCallback = ranges::invocable<T, std::string_view, bool>;
-// Concept for a callable that compares to `string_view`s.
+CPP_concept WordCallback =
+    ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
+                                             bool>;
+// Concept for a callable that compares two `string_view`s.
 template <typename T>
 CPP_concept WordComparator =
     ranges::predicate<T, std::string_view, std::string_view>;
@@ -211,10 +216,9 @@ class VocabularyMerger {
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
   // clang-format off
-  CPP_template(typename C, typename L)(
+    CPP_template(typename C, typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
-          L, TripleComponentWithIndex,
-          TripleComponentWithIndex>)
+          L, TripleComponentWithIndex, TripleComponentWithIndex>)
       // clang-format on
       void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
                                   C& wordCallback, const L& lessThan,
@@ -256,7 +260,8 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-void writeMappedIdsToExtVec(const auto& input,
+template <typename T>
+void writeMappedIdsToExtVec(const T& input,
                             const ad_utility::HashMap<Id, Id>& map,
                             std::unique_ptr<TripleVec>* writePtr);
 
@@ -293,3 +298,5 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }  // namespace ad_utility::vocabulary_merger
 
 #include "VocabularyMergerImpl.h"
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARYMERGER_H

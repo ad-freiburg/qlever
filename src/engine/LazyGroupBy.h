@@ -2,7 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_LAZYGROUPBY_H
+#define QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 
 #include "engine/GroupBy.h"
 
@@ -45,9 +46,10 @@ class LazyGroupBy {
   void resetAggregationData();
 
   // Helper function to visit the correct variant of the aggregation data.
-  void visitAggregate(const auto& visitor,
+  template <typename Visitor, typename... Args>
+  void visitAggregate(const Visitor& visitor,
                       const GroupBy::HashMapAggregateInformation& aggregateInfo,
-                      auto&&... additionalVariants);
+                      Args&&... additionalVariants);
 
   auto allAggregateInfoView() const {
     return aggregateAliases_ |
@@ -58,3 +60,5 @@ class LazyGroupBy {
 
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);
 };
+
+#endif  // QLEVER_SRC_ENGINE_LAZYGROUPBY_H

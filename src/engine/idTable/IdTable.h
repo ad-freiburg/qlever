@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
+#define QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H
 
 #include <array>
 #include <cassert>
@@ -817,7 +818,8 @@ class IdTable {
 
   // Common implementation for const and mutable overloads of `getColumns`
   // (see below).
-  static auto getColumnsImpl(auto&& self) {
+  template <typename Self>
+  static auto getColumnsImpl(Self&& self) {
     using Column = decltype(self.getColumn(0));
     if constexpr (isDynamic) {
       // TODO<joka921, for the dynamic case we could maybe use a vector with
@@ -897,3 +899,5 @@ template <int COLS>
 using IdTableView =
     columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
+
+#endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

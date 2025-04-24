@@ -2,7 +2,8 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_LITERAL_H
+#define QLEVER_SRC_PARSER_LITERAL_H
 
 #include <optional>
 #include <variant>
@@ -101,5 +102,18 @@ class Literal {
 
   // Remove the datatype suffix from the Literal.
   void removeDatatypeOrLanguageTag();
+
+  // Replace the content of the Literal object with `newContent`.
+  // It truncates or extends the content based on the length of newContent
+  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  void replaceContent(std::string_view newContent);
+
+  // Concatenates the content of the current literal with another literal.
+  // If the language tag or datatype of the literals differ, the existing
+  // language tag or datatype is removed from the current literal. Used in the
+  // CONCAT function in StringExpressions.cpp.
+  void concat(const Literal& other);
 };
 }  // namespace ad_utility::triple_component
+
+#endif  // QLEVER_SRC_PARSER_LITERAL_H

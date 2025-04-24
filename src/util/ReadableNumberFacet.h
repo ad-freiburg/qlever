@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_READABLENUMBERFACT_H
+#define QLEVER_SRC_UTIL_READABLENUMBERFACT_H
 
-#include <locale>
 #include <string>
 
-using std::string;
 namespace ad_utility {
 
 // Facet for number formatting.
@@ -26,12 +25,14 @@ namespace ad_utility {
 // using RIIA as ReadableNumberFacet rnf(1);
 class ReadableNumberFacet : public std::numpunct<char> {
  public:
-  explicit ReadableNumberFacet(size_t refs = 0) : std::numpunct<char>(refs) {}
+  using std::numpunct<char>::numpunct;
 
-  virtual ~ReadableNumberFacet() {}
+  ~ReadableNumberFacet() override = default;
 
-  virtual char do_thousands_sep() const { return ','; }
+  char do_thousands_sep() const override { return ','; }
 
-  virtual string do_grouping() const { return "\003"; }
+  std::string do_grouping() const override { return "\003"; }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_READABLENUMBERFACT_H

@@ -66,14 +66,15 @@ Server::Server(unsigned short port, size_t numThreads,
 
 // __________________________________________________________________________
 void Server::initialize(const string& indexBaseName, bool useText,
-                        bool usePatterns, bool loadAllPermutations) {
+                        bool usePatterns, bool loadAllPermutations,
+                        bool persistUpdates) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
   index_.usePatterns() = usePatterns;
   index_.loadAllPermutations() = loadAllPermutations;
 
   // Init the index.
-  index_.createFromOnDiskIndex(indexBaseName);
+  index_.createFromOnDiskIndex(indexBaseName, persistUpdates);
   if (useText) {
     index_.addTextFromOnDiskIndex();
   }
@@ -88,7 +89,7 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
 // _____________________________________________________________________________
 void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
-                 bool loadAllPermutations) {
+                 bool loadAllPermutations, bool persistUpdates) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -163,7 +164,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
                                std::move(webSocketSessionSupplier)};
 
   // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
+  initialize(indexBaseName, useText, usePatterns, loadAllPermutations,
+             persistUpdates);
 
   LOG(INFO) << "The server is ready, listening for requests on port "
             << std::to_string(httpServer.getPort()) << " ..." << std::endl;

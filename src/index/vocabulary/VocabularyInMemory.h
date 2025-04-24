@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H
 
 #include <string>
 #include <string_view>
@@ -54,7 +55,8 @@ class VocabularyInMemory
   auto operator[](uint64_t i) const { return _words[i]; }
 
   // Conversion function that is used by the Mixin base class.
-  WordAndIndex iteratorToWordAndIndex(auto it) const {
+  template <typename It>
+  WordAndIndex iteratorToWordAndIndex(It it) const {
     if (it == _words.end()) {
       return WordAndIndex::end();
     }
@@ -67,36 +69,33 @@ class VocabularyInMemory
   /// documentation of `CompactVectorOfStrings` for details.
   struct WordWriter {
     typename Words::Writer writer_;
+    uint64_t index_ = 0;
+    std::string readableName_ = "";
+
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
-    void operator()(std::string_view str) {
+    uint64_t operator()(std::string_view str,
+                        [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
+      return index_++;
     }
 
     void finish() { writer_.finish(); }
+    std::string& readableName() { return readableName_; }
   };
 
-  // Return a `WordWriter` that directly writes the words to the given
-  // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initizlied via `open(filename)`.
-  WordWriter makeDiskWriter(const std::string& filename) const {
-    return WordWriter{filename};
+  // Return a `unique_ptr<WordWriter>` that directly writes the words to the
+  // given `filename`. The words are not materialized in RAM, but the vocabulary
+  // later has to be explicitly initialized via `open(filename)`.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
   }
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
 
-  /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
-  }
-
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }
   auto end() const { return _words.end(); }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORY_H

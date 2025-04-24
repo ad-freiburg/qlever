@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H
 
 #include <iterator>
 #include <memory>
@@ -53,6 +54,17 @@ struct BinSearchMap {
 
     return targetIds_.subspan(startIndex, range.size());
   }
+
+  // Retrieve pointer to equal id from `startIds_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto range = ql::ranges::equal_range(startIds_, node);
+    if (range.empty()) {
+      return nullptr;
+    }
+    return &range.front();
+  }
 };
 
 /**
@@ -87,3 +99,5 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
     return {&alternativelySortedSubtree_, 1};
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBINSEARCH_H

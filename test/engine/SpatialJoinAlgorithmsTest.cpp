@@ -11,13 +11,10 @@
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "gtest/gtest.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -26,7 +23,8 @@ using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
 // Shortcut for SpatialJoin task parameters
-using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+using SJ =
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
 
 namespace computeResultTest {
 
@@ -283,9 +281,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    ad_utility::MemorySize blocksizePermutations = 128_MB;
-    auto qec = ad_utility::testing::getQec(kg, true, true, false,
-                                           blocksizePermutations, false);
+    auto qec = buildQec(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -1539,8 +1535,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   addRow(kg, "5", multiLinestring);
   addRow(kg, "6", multiPolygon);
 
-  auto qec = ad_utility::testing::getQec(kg, true, true, false, 16_MB, false,
-                                         true, std::nullopt, 10_kB);
+  auto qec = buildQec(kg);
   return qec;
 }
 

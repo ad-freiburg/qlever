@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
+#define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H
 
 #include <string>
 #include <string_view>
@@ -74,7 +75,7 @@ class VocabularyInMemoryBinSearch
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than
     // all previous indices.
-    void operator()(std::string_view word, uint64_t idx);
+    uint64_t operator()(std::string_view word, uint64_t idx);
 
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
@@ -88,3 +89,5 @@ class VocabularyInMemoryBinSearch
   auto begin() const { return words_.begin(); }
   auto end() const { return words_.end(); }
 };
+
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYINMEMORYBINSEARCH_H

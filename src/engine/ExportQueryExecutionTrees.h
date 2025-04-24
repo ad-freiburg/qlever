@@ -4,7 +4,8 @@
 //          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
+#define QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H
 
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -38,6 +39,11 @@ class ExportQueryExecutionTrees {
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
+
+  // Return the corresponding blank node string representation for the export if
+  // this iri is a blank node iri. Otherwise, return std::nullopt.
+  static std::optional<std::string> blankNodeIriToString(
+      const ad_utility::triple_component::Iri& iri);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -93,10 +99,35 @@ class ExportQueryExecutionTrees {
   static std::optional<Literal> idToLiteralForEncodedValue(
       Id id, bool onlyReturnLiteralsWithXsdString = false);
 
-  // A helper function for the `idToLiteralOrIri` function. Checks and processes
+  // A helper function for the `idToLiteral` function. Checks and processes
   // a LiteralOrIri based on the given parameters.
   static std::optional<Literal> handleIriOrLiteral(
       LiteralOrIri word, bool onlyReturnLiteralsWithXsdString);
+
+  // The function resolves a given `ValueId` to a `LiteralOrIri` object. Unlike
+  // `idToLiteral` no further processing is applied to the string content.
+  static std::optional<LiteralOrIri> idToLiteralOrIri(
+      const Index& index, Id id, const LocalVocab& localVocab,
+      bool skipEncodedValues = false);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal from
+  // a value encoded in the given ValueId.
+  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
+  // a word in the vocabulary.
+  static std::optional<LiteralOrIri> getLiteralOrIriFromWordVocabIndex(
+      const Index& index, Id id);
+
+  // Helper for the `idToLiteralOrIri` function: Retrieves a string literal for
+  // a word in the text index.
+  static std::optional<LiteralOrIri> getLiteralOrIriFromTextRecordIndex(
+      const Index& index, Id id);
+
+  // Helper for the `idToLiteral` function: get only literals from the
+  // `LiteralOrIri` object.
+  static std::optional<Literal> getLiteralOrNullopt(
+      std::optional<LiteralOrIri> litOrIri);
 
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.
@@ -246,3 +277,5 @@ class ExportQueryExecutionTrees {
               ensureGeneratorIsNotConsumedWhenNotRequired);
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
 };
+
+#endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

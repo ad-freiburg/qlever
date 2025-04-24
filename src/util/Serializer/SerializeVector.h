@@ -5,6 +5,7 @@
 #ifndef QLEVER_SERIALIZEVECTOR_H
 #define QLEVER_SERIALIZEVECTOR_H
 
+#include <cstdint>
 #include <string>
 #include <type_traits>
 #include <vector>

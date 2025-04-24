@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Florian Kramer [2018 - 2020]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/GroupBy.h"
 
@@ -283,7 +285,7 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
 
 // _____________________________________________________________________________
 sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
-    const LocalVocab& localVocab, const IdTable& idTable) const {
+    LocalVocab& localVocab, const IdTable& idTable) const {
   sparqlExpression::EvaluationContext evaluationContext{
       *getExecutionContext(),
       _subtree->getVariableColumns(),
@@ -1274,8 +1276,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     const auto numberOfGroups = getNumberOfGroups();
 
     std::visit(
-        [&resizeVectors, &aggregationTypeWithData,
-         numberOfGroups]<typename T>(T& arg) {
+        [&resizeVectors, &aggregationTypeWithData, numberOfGroups](auto& arg) {
           resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
@@ -1510,10 +1511,10 @@ static constexpr auto makeProcessGroupsVisitor =
     };
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupBy::computeGroupByForHashMapOptimization(
-    std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
-    const std::vector<size_t>& columnIndices) const {
+    std::vector<HashMapAliasInformation>& aggregateAliases,
+    SubResults subresults, const std::vector<size_t>& columnIndices) const {
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;

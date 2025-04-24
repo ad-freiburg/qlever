@@ -1,9 +1,12 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Several templated helper functions that are used for the Expression module
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -122,11 +125,11 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-inline auto applyFunction = []<typename Function, typename... Generators>(
-                                Function&& function, size_t numItems,
-                                Generators... generators)
+inline auto applyFunction = [](auto&& function, size_t numItems,
+                               auto... generators)
     -> cppcoro::generator<std::invoke_result_t<
-        Function, ql::ranges::range_value_t<Generators>...>> {
+        decltype(function),
+        ql::ranges::range_value_t<decltype(generators)>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 
@@ -197,3 +200,5 @@ inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value,
 }
 
 }  // namespace sparqlExpression::detail
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H

@@ -3,7 +3,9 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_FILTER_H
+#define QLEVER_SRC_ENGINE_FILTER_H
 
 #include <utility>
 #include <vector>
@@ -84,3 +86,5 @@ class Filter : public Operation {
       IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
                             const LocalVocab& localVocab) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_FILTER_H

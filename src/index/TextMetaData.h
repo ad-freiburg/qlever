@@ -1,7 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_INDEX_TEXTMETADATA_H
+#define QLEVER_SRC_INDEX_TEXTMETADATA_H
 
 #include <cstdio>
 #include <vector>
@@ -76,7 +78,9 @@ class TextBlockMetaData {
   static constexpr size_t sizeOnDisk() {
     return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
   }
-  friend std::true_type allowTrivialSerialization(TextBlockMetaData, auto);
+
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(TextBlockMetaData, T);
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
@@ -134,3 +138,5 @@ class TextMetaData {
     serializer | arg._blocks;
   }
 };
+
+#endif  // QLEVER_SRC_INDEX_TEXTMETADATA_H

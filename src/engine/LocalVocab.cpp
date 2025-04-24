@@ -31,6 +31,13 @@ void LocalVocab::mergeWith(const LocalVocab& other) {
 // _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
+  // We can't modify the word set after it has been copied, otherwise we will
+  // silently alter the size of other `LocalVocab`s leading to assertion errors
+  // and data races. Please note that this check does not ensure thread safety!
+  // If you're concurrently reading and writing to the same local vocab, you
+  // still might end up with data races but it helps to find wrong
+  // implementations.
+  AD_CORRECTNESS_CHECK(!copied_->load());
   auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
   size_ += static_cast<size_t>(isNewWord);
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
@@ -99,4 +106,15 @@ bool LocalVocab::isBlankNodeIndexContained(
     return false;
   }
   return localBlankNodeManager_->containsBlankNodeIndex(blankNodeIndex.get());
+}
+
+// _____________________________________________________________________________
+LocalVocab::LifetimeExtender LocalVocab::getLifetimeExtender() const {
+  std::vector<std::shared_ptr<const Set>> wordSets;
+  wordSets.reserve(otherWordSets_.size() + 1);
+  if (!primaryWordSet_->empty()) {
+    wordSets.emplace_back(primaryWordSet_);
+  }
+  ql::ranges::copy(otherWordSets_, std::back_inserter(wordSets));
+  return LifetimeExtender{std::move(wordSets)};
 }

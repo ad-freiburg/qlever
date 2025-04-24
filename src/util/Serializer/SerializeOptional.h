@@ -2,7 +2,9 @@
 //                  Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H
+#define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H
+
 #include <optional>
 
 #include "util/Serializer/Serializer.h"
@@ -31,3 +33,5 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
 }
 }  // namespace ad_utility::serialization
+
+#endif  // QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H

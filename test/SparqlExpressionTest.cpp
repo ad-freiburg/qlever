@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
@@ -19,6 +21,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -143,7 +146,8 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
     return matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
     return std::visit(
-        []<typename U>(const U& el) {
+        [](const auto& el) {
+          using U = std::decay_t<decltype(el)>;
           return ::testing::MatcherCast<const IdOrLiteralOrIri&>(
               ::testing::VariantWith<U>(nonVectorResultMatcher(el)));
         },
@@ -157,19 +161,19 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
 // `expected` being a single element or a vector and the case of `expected`
 // storing `Ids` which have to be handled using the `matchId` matcher (see
 // above) are all handled correctly.
-auto sparqlExpressionResultMatcher =
-    []<typename Expected>(const Expected& expected) {
-      CPP_assert(SingleExpressionResult<Expected>);
-      if constexpr (isVectorResult<Expected>) {
-        auto matcherVec =
-            ad_utility::transform(expected, [](const auto& singleExpected) {
-              return nonVectorResultMatcher(singleExpected);
-            });
-        return ::testing::ElementsAreArray(matcherVec);
-      } else {
-        return nonVectorResultMatcher(expected);
-      }
-    };
+auto sparqlExpressionResultMatcher = [](const auto& expected) {
+  using Expected = std::decay_t<decltype(expected)>;
+  CPP_assert(SingleExpressionResult<Expected>);
+  if constexpr (isVectorResult<Expected>) {
+    auto matcherVec =
+        ad_utility::transform(expected, [](const auto& singleExpected) {
+          return nonVectorResultMatcher(singleExpected);
+        });
+    return ::testing::ElementsAreArray(matcherVec);
+  } else {
+    return nonVectorResultMatcher(expected);
+  }
+};
 
 // A generic function that can copy all kinds of `SingleExpressionResult`s. Note
 // that we have disabled the implicit copying of vector results, but for testing
@@ -194,7 +198,8 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   IdTable table{alloc};
 
   // Get the size of `operand`: size for a vector, 1 otherwise.
-  auto getResultSize = []<typename T>(const T& operand) -> size_t {
+  auto getResultSize = [](const auto& operand) -> size_t {
+    using T = std::decay_t<decltype(operand)>;
     if constexpr (isVectorResult<T>) {
       return operand.size();
     }
@@ -702,8 +707,22 @@ auto checkLcase = testUnaryExpression<&makeLowercaseExpression>;
 TEST(SparqlExpression, uppercaseAndLowercase) {
   checkLcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("one"), lit("twö"), U, U});
+  checkLcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("one", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
+  checkUcase(
+      IdOrLiteralOrIriVec{
+          lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("One", "@en"), U, I(12)},
+      IdOrLiteralOrIriVec{
+          lit("ONE", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("ONE", "@en"), U, U});
 }
 
 // _____________________________________________________________________________________
@@ -744,13 +763,44 @@ TEST(SparqlExpression, binaryStringOperations) {
                 S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
                 S({"", "x", "", "ullo", "ll", "Hällo", "Hällox"}));
   checkStrAfter(
-      S({"", "", "Hällo", "", "o", "", "", "lo"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "Hällo", "", "o", "", "", "lo"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrAfter(
+      IdOrLiteralOrIriVec{
+          lit("bc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("c", "@en"), lit(""), lit("abc", "@en"), lit("abc", "@en"),
+          lit(""), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
+          lit("z", "@en"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+
   checkStrBefore(
-      S({"", "", "Hällo", "", "Hä", "", "", "Hä"}),
-      S({"", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
-      S({"", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+      S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
+      S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
+      S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
+  checkStrBefore(
+      IdOrLiteralOrIriVec{
+          lit("a", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit(""), lit("", "@en"), lit("", "@en"), lit(""),
+          lit("", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{
+          lit("bc"), lit(""), lit("bc"), lit("z"), lit(""), lit("", "@en"),
+          lit("z", "@en"),
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
 }
 
 // ______________________________________________________________________________
@@ -1320,26 +1370,35 @@ TEST(SparqlExpression, concatExpression) {
   auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
 
   const auto T = Id::makeFromBool(true);
+
+  checkConcat(idOrLitOrStringVec({U, U, U}),
+              std::tuple{Ids{U, I(0), U}, Ids{U, U, I(0)}});
+
+  //  CONCAT function explicitly takes string literals according to the sparql
+  //  standard.
   checkConcat(
-      idOrLitOrStringVec({"0null", "eins", "2zwei", "3drei", "", "5.35.2"}),
-      // UNDEF evaluates to an empty string..
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.3)},
-                 idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
-                 Ids{U, U, U, U, U, D(5.2)}});
+      idOrLitOrStringVec({"0null0", U, U, U, U}),
+      std::tuple{idOrLitOrStringVec({"0", I(1), "zwei", T, D(5.3)}),
+                 idOrLitOrStringVec({"null", "eins", I(2), "true", ""}),
+                 idOrLitOrStringVec({"0", "EINS", "ZWEI", "TRUE", D(5.2)})});
   // Example with some constants in the middle.
   checkConcat(
-      idOrLitOrStringVec({"0trueeins", "trueeins", "2trueeins", "3trueeins",
-                          "trueeins", "12.3trueeins-2.1"}),
-      // UNDEF and the empty string are considered to be `false`.
-      std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
-                 IdOrLiteralOrIri{lit("eins")}, Ids{U, U, U, U, U, D(-2.1)}});
+      idOrLitOrStringVec(
+          {"0trueeins", U, "2trueeins", "3trueeins", U, "12.3trueeins-2.1"}),
+      std::tuple{idOrLitOrStringVec({"0", U, "2", "3", "", "12.3"}),
+                 IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("eins")},
+                 idOrLitOrStringVec({"", "", "", "", I(4), "-2.1"})});
 
   // Only constants
-  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, I(1)});
+  checkConcat(
+      IdOrLiteralOrIri{lit("trueMe1")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 IdOrLiteralOrIri{lit("1")}});
   // Constants at the beginning.
-  checkConcat(IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
-              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, Ids{I(1), I(2)}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("trueMe1"), lit("trueMe2")},
+      std::tuple{IdOrLiteralOrIri{lit("true")}, IdOrLiteralOrIri{lit("Me")},
+                 idOrLitOrStringVec({"1", "2"})});
 
   checkConcat(IdOrLiteralOrIri{lit("")}, std::tuple{});
   auto coalesceExpr = makeConcatExpressionVariadic(
@@ -1349,6 +1408,72 @@ TEST(SparqlExpression, concatExpression) {
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
+  // Only constants with datatypes or language tags.
+  checkConcat(
+      IdOrLiteralOrIri{
+          lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit(
+                     "World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld", "@en")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@en")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit("World")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
+                         IdOrLiteralOrIri{lit("World")}});
+  checkConcat(IdOrLiteralOrIri{lit("HelloWorld")},
+              std::tuple{IdOrLiteralOrIri{lit("Hello", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIri{lit("HelloWorld")},
+      std::tuple{IdOrLiteralOrIri{lit(
+                     "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+                 IdOrLiteralOrIri{lit("World", "@en")}});
+
+  // Constants at beginning with datatypes or language tags.
+  checkConcat(IdOrLiteralOrIriVec{lit("MeHello", "@en"), lit("MeWorld"),
+                                  lit("MeHallo")},
+              std::tuple{IdOrLiteralOrIri{lit("Me", "@en")},
+                         IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("World"),
+                                             lit("Hallo", "@de")}});
+  checkConcat(
+      IdOrLiteralOrIriVec{
+          lit("MeHello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("MeWorld"), lit("MeHallo")},
+      std::tuple{
+          IdOrLiteralOrIri{
+              lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+          IdOrLiteralOrIriVec{
+              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("World"), lit("Hallo", "@de")}});
+
+  // Vector at the beginning with datatypes or language tags.
+  checkConcat(
+      IdOrLiteralOrIriVec{
+          lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("HiWorld"), lit("HalloWorld")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+              lit("Hi"), lit("Hallo", "@de")},
+          IdOrLiteralOrIri{
+              lit("World", "^^<http://www.w3.org/2001/XMLSchema#string>")}});
+  checkConcat(IdOrLiteralOrIriVec{lit("HelloWorld", "@en"), lit("HiWorld"),
+                                  lit("HalloWorld")},
+              std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hi"),
+                                             lit("Hallo", "@de")},
+                         IdOrLiteralOrIri{lit("World", "@en")}});
+  checkConcat(
+      IdOrLiteralOrIriVec{lit("HelloWorld!"), lit("HalloWorld!")},
+      std::tuple{IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("Hallo", "@de")},
+                 IdOrLiteralOrIri{lit("World", "@en")},
+                 IdOrLiteralOrIri{lit("!", "@fr")}});
 }
 
 // ______________________________________________________________________________
@@ -1376,7 +1501,8 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{lit(R"("\\$1 \\2 $1 \\")")}});
 
-  checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
+  // Only simple literals should be replaced.
+  checkReplace(idOrLitOrStringVec({U, U}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLiteralOrIri{lit("([A-Z]+)")},
                           IdOrLiteralOrIri{Id::makeFromBool(true)}});
@@ -1393,6 +1519,13 @@ TEST(SparqlExpression, ReplaceExpression) {
       std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
                  IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
                  IdOrLiteralOrIri{lit("i")}});
+
+  // Matching using the all the flags
+  checkReplaceWithFlags(
+      idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
+      std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
+                 IdOrLiteralOrIri{lit("[ei]")}, IdOrLiteralOrIri{lit("x")},
+                 IdOrLiteralOrIri{lit("imsU")}});
   // Empty flag
   checkReplaceWithFlags(
       idOrLitOrStringVec({"null", "xIns", "zwEx", "drxx"}),
@@ -1440,6 +1573,16 @@ TEST(SparqlExpression, ReplaceExpression) {
       IdOrLiteralOrIriVec{U, U, U, U, U, U},
       std::tuple{idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
+
+  // Datatype or language tag
+  checkReplace(
+      IdOrLiteralOrIriVec{
+          lit("Eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("zwEi", "@en")},
+      std::tuple{IdOrLiteralOrIriVec{
+                     lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("zwei", "@en")},
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
 }
 
 // ______________________________________________________________________________

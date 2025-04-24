@@ -1,11 +1,14 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <boost/url.hpp>
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/StringExpressionsHelper.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 
 namespace sparqlExpression {
@@ -16,11 +19,14 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
 // Note: This currently requires a copy of a string since the `Literal` class
 // has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
+constexpr auto toLiteral =
+    [](std::string_view normalizedContent,
+       const std::optional<std::variant<Iri, std::string>>& descriptor =
+           std::nullopt) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
 
 // Return `true` if the byte representation of `c` does not start with `10`,
 // meaning that it is not a UTF-8 continuation byte, and therefore the start of
@@ -33,6 +39,23 @@ static constexpr bool isUtf8CodepointStart(char c) {
 // "10").
 static std::size_t utf8Length(std::string_view s) {
   return ql::ranges::count_if(s, &isUtf8CodepointStart);
+}
+
+// Initialize or append a Literal. If both literals are valid and initialized,
+// concatenate nextLiteral into literalSoFar. If not initialized yet, set
+// literalSoFar to nextLiteral. If either is UNDEF, set literalSoFar to nullopt
+// to indicate an undefined result.
+void concatOrSetLiteral(
+    std::optional<ad_utility::triple_component::Literal>& literalSoFarOpt,
+    const std::optional<ad_utility::triple_component::Literal>& nextLiteral,
+    const bool isFirstLiteral) {
+  if (!nextLiteral.has_value() || !literalSoFarOpt.has_value()) {
+    literalSoFarOpt = std::nullopt;  // UNDEF
+  } else if (isFirstLiteral) {
+    literalSoFarOpt = nextLiteral.value();
+  } else {
+    literalSoFarOpt.value().concat(nextLiteral.value());
+  }
 }
 
 // Convert UTF-8 position to byte offset. If utf8Pos exceeds the
@@ -65,70 +88,6 @@ class StrExpression : public StrExpressionImpl {
   using StrExpressionImpl::StrExpressionImpl;
   bool isStrExpression() const override { return true; }
 };
-
-// Template for an expression that works on string literals. The arguments are
-// the same as those to `NaryExpression` with the difference that the value
-// getter is deduced automatically. If the child of the expression is the
-// `STR()` expression, then the `StringValueGetter` will be used (which also
-// returns string values for IRIs, numeric literals, etc.), otherwise the
-// `LiteralFromIdGetter` is used (which returns `std::nullopt` for these cases).
-template <typename ValueGetterWithStr, typename ValueGetterWithoutStr, size_t N,
-          typename Function, typename... AdditionalNonStringValueGetters>
-class StringExpressionImplImpl : public SparqlExpression {
- private:
-  using ExpressionWithStr = NARY<
-      N, FV<Function, ValueGetterWithStr, AdditionalNonStringValueGetters...>>;
-  using ExpressionWithoutStr = NARY<N, FV<Function, ValueGetterWithoutStr,
-                                          AdditionalNonStringValueGetters...>>;
-
-  SparqlExpression::Ptr impl_;
-
- public:
-  CPP_template(typename... C)(
-      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...) CPP_and(
-          sizeof...(C) + 1 ==
-          N)) explicit StringExpressionImplImpl(SparqlExpression::Ptr child,
-                                                C... children) {
-    AD_CORRECTNESS_CHECK(child != nullptr);
-    if (child->isStrExpression()) {
-      auto childrenOfStr = std::move(*child).moveChildrenOut();
-      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
-      impl_ = std::make_unique<ExpressionWithStr>(
-          std::move(childrenOfStr.at(0)), std::move(children)...);
-    } else {
-      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
-                                                     std::move(children)...);
-    }
-  }
-
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    return impl_->evaluate(context);
-  }
-  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return impl_->getCacheKey(varColMap);
-  }
-
- private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
-    return impl_->children();
-  }
-};
-
-// Impl class for expressions that work on plain strings.
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-using StringExpressionImpl =
-    StringExpressionImplImpl<StringValueGetter, LiteralFromIdGetter, N,
-                             Function, AdditionalNonStringValueGetters...>;
-
-// Impl class for expressions that work on literals with datatypes and language
-// tags.
-template <size_t N, typename Function,
-          typename... AdditionalNonStringValueGetters>
-using LiteralExpressionImpl =
-    StringExpressionImplImpl<LiteralValueGetterWithStrFunction,
-                             LiteralValueGetterWithoutStrFunction, N, Function,
-                             AdditionalNonStringValueGetters...>;
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
@@ -198,27 +157,25 @@ using IriOrUriExpression =
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
-// LCASE
-[[maybe_unused]] auto lowercaseImpl =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+// UCase and LCase
+template <auto toLowerOrToUpper>
+auto upperOrLowerCaseImpl =
+    [](std::optional<ad_utility::triple_component::Literal> input)
+    -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
-  } else {
-    return toLiteral(ad_utility::utf8ToLower(input.value()));
   }
+  auto& literal = input.value();
+  auto newContent =
+      std::invoke(toLowerOrToUpper, asStringViewUnsafe(literal.getContent()));
+  literal.replaceContent(newContent);
+  return LiteralOrIri(std::move(literal));
 };
-using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
+auto uppercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToUpper>;
+auto lowercaseImpl = upperOrLowerCaseImpl<&ad_utility::utf8ToLower>;
 
-// UCASE
-[[maybe_unused]] auto uppercaseImpl =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return toLiteral(ad_utility::utf8ToUpper(input.value()));
-  }
-};
-using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
+using UppercaseExpression = LiteralExpressionImpl<1, decltype(uppercaseImpl)>;
+using LowercaseExpression = LiteralExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // SUBSTR
 class SubstrImpl {
@@ -230,7 +187,8 @@ class SubstrImpl {
 
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.
-  static constexpr auto round = []<typename T>(const T& value) -> int64_t {
+  static constexpr auto round = [](const auto& value) -> int64_t {
+    using T = std::decay_t<decltype(value)>;
     if constexpr (ad_utility::FloatingPoint<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
@@ -375,33 +333,46 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string_view text, std::string_view pattern) {
-      // Required by the SPARQL standard.
-      if (pattern.empty()) {
-        return toLiteral(text);
-      }
-      auto pos = text.find(pattern);
-      if (pos >= text.size()) {
-        return toLiteral("");
-      }
-      if constexpr (isStrAfter) {
-        return toLiteral(text.substr(pos + pattern.size()));
-      } else {
-        // STRBEFORE
-        return toLiteral(text.substr(0, pos));
-      }
-    };
+    [](std::optional<ad_utility::triple_component::Literal> literal,
+       std::optional<ad_utility::triple_component::Literal> optPattern)
+    -> IdOrLiteralOrIri {
+  if (!optPattern.has_value() || !literal.has_value()) {
+    return Id::makeUndefined();
+  }
+  const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
+  //  Required by the SPARQL standard.
+  if (pattern.empty()) {
+    if (isStrAfter) {
+      return LiteralOrIri(std::move(literal.value()));
+    } else {
+      literal.value().setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal.value()));
+    }
+  }
+  auto literalContent = literal.value().getContent();
+  auto pos = asStringViewUnsafe(literalContent).find(pattern);
+  if (pos >= literalContent.size()) {
+    return toLiteral("");
+  }
+  if constexpr (isStrAfter) {
+    literal.value().setSubstr(pos + pattern.size(),
+                              literalContent.size() - pos - pattern.size());
+  } else {
+    // STRBEFORE
+    literal.value().setSubstr(0, pos);
+  }
+  return LiteralOrIri(std::move(literal.value()));
+};
 
 auto strAfter = strAfterOrBeforeImpl<true>;
-
 using StrAfterExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strAfter)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strAfter),
+                          LiteralValueGetterWithoutStrFunction>;
 
 auto strBefore = strAfterOrBeforeImpl<false>;
 using StrBeforeExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strBefore)>,
-                         StringValueGetter>;
+    LiteralExpressionImpl<2, decltype(strBefore),
+                          LiteralValueGetterWithoutStrFunction>;
 
 [[maybe_unused]] auto mergeFlagsIntoRegex =
     [](std::optional<std::string> regex,
@@ -409,7 +380,7 @@ using StrBeforeExpression =
   if (!flags.has_value() || !regex.has_value()) {
     return Id::makeUndefined();
   }
-  auto firstInvalidFlag = flags.value().find_first_not_of("imsu");
+  auto firstInvalidFlag = flags.value().find_first_not_of("imsU");
   if (firstInvalidFlag != std::string::npos) {
     return Id::makeUndefined();
   }
@@ -423,29 +394,30 @@ using StrBeforeExpression =
 };
 
 using MergeRegexPatternAndFlagsExpression =
-    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), StringValueGetter>;
+    StringExpressionImpl<2, decltype(mergeFlagsIntoRegex), LiteralFromIdGetter>;
 
 [[maybe_unused]] auto replaceImpl =
-    [](std::optional<std::string> input,
-       const std::unique_ptr<re2::RE2>& pattern,
+    [](std::optional<ad_utility::triple_component::Literal> s,
+       const std::shared_ptr<RE2>& pattern,
        const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !pattern || !replacement.has_value()) {
+  if (!s.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
-  auto& in = input.value();
+  std::string in(asStringViewUnsafe(s.value().getContent()));
   const auto& pat = *pattern;
   // Check for invalid regexes.
   if (!pat.ok()) {
     return Id::makeUndefined();
   }
   const auto& repl = replacement.value();
-  re2::RE2::GlobalReplace(&in, pat, repl);
-  return toLiteral(in);
+  RE2::GlobalReplace(&in, pat, repl);
+  s.value().replaceContent(in);
+  return LiteralOrIri(std::move(s.value()));
 };
 
 using ReplaceExpression =
-    StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         ReplacementStringGetter>;
+    LiteralExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
+                          ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
@@ -454,7 +426,8 @@ class ConcatExpression : public detail::VariadicExpression {
 
   // _________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* ctx) const override {
-    using StringVec = VectorWithMemoryLimit<std::string>;
+    using Literal = ad_utility::triple_component::Literal;
+    using LiteralVec = VectorWithMemoryLimit<std::optional<Literal>>;
     // We evaluate one child after the other and append the strings from child i
     // to the strings already constructed for children 0, …, i - 1. The
     // seemingly more natural row-by-row approach has two problems. First, the
@@ -464,39 +437,73 @@ class ConcatExpression : public detail::VariadicExpression {
     // have constant results (in which case, we need to evaluate the whole
     // expression only once).
 
-    // We store the (intermediate) result either as single string or a vector.
-    // If the result is a string, then all the previously evaluated children
+    // We store the (intermediate) result either as single literal or a vector.
+    // If the result is a Literal, then all the previously evaluated children
     // were constants (see above).
-    std::variant<std::string, StringVec> result{std::string{""}};
+
+    // `LiteralVec` stores literals whose string contents are the result of
+    // concatenation. Each literal also carries a suffix (language tag or
+    // datatype) that is determined by the previously processed children. For
+    // each row, the suffix reflects either the current matching suffix or a
+    // mismatch (in which case the final suffix will be empty).
+
+    auto valueGetter =
+        sparqlExpression::detail::LiteralValueGetterWithoutStrFunction{};
+    std::variant<std::optional<Literal>, LiteralVec> result =
+        Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(""));
+    bool isFirstLiteral = true;
+
+    auto moveLiteralToResult =
+        [](std::optional<Literal>& literal) -> IdOrLiteralOrIri {
+      if (!literal.has_value()) {
+        return Id::makeUndefined();
+      }
+      return LiteralOrIri(std::move(literal.value()));
+    };
+
     auto visitSingleExpressionResult = CPP_template_lambda(
-        &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
-                                           std::is_rvalue_reference_v<T&&>) {
+        &ctx, &result, &isFirstLiteral, &valueGetter)(typename T)(T && s)(
+        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
-        std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
-        if (std::holds_alternative<std::string>(result)) {
-          // All previous children were constants, and the current child also is
-          // a constant.
-          std::get<std::string>(result).append(strFromConstant);
-        } else {
-          // One of the previous children was not a constant, so we already
-          // store a vector.
-          auto& resultAsVector = std::get<StringVec>(result);
-          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
-            target.append(strFromConstant);
+        auto literalFromConstant = valueGetter(std::forward<T>(s), ctx);
+
+        auto concatOrSetLitFromConst =
+            [&](std::optional<Literal>& literalSoFar) {
+              concatOrSetLiteral(literalSoFar, literalFromConstant,
+                                 isFirstLiteral);
+            };
+
+        // All previous children were constants, and the current child also is
+        // a constant.
+        auto visitLiteralConcat =
+            [&concatOrSetLitFromConst](std::optional<Literal>&& literalSoFar) {
+              concatOrSetLitFromConst(literalSoFar);
+            };
+
+        // One of the previous children was not a constant, so we already
+        // store a vector.
+        auto visitLiteralVecConcat = [&concatOrSetLitFromConst](
+                                         LiteralVec&& literalVec) {
+          ql::ranges::for_each(std::move(literalVec), [&](auto& literalSoFar) {
+            concatOrSetLitFromConst(literalSoFar);
           });
-        }
+        };
+
+        std::visit(ad_utility::OverloadCallOperator{visitLiteralConcat,
+                                                    visitLiteralVecConcat},
+                   std::move(result));
       } else {
         auto gen = sparqlExpression::detail::makeGenerator(AD_FWD(s),
                                                            ctx->size(), ctx);
 
-        if (std::holds_alternative<std::string>(result)) {
+        if (std::holds_alternative<std::optional<Literal>>(result)) {
           // All previous children were constants, but now we have a
           // non-constant child, so we have to expand the `result` from a single
           // string to a vector.
-          std::string constantResultSoFar =
-              std::move(std::get<std::string>(result));
-          result.emplace<StringVec>(ctx->_allocator);
-          auto& resultAsVec = std::get<StringVec>(result);
+          std::optional<Literal> constantResultSoFar =
+              std::move(std::get<std::optional<Literal>>(result));
+          result.emplace<LiteralVec>(ctx->_allocator);
+          auto& resultAsVec = std::get<LiteralVec>(result);
           resultAsVec.reserve(ctx->size());
           std::fill_n(std::back_inserter(resultAsVec), ctx->size(),
                       constantResultSoFar);
@@ -504,37 +511,45 @@ class ConcatExpression : public detail::VariadicExpression {
 
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
-        auto& resultAsVec = std::get<StringVec>(result);
+        auto& resultAsVec = std::get<LiteralVec>(result);
         // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
-          if (auto str = StringValueGetter{}(std::move(el), ctx);
-              str.has_value()) {
-            resultAsVec[i].append(str.value());
-          }
+          auto literal = valueGetter(std::move(el), ctx);
+          concatOrSetLiteral(resultAsVec[i], literal, isFirstLiteral);
           ctx->cancellationHandle_->throwIfCancelled();
           ++i;
         }
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    ql::ranges::for_each(
-        childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
-          std::visit(visitSingleExpressionResult, child->evaluate(ctx));
-        });
+    ql::ranges::for_each(childrenVec(), [&ctx, &visitSingleExpressionResult,
+                                         &isFirstLiteral](const auto& child) {
+      std::visit(visitSingleExpressionResult, child->evaluate(ctx));
+      isFirstLiteral = false;
+    });
 
     // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
     // the expression module.
-    if (std::holds_alternative<std::string>(result)) {
-      return IdOrLiteralOrIri{toLiteral(std::get<std::string>(result))};
-    } else {
-      auto& stringVec = std::get<StringVec>(result);
+
+    auto visitLiteralResult =
+        [&moveLiteralToResult](
+            std::optional<Literal>& literalSoFar) -> ExpressionResult {
+      return moveLiteralToResult(literalSoFar);
+    };
+
+    auto visitLiteralVecResult =
+        [&ctx,
+         &moveLiteralToResult](LiteralVec& literalVec) -> ExpressionResult {
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
-      resultAsVec.reserve(stringVec.size());
-      ql::ranges::copy(stringVec | ql::views::transform(toLiteral),
+      resultAsVec.reserve(literalVec.size());
+      ql::ranges::copy(literalVec | ql::views::transform(moveLiteralToResult),
                        std::back_inserter(resultAsVec));
       return resultAsVec;
-    }
+    };
+    return std::visit(ad_utility::OverloadCallOperator{visitLiteralResult,
+                                                       visitLiteralVecResult},
+                      result);
   }
 };
 

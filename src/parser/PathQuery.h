@@ -3,7 +3,8 @@
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_PATHQUERY_H
+#define QLEVER_SRC_PARSER_PATHQUERY_H
 
 #include "parser/MagicServiceQuery.h"
 
@@ -77,3 +78,5 @@ struct PathQuery : MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_PATHQUERY_H

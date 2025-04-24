@@ -2,7 +2,9 @@
 // Structures.
 // Author: Björn Buchhold <buchholb>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_FILE_H
+#define QLEVER_SRC_UTIL_FILE_H
+
 #include <absl/strings/str_cat.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -57,15 +59,13 @@ class File {
       close();
     }
 
-    file_ = rhs.file_;
-    rhs.file_ = nullptr;
+    file_ = std::exchange(rhs.file_, nullptr);
     name_ = std::move(rhs.name_);
     return *this;
   }
 
-  File(File&& rhs) : name_{std::move(rhs.name_)}, file_{rhs.file_} {
-    rhs.file_ = nullptr;
-  }
+  File(File&& rhs) noexcept
+      : name_{std::move(rhs.name_)}, file_{std::exchange(rhs.file_, nullptr)} {}
 
   //! Destructor closes file if still open
   ~File() {
@@ -234,3 +234,5 @@ std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_FILE_H

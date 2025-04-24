@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_CACHINGMEMORYRESOURCE_H
+#define QLEVER_SRC_UTIL_CACHINGMEMORYRESOURCE_H
 
 #include <memory_resource>
 
@@ -70,3 +71,5 @@ class CachingMemoryResource : public std::pmr::memory_resource {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_CACHINGMEMORYRESOURCE_H

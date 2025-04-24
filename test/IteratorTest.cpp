@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gtest/gtest.h>
 
@@ -80,10 +82,15 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
   testIterator(d, begin, end);
 }
 
-TEST(Iterator, makeForwardingIterator) {
-  auto forwardFirstElement = []<typename T>(T&& vector) {
+struct ForwardFirstElement {
+  template <typename T>
+  auto operator()(T&& vector) const {
     return *ad_utility::makeForwardingIterator<T>(vector.begin());
-  };
+  }
+};
+
+TEST(Iterator, makeForwardingIterator) {
+  ForwardFirstElement forwardFirstElement;
 
   std::vector<std::string> vector{"hello"};
   auto vector2 = vector;
@@ -171,6 +178,29 @@ TEST(Iterator, InputRangeFromGet) {
   };
   testIota(makeIota);
 }
+
+//_____________________________________________________________________________
+TEST(Iterator, InputRangeFromGetCallable) {
+  using namespace ad_utility;
+  auto makeLambda = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return [value = lower, upper]() mutable -> std::optional<size_t> {
+      if (value == upper) {
+        return std::nullopt;
+      }
+      return value++;
+    };
+  };
+  auto makeIota = [&makeLambda](size_t lower = 0,
+                                std::optional<size_t> upper = {}) {
+    return InputRangeFromGetCallable{makeLambda(lower, upper)};
+    /*
+    return InputRangeFromGetCallable<size_t, decltype(makeLambda(0, 3))>{
+        makeLambda(lower, upper)};
+        */
+  };
+  testIota(makeIota);
+}
+
 //_____________________________________________________________________________
 TEST(Iterator, InputRangeTypeErased) {
   using namespace ad_utility;

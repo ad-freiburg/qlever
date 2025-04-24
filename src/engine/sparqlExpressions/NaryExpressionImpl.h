@@ -1,8 +1,11 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
 #include <ranges>
 
@@ -101,7 +104,8 @@ struct NumericIdWrapper {
   // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
   // but adding it causes an internal compiler error in Clang 16.
   Function function_{};
-  Id operator()(auto&&... args) const {
+  template <typename... Args>
+  Id operator()(Args&&... args) const {
     return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
   }
 };
@@ -115,8 +119,9 @@ inline auto makeNumericExpression() {
   return [](const auto&... args) {
     CPP_assert(
         (concepts::same_as<std::decay_t<decltype(args)>, NumericValue> && ...));
-    auto visitor = []<typename... Ts>(const Ts&... t) {
-      if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
+    auto visitor = [](const auto&... t) {
+      if constexpr ((... ||
+                     std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return Id::makeUndefined();
       } else {
         return makeNumericId(Function{}(t...));
@@ -134,8 +139,9 @@ template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
 // True iff all types `Ts` are `SetOfIntervals`.
-inline auto areAllSetOfIntervals = []<typename... Ts>(const Ts&...) constexpr {
-  return (... && ad_utility::isSimilar<Ts, ad_utility::SetOfIntervals>);
+inline auto areAllSetOfIntervals = [](const auto&... t) constexpr {
+  return (... && ad_utility::isSimilar<std::decay_t<decltype(t)>,
+                                       ad_utility::SetOfIntervals>);
 };
 template <typename F>
 using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
@@ -203,3 +209,5 @@ template <typename Op>
   };
 
 }  // namespace sparqlExpression::detail
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
