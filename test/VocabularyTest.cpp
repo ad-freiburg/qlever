@@ -221,6 +221,12 @@ TEST(Vocabulary, SplitGeoVocab) {
   ASSERT_EQ(SGV::addMarker(0, 1), (1ull << 59));
   ASSERT_EQ(SGV::addMarker(25, 1), (1ull << 59) | 25);
 
+  // Get vocab index
+  ASSERT_EQ(SGV::getVocabIndex(0), 0);
+  ASSERT_EQ(SGV::getVocabIndex(1), 1);
+  ASSERT_EQ(SGV::getVocabIndex(1ull << 59), 0);
+  ASSERT_EQ(SGV::getVocabIndex((1ull << 59) | 25), 25);
+
   // Vocab index is out of range
   EXPECT_ANY_THROW(SGV::addMarker((1ull << 60) | 42, 5));
   EXPECT_ANY_THROW(SGV::addMarker(1ull << 59, 5));
@@ -311,9 +317,8 @@ std::array<std::string, 2> testSplitFnTwoFunction(std::string_view s) {
 }
 
 using TwoSplitVocabulary =
-    SplitVocabulary<splitVocabTest::testSplitTwoFunction,
-                    splitVocabTest::testSplitFnTwoFunction, VocabularyInMemory,
-                    VocabularyInMemory>;
+    SplitVocabulary<testSplitTwoFunction, testSplitFnTwoFunction,
+                    VocabularyInMemory, VocabularyInMemory>;
 
 TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
@@ -348,10 +353,97 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("\"xyz\""), 0);
   ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 1);
-  ;
+
+  auto ww = sv.makeWordWriterPtr("twoSplitVocab.dat");
+  ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
+  ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(0, 1));
+  ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(1, 1));
+  ASSERT_EQ((*ww)("\"xyz\"", true), sv.addMarker(1, 0));
+  ww->readableName() = "Split Vocab with Two Underlying Vocabs";
+  ww->finish();
+
+  sv.readFromFile("twoSplitVocab.dat");
+  ASSERT_EQ(sv.size(), 4);
+  ASSERT_EQ(sv[1], "\"xyz\"");
+  ASSERT_EQ(sv[(1ull << 59) | 1], "\"axyz\"");
 }
 
-// TODO test with three
+uint8_t testSplitThreeFunction(std::string_view s) {
+  if (s.starts_with("\"")) {
+    if (s.ends_with("\"^^<http://example.com>")) {
+      return 1;
+    } else if (s.ends_with("\"^^<blabliblu>")) {
+      return 2;
+    }
+  }
+  return 0;
+}
+
+std::array<std::string, 3> testSplitFnThreeFunction(std::string_view s) {
+  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
+}
+
+using ThreeSplitVocabulary =
+    SplitVocabulary<testSplitThreeFunction, testSplitFnThreeFunction,
+                    VocabularyInMemory, VocabularyInMemory, VocabularyInMemory>;
+
+TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
+  // Tests the SplitVocabulary class with a custom split function that separates
+  // all words in three underlying vocabularies (of different types)
+  ThreeSplitVocabulary sv;
+
+  ASSERT_EQ(sv.numberOfVocabs, 3);
+  ASSERT_EQ(sv.markerBitMaskSize, 2);
+  ASSERT_EQ(sv.markerBitMask, 3ull << 58);
+  ASSERT_EQ(sv.markerShift, 58);
+  ASSERT_EQ(sv.vocabIndexBitMask, (1ull << 58) - 1);
+
+  ASSERT_EQ(sv.addMarker(42, 0), 42);
+  ASSERT_EQ(sv.addMarker(42, 1), (1ull << 58) | 42);
+  ASSERT_EQ(sv.addMarker(42, 2), (2ull << 58) | 42);
+  ASSERT_ANY_THROW(sv.addMarker(1ull << 60, 1));
+  ASSERT_ANY_THROW(sv.addMarker(5, 3));
+
+  ASSERT_EQ(sv.getMarker((1ull << 58) | 42), 1);
+  ASSERT_EQ(sv.getMarker((2ull << 58) | 42), 2);
+  ASSERT_EQ(sv.getMarker(42), 0);
+
+  ASSERT_EQ(sv.getVocabIndex((1ull << 58) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex((2ull << 58) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex(1ull << 58), 0);
+  ASSERT_EQ(sv.getVocabIndex(2ull << 58), 0);
+  ASSERT_EQ(sv.getVocabIndex(0), 0);
+  ASSERT_EQ(sv.getVocabIndex((1ull << 58) - 1), (1ull << 58) - 1);
+  ASSERT_EQ(sv.getVocabIndex(42), 42);
+
+  ASSERT_TRUE(sv.isSpecialVocabIndex((1ull << 58) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex((2ull << 58) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex(1ull << 58));
+  ASSERT_FALSE(sv.isSpecialVocabIndex(42));
+  ASSERT_FALSE(sv.isSpecialVocabIndex(0));
+
+  ASSERT_EQ(sv.getMarkerForWord("\"xyz\"^^<http://example.com>"), 1);
+  ASSERT_EQ(sv.getMarkerForWord("\"xyz\"^^<blabliblu>"), 2);
+  ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
+  ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 0);
+
+  auto ww = sv.makeWordWriterPtr("threeSplitVocab.dat");
+  ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
+  ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(1, 0));
+  ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(2, 0));
+  ASSERT_EQ((*ww)("\"xyz\"^^<blabliblu>", true), sv.addMarker(0, 2));
+  ASSERT_EQ((*ww)("\"xyz\"^^<http://example.com>", true), sv.addMarker(0, 1));
+  ASSERT_EQ((*ww)("\"zzz\"^^<blabliblu>", true), sv.addMarker(1, 2));
+  ww->readableName() = "Split Vocab with Three Underlying Vocabs";
+  ww->finish();
+
+  sv.readFromFile("threeSplitVocab.dat");
+  ASSERT_EQ(sv.size(), 6);
+  ASSERT_EQ(sv[2], "\"axyz\"");
+  ASSERT_EQ(sv[2ull << 58], "\"xyz\"^^<blabliblu>");
+  ASSERT_EQ(sv[(2ull << 58) | 1], "\"zzz\"^^<blabliblu>");
+  ASSERT_EQ(sv[1ull << 58], "\"xyz\"^^<http://example.com>");
+}
 
 }  // namespace splitVocabTest
 
@@ -359,3 +451,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
 template class SplitVocabulary<splitVocabTest::testSplitTwoFunction,
                                splitVocabTest::testSplitFnTwoFunction,
                                VocabularyInMemory, VocabularyInMemory>;
+template class SplitVocabulary<splitVocabTest::testSplitThreeFunction,
+                               splitVocabTest::testSplitFnThreeFunction,
+                               VocabularyInMemory, VocabularyInMemory,
+                               VocabularyInMemory>;

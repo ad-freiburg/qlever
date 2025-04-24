@@ -225,7 +225,7 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternal);
 
-    // Finish the writing on both underlying word writers. After this no more
+    // Finish the writing on all underlying word writers. After this no more
     // calls to `operator()` are allowed.
     void finish();
 
