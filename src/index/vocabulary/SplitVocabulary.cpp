@@ -13,18 +13,10 @@
 #include "util/Log.h"
 
 // _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
-    requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<SFN>) uint64_t
-    SplitVocabulary<M, S, SF, SFN>::makeSpecialVocabIndex(uint64_t vocabIndex) {
-  AD_CORRECTNESS_CHECK(vocabIndex < maxVocabIndex);
-  return vocabIndex | specialVocabMarker;
-}
-
-// _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
+CPP_template(const auto& SF, const auto& SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
-        SFN>) void SplitVocabulary<M, S, SF, SFN>::readFromFile(const string&
-                                                                    filename) {
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::
+    readFromFile(const string& filename) {
   auto readSingle = [](auto& vocab, const string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
@@ -44,70 +36,85 @@ CPP_template(class M, class S, const auto& SF, const auto& SFN)(
     }
   };
 
-  auto [fnMain, fnSpecial] = SFN(filename);
-  readSingle(underlyingMain_, fnMain);
-  readSingle(underlyingSpecial_, fnSpecial);
-}
-
-// _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
-    requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
-        SFN>) void SplitVocabulary<M, S, SF, SFN>::open(const string&
-                                                            filename) {
-  auto [fnMain, fnSpecial] = SFN(filename);
-  underlyingMain_.open(fnMain);
-  underlyingSpecial_.open(fnSpecial);
-}
-
-// _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
-    requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<SFN>)
-    SplitVocabulary<M, S, SF, SFN>::WordWriter::WordWriter(
-        const M& mainVocabulary, const S& specialVocabulary,
-        const std::string& filename)
-    : underlyingWordWriter_{mainVocabulary.makeDiskWriterPtr(
-          SFN(filename).at(0))},
-      underlyingSpecialWordWriter_{
-          specialVocabulary.makeDiskWriterPtr(SFN(filename).at(1))} {};
-
-// _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
-    requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<SFN>) uint64_t
-    SplitVocabulary<M, S, SF, SFN>::WordWriter::operator()(
-        std::string_view word, bool isExternal) {
-  if (SF(word)) {
-    // The word to be stored in the vocabulary is selected by the split function
-    // to go to the special vocabulary. It needs an index with the marker bit
-    // set to 1.
-    return makeSpecialVocabIndex(
-        (*underlyingSpecialWordWriter_)(word, isExternal));
-  } else {
-    // We have any other word: it goes to the normal vocabulary.
-    auto index = (*underlyingWordWriter_)(word, isExternal);
-    AD_CONTRACT_CHECK(index <= maxVocabIndex);
-    return index;
+  // Make filenames and read each underlying vocabulary
+  auto vocabFilenames = SFN(filename);
+  for (uint8_t i = 0; i < numberOfVocabs; i++) {
+    std::visit([&](auto& vocab) { readSingle(vocab, vocabFilenames[i]); },
+               underlying_[i]);
   }
 }
 
 // _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
+CPP_template(const auto& SF, const auto& SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
-        SFN>) void SplitVocabulary<M, S, SF, SFN>::WordWriter::finish() {
-  underlyingWordWriter_->finish();
-  underlyingSpecialWordWriter_->finish();
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN,
+                                                 S...>::open(const string&
+                                                                 filename) {
+  auto vocabFilenames = SFN(filename);
+  for (uint8_t i = 0; i < numberOfVocabs; i++) {
+    std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
+               underlying_[i]);
+  }
 }
 
 // _____________________________________________________________________________
-CPP_template(class M, class S, const auto& SF, const auto& SFN)(
+CPP_template(const auto& SF, const auto& SFN,
+             class... S)(requires SplitFunctionT<SF> CPP_and
+                             SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
+        const UnderlyingVocabsArray& underlyingVocabularies,
+        const std::string& filename) {
+  // Init all underlying word writers
+  auto vocabFilenames = SFN(filename);
+  for (uint8_t i = 0; i < numberOfVocabs; i++) {
+    underlyingWordWriters_[i] = std::visit(
+        [&](auto& vocab) -> AnyUnderlyingWordWriterPtr {
+          return vocab.makeDiskWriterPtr(vocabFilenames[i]);
+        },
+        underlyingVocabularies[i]);
+  }
+};
+
+// _____________________________________________________________________________
+CPP_template(const auto& SF, const auto& SFN,
+             class... S)(requires SplitFunctionT<SF> CPP_and
+                             SplitFilenameFunctionT<SFN, sizeof...(S)>) uint64_t
+    SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
+        std::string_view word, bool isExternal) {
+  // The word will be stored in the vocabulary selected by the split
+  // function. Therefore the word's index needs the marker bit(s) set
+  // accordingly.
+  auto splitIdx = SF(word);
+  return std::visit(
+      [&](auto& wordWriterPtr) {
+        return addMarker((*wordWriterPtr)(word, isExternal), splitIdx);
+      },
+      underlyingWordWriters_[splitIdx]);
+}
+
+// _____________________________________________________________________________
+CPP_template(const auto& SF, const auto& SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
-        SFN>) void SplitVocabulary<M, S, SF, SFN>::close() {
-  underlyingMain_.close();
-  underlyingSpecial_.close();
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN,
+                                                 S...>::WordWriter::finish() {
+  for (const auto& wordWriter : underlyingWordWriters_) {
+    std::visit([&](auto& ww) { ww->finish(); }, wordWriter);
+  }
+}
+
+// _____________________________________________________________________________
+CPP_template(const auto& SF, const auto& SFN, class... S)(
+    requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::close() {
+  for (auto& vocab : underlying_) {
+    std::visit([&](auto& v) { v.close(); }, vocab);
+  }
 }
 
 // Explicit template instantiations
-template class SplitVocabulary<CompressedVocabulary<VocabularyInternalExternal>,
-                               CompressedVocabulary<VocabularyInternalExternal>,
-                               geoSplitFunc, geoFilenameFunc>;
-template class SplitVocabulary<VocabularyInMemory, VocabularyInMemory,
-                               geoSplitFunc, geoFilenameFunc>;
+template class SplitVocabulary<
+    geoSplitFunc, geoFilenameFunc,
+    CompressedVocabulary<VocabularyInternalExternal>,
+    CompressedVocabulary<VocabularyInternalExternal>>;
+template class SplitVocabulary<geoSplitFunc, geoFilenameFunc,
+                               VocabularyInMemory, VocabularyInMemory>;

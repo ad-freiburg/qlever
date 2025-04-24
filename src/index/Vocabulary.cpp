@@ -253,15 +253,9 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
     return wordAndIndex.word() == word;
   };
 
-  if (checkWord()) {
-    return true;
-  }
-
-  if (checkWord(true)) {
-    return true;
-  }
-
-  return false;
+  // TODO<ullingerc> docs
+  return checkWord(
+      vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word));
 }
 
 // ___________________________________________________________________________

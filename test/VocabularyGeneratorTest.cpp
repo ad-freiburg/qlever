@@ -144,8 +144,8 @@ class MergeVocabularyTest : public ::testing::Test {
               } else {
                 using GeoVocab = SplitGeoVocabulary<
                     CompressedVocabulary<VocabularyInternalExternal>>;
-                if (GeoVocab::isSpecialLiteral(w.iriOrLiteral())) {
-                  globalId = GeoVocab::makeSpecialVocabIndex(globalId);
+                if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
+                  globalId = GeoVocab::addMarker(globalId, 1);
                 }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }

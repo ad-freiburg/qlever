@@ -9,143 +9,217 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <variant>
 
 #include "global/ValueId.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
-// TODO docs
-// Func. to decide where a literal goes
+// The signature of the SplitFunction for a SplitVocabulary. For each literal or
+// IRI, it should return a marker index which of the underlying vocabularies of
+// the SplitVocabulary should be used. The underlying vocabularies except 0
+// should not hold conventional string literals (that is, without a special data
+// type) or IRIs. Thus the function should return 0 for these inputs.
 template <const auto& T>
 CPP_concept SplitFunctionT =
-    ad_utility::InvocableWithExactReturnType<decltype(T), bool,
+    ad_utility::InvocableWithExactReturnType<decltype(T), uint8_t,
                                              std::string_view>;
 
-// TODO docs
-// Func. to get filenames for each vocabulary
-template <const auto& T>
+// The signature of the SplitFilenameFunction for a SplitVocabulary. For a given
+// base filename the function should construct readable filenames for each of
+// the underlying vocabularies. This should usually happen by appending a suffix
+// for each vocabulary.
+template <const auto& T, uint8_t N>
 CPP_concept SplitFilenameFunctionT = ad_utility::InvocableWithExactReturnType<
-    decltype(T), std::array<std::string, 2>, std::string>;
+    decltype(T), std::array<std::string, N>, std::string_view>;
 
-// TODO docs
-CPP_template(class MainVocabulary, class SpecialVocabulary,
-             const auto& SplitFunction, const auto& SplitFilenameFunction)(
-    requires SplitFunctionT<SplitFunction> CPP_and
-        SplitFilenameFunctionT<SplitFilenameFunction>) class SplitVocabulary {
+// A SplitVocabulary is a vocabulary layer that divides words into different
+// underlying vocabularies. It is templated on the UnderlyingVocabularies as
+// well as a SplitFunction that decides which underlying vocabulary is used for
+// each word and a SplitFilenameFunction that assigns filenames to underlying
+// vocabularies.
+CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
+             class... UnderlyingVocabularies)(
+    requires SplitFunctionT<SplitFunction> CPP_and SplitFilenameFunctionT<
+        SplitFilenameFunction,
+        sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
+ public:
+  // A SplitVocabulary must have at least two and at most 255 underlying
+  // vocabularies.
+  static_assert(sizeof...(UnderlyingVocabularies) >= 2 &&
+                sizeof...(UnderlyingVocabularies) <= 255);
+  static constexpr uint8_t numberOfVocabs =
+      static_cast<uint8_t>(sizeof...(UnderlyingVocabularies));
+
+  // Assuming we only make use of methods that all UnderlyingVocabularies
+  // provide, we simplify this class by using an array over a variant instead of
+  // a tuple.
+  using AnyUnderlyingVocab =
+      ad_utility::UniqueVariant<UnderlyingVocabularies...>;
+  using UnderlyingVocabsArray = std::array<AnyUnderlyingVocab, numberOfVocabs>;
+  using AnyUnderlyingWordWriterPtr = ad_utility::UniqueVariant<
+      std::unique_ptr<typename UnderlyingVocabularies::WordWriter>...>;
+  using UnderlyingWordWriterPtrsArray =
+      std::array<AnyUnderlyingWordWriterPtr, numberOfVocabs>;
+
+  // Bit masks for extracting and adding marker and vocabIndex bits
+  static constexpr uint64_t markerBitMaskSize = ad_utility::bitMaskSizeForValue(
+      numberOfVocabs - 1);  // Range of marker: [0..numberOfVocabs-1]
+  static constexpr uint64_t markerBitMask =
+      ad_utility::bitMaskForHigherBits(ValueId::numDatatypeBits +
+                                       markerBitMaskSize) &
+      ad_utility::bitMaskForLowerBits(ValueId::numDataBits);
+  static constexpr uint64_t markerShift =
+      ValueId::numDataBits - markerBitMaskSize;
+  static constexpr uint64_t vocabIndexBitMask =
+      ad_utility::bitMaskForLowerBits(markerShift);
+
  private:
-  MainVocabulary underlyingMain_;
-  SpecialVocabulary underlyingSpecial_;  // Should not hold conventional string
-                                         // literals (that is, without a special
-                                         // data type) or IRIs
-
-  // The 5th highest bit of the vocabulary index is used as a marker to
-  // determine whether the word is stored in the normal vocabulary or the
-  // special vocabulary.
-  static constexpr uint64_t specialVocabMarker = 1ull
-                                                 << (ValueId::numDataBits - 1);
-  static constexpr uint64_t specialVocabIndexMask =
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits - 1);
-  static constexpr uint64_t maxVocabIndex = specialVocabMarker - 1;
+  // Array that holds all underlying vocabularies.
+  UnderlyingVocabsArray underlying_;
 
  public:
-  static uint64_t makeSpecialVocabIndex(uint64_t vocabIndex);
-
-  static bool isSpecialVocabIndex(uint64_t index) {
-    return static_cast<bool>(index & specialVocabMarker);
-  }
-
-  static bool isSpecialLiteral(const std::string& input) {
-    return SplitFunction(input);
+  // Check validity of vocabIndex and marker, then return a 64 bit index that
+  // contains the marker and vocabIndex, but leaves the ValueId datatype bits 0.
+  static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
+    AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
+                         vocabIndex <= vocabIndexBitMask);
+    return vocabIndex | (static_cast<uint64_t>(marker) << markerShift);
   };
 
-  void close();
-
-  // Read the vocabulary from files.
-  void readFromFile(const std::string& filename);
-
-  // Problem with getId is that it needs the Comparator which is from the
-  // UnicodeVocab above this splitvocab for the correct lower_bound. -> we can't
-  // do it here
-  // bool getId(std::string_view word, uint64_t* idx) const;
-
-  // needs to be defined in header otherwise we get serious compiler trouble
-  decltype(auto) operator[](uint64_t idx) const {
-    // Check marker bit to determine which vocabulary to use
-    if (isSpecialVocabIndex(idx)) {
-      // The requested word is stored in the special vocabulary
-      uint64_t unmarkedIdx = idx & specialVocabIndexMask;
-      AD_CONTRACT_CHECK(unmarkedIdx <= underlyingSpecial_.size());
-      return underlyingSpecial_[unmarkedIdx];
-    } else {
-      // The requested word is stored in the vocabulary for normal words
-      AD_CONTRACT_CHECK(idx <= maxVocabIndex && idx <= underlyingMain_.size());
-      return underlyingMain_[idx];
-    }
+  // Extract the marker from a full 64 bit index.
+  static constexpr uint8_t getMarker(uint64_t indexWithMarker) {
+    uint64_t marker = (indexWithMarker & markerBitMask) >> markerShift;
+    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    return static_cast<uint8_t>(marker);
   }
 
+  // Use the SplitFunction to determine the marker for a given word (that is, in
+  // which vocabulary this word would go)
+  static uint8_t getMarkerForWord(const std::string_view& word) {
+    return SplitFunction(word);
+  };
+
+  // Helper to detect if a "special" vocabulary is used.
+  static constexpr bool isSpecialVocabIndex(uint64_t indexWithMarker) {
+    return getMarker(indexWithMarker) != 0;
+  }
+
+  // Extract only the vocab index bits and remove ValueId datatype and marker
+  // bits.
+  static constexpr uint64_t getVocabIndex(uint64_t indexWithMarker) {
+    return indexWithMarker & vocabIndexBitMask;
+  };
+
+  // Close all underlying vocabularies.
+  void close();
+
+  // Read the vocabulary from files: all underlying vocabularies will be read
+  // using the filenames returned by SplitFilenameFunction for the given base
+  // filename.
+  void readFromFile(const std::string& filename);
+
+  // The item-at operator retrieves a word by a given index. The index is
+  // expected to have the marker bits set to indicate which underlying
+  // vocabulary is to be used.
+  // Note: The item-at operator needs to be defined in header to avoid some
+  // serious compiler trouble.
+  decltype(auto) operator[](uint64_t idx) const {
+    // Check marker bit to determine which vocabulary to use
+    auto unmarkedIdx = getVocabIndex(idx);
+    auto marker = getMarker(idx);
+
+    // Retrieve the word from the indicated underlying vocabulary
+    return std::visit(
+        [&unmarkedIdx](auto& vocab) {
+          AD_CORRECTNESS_CHECK(unmarkedIdx < vocab.size());
+          return vocab[unmarkedIdx];
+        },
+        underlying_[marker]);
+  }
+
+  // The size of a SplitVocabulary is the sum of the sizes of the underlying
+  // vocabularies.
   [[nodiscard]] uint64_t size() const {
-    return underlyingMain_.size() + underlyingSpecial_.size();
+    uint64_t total = 0;
+    for (auto& vocab : underlying_) {
+      total += std::visit([](auto& v) { return v.size(); }, vocab);
+    }
+    return total;
+  }
+
+  // Perform a search for upper or lower bound on the underlying vocabulary
+  // given by the marker parameter. By default this is the "main" vocabulary
+  // (first).
+  // Note: This function needs to be declared in the header to avoid linker
+  // problems.
+  template <typename InternalStringType, typename Comparator,
+            bool getUpperBound>
+  WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
+                         uint8_t marker = 0) const {
+    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    WordAndIndex subResult = std::visit(
+        [&](auto& v) {
+          if constexpr (getUpperBound) {
+            return v.upper_bound(word, comparator);
+          } else {
+            return v.lower_bound(word, comparator);
+          }
+        },
+        underlying_[marker]);
+    if (subResult.isEnd()) {
+      return subResult;
+    }
+    return {subResult.word(), addMarker(subResult.index(), marker)};
   }
 
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator,
-                           bool useSpecial = false) const {
-    if (useSpecial) {
-      WordAndIndex subResult = underlyingSpecial_.lower_bound(word, comparator);
-      if (subResult.isEnd()) {
-        return subResult;
-      }
-      return {subResult.word(), subResult.index() | specialVocabMarker};
-    } else {
-      return underlyingMain_.lower_bound(word, comparator);
-    }
+                           Comparator comparator, uint8_t marker = 0) const {
+    return boundImpl<InternalStringType, Comparator, false>(word, comparator,
+                                                            marker);
   }
+
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator,
-                           bool useSpecial = false) const {
-    if (useSpecial) {
-      WordAndIndex subResult = underlyingSpecial_.upper_bound(word, comparator);
-      if (subResult.isEnd()) {
-        return subResult;
-      }
-      return {subResult.word(), subResult.index() | specialVocabMarker};
-    } else {
-      return underlyingMain_.upper_bound(word, comparator);
-    }
+                           Comparator comparator, uint8_t marker = 0) const {
+    return boundImpl<InternalStringType, Comparator, true>(word, comparator,
+                                                           marker);
   }
 
-  MainVocabulary& getUnderlyingMainVocabulary() { return underlyingMain_; }
-
-  const MainVocabulary& getUnderlyingMainVocabulary() const {
-    return underlyingMain_;
+  // Shortcut to retrieve the first underlying vocabulary
+  AnyUnderlyingVocab& getUnderlyingMainVocabulary() { return underlying_[0]; }
+  const AnyUnderlyingVocab& getUnderlyingMainVocabulary() const {
+    return underlying_[0];
   }
 
-  SpecialVocabulary& getUnderlyingSpecialVocabulary() {
-    return underlyingSpecial_;
+  // Retrieve a reference to any of the underlying vocabularies
+  AnyUnderlyingVocab& getUnderlyingVocabulary(uint8_t marker) {
+    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    return underlying_[marker];
+  }
+  const AnyUnderlyingVocab& getUnderlyingVocabulary(uint8_t marker) const {
+    AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
+    return underlying_[marker];
   }
 
-  const SpecialVocabulary& getUnderlyingSpecialVocabulary() const {
-    return underlyingSpecial_;
-  }
-
+  // Load from file: open all underlying vocabularies on the corresponding
+  // result of SplitFilenameFunction for the given base filename.
   void open(const std::string& filename);
 
-  // This word writer writes words to different vocabularies depending on their
-  // content.
-  using MainWWPtr = std::unique_ptr<typename MainVocabulary::WordWriter>;
-  using SpecialWWPtr = std::unique_ptr<typename SpecialVocabulary::WordWriter>;
+  // This word writer writes words to different vocabularies depending on the
+  // result of SplitFunction.
   class WordWriter {
    private:
-    MainWWPtr underlyingWordWriter_;
-    SpecialWWPtr underlyingSpecialWordWriter_;
+    UnderlyingWordWriterPtrsArray underlyingWordWriters_;
     std::string readableName_ = "";
 
    public:
-    WordWriter(const MainVocabulary& mainVocabulary,
-               const SpecialVocabulary& specialVocabulary,
+    // Construct a WordWriter for each vocabulary in the given array. Determine
+    // filenames of underlying vocabularies using the SplitFilenameFunction.
+    WordWriter(const UnderlyingVocabsArray& underlyingVocabularies,
                const std::string& filename);
 
     // Add the next word to the vocabulary and return its index.
@@ -158,32 +232,37 @@ CPP_template(class MainVocabulary, class SpecialVocabulary,
     std::string& readableName() { return readableName_; }
   };
 
-  using WWPtr = std::unique_ptr<WordWriter>;
-  WWPtr makeWordWriterPtr(const std::string& filename) const {
-    return std::make_unique<WordWriter>(underlyingMain_, underlyingSpecial_,
-                                        filename);
+  // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
+  // underlying vocabularies and calls the appropriate one depending on the
+  // result of SplitFunction for the given word.
+  std::unique_ptr<WordWriter> makeWordWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<WordWriter>(underlying_, filename);
   }
 };
 
 // Concrete implementations of split function and split filename function
 
-static constexpr std::string_view GEO_LITERAL_SUFFIX =
-    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
-
-// Split function
-inline bool geoSplitFunc(std::string_view word) {
+// Split function for Well-Known Text Literals: All words are written to
+// vocabulary 0 except WKT literals, which go to vocabulary 1.
+inline uint8_t geoSplitFunc(std::string_view word) {
   return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
 };
 
-// Split filename function
-inline std::array<std::string, 2> geoFilenameFunc(std::string base) {
-  return {base, base + ".geometry"};
+// Split filename function for Well-Known Text Literals: The vocabulary 0 is
+// saved under the base filename and WKT literals are saved with a suffix
+// ".geometry"
+inline std::array<std::string, 2> geoFilenameFunc(std::string_view base) {
+  return {std::string(base), absl::StrCat(base, ".geometry")};
 };
 
-// TODO docs
+// A SplitGeoVocabulary splits only Well-Known Text literals to their own
+// vocabulary. This can be used for precomputations for spatial features.
+// TODO<ullingerc>: Switch 2nd Vocab to GeoVocabulary<UnderlyingVocabulary>
+// after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<UnderlyingVocabulary, UnderlyingVocabulary, geoSplitFunc,
-                    geoFilenameFunc>;
+    SplitVocabulary<geoSplitFunc, geoFilenameFunc, UnderlyingVocabulary,
+                    UnderlyingVocabulary>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

@@ -11,9 +11,18 @@
 #include "global/IndexTypes.h"
 #include "index/Vocabulary.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+// Including the SplitVocabulary.cpp file is necessary for the compiler to fully
+// see the SplitVocabulary template. The template is required to instatiate
+// example split vocabularies, which should not pollute the main implementation
+// of SplitVocabulary.
+#include "index/vocabulary/SplitVocabulary.cpp"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/json.h"
+
+// Anonymous namespace for the normal tests
+namespace {
 
 using json = nlohmann::json;
 using std::string;
@@ -166,24 +175,24 @@ TEST(VocabularyTest, ItemAt) {
       "\"LINESTRING(1 2, 3 "
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
-  TextVocabulary v;
+  RdfsVocabulary v;
   auto filename = "vocTest6.dat";
   v.createFromSet(s, filename);
 
-  ASSERT_EQ(v[WordVocabIndex::make(0)], "a");
-  ASSERT_EQ(v[WordVocabIndex::make(1)], "ab");
-  ASSERT_EQ(v[WordVocabIndex::make(2)], "ba");
-  ASSERT_EQ(v[WordVocabIndex::make(3)], "car");
+  ASSERT_EQ(v[VocabIndex::make(0)], "a");
+  ASSERT_EQ(v[VocabIndex::make(1)], "ab");
+  ASSERT_EQ(v[VocabIndex::make(2)], "ba");
+  ASSERT_EQ(v[VocabIndex::make(3)], "car");
 
   // Out of range indices
-  EXPECT_ANY_THROW(v[WordVocabIndex::make(42)]);
-  EXPECT_ANY_THROW(v[WordVocabIndex::make((1ull << 59) | 42)]);
+  EXPECT_ANY_THROW(v[VocabIndex::make(42)]);
+  EXPECT_ANY_THROW(v[VocabIndex::make((1ull << 59) | 42)]);
 
-  WordVocabIndex idx = WordVocabIndex::make(1ull << 59);
+  auto idx = VocabIndex::make(1ull << 59);
   ASSERT_EQ(v[idx],
             "\"LINESTRING(1 2, 3 "
             "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  idx = WordVocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
+  idx = VocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
   ASSERT_EQ(v[idx],
             "\"POLYGON((1 2, 3 "
             "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -196,23 +205,25 @@ TEST(Vocabulary, SplitGeoVocab) {
       SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 
   // Test check: Is a geo literal?
-  ASSERT_TRUE(SGV::isSpecialLiteral(
-      "\"POLYGON((1 2, 3 "
-      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
-  ASSERT_TRUE(SGV::isSpecialLiteral(
-      "\"LINESTRING(1 2, 3 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"));
-  ASSERT_FALSE(SGV::isSpecialLiteral(""));
-  ASSERT_FALSE(SGV::isSpecialLiteral("\"abc\""));
-  ASSERT_FALSE(SGV::isSpecialLiteral("\"\"^^<http://example.com>"));
+  ASSERT_EQ(SGV::getMarkerForWord(
+                "\"POLYGON((1 2, 3 "
+                "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+            1);
+  ASSERT_EQ(SGV::getMarkerForWord(
+                "\"LINESTRING(1 2, 3 "
+                "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+            1);
+  ASSERT_EQ(SGV::getMarkerForWord(""), 0);
+  ASSERT_EQ(SGV::getMarkerForWord("\"abc\""), 0);
+  ASSERT_EQ(SGV::getMarkerForWord("\"\"^^<http://example.com>"), 0);
 
   // Add marker bit
-  ASSERT_EQ(SGV::makeSpecialVocabIndex(0), (1ull << 59));
-  ASSERT_EQ(SGV::makeSpecialVocabIndex(25), (1ull << 59) | 25);
+  ASSERT_EQ(SGV::addMarker(0, 1), (1ull << 59));
+  ASSERT_EQ(SGV::addMarker(25, 1), (1ull << 59) | 25);
 
   // Vocab index is out of range
-  EXPECT_ANY_THROW(SGV::makeSpecialVocabIndex((1ull << 60) | 42));
-  EXPECT_ANY_THROW(SGV::makeSpecialVocabIndex(1ull << 59));
+  EXPECT_ANY_THROW(SGV::addMarker((1ull << 60) | 42, 5));
+  EXPECT_ANY_THROW(SGV::addMarker(1ull << 59, 5));
 
   // Check marker bit
   ASSERT_TRUE(SGV::isSpecialVocabIndex((1ull << 59) | 42));
@@ -286,3 +297,65 @@ TEST(Vocabulary, SplitWordWriter) {
   ASSERT_FALSE(vocabulary.getId("xyz", &idx));
   ASSERT_ANY_THROW(vocabulary[VocabIndex::make(42)]);
 }
+
+}  // namespace
+
+namespace splitVocabTest {
+
+uint8_t testSplitTwoFunction(std::string_view s) {
+  return s.starts_with("\"a");
+}
+
+std::array<std::string, 2> testSplitFnTwoFunction(std::string_view s) {
+  return {std::string(s), absl::StrCat(s, ".a")};
+}
+
+using TwoSplitVocabulary =
+    SplitVocabulary<splitVocabTest::testSplitTwoFunction,
+                    splitVocabTest::testSplitFnTwoFunction, VocabularyInMemory,
+                    VocabularyInMemory>;
+
+TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
+  // Tests the SplitVocabulary class with a custom split function that separates
+  // all words in two underlying vocabularies
+  TwoSplitVocabulary sv;
+
+  ASSERT_EQ(sv.numberOfVocabs, 2);
+  ASSERT_EQ(sv.markerBitMaskSize, 1);
+  ASSERT_EQ(sv.markerBitMask, 1ull << 59);
+  ASSERT_EQ(sv.markerShift, 59);
+  ASSERT_EQ(sv.vocabIndexBitMask, (1ull << 59) - 1);
+
+  ASSERT_EQ(sv.addMarker(42, 0), 42);
+  ASSERT_EQ(sv.addMarker(42, 1), (1ull << 59) | 42);
+  ASSERT_ANY_THROW(sv.addMarker(1ull << 60, 1));
+  ASSERT_ANY_THROW(sv.addMarker(5, 2));
+
+  ASSERT_EQ(sv.getMarker((1ull << 59) | 42), 1);
+  ASSERT_EQ(sv.getMarker(42), 0);
+
+  ASSERT_EQ(sv.getVocabIndex((1ull << 59) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex(1ull << 59), 0);
+  ASSERT_EQ(sv.getVocabIndex(0), 0);
+  ASSERT_EQ(sv.getVocabIndex((1ull << 59) - 1), (1ull << 59) - 1);
+  ASSERT_EQ(sv.getVocabIndex(42), 42);
+
+  ASSERT_TRUE(sv.isSpecialVocabIndex((1ull << 59) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex(1ull << 59));
+  ASSERT_FALSE(sv.isSpecialVocabIndex(42));
+  ASSERT_FALSE(sv.isSpecialVocabIndex(0));
+
+  ASSERT_EQ(sv.getMarkerForWord("\"xyz\""), 0);
+  ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
+  ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 1);
+  ;
+}
+
+// TODO test with three
+
+}  // namespace splitVocabTest
+
+// Explicit instantiations for SplitVocabulary tests
+template class SplitVocabulary<splitVocabTest::testSplitTwoFunction,
+                               splitVocabTest::testSplitFnTwoFunction,
+                               VocabularyInMemory, VocabularyInMemory>;
