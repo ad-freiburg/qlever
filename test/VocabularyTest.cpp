@@ -12,7 +12,7 @@
 #include "index/Vocabulary.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 // Including the SplitVocabulary.cpp file is necessary for the compiler to fully
-// see the SplitVocabulary template. The template is required to instatiate
+// see the SplitVocabulary template. The template is required to instantiate
 // example split vocabularies, which should not pollute the main implementation
 // of SplitVocabulary.
 #include "index/vocabulary/SplitVocabulary.cpp"
