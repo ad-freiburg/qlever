@@ -11,15 +11,18 @@ using AntlrParser = SparqlAutomaticParser;
 // _____________________________________________________________________________
 template <typename ContextType>
 auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
-                    std::string operation) {
-  // The second argument is the `PrefixMap` for QLever's internal IRIs.
+                    std::string operation,
+                    const std::vector<DatasetClause>& datasets) {
   using S = std::string;
+  // The second argument is the `PrefixMap` for QLever's internal IRIs.
+  // The third argument are the datasets from outside the query, which override
+  // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
       std::move(operation),
-      {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}}};
-  // Note: `AntlrParser::query` is a method of `AntlrParser` (which is an alias
-  // for `SparqlAutomaticParser`) that returns the `QueryContext*` for the whole
-  // query.
+      {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
+      datasets.empty()
+          ? std::nullopt
+          : std::optional(parsedQuery::DatasetClauses::fromClauses(datasets))};
   auto resultOfParseAndRemainingText = p.parseTypesafe(F);
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
@@ -29,39 +32,13 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
 }
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(std::string query) {
-  return parseOperation(&AntlrParser::query, std::move(query));
-}
-
-// _____________________________________________________________________________
-std::vector<ParsedQuery> SparqlParser::parseUpdate(std::string update) {
-  return parseOperation(&AntlrParser::update, std::move(update));
-}
-
-// _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasets) {
-  auto parsedQuery = parseQuery(std::move(query));
-  // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-  // parameters overrides the dataset from the query itself.
-  if (!datasets.empty()) {
-    parsedQuery.datasetClauses_ =
-        parsedQuery::DatasetClauses::fromClauses(datasets);
-  }
-  return parsedQuery;
+  return parseOperation(&AntlrParser::query, std::move(query), datasets);
 }
 
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
     std::string update, const std::vector<DatasetClause>& datasets) {
-  auto parsedUpdates = parseUpdate(std::move(update));
-  // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-  // parameters overrides the dataset from the query itself.
-  if (!datasets.empty()) {
-    auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(datasets);
-    for (auto& parsedOperation : parsedUpdates) {
-      parsedOperation.datasetClauses_ = datasetClauses;
-    }
-  }
-  return parsedUpdates;
+  return parseOperation(&AntlrParser::update, std::move(update), datasets);
 }

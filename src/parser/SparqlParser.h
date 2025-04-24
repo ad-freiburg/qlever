@@ -21,7 +21,7 @@ class SparqlParser {
   // query or update.
   static ParsedQuery parseQuery(
       std::string query, const std::vector<DatasetClause>& datasets = {});
-  static ParsedQuery parseUpdate(
+  static std::vector<ParsedQuery> parseUpdate(
       std::string update, const std::vector<DatasetClause>& datasets = {});
 };
 
