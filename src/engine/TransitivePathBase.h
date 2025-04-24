@@ -318,6 +318,8 @@ class TransitivePathBase : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  bool columnOriginatesFromGraph(Variable variable) const override;
+
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
   std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(

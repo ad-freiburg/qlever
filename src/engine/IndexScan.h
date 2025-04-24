@@ -177,6 +177,8 @@ class IndexScan final : public Operation {
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
+  bool columnOriginatesFromGraph(Variable variable) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 

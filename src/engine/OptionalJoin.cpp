@@ -276,6 +276,16 @@ auto OptionalJoin::computeImplementationFromIdTables(
   return implementation;
 }
 
+// _____________________________________________________________________________
+bool OptionalJoin::columnOriginatesFromGraph(Variable variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (_left->getVariableColumnOrNullopt(variable).has_value() &&
+      _right->getVariableColumnOrNullopt(variable).has_value()) {
+    return _left->getRootOperation()->columnOriginatesFromGraph(variable);
+  }
+  return Operation::columnOriginatesFromGraph(variable);
+}
+
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTable& left, const IdTable& right,

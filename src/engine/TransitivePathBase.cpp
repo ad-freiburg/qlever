@@ -520,3 +520,9 @@ void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
   auto [it, success] = map.try_emplace(key, allocator());
   it->second.insert(value);
 }
+
+// _____________________________________________________________________________
+bool TransitivePathBase::columnOriginatesFromGraph(Variable variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  return getExternallyVisibleVariableColumns().at(variable).columnIndex_ < 2;
+}

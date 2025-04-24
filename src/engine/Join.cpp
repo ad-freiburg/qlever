@@ -845,3 +845,15 @@ std::unique_ptr<Operation> Join::cloneImpl() const {
   copy->_right = _right->clone();
   return copy;
 }
+
+// _____________________________________________________________________________
+bool Join::columnOriginatesFromGraph(Variable variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join column we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (variable == _joinVar) {
+    return _left->getRootOperation()->columnOriginatesFromGraph(_joinVar) ||
+           _right->getRootOperation()->columnOriginatesFromGraph(_joinVar);
+  }
+  return Operation::columnOriginatesFromGraph(variable);
+}

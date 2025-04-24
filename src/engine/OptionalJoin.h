@@ -60,6 +60,8 @@ class OptionalJoin : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraph(Variable variable) const override;
+
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(

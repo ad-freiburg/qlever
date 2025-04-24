@@ -76,6 +76,8 @@ class ExistsJoin : public Operation {
     return {left_.get(), right_.get()};
   }
 
+  bool columnOriginatesFromGraph(Variable variable) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
