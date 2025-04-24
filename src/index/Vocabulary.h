@@ -209,13 +209,39 @@ class Vocabulary {
     return getCaseComparator().getLocaleManager();
   }
 
+  // Get bounds for a given prefix. Since the underlying vocabulary is a
+  // SplitVocabulary, the template parameter applySplit indicates whether all
+  // lookups should only be done in the main vocabulary or whether the lookup
+  // should be performed on the special split vocabulary.
+  template <bool getUpperBound, bool applySplit = false>
+  IndexType boundImpl(std::string_view word,
+                      const SortLevel level = SortLevel::QUARTERNARY) const {
+    WordAndIndex wordAndIndex;
+    uint8_t marker = 0;
+    if constexpr (applySplit) {
+      marker = vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
+    }
+    if constexpr (getUpperBound) {
+      wordAndIndex = vocabulary_.upper_bound(word, level, marker);
+    } else {
+      wordAndIndex = vocabulary_.lower_bound(word, level, marker);
+    }
+    return IndexType::make(wordAndIndex.indexOrDefault(size()));
+  };
+
   // Wraps std::lower_bound and returns an index instead of an iterator
+  template <bool applySplit = false>
   IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+                        const SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<false, applySplit>(word, level);
+  };
 
   // _______________________________________________________________
+  template <bool applySplit = false>
   IndexType upper_bound(const string& word,
-                        SortLevel level = SortLevel::QUARTERNARY) const;
+                        SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<true, applySplit>(word, level);
+  };
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
