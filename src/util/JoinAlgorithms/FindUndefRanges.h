@@ -1,9 +1,12 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
 #define QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
+
+#include <algorithm>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
@@ -40,32 +43,33 @@ CPP_template(typename R,
              typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithoutUndef(
         const R& row, It begin, It end,
-        [[maybe_unused]] bool& resultMightBeUnsorted)
-        -> cppcoro::generator<It> {
+        [[maybe_unused]] bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
   assert((ql::ranges::all_of(row,
                              [](Id id) { return id != Id::makeUndefined(); })));
-  size_t numJoinColumns = row.size();
+
+  const size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   Row rowLower = row;
+  const size_t upperBound = 1UL << row.size();  // 2^3
 
-  size_t upperBound = 1UL << row.size();
+  std::vector<Row> permutations;
   for (size_t i = 0; i < upperBound - 1; ++i) {
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
                         ? row[j]
                         : ValueId::makeUndefined();
     }
-
-    auto [begOfUndef, endOfUndef] = std::equal_range(
-        begin, end, rowLower, ql::ranges::lexicographical_compare);
-    for (auto it = begOfUndef; it != endOfUndef; ++it) {
-      co_yield it;
-    }
+    permutations.push_back(rowLower);
   }
+
+  return permutations | ql::views::transform([begin, end](const Row& row) {
+           return std::equal_range(begin, end, row,
+                                   ql::ranges::lexicographical_compare);
+         });
 }
 
 // This function has the additional precondition, that the `row` contains
@@ -79,7 +83,7 @@ CPP_template(typename R,
 CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
         const auto& row, const size_t numLastUndefined, It begin, It end,
-        bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
+        bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -97,11 +101,12 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
   // If every entry in the row is UNDEF, then it is the smallest possible
   // row, and there can be no smaller row.
   if (numLastUndefined == 0) {
-    co_return;
+    return;
   }
   Row rowLower = row;
 
-  size_t upperBound = 1u << numDefinedColumns;
+  const size_t upperBound = 1u << numDefinedColumns;
+  std::vector<Row> permutations;
   for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
        ++permutationCounter) {
     for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
@@ -110,26 +115,29 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
               ? row[colIdx]
               : ValueId::makeUndefined();
     }
-
-    auto begOfUndef = std::lower_bound(begin, end, rowLower,
-                                       ql::ranges::lexicographical_compare);
-    rowLower[numDefinedColumns - 1] =
-        Id::fromBits(rowLower[numDefinedColumns - 1].getBits() + 1);
-    auto endOfUndef = std::lower_bound(begin, end, rowLower,
-                                       ql::ranges::lexicographical_compare);
-    for (; begOfUndef != endOfUndef; ++begOfUndef) {
-      resultMightBeUnsorted = true;
-      co_yield begOfUndef;
-    }
+    permutations.push_back(rowLower);
   }
+
+  return permutations |
+         ql::views::transform([begin, end, &resultMightBeUnsorted,
+                               numDefinedColumns](const Row& row) {
+           auto begOfUndef = std::lower_bound(
+               begin, end, row, ql::ranges::lexicographical_compare);
+           row[numDefinedColumns - 1] =
+               Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
+           auto endOfUndef = std::lower_bound(
+               begin, end, row, ql::ranges::lexicographical_compare);
+
+           resultMightBeUnsorted = true;
+           return begOfUndef;
+         });
 }
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
 CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
-                                         bool& resultMightBeUnsorted)
-        -> cppcoro::generator<It> {
+                                         bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
@@ -155,13 +163,15 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     return true;
   };
 
-  for (auto it = begin; it != end; ++it) {
-    if (isCompatible(*it)) {
-      resultMightBeUnsorted = true;
-      co_yield it;
-    }
-  }
-  co_return;
+  return ql::ranges::subrange(begin, end) |
+         ql::views::filter(
+             [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
+               if (isCompatible(otherRow)) {
+                 resultMightBeUnsorted = true;
+                 return true;
+               }
+               return false;
+             });
 }
 
 // This function first checks in which positions the `row` has UNDEF values, and
@@ -174,7 +184,7 @@ struct FindSmallerUndefRanges {
   CPP_template(typename Row,
                typename It)(requires std::random_access_iterator<It>) auto
   operator()(const Row& row, It begin, It end,
-             bool& resultMightBeUnsorted) const -> cppcoro::generator<It> {
+             bool& resultMightBeUnsorted) const {
     size_t numLastUndefined = 0;
     assert(row.size() > 0);
     auto it = ql::ranges::rbegin(row);
