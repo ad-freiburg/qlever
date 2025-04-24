@@ -38,9 +38,9 @@ class UnicodeVocabulary {
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T>
+  template <typename T, typename... Args>
   WordAndIndex lower_bound(const T& word, SortLevel level,
-                           auto&&... args) const {
+                           Args&&... args) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
@@ -54,9 +54,9 @@ class UnicodeVocabulary {
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T>
+  template <typename T, typename... Args>
   WordAndIndex upper_bound(const T& word, SortLevel level,
-                           auto&&... args) const {
+                           Args&&... args) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
