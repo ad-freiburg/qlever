@@ -4249,7 +4249,7 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                                   "?_QLever_internal_variable_qp_1")),
       std::nullopt, {16, 64'000'000});
 
-  h::expectWithGivenBudgets(
+  h::expectWithGivenBudget(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
@@ -4257,5 +4257,5 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
-      std::nullopt, {0, 4});
+      std::nullopt, 0);
 }
