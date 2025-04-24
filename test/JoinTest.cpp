@@ -857,3 +857,40 @@ TEST(JoinTest, clone) {
   EXPECT_THAT(join, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
 }
+
+// _____________________________________________________________________________
+TEST(JoinTest, columnOriginatesFromGraph) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = ad_utility::testing::getQec();
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto index = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?c"}});
+
+  Join join1{qec, values1, values2, 0, 0};
+  EXPECT_FALSE(join1.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(join1.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_FALSE(join1.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(join1.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+
+  Join join2{qec, index, values1, 0, 0};
+  EXPECT_TRUE(join2.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(join2.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_TRUE(join2.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(join2.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+
+  Join join3{qec, values1, index, 0, 0};
+  EXPECT_TRUE(join3.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(join3.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_TRUE(join3.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(join3.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+}

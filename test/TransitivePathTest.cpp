@@ -909,6 +909,25 @@ TEST_P(TransitivePathTest, clone) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, columnOriginatesFromGraph) {
+  auto sub = makeIdTableFromVector({{0, 2}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto transitivePath = makePathBound(
+      false, std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}},
+      sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right, 0,
+      std::numeric_limits<size_t>::max());
+
+  EXPECT_TRUE(transitivePath->columnOriginatesFromGraph(Variable{"?start"}));
+  EXPECT_TRUE(transitivePath->columnOriginatesFromGraph(Variable{"?target"}));
+  EXPECT_FALSE(transitivePath->columnOriginatesFromGraph(Variable{"?other"}));
+  EXPECT_THROW(
+      transitivePath->columnOriginatesFromGraph(Variable{"?notExisting"}),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),

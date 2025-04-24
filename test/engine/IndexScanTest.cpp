@@ -1122,3 +1122,34 @@ TEST(IndexScan, clone) {
     EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
   }
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, columnOriginatesFromGraph) {
+  auto* qec = getQec();
+  IndexScan scan1{qec, Permutation::PSO,
+                  SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
+  EXPECT_TRUE(scan1.columnOriginatesFromGraph(Var{"?x"}));
+  EXPECT_TRUE(scan1.columnOriginatesFromGraph(Var{"?y"}));
+  EXPECT_TRUE(scan1.columnOriginatesFromGraph(Var{"?z"}));
+  EXPECT_THROW(scan1.columnOriginatesFromGraph(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  IndexScan scan2{
+      qec, Permutation::PSO,
+      SparqlTripleSimple{
+          Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
+  EXPECT_TRUE(scan2.columnOriginatesFromGraph(Var{"?x"}));
+  EXPECT_TRUE(scan2.columnOriginatesFromGraph(Var{"?y"}));
+  EXPECT_TRUE(scan2.columnOriginatesFromGraph(Var{"?z"}));
+  EXPECT_FALSE(scan2.columnOriginatesFromGraph(Var{"?g"}));
+  EXPECT_THROW(scan2.columnOriginatesFromGraph(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  IndexScan scan3{qec, Permutation::OSP,
+                  SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
+  EXPECT_THROW(scan3.columnOriginatesFromGraph(Var{"?x"}),
+               ad_utility::Exception);
+  EXPECT_TRUE(scan3.columnOriginatesFromGraph(Var{"?y"}));
+  EXPECT_THROW(scan3.columnOriginatesFromGraph(Var{"?z"}),
+               ad_utility::Exception);
+}
