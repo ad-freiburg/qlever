@@ -45,7 +45,7 @@ const auto makeIdForLYearDate = [](int year, DateT type = DateT::Date) {
 using IdxPair = std::pair<size_t, size_t>;
 using IdxPairRanges = std::vector<IdxPair>;
 // Convert `IdxPairRanges` to `BlockMetadataRanges` with respect to
-// `BlockMetadataIt beginBlockSpan` (first possible `std::span<const
+// `BlockMetadataIt beginBlockSpan` (first possible `ql::span<const
 // CompressedBlockMetadata>::iterator`).
 static BlockMetadataRanges convertFromSpanIdxToSpanBlockItRanges(
     const BlockMetadataIt& beginBlockSpan, const IdxPairRanges idxRanges) {
@@ -380,21 +380,21 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Test the `mapValueIdItRangesToBlockItRangesComplemented` (if
   // `testComplement = true`) or `mapValueIdItRangesToBlockItRanges` helper
   // function of `PrefilterExpression`s. We assert that the retrieved
-  // relevant iterators with respect to the containerized `std::span<const
+  // relevant iterators with respect to the containerized `ql::span<const
   // CompressedBlockMetadata> evalBlocks` are correctly mapped back to
   // `RelevantBlockRange`s (index values regarding `evalBlocks`).
   auto makeTestDetailIndexMapping(CompOp compOp, ValueId referenceId,
                                   IdxPairRanges&& relevantIdxRanges,
                                   bool testComplement) {
-    std::span<const CompressedBlockMetadata> evalBlocks(
-        allTestBlocksIsDatatype);
+    ql::span<const CompressedBlockMetadata> evalBlocks(allTestBlocksIsDatatype);
     // Make `ValueId`s of `evalBlocks` accessible by iterators.
     // For the defined `CompressedBlockMetadata` values above, evaluation column
     // at index 2 is relevant.
     AccessValueIdFromBlockMetadata accessValueIdOp(2);
     ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
-        ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
+        ValueIdIt{&evalBlocks, static_cast<size_t>(evalBlocks.size() * 2),
+                  accessValueIdOp}};
     std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
         inputRange.begin(), inputRange.end(), referenceId, compOp);
     using namespace prefilterExpressions::detail::mapping;
@@ -423,7 +423,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   template <bool TestUnion>
   auto makeTestAndOrOrMergeBlocks(IdxPairRanges&& r1, IdxPairRanges&& r2,
                                   IdxPairRanges&& rExpected) {
-    std::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
+    ql::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
     auto mergedBlockItRanges =
         prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<

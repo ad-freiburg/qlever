@@ -122,7 +122,7 @@ class IdTable {
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
   using Storage = detail::VectorWithElementwiseMove<ColumnStorage>;
-  using ViewSpans = std::vector<std::span<const T>>;
+  using ViewSpans = std::vector<ql::span<const T>>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -282,9 +282,11 @@ class IdTable {
       AD_CORRECTNESS_CHECK(numColumns == NumColumns);
     }
     AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
-    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-        this->data(),
-        [this](const auto& column) { return column.size() == numRows_; }));
+    AD_CORRECTNESS_CHECK(
+        ql::ranges::all_of(this->data(), [this](const auto& column) {
+          return column.size() ==
+                 static_cast<decltype(column.size())>(numRows_);
+        }));
   }
 
  public:
@@ -596,16 +598,17 @@ class IdTable {
   // the argument `columnIndices`.
   CPP_template(typename = void)(requires isDynamic)
       IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-          std::span<const ColumnIndex> columnIndices) const {
+          ql::span<const ColumnIndex> columnIndices) const {
     AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
-    viewSpans.reserve(columnIndices.size());
+    viewSpans.reserve(static_cast<size_t>(columnIndices.size()));
     for (auto idx : columnIndices) {
       viewSpans.push_back(getColumn(idx));
     }
     return IdTable<T, 0, ColumnStorage, IsView::True>{
-        std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
+        std::move(viewSpans), static_cast<size_t>(columnIndices.size()),
+        numRows_, allocator_};
   }
 
   // Modify the table, such that it contains only the specified `subset` of the
@@ -618,7 +621,7 @@ class IdTable {
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
   // with three columns left by one element.
-  void setColumnSubset(std::span<const ColumnIndex> subset) {
+  void setColumnSubset(ql::span<const ColumnIndex> subset) {
     // First check that the `subset` is indeed a subset of the column
     // indices.
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
@@ -800,15 +803,15 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  CPP_template(typename = void)(requires(!isView)) std::span<T> getColumn(
+  CPP_template(typename = void)(requires(!isView)) ql::span<T> getColumn(
       size_t i) {
     return {data().at(i)};
   }
-  std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
+  ql::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `std::span<T>`
-  // or `std::span<const T>`, depending on whether `this` is const.
+  // `std::array` (else). The elements of the vector/array are `ql::span<T>`
+  // or `ql::span<const T>`, depending on whether `this` is const.
   auto getColumns() { return getColumnsImpl(*this); }
   auto getColumns() const { return getColumnsImpl(*this); }
 

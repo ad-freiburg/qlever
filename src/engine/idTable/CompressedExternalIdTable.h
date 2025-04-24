@@ -130,8 +130,10 @@ class CompressedExternalIdTableWriter {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
             // TODO<C++23> Use `ql::views::chunkd`
-            for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min(lower + blockSize, column.size());
+            for (size_t lower = 0; lower < static_cast<size_t>(column.size());
+                 lower += blockSize) {
+              size_t upper = std::min<size_t>(
+                  lower + blockSize, static_cast<size_t>(column.size()));
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
               auto compressed = ZstdWrapper::compress(
                   column.data() + lower, thisBlockSizeUncompressed);

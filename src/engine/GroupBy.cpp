@@ -218,7 +218,7 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_template_lambda_mut (&)(typename T)(T && singleResult)(
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
       requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
@@ -755,7 +755,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   auto table = permutation.getDistinctCol0IdsAndCounts(
       cancellationHandle_, locatedTriplesSnapshot());
   if (numCounts == 0) {
-    table.setColumnSubset({0});
+    table.setColumnSubset(std::array{ColumnIndex(0)});
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
@@ -1230,7 +1230,7 @@ GroupBy::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<std::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1560,7 +1560,7 @@ Result GroupBy::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<std::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

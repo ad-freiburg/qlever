@@ -78,7 +78,7 @@ static bool checkBlockIsInconsistent(const CompressedBlockMetadata& block,
 // order. (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
-    std::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
+    ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
   const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
   };
@@ -182,15 +182,15 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   // CompressedBlockMetadata> blockRange` with respect to the contained
   // `ValueId`s.
   // `blockRange.begin()` represents the first valid iterator on our original
-  // `std::span<const CompressedBlockMetadata> blockRange`.
+  // `ql::span<const CompressedBlockMetadata> blockRange`.
   //
   //  EXAMPLE
-  // `CompressedBlockMetadata` view on `std::span<const CompressedBlockMetadata>
+  // `CompressedBlockMetadata` view on `ql::span<const CompressedBlockMetadata>
   // blockRange`:
   // `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150,
   // 1158]}`. Range for `BlockMetadataIt` values.
   //
-  // `ValueId` view on (flat) `std::span<const CompressedBlockMetadata>
+  // `ValueId` view on (flat) `ql::span<const CompressedBlockMetadata>
   // blockRange`:
   //`{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`.
   // Range for `ValueIdIt` values.
@@ -202,7 +202,7 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   auto blockOffsetBegin = std::distance(idRangeBegin, beginIdIt) / 2;
   auto blockOffsetEnd = (std::distance(idRangeBegin, endIdIt) + 1) / 2;
   AD_CORRECTNESS_CHECK(static_cast<size_t>(blockOffsetEnd) <=
-                       blockRange.size());
+                       static_cast<size_t>(blockRange.size()));
   return {blockRangeBegin + blockOffsetBegin, blockRangeBegin + blockOffsetEnd};
 }
 
@@ -420,7 +420,7 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // CUSTOM VALUE-ID ACCESS (STRUCT) OPERATOR
 //______________________________________________________________________________
 // Enables access to the i-th `ValueId` regarding our containerized
-// `std::span<const CompressedBlockMetadata> inputSpan`.
+// `ql::span<const CompressedBlockMetadata> inputSpan`.
 // Each `CompressedBlockMetadata` value holds exactly two bound `ValueId`s (one
 // in `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.
@@ -459,7 +459,8 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
-        ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
+        ValueIdIt{&blockRange, static_cast<uint64_t>(blockRange.size()) * 2,
+                  accessValueIdOp}};
     result =
         getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
             evaluateImpl(idRange, blockRange),

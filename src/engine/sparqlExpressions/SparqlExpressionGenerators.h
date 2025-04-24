@@ -17,7 +17,7 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
@@ -28,17 +28,17 @@ inline std::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
-                    endIndex <= completeColumn.size());
+                    endIndex <= static_cast<size_t>(completeColumn.size()));
   return {completeColumn.begin() + beginIndex,
           completeColumn.begin() + endIndex};
 }
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
@@ -65,7 +65,7 @@ CPP_template(typename T, typename Transformation = std::identity)(
     requires ql::ranges::input_range<
         T>) auto resultGenerator(T&& vector, size_t numItems,
                                  Transformation transformation = {}) {
-  AD_CONTRACT_CHECK(numItems == vector.size());
+  AD_CONTRACT_CHECK(numItems == static_cast<size_t>(vector.size()));
   return ad_utility::allView(AD_FWD(vector)) |
          ql::views::transform(std::move(transformation));
 }

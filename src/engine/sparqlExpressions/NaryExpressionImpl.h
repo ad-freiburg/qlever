@@ -7,8 +7,9 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
-#include <ranges>
 #include <absl/functional/bind_front.h>
+
+#include <ranges>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -52,7 +53,7 @@ class NaryExpression : public SparqlExpression {
 
  private:
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   CPP_template(typename... Operands)(
@@ -182,8 +183,12 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
 // _____________________________________________________________________________
 template <typename Op>
-std::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
+ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
+#ifdef QLEVER_CPP_17
+  return {children_.data(), static_cast<std::ptrdiff_t>(children_.size())};
+#else
   return {children_.data(), children_.size()};
+#endif
 }
 
 // __________________________________________________________________________

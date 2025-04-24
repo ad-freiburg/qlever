@@ -588,8 +588,7 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       auto... rewritePositions)
+       ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
@@ -632,7 +631,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -646,14 +645,18 @@ void QueryPlanner::indexScanTwoVarsCase(
   using Tr = SparqlTripleSimple;
   if (!isVariable(s)) {
     if (p == o) {
-      handleRepeatedVariables({{SPO}}, &Tr::o_);
+      static const Permutation::Enum spoPerms[] = {SPO};
+      handleRepeatedVariables(ql::span<const Permutation::Enum>{spoPerms},
+                              &Tr::o_);
     } else {
       addIndexScan(SPO);
       addIndexScan(SOP);
     }
   } else if (!isVariable(p)) {
     if (s == o) {
-      handleRepeatedVariables({{PSO}}, &Tr::o_);
+      static const Permutation::Enum psoPerms[] = {PSO};
+      handleRepeatedVariables(ql::span<const Permutation::Enum>{psoPerms},
+                              &Tr::o_);
     } else {
       addIndexScan(PSO);
       addIndexScan(POS);
@@ -661,7 +664,9 @@ void QueryPlanner::indexScanTwoVarsCase(
   } else {
     AD_CORRECTNESS_CHECK(!isVariable(o));
     if (s == p) {
-      handleRepeatedVariables({{OPS}}, &Tr::s_);
+      static const Permutation::Enum opsPerms[] = {OPS};
+      handleRepeatedVariables(ql::span<const Permutation::Enum>{opsPerms},
+                              &Tr::s_);
     } else {
       addIndexScan(OSP);
       addIndexScan(OPS);
@@ -686,7 +691,7 @@ void QueryPlanner::indexScanThreeVarsCase(
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -700,14 +705,25 @@ void QueryPlanner::indexScanThreeVarsCase(
 
   if (s == o) {
     if (s == p) {
-      handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
+      static const Permutation::Enum psoPerms[] = {Permutation::Enum::PSO};
+      handleRepeatedVariables(ql::span<const Permutation::Enum>{psoPerms},
+                              &Tr::o_, &Tr::s_);
     } else {
-      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
+      static const Permutation::Enum posOpsPerms[] = {Permutation::Enum::POS,
+                                                      Permutation::Enum::OPS};
+      handleRepeatedVariables(ql::span<const Permutation::Enum>{posOpsPerms},
+                              &Tr::s_);
     }
   } else if (s == p) {
-    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
+    static const Permutation::Enum opsPosPerms[] = {Permutation::Enum::OPS,
+                                                    Permutation::Enum::POS};
+    handleRepeatedVariables(ql::span<const Permutation::Enum>{opsPosPerms},
+                            &Tr::s_);
   } else if (o == p) {
-    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
+    static const Permutation::Enum psoSpoPerms[] = {Permutation::Enum::PSO,
+                                                    Permutation::Enum::SPO};
+    handleRepeatedVariables(ql::span<const Permutation::Enum>{psoSpoPerms},
+                            &Tr::o_);
   } else {
     // Three distinct variables
     // Add plans for all six permutations.
@@ -1030,7 +1046,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
     auto expression = makeNotEqualExpression(variable, iris.at(0));
     appendNotEqualString(descriptor, iris.at(0), variable);
     // Combine subsequent iris with a logical AND.
-    for (string_view iri : std::span{iris.begin() + 1, iris.end()}) {
+    for (const auto& iri : ql::views::drop(iris, 1)) {
       expression = makeAndExpression(std::move(expression),
                                      makeNotEqualExpression(variable, iri));
       descriptor << " && ";

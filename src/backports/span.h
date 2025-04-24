@@ -3,15 +3,15 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_BACKPORTS_SPAN
-#define QLEVER_SRC_BACKPORTS_SPAN
+#ifndef QLEVER_SRC_BACKPORTS_SPAN_H
+#define QLEVER_SRC_BACKPORTS_SPAN_H
 
 #include "backports/cppTemplate2.h"
 
 #ifdef QLEVER_CPP_17
 #include <range/v3/view/span.hpp>
 namespace ql {
-using ranges::span;
+using ::ranges::span;
 }  // namespace ql
 
 #else
@@ -22,4 +22,4 @@ using std::span;
 
 #endif
 
-#endif  // QLEVER_SRC_BACKPORTS_SPAN
+#endif  // QLEVER_SRC_BACKPORTS_SPAN_H

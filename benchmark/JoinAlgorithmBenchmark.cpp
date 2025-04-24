@@ -117,7 +117,7 @@ struct SetOfIdTableColumnElements {
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const std::span<const ValueId>& idTableColumnRef) {
+      const ql::span<const ValueId>& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
@@ -795,11 +795,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                OptionType, ad_utility::ConstConfigOptionProxy>>>(
             const OptionType& option, const auto& minimumValue,
             bool canBeEqual) {
-      return absl::StrCat("'", option.getConfigOption().getIdentifier(),
-                          "' must be bigger than",
-                          canBeEqual ? ", or equal to," : "", " ", minimumValue,
-                          ".");
-    };
+          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                              "' must be bigger than",
+                              canBeEqual ? ", or equal to," : "", " ",
+                              minimumValue, ".");
+        };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
@@ -808,11 +808,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
            typename = std::enable_if_t<ad_utility::isInstantiation<
                OptionType, ad_utility::ConstConfigOptionProxy>>>(
             const OptionType& lhs, const OptionType& rhs) {
-      return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
-                          "' must be smaller than, or equal to, "
-                          "'",
-                          rhs.getConfigOption().getIdentifier(), "'.");
-    };
+          return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
+                              "' must be smaller than, or equal to, "
+                              "'",
+                              rhs.getConfigOption().getIdentifier(), "'.");
+        };
 
     // Adding the validators.
 

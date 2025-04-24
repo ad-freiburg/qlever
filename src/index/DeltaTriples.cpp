@@ -29,7 +29,7 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
-                                  std::span<const IdTriple<0>> idTriples,
+                                  ql::span<const IdTriple<0>> idTriples,
                                   bool shouldExist) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
@@ -46,7 +46,8 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
-  std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
+  std::vector<DeltaTriples::LocatedTripleHandles> handles{
+      static_cast<size_t>(idTriples.size())};
   for (auto permutation : Permutation::ALL) {
     for (size_t i = 0; i < idTriples.size(); i++) {
       handles[i].forPermutation(permutation) =
