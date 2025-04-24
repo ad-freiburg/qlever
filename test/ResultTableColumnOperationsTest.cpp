@@ -95,8 +95,9 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
 ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
 */
+template <typename F>
 static void generalExceptionTestTwoInputColumns(
-    const auto& callTransform,
+    const F& callTransform,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
@@ -172,8 +173,9 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
 ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
 */
+template <typename F>
 static void generalExceptionTestUnlimitedInputColumns(
-    const auto& callTransform,
+    const F& callTransform,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{

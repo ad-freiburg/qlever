@@ -267,10 +267,10 @@ CPP_template(typename Queue, typename Producer)(
 // exception. In that case the exception is propagated to the resulting
 // generator. The resulting generator yields all the values that have been
 // pushed to the queue.
-template <typename Queue>
+template <typename Queue, typename Producer>
 cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
                                                             size_t numThreads,
-                                                            auto producer) {
+                                                            Producer producer) {
   Queue queue{queueSize};
   AD_CONTRACT_CHECK(numThreads > 0u);
   std::vector<ad_utility::JThread> threads;

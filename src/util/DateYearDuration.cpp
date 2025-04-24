@@ -52,7 +52,8 @@ std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
 }
 
 // _____________________________________________________________________________
-static Date::TimeZone parseTimeZone(const auto& match) {
+template <typename T>
+static Date::TimeZone parseTimeZone(const T& match) {
   if (match.template get<"tzZ">() == "Z") {
     return Date::TimeZoneZ{};
   } else if (!match.template get<"tzHours">()) {

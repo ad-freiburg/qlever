@@ -136,8 +136,9 @@ inline std::ostream& operator<<(std::ostream& out,
  * @param resultOfParseAndText Parsing result
  * @param matcher Matcher that must be fulfilled
  */
+template <typename Result, typename Matcher>
 void expectCompleteParse(
-    const auto& resultOfParseAndText, auto&& matcher,
+    const Result& resultOfParseAndText, Matcher&& matcher,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
@@ -154,8 +155,9 @@ void expectCompleteParse(
  * @param matcher Matcher that must be fulfilled
  * @param rest Input that is not consumed
  */
+template <typename Result, typename Matcher>
 void expectIncompleteParse(
-    const auto& resultOfParseAndText, const string& rest, auto&& matcher,
+    const Result& resultOfParseAndText, const string& rest, Matcher&& matcher,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
@@ -171,9 +173,9 @@ namespace p = parsedQuery;
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
-template <typename Current, typename... Others>
+template <typename Current, typename... Others, typename T>
 constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
-    const auto& arg) {
+    const T& arg) {
   if constexpr (sizeof...(Others) > 0) {
     if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
       if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
@@ -1068,8 +1070,8 @@ inline auto variableExpressionMatcher = [](const ::Variable& variable) {
 // Return a matcher that matches a `SparqlExpression::Ptr`that stores an
 // `Expression` (template argument), the children of which match the
 // `childrenMatchers`.
-template <typename Expression>
-auto matchPtrWithChildren(auto&&... childrenMatchers)
+template <typename Expression, typename... ChildrenMatchers>
+auto matchPtrWithChildren(ChildrenMatchers&&... childrenMatchers)
     -> Matcher<const SparqlExpression::Ptr&> {
   return matchPtr<Expression>(
       AD_PROPERTY(SparqlExpression, childrenForTesting,
@@ -1126,7 +1128,8 @@ auto matchNary(auto makeFunction,
   return matchNaryWithChildrenMatchers(makeFunction,
                                        variableExpressionMatcher(variables)...);
 }
-auto matchUnary(auto makeFunction) -> Matcher<const SparqlExpression::Ptr&> {
+template <typename F>
+auto matchUnary(F makeFunction) -> Matcher<const SparqlExpression::Ptr&> {
   return matchNary(makeFunction, ::Variable{"?x"});
 }
 

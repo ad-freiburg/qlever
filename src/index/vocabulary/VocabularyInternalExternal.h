@@ -142,9 +142,10 @@ class VocabularyInternalExternal {
   // `lower_bound_iterator`, and `upper_bound_iterator`. The `boundFunction`
   // must be a lambda, that calls the corresponding function (e.g.
   // `lower_bound`) on its first argument (see above for usages).
-  template <typename InternalStringType, typename Comparator>
+  template <typename InternalStringType, typename Comparator,
+            typename BoundFunction>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
-                         auto boundFunction) const {
+                         BoundFunction boundFunction) const {
     // First do a binary search in the internal vocab.
     WordAndIndex boundFromInternalVocab =
         boundFunction(internalVocab_, word, comparator);
