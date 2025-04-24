@@ -524,5 +524,5 @@ void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
 // _____________________________________________________________________________
 bool TransitivePathBase::columnOriginatesFromGraph(Variable variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  return getExternallyVisibleVariableColumns().at(variable).columnIndex_ < 2;
+  return variable == lhs_.value_ || variable == rhs_.value_;
 }
