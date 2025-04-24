@@ -198,8 +198,8 @@ TEST(Views, inPlaceTransform) {
 
 // __________________________________________________________________________
 
-std::string_view toView(std::span<char> span) {
-  return {span.data(), span.size()};
+std::string_view toView(ql::span<char> span) {
+  return {span.data(), static_cast<std::string_view::size_type>(span.size())};
 }
 
 // __________________________________________________________________________

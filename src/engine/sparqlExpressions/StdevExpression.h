@@ -49,7 +49,7 @@ class DeviationExpression : public SparqlExpression {
 
  private:
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
     return {&child_, 1};
   }
 };
@@ -66,7 +66,7 @@ class DeviationAggExpression
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct, std::make_unique<DeviationExpression>(std::move(child)),
-            aggregateOp){};
+            aggregateOp) {};
 };
 
 // The final operation for dividing by degrees of freedom and calculation square

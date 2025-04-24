@@ -10,6 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -156,7 +157,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   }
 
   CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+    requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
@@ -352,14 +353,21 @@ CPP_template(typename Range, typename Transformation)(
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<std::span<ElementType>> reChunkAtSeparator(
-        Range generator, ElementType separator) {
+    generator<ql::span<ElementType>> reChunkAtSeparator(Range generator,
+                                                        ElementType separator) {
   std::vector<ElementType> buffer;
   for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
        generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
-        co_yield std::span{buffer.data(), buffer.size()};
+#ifdef QLEVER_CPP_17
+        co_yield ql::span{
+            buffer.data(),
+            static_cast<typename ql::span<ElementType>::index_type>(
+                buffer.size())};
+#else
+        co_yield ql::span{buffer.data(), buffer.size()};
+#endif
         buffer.clear();
       } else {
         buffer.push_back(c);
@@ -367,7 +375,13 @@ CPP_template(typename Range, typename ElementType)(
     }
   }
   if (!buffer.empty()) {
-    co_yield std::span{buffer.data(), buffer.size()};
+#ifdef QLEVER_CPP_17
+    co_yield ql::span{
+        buffer.data(),
+        static_cast<typename ql::span<ElementType>::index_type>(buffer.size())};
+#else
+    co_yield ql::span{buffer.data(), buffer.size()};
+#endif
   }
 }
 }  // namespace ad_utility
