@@ -1,8 +1,10 @@
-// Copyright 2015 - 2016 Björn Buchhold, UFR
-// Copyright 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
-// Copyright 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
-// Copyright 2024 - 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
-// Copyright 2025        Brandon Harris, BMW
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2016 Björn Buchhold, UFR
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// 2025        Brandon Harris, BMW
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // BMW = Bayerische Motoren Werke Aktiengesellschaft (BMW)
