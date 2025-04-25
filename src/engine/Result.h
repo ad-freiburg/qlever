@@ -1,17 +1,14 @@
-// Copyright 2015 - 2025 University of Freiburg, Algorithms and Data Structures
-// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
-// Copyright 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
-// Authors: Brandon Harris (BMW)
+// Copyright 2015 - 2016 Björn Buchhold, UFR
+// Copyright 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// Copyright 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// Copyright 2024 - 2025 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+// Copyright 2025        Brandon Harris, BMW
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+// BMW = Bayerische Motoren Werke Aktiengesellschaft (BMW)
 
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy of
-// the License at http://www.apache.org/licenses/LICENSE-2.0 . Unless required
-// by applicable law or agreed to in writing, software distributed under the
-// License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
-// OF ANY KIND, either express or implied. See the License for the specific
-// language governing permissions and limitations under the License.
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of this project.
 
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
