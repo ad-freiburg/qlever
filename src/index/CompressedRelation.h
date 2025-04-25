@@ -11,6 +11,7 @@
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/KeyOrder.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -96,7 +97,8 @@ struct CompressedBlockMetadataNoBlockIndex {
       return str;
     }
 
-    friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
+    template <typename T>
+    friend std::true_type allowTrivialSerialization(PermutedTriple, T);
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
@@ -113,13 +115,13 @@ struct CompressedBlockMetadataNoBlockIndex {
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
 
-  // Format BlockMetadata contents for debugging.
+  // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str,
       const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
-    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
-        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << ".\n";
+    str << "#CompressedBlockMetadata\n(first) " << blockMetadata.firstTriple_
+        << "(last) " << blockMetadata.lastTriple_
+        << "num. rows: " << blockMetadata.numRows_ << ".\n";
     if (blockMetadata.graphInfo_.has_value()) {
       str << "Graphs: ";
       ad_utility::lazyStrJoin(&str, blockMetadata.graphInfo_.value(), ", ");
@@ -141,7 +143,7 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 
-  // Format BlockMetadata contents for debugging.
+  // Format CompressedBlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
     str << static_cast<const CompressedBlockMetadataNoBlockIndex&>(
@@ -290,7 +292,7 @@ class CompressedRelationWriter {
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       cppcoro::generator<IdTableStatic<0>> sortedTriples,
-      std::array<size_t, 3> permutation,
+      qlever::KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
 
@@ -393,15 +395,17 @@ class CompressedRelationWriter {
   // each block in the `sortedBlocks` and then calling `finishLargeRelation`.
   // The number of distinct col1 entries will be computed from the blocks
   // directly.
+  template <typename T>
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
-                                                      auto&& sortedBlocks);
+                                                      T&& sortedBlocks);
 
   // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
+  template <typename T>
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      auto inputs, std::string filename, ad_utility::MemorySize blocksize);
+      T inputs, std::string filename, ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
@@ -717,8 +721,9 @@ class CompressedRelationReader {
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
+  template <typename T>
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
+      T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
       LimitOffsetClause& limitOffset) const;
 

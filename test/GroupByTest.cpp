@@ -2248,8 +2248,8 @@ TEST_P(GroupByLazyFixture, groupsOfSize1AreAggregatedCorrectly) {
 
 // _____________________________________________________________________________
 TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
-  // Test queries of the class `SELECT (CONCAT(SUM(?x), "---") as ?result) ...`
-  // where the aggregate function is not on top of the expression tree.
+  // Test queries of the class `SELECT (CONCAT(STR(SUM(?x)), "---") as ?result)
+  // ...` where the aggregate function is not on top of the expression tree.
   using L = TripleComponent::Literal;
   std::vector<IdTable> idTables;
   idTables.push_back(makeIntTable({{1, 0}}));
@@ -2259,7 +2259,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
       std::vector<ColumnIndex>{1});
 
   std::vector<std::unique_ptr<SparqlExpression>> children;
-  children.push_back(makeSum("?x"));
+  children.push_back(makeStrExpression(makeSum("?x")));
   children.push_back(std::make_unique<StringLiteralExpression>(
       L::fromStringRepresentation("\"---\"")));
   Alias alias{SparqlExpressionPimpl{makeConcatExpression(std::move(children)),

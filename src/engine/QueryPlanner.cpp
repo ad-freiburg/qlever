@@ -61,8 +61,8 @@ namespace {
 using ad_utility::makeExecutionTree;
 using SubtreePlan = QueryPlanner::SubtreePlan;
 
-template <typename Operation>
-SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, auto&&... args) {
+template <typename Operation, typename... Args>
+SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
@@ -619,10 +619,10 @@ void QueryPlanner::indexScanSingleVarCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
 
   // Replace the position of the `triple` that is specified by the
@@ -670,10 +670,10 @@ void QueryPlanner::indexScanTwoVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
@@ -2537,8 +2537,9 @@ void QueryPlanner::checkCancellation(
 }
 
 // _____________________________________________________________________________
+template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const auto& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables) {
   using enum SubtreePlan::Type;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
@@ -2785,24 +2786,11 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
   for (auto& sub : candidatesIn) {
     TransitivePathSide left;
     TransitivePathSide right;
-    auto getSideValue =
-        [this](const TripleComponent& side) -> std::variant<Id, Variable> {
-      if (isVariable(side)) {
-        return side.getVariable();
-      } else {
-        if (auto opt = side.toValueId(planner_._qec->getIndex().getVocab());
-            opt.has_value()) {
-          return opt.value();
-        } else {
-          AD_THROW("No vocabulary entry for " + side.toString());
-        }
-      }
-    };
 
     left.subCol_ = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-    left.value_ = getSideValue(arg._left);
+    left.value_ = arg._left;
     right.subCol_ = sub._qet->getVariableColumn(arg._innerRight.getVariable());
-    right.value_ = getSideValue(arg._right);
+    right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
     if (planner_.activeGraphVariable_.has_value()) {

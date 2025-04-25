@@ -391,8 +391,8 @@ TEST(LocalVocab, propagation) {
   Values valuesPatternTrick(
       testQec,
       {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}},
-        {TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}}}});
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}},
+        {TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}}}});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(valuesPatternTrick), 0, Variable{"?y"}, Variable{"?count"});
   checkLocalVocab(countAvailablePredictes, {"<xN1>"});
