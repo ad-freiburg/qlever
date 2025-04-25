@@ -4239,7 +4239,11 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 
-  h::expectWithGivenBudgets(
+  auto* qec = ad_utility::testing::getQec(
+      "<d> <c> <d> . <d1> <c> <d> . <d2> <c> <d> . <d> <a> <b> . <d2> <a> <b> "
+      ". <d3> <a> <b> . <d4> <a> <b> . <d5> <a> <b> . <d6> <a> <b>");
+
+  h::expect(
       "SELECT * { ?var <a> <b> . ?var <c> <d> . ?other <a>* ?var }",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
@@ -4247,9 +4251,9 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
-      std::nullopt, {16, 64'000'000});
+      qec);
 
-  h::expectWithGivenBudget(
+  h::expect(
       "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
@@ -4257,5 +4261,5 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                   h::IndexScanFromStrings("?var", "<c>", "<d>")),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")),
-      std::nullopt, 0);
+      qec);
 }
