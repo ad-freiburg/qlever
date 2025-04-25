@@ -1,11 +1,10 @@
-// Copyright 2011 - 2025
+// Copyright 2011 - 2024
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
@@ -25,14 +24,11 @@
 #include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/GeoVocabulary.h"
-#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Exception.h"
-#include "util/GeometryInfo.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -105,8 +101,7 @@ class Vocabulary {
   vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
-      UnicodeVocabulary<SplitGeoVocabulary<UnderlyingVocabulary>,
-                        ComparatorType>;
+      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
   VocabularyWithUnicodeComparator vocabulary_;
 
@@ -130,7 +125,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& filename);
+  void readFromFile(const string& fileName);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -145,11 +140,6 @@ class Vocabulary {
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(std::string_view word, IndexType* idx) const;
-
-  // Retrieve a `GeometryInfo` object from the underlying `GeoVocabulary`. The
-  // index parameter is expected to have the geo literal marker bit, otherwise
-  // `std::nullopt` is returned.
-  std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
@@ -217,46 +207,20 @@ class Vocabulary {
     return getCaseComparator().getLocaleManager();
   }
 
-  // Get bounds for a given prefix. Since the underlying vocabulary is a
-  // SplitVocabulary, the template parameter applySplit indicates whether all
-  // lookups should only be done in the main vocabulary or whether the lookup
-  // should be performed on the special split vocabulary.
-  template <bool getUpperBound, bool applySplit = false>
-  IndexType boundImpl(std::string_view word,
-                      const SortLevel level = SortLevel::QUARTERNARY) const {
-    WordAndIndex wordAndIndex;
-    uint8_t marker = 0;
-    if constexpr (applySplit) {
-      marker = vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
-    }
-    if constexpr (getUpperBound) {
-      wordAndIndex = vocabulary_.upper_bound(word, level, marker);
-    } else {
-      wordAndIndex = vocabulary_.lower_bound(word, level, marker);
-    }
-    return IndexType::make(wordAndIndex.indexOrDefault(size()));
-  };
-
   // Wraps std::lower_bound and returns an index instead of an iterator
-  template <bool applySplit = false>
   IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const {
-    return boundImpl<false, applySplit>(word, level);
-  };
+                        const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  template <bool applySplit = false>
   IndexType upper_bound(const string& word,
-                        SortLevel level = SortLevel::QUARTERNARY) const {
-    return boundImpl<true, applySplit>(word, level);
-  };
+                        SortLevel level = SortLevel::QUARTERNARY) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
   auto makeWordWriterPtr(const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
+    return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 };
 

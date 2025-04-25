@@ -70,30 +70,6 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
   using type = std::variant<Ts...>;
 };
 
-// Test if type T is contained in variadic type List
-template <typename T, typename... List>
-struct TypeContainedImpl : std::disjunction<std::is_same<T, List>...> {};
-
-// Make a variadic type unique (std::tuple containing each type once)
-template <typename...>
-struct UniqueTypesTupleImpl;
-
-template <>
-struct UniqueTypesTupleImpl<> {
-  using type = std::tuple<>;
-};
-
-template <typename T, typename... List>
-struct UniqueTypesTupleImpl<T, List...> {
- private:
-  using tail = typename UniqueTypesTupleImpl<List...>::type;
-
- public:
-  using type =
-      std::conditional_t<TypeContainedImpl<T, List...>::value, tail,
-                         decltype(std::tuple_cat(std::tuple<T>{}, tail{}))>;
-};
-
 // Implementation for Last
 template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};
@@ -387,13 +363,6 @@ CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 // Ensures that T is a floating-point type.
 template <typename T>
 CPP_concept FloatingPoint = std::is_floating_point_v<T>;
-
-// Behaves like std::variant<List...> but ensures uniqueness of the types in
-// List to avoid ambigiuity when converting from types in List to the variant.
-template <typename... List>
-using UniqueVariant = typename detail::TupleToVariantImpl<
-    typename detail::UniqueTypesTupleImpl<List...>::type>::type;
-
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TYPETRAITS_H
