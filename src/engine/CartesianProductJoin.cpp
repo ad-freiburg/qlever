@@ -306,26 +306,40 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::Generator
+CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
     CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
                                               R idTables, size_t offset,
                                               size_t limit,
                                               size_t lastTableOffset) const {
-  while (limit > 0) {
-    uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
-    IdTable idTable = writeAllColumns(ql::ranges::ref_view(idTables), offset,
-                                      limitWithChunkSize, lastTableOffset);
-    size_t tableSize = idTable.size();
-    AD_CORRECTNESS_CHECK(tableSize <= limit);
-    if (!idTable.empty()) {
-      offset += tableSize;
-      limit -= tableSize;
-      co_yield {std::move(idTable), mergedVocab.clone()};
+  auto get = [cartesianProductJoin = this, mergedVocab = std::move(mergedVocab),
+              idTables = std::move(idTables), offset = offset, limit = limit,
+              lastTableOffset = lastTableOffset,
+              // tableSize will be overwritten on first execution, but it needs
+              // to be larger than limitWithChunkSize initially
+              tableSize = size_t{1},
+              limitWithChunkSize = uint64_t{
+                  0}]() mutable -> std::optional<Result::IdTableVocabPair> {
+    // If limit was reduced to 0, or the last produced table was smaller than
+    // the remaining limit, then all result have been produced and nullopt shall
+    // be returned
+    if (limit > 0 && tableSize >= limitWithChunkSize) {
+      limitWithChunkSize = std::min(limit, cartesianProductJoin->chunkSize_);
+      IdTable idTable = cartesianProductJoin->writeAllColumns(
+          ql::ranges::ref_view(idTables), offset, limitWithChunkSize,
+          lastTableOffset);
+      tableSize = idTable.size();
+      AD_CORRECTNESS_CHECK(tableSize <= limit);
+      if (!idTable.empty()) {
+        offset += tableSize;
+        limit -= tableSize;
+        return std::optional(
+            Result::IdTableVocabPair{std::move(idTable), mergedVocab.clone()});
+      }
     }
-    if (tableSize < limitWithChunkSize) {
-      break;
-    }
-  }
+    return std::nullopt;
+  };
+  return Result::LazyResult(
+      ad_utility::InputRangeFromGetCallable(std::move(get)));
 }
 
 // _____________________________________________________________________________
