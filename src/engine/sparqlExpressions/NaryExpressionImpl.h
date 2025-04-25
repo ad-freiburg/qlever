@@ -104,7 +104,8 @@ struct NumericIdWrapper {
   // Note: Sonarcloud suggests `[[no_unique_address]]` for the following member,
   // but adding it causes an internal compiler error in Clang 16.
   Function function_{};
-  Id operator()(auto&&... args) const {
+  template <typename... Args>
+  Id operator()(Args&&... args) const {
     return makeNumericId<nanToUndef>(function_(AD_FWD(args)...));
   }
 };

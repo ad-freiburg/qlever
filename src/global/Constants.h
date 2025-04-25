@@ -47,7 +47,8 @@ constexpr std::string_view makeQleverInternalIriConst() {
   return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
                                      suffixes..., ">">();
 }
-inline std::string makeQleverInternalIri(const auto&... suffixes) {
+template <typename... T>
+inline std::string makeQleverInternalIri(const T&... suffixes) {
   return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
                       suffixes..., ">");
 }
@@ -154,6 +155,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+static constexpr std::string_view GEO_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
 
 enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";

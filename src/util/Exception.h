@@ -114,7 +114,8 @@ CPP_template(typename T)(
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
 // etc. Return "<concatenation of `getMessageImpl(messages)...`>" followed by
 // a full stop and space if there is at least one message.
-std::string concatMessages(auto&&... messages) {
+template <typename... Args>
+std::string concatMessages(Args&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
     return "";
   } else {

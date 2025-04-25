@@ -258,8 +258,9 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
 }
 
 // ________________________________________________________________________________________________________
+template <typename T>
 inline void writeMappedIdsToExtVec(
-    const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
@@ -327,9 +328,10 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(
-              singleMap.map_, els.begin() + offsets[i],
-              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
+          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                [](auto& el) -> T {
+                                  return {el.first, std::move(el.second)};
+                                });
         }));
     ++i;
   }

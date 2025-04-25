@@ -1,2 +1,4 @@
-add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp GeoVocabulary.cpp)
+add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp
+                       VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp
+                       VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp)
 qlever_target_link_libraries(vocabulary util)

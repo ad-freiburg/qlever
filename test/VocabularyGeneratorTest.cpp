@@ -1,3 +1,8 @@
+// Copyright 2018 - 2025, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 
 #include <cstdlib>
@@ -12,6 +17,9 @@
 #include "index/Index.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 
 using namespace ad_utility::vocabulary_merger;
@@ -134,8 +142,10 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
-                if (RdfsVocabulary::stringIsGeoLiteral(w.iriOrLiteral())) {
-                  globalId = RdfsVocabulary::makeGeoVocabIndex(globalId);
+                using GeoVocab = SplitGeoVocabulary<
+                    CompressedVocabulary<VocabularyInternalExternal>>;
+                if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
+                  globalId = GeoVocab::addMarker(globalId, 1);
                 }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }

@@ -24,13 +24,13 @@
 #include "global/Pattern.h"
 #include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
-#include "util/BitUtils.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Exception.h"
 #include "util/GeometryInfo.h"
 #include "util/HashMap.h"
@@ -40,11 +40,6 @@
 
 using std::string;
 using std::vector;
-
-template <class StringType>
-using AccessReturnType_t =
-    std::conditional_t<std::is_same_v<StringType, CompressedString>,
-                       std::string, std::string_view>;
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -69,10 +64,11 @@ inline std::ostream& operator<<(std::ostream& stream,
 }
 
 // A vocabulary. Wraps a vector of strings and provides additional methods for
-// retrieval. Template parameters that are supported are:
-// std::string -> no compression is applied
-// CompressedString -> prefix compression is applied
-template <typename StringType, typename ComparatorType, typename IndexT>
+// retrieval. It is templated on the type of the underlying vocabulary
+// implementation, which can be any of the implementations in the
+// `index/vocabulary` directory
+template <typename UnderlyingVocabulary, typename ComparatorType,
+          typename IndexT>
 class Vocabulary {
  public:
   // The index ranges for a prefix + a function to check whether a given index
@@ -99,17 +95,6 @@ class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
-  template <typename T, typename R = void>
-  using enable_if_compressed =
-      std::enable_if_t<std::is_same_v<T, CompressedString>>;
-
-  template <typename T, typename R = void>
-  using enable_if_uncompressed =
-      std::enable_if_t<!std::is_same_v<T, CompressedString>>;
-
-  static constexpr bool isCompressed_ =
-      std::is_same_v<StringType, CompressedString>;
-
   // If a literal uses one of these language tags or starts with one of these
   // prefixes, it will be externalized. By default, everything is externalized.
   // Both of these settings can be overridden using the `settings.json` file.
@@ -119,31 +104,11 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
-  // The 5th highest bit of the vocabulary index is used as a marker to
-  // determine whether the word is stored in the normal vocabulary or the
-  // geometry vocabulary.
-  static constexpr uint64_t geoVocabMarker = 1ull << (ValueId::numDataBits - 1);
-  static constexpr uint64_t geoVocabIndexMask =
-      ad_utility::bitMaskForLowerBits(ValueId::numDataBits - 1);
-  static constexpr uint64_t maxWordIndex = geoVocabMarker - 1;
-
-  static constexpr std::string_view geoVocabSuffix = ".geometries";
-
-  using UnderlyingVocabulary =
-      std::conditional_t<isCompressed_,
-                         CompressedVocabulary<VocabularyInternalExternal>,
-                         VocabularyInMemory>;
   using VocabularyWithUnicodeComparator =
-      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
+      UnicodeVocabulary<SplitGeoVocabulary<UnderlyingVocabulary>,
+                        ComparatorType>;
 
-  using UnderlyingGeoVocabulary = GeoVocabulary<UnderlyingVocabulary>;
-  using GeoVocabularyWithUnicodeComparator =
-      UnicodeVocabulary<UnderlyingGeoVocabulary, ComparatorType>;
-
-  // The vocabulary is split into an underlying vocabulary for normal literals
-  // and one for geometry well-known text literals specifically.
   VocabularyWithUnicodeComparator vocabulary_;
-  GeoVocabularyWithUnicodeComparator geoVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -153,31 +118,29 @@ class Vocabulary {
  public:
   using SortLevel = typename ComparatorType::Level;
   using IndexType = IndexT;
+  // The type that is returned by the `operator[]` of this vocabulary. Typically
+  // either `std::string` or `std::string_view`.
+  using AccessReturnType =
+      decltype(std::declval<const UnderlyingVocabulary&>()[0]);
 
-  template <
-      typename = std::enable_if_t<std::is_same_v<StringType, string> ||
-                                  std::is_same_v<StringType, CompressedString>>>
-  Vocabulary() {}
+  Vocabulary() = default;
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
   Vocabulary(Vocabulary&&) noexcept = default;
 
   virtual ~Vocabulary() = default;
 
-  //! Read the vocabulary from files containing words and geometries
-  //! respectively.
+  //! Read the vocabulary from file.
   void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
-  AccessReturnType_t<StringType> operator[](IndexType idx) const;
+  AccessReturnType operator[](IndexType idx) const;
 
   // AccessReturnType_t<StringType> at(IndexType idx) const { return
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const {
-    return vocabulary_.size() + geoVocabulary_.size();
-  }
+  [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -207,18 +170,9 @@ class Vocabulary {
 
   static bool stringIsLiteral(std::string_view s);
 
-  static constexpr std::string_view geoLiteralSuffix =
-      ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
-  static bool stringIsGeoLiteral(std::string_view s);
-
-  static uint64_t makeGeoVocabIndex(uint64_t vocabIndex);
-
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
-  }
-  bool isGeoLiteral(IndexT index) const {
-    return static_cast<bool>(index.get() & geoVocabMarker);
   }
 
   bool shouldBeExternalized(std::string_view word) const;
@@ -263,49 +217,58 @@ class Vocabulary {
     return getCaseComparator().getLocaleManager();
   }
 
-  // Wraps std::lower_bound and returns an index instead of an iterator
-  IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
-
-  // _______________________________________________________________
-  IndexType upper_bound(const string& word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
-
-  // This word writer writes words to different vocabularies depending on their
-  // content.
-  class WordWriter {
-   private:
-    UnderlyingVocabulary::WordWriter underlyingWordWriter_;
-    UnderlyingGeoVocabulary::WordWriter underlyingGeoWordWriter_;
-
-   public:
-    WordWriter(const VocabularyWithUnicodeComparator& vocabulary,
-               const GeoVocabularyWithUnicodeComparator& geoVocabulary,
-               const std::string& filename);
-
-    // Add the next word to the vocabulary and return its index.
-    uint64_t operator()(std::string_view word, bool isExternal);
-
-    // Finish the writing on both underlying word writers. After this no more
-    // calls to `operator()` are allowed.
-    void finish();
-
-    std::string& readableName();
+  // Get bounds for a given prefix. Since the underlying vocabulary is a
+  // SplitVocabulary, the template parameter applySplit indicates whether all
+  // lookups should only be done in the main vocabulary or whether the lookup
+  // should be performed on the special split vocabulary.
+  template <bool getUpperBound, bool applySplit = false>
+  IndexType boundImpl(std::string_view word,
+                      const SortLevel level = SortLevel::QUARTERNARY) const {
+    WordAndIndex wordAndIndex;
+    uint8_t marker = 0;
+    if constexpr (applySplit) {
+      marker = vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
+    }
+    if constexpr (getUpperBound) {
+      wordAndIndex = vocabulary_.upper_bound(word, level, marker);
+    } else {
+      wordAndIndex = vocabulary_.lower_bound(word, level, marker);
+    }
+    return IndexType::make(wordAndIndex.indexOrDefault(size()));
   };
 
-  // Get a writer for each underlying vocab that has an `operator()` method to
+  // Wraps std::lower_bound and returns an index instead of an iterator
+  template <bool applySplit = false>
+  IndexType lower_bound(std::string_view word,
+                        const SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<false, applySplit>(word, level);
+  };
+
+  // _______________________________________________________________
+  template <bool applySplit = false>
+  IndexType upper_bound(const string& word,
+                        SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<true, applySplit>(word, level);
+  };
+
+  // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
-  // the internal vocabulary have to be pushed one by one to add words to the
-  // vocabulary. This writer internally splits the words into a generic
-  // vocabulary and a geometry vocabulary.
-  WordWriter makeWordWriter(const std::string& filename) const {
-    return {vocabulary_, geoVocabulary_, filename};
+  // the internal vocabulary  have to be pushed one by one to add words to the
+  // vocabulary.
+  auto makeWordWriterPtr(const std::string& filename) const {
+    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
   }
 };
 
-using RdfsVocabulary =
-    Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
-using TextVocabulary =
-    Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
+namespace detail {
+using UnderlyingVocabRdfsVocabulary =
+    CompressedVocabulary<VocabularyInternalExternal>;
+using UnderlyingVocabTextVocabulary = VocabularyInMemory;
+}  // namespace detail
+
+using RdfsVocabulary = Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
+                                  TripleComponentComparator, VocabIndex>;
+using TextVocabulary = Vocabulary<detail::UnderlyingVocabTextVocabulary,
+                                  SimpleStringComparator, WordVocabIndex>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_H
