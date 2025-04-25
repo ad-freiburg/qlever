@@ -675,7 +675,7 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-bool Operation::columnOriginatesFromGraph(Variable variable) const {
+bool Operation::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   // If the column contains UNDEF, it cannot possibly be guaranteed to originate
   // from the graph.

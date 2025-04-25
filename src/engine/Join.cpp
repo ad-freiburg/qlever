@@ -847,7 +847,7 @@ std::unique_ptr<Operation> Join::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool Join::columnOriginatesFromGraph(Variable variable) const {
+bool Join::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   // For the join column we don't union the elements, we intersect them so we
   // can have a more efficient implementation.

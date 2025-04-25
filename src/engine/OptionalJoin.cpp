@@ -277,7 +277,7 @@ auto OptionalJoin::computeImplementationFromIdTables(
 }
 
 // _____________________________________________________________________________
-bool OptionalJoin::columnOriginatesFromGraph(Variable variable) const {
+bool OptionalJoin::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {

@@ -436,7 +436,7 @@ class Operation {
 
   // Return true if the given column originates from the loaded knowledge graph.
   // This is used to skip potentially expensive checks.
-  virtual bool columnOriginatesFromGraph(Variable variable) const;
+  virtual bool columnOriginatesFromGraph(const Variable& variable) const;
 
  private:
   // Create the runtime information in case the evaluation of this operation has
