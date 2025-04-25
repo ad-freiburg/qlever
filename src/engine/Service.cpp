@@ -588,7 +588,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // result with subsequent calls to get(). Therefore, we do not need to
   // keep and pass an iterator to the sibling result if the max row threshold
   // is exceeded
-  auto generator = ad_utility::CachingTransformInputRange(std::move(siblingResult->idTables()), identityFunction);
+  auto generator = ad_utility::CachingTransformInputRange(
+      std::move(siblingResult->idTables()), identityFunction);
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
   while (auto pairOpt = generator.get()) {
@@ -600,16 +601,15 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Stop precomputation as the size of `siblingResult` exceeds the
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
-      std::vector<std::unique_ptr<Result::LazyResult>> viewCollection;
-      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(
-          ad_utility::CachingTransformInputRange(std::move(resultPairs),
-                                                 identityFunction)));
-      viewCollection.emplace_back(std::make_unique<Result::LazyResult>(std::move(generator)));
+      std::vector<Result::LazyResult> viewCollection;
+      viewCollection.emplace_back(ad_utility::CachingTransformInputRange{
+          std::move(resultPairs), identityFunction});
+      viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
               Result::LazyResult{
-                  ad_utility::ConcatenatedInputRange<Result::LazyResult>(
-                      std::move(viewCollection))},
+                  ad_utility::OwningViewNoConst{std::move(viewCollection)} |
+                  ql::views::join},
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;
