@@ -28,7 +28,7 @@ void GeoVocabulary<V>::close() {
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
-    : underlyingWordWriter_{vocabulary.makeDiskWriter(filename)},
+    : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{filename + geoInfoSuffix, "w"} {};
 
 // ____________________________________________________________________________
@@ -38,12 +38,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   uint64_t index;
 
   // Store the WKT literal
-  // TODO<ullingerc> Remove this "if" after merge of #1740
-  if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
-    index = underlyingWordWriter_(word, isExternal);
-  } else {
-    index = underlyingWordWriter_(word);
-  }
+  index = (*underlyingWordWriter_)(word, isExternal);
 
   // Precompute geometry info
   auto info = GeometryInfo::fromWktLiteral(word);
@@ -60,7 +55,7 @@ void GeoVocabulary<V>::WordWriter::finish() {
     return;
   }
 
-  underlyingWordWriter_.finish();
+  underlyingWordWriter_->finish();
   geoInfoFile_.close();
 }
 
@@ -80,25 +75,6 @@ std::string& GeoVocabulary<V>::WordWriter::readableName() {
   // TODO<ullingerc> Remove this dummy as soon as possible.
   static std::string dummy;
   return dummy;
-}
-
-// ____________________________________________________________________________
-template <typename V>
-void GeoVocabulary<V>::build(const std::vector<std::string>& v,
-                             const std::string& filename) {
-  // Build text literal vocabulary
-  literals_.close();
-  literals_.build(v, filename);
-
-  // Build and precompute geometry info
-  geoInfoFile_.close();
-  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "w");
-  for (const auto& word : v) {
-    auto info = GeometryInfo::fromWktLiteral(word);
-    geoInfoFile_.write(&info, geoInfoOffset);
-  }
-  geoInfoFile_.close();
-  geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
 }
 
 // ____________________________________________________________________________

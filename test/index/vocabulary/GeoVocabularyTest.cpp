@@ -23,8 +23,8 @@ void testGeoVocabulary() {
   using GV = GeoVocabulary<T>;
   GV geoVocab;
   const std::string fn = "geovocab-test1.dat";
-  auto ww = geoVocab.makeWordWriter(fn);
-  ww.readableName() = "test";
+  auto ww = geoVocab.makeDiskWriterPtr(fn);
+  ww->readableName() = "test";
 
   std::vector<std::string> testLiterals{
       "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
@@ -36,11 +36,11 @@ void testGeoVocabulary() {
 
   for (size_t i = 0; i < testLiterals.size(); i++) {
     auto lit = testLiterals[i];
-    auto idx = ww(lit, true);
+    auto idx = (*ww)(lit, true);
     ASSERT_EQ(i, idx);
   }
 
-  ww.finish();
+  ww->finish();
 
   geoVocab.open(fn);
 
@@ -56,15 +56,7 @@ void testGeoVocabulary() {
 
   checkGeoVocabContents(geoVocab);
 
-  const std::string fn2 = "geovocab-test2.dat";
   geoVocab.close();
-
-  GV geoVocab2;
-  geoVocab2.build(testLiterals, fn2);
-
-  checkGeoVocabContents(geoVocab2);
-
-  geoVocab2.close();
 };
 
 TEST(GeoVocabularyTest, GeoVocabInMem) {

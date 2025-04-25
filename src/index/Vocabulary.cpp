@@ -14,6 +14,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
@@ -209,6 +210,25 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
   }
   return std::nullopt;
 }
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+    IndexType idx) const {
+  auto marker = vocabulary_.getUnderlyingVocabulary().getMarker(idx.get());
+  AD_CORRECTNESS_CHECK(marker == 1);
+  auto geoIndex =
+      vocabulary_.getUnderlyingVocabulary().getVocabIndex(idx.get());
+  return std::visit(
+      [&geoIndex](auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+        using T = std::decay_t<decltype(vocab)>;
+        if constexpr (std::is_same_v<T, GeoVocabulary<S>>) {
+          return vocab.getGeoInfo(geoIndex);
+        }
+        return std::nullopt;
+      },
+      vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary(1));
+};
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>

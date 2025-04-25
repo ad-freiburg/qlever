@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
@@ -263,6 +264,6 @@ inline std::array<std::string, 2> geoFilenameFunc(std::string_view base) {
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<geoSplitFunc, geoFilenameFunc, UnderlyingVocabulary,
-                    UnderlyingVocabulary>;
+                    GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

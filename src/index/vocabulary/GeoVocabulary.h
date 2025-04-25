@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_GEOVOCABULARY_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "index/vocabulary/VocabularyTypes.h"
@@ -79,7 +80,7 @@ class GeoVocabulary {
   class WordWriter {
    private:
     using UV = UnderlyingVocabulary;
-    using WW = UnderlyingVocabulary::WordWriter;
+    using WW = std::unique_ptr<typename UnderlyingVocabulary::WordWriter>;
     WW underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
@@ -101,11 +102,10 @@ class GeoVocabulary {
     ~WordWriter();
   };
 
-  WordWriter makeWordWriter(const std::string& filename) const {
-    return {literals_, filename};
+  std::unique_ptr<WordWriter> makeDiskWriterPtr(
+      const std::string& filename) const {
+    return std::make_unique<WordWriter>(literals_, filename);
   }
-
-  void build(const std::vector<std::string>& v, const std::string& filename);
 
   void close();
 };

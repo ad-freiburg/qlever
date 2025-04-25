@@ -115,6 +115,7 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
 template class SplitVocabulary<
     geoSplitFunc, geoFilenameFunc,
     CompressedVocabulary<VocabularyInternalExternal>,
-    CompressedVocabulary<VocabularyInternalExternal>>;
+    GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
 template class SplitVocabulary<geoSplitFunc, geoFilenameFunc,
-                               VocabularyInMemory, VocabularyInMemory>;
+                               VocabularyInMemory,
+                               GeoVocabulary<VocabularyInMemory>>;
