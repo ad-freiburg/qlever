@@ -16,9 +16,9 @@
 // order of the includes should not matter, and it should certainly not cause
 // segmentation faults.
 
-#include <span>
 #include <string>
 
+#include "backports/span.h"
 #include "util/CancellationHandle.h"
 #include "util/Generator.h"
 #include "util/http/HttpUtils.h"

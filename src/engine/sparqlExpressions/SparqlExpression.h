@@ -6,9 +6,9 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H
 
 #include <memory>
-#include <span>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "parser/data/Variable.h"

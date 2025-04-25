@@ -8,7 +8,6 @@
 #define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
-#include <span>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -159,7 +158,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   }
 
   CPP_auto_member constexpr auto CPP_fun(data)()(
-    requires ql::ranges::contiguous_range<UnderlyingRange>) {
+      requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
@@ -362,14 +361,7 @@ CPP_template(typename Range, typename ElementType)(
        generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
-#ifdef QLEVER_CPP_17
-        co_yield ql::span{
-            buffer.data(),
-            static_cast<typename ql::span<ElementType>::index_type>(
-                buffer.size())};
-#else
         co_yield ql::span{buffer.data(), buffer.size()};
-#endif
         buffer.clear();
       } else {
         buffer.push_back(c);
@@ -377,13 +369,7 @@ CPP_template(typename Range, typename ElementType)(
     }
   }
   if (!buffer.empty()) {
-#ifdef QLEVER_CPP_17
-    co_yield ql::span{
-        buffer.data(),
-        static_cast<typename ql::span<ElementType>::index_type>(buffer.size())};
-#else
     co_yield ql::span{buffer.data(), buffer.size()};
-#endif
   }
 }
 }  // namespace ad_utility

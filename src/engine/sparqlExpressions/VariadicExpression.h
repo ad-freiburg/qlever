@@ -44,11 +44,7 @@ class VariadicExpression : public SparqlExpression {
  private:
   // ___________________________________________________
   ql::span<SparqlExpression::Ptr> childrenImpl() override {
-#ifdef QLEVER_CPP_17
-    return {children_.data(), static_cast<std::ptrdiff_t>(children_.size())};
-#else
     return {children_.data(), children_.size()};
-#endif
   }
 };
 

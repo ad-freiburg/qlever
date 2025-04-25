@@ -7,10 +7,10 @@
 
 #include <memory>
 #include <optional>
-#include <span>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"

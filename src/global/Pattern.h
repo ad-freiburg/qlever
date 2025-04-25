@@ -123,15 +123,7 @@ class CompactVectorOfStrings {
     offset_type offset = offsets_[i];
     const data_type* ptr = data_.data() + offset;
     size_t size = offsets_[i + 1] - offset;
-#ifdef QLEVER_CPP_17
-    if constexpr (std::is_same_v<data_type, char>) {
-      return {ptr, size};
-    } else {
-      return {ptr, static_cast<std::ptrdiff_t>(size)};
-    }
-#else
     return {ptr, size};
-#endif
   }
 
   // Forward iterator for a `CompactVectorOfStrings` that reads directly from

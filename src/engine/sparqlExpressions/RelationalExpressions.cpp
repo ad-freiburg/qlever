@@ -289,11 +289,7 @@ string RelationalExpression<Comp>::getCacheKey(
 // _____________________________________________________________________________
 template <Comparison Comp>
 ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
-#ifdef QLEVER_CPP_17
-  return {children_.data(), static_cast<std::ptrdiff_t>(children_.size())};
-#else
   return {children_.data(), children_.size()};
-#endif
 }
 
 // _____________________________________________________________________________

@@ -12,12 +12,14 @@
 #include <range/v3/view/span.hpp>
 namespace ql {
 using ::ranges::span;
+static constexpr auto dynamic_extent = ::ranges::dynamic_extent;
 }  // namespace ql
 
 #else
-#include <span>
+#include "backports/span.h"
 namespace ql {
 using std::span;
+static constexpr auto dynamic_extent = std::dynamic_extent;
 }  // namespace ql
 
 #endif

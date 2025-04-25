@@ -184,11 +184,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 // _____________________________________________________________________________
 template <typename Op>
 ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
-#ifdef QLEVER_CPP_17
-  return {children_.data(), static_cast<std::ptrdiff_t>(children_.size())};
-#else
   return {children_.data(), children_.size()};
-#endif
 }
 
 // __________________________________________________________________________

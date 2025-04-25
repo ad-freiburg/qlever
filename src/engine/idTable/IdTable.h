@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <functional>
 #include <initializer_list>
-#include <span>
 #include <variant>
 #include <vector>
 
