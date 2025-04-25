@@ -755,7 +755,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   auto table = permutation.getDistinctCol0IdsAndCounts(
       cancellationHandle_, locatedTriplesSnapshot());
   if (numCounts == 0) {
-    table.setColumnSubset(std::array{ColumnIndex(0)});
+    table.setColumnSubset({{0}});
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.

@@ -646,18 +646,14 @@ void QueryPlanner::indexScanTwoVarsCase(
 
   if (!isVariable(s)) {
     if (p == o) {
-      static const Permutation::Enum spoPerms[] = {SPO};
-      handleRepeatedVariables(ql::span<const Permutation::Enum>{spoPerms},
-                              &Tr::o_);
+      handleRepeatedVariables({{SPO}}, &Tr::o_);
     } else {
       addIndexScan(SPO);
       addIndexScan(SOP);
     }
   } else if (!isVariable(p)) {
     if (s == o) {
-      static const Permutation::Enum psoPerms[] = {PSO};
-      handleRepeatedVariables(ql::span<const Permutation::Enum>{psoPerms},
-                              &Tr::o_);
+      handleRepeatedVariables({{PSO}}, &Tr::o_);
     } else {
       addIndexScan(PSO);
       addIndexScan(POS);
@@ -665,9 +661,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   } else {
     AD_CORRECTNESS_CHECK(!isVariable(o));
     if (s == p) {
-      static const Permutation::Enum opsPerms[] = {OPS};
-      handleRepeatedVariables(ql::span<const Permutation::Enum>{opsPerms},
-                              &Tr::s_);
+      handleRepeatedVariables({{OPS}}, &Tr::s_);
     } else {
       addIndexScan(OSP);
       addIndexScan(OPS);
@@ -706,25 +700,14 @@ void QueryPlanner::indexScanThreeVarsCase(
 
   if (s == o) {
     if (s == p) {
-      static const Permutation::Enum psoPerms[] = {Permutation::Enum::PSO};
-      handleRepeatedVariables(ql::span<const Permutation::Enum>{psoPerms},
-                              &Tr::o_, &Tr::s_);
+      handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
     } else {
-      static const Permutation::Enum posOpsPerms[] = {Permutation::Enum::POS,
-                                                      Permutation::Enum::OPS};
-      handleRepeatedVariables(ql::span<const Permutation::Enum>{posOpsPerms},
-                              &Tr::s_);
+      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
     }
   } else if (s == p) {
-    static const Permutation::Enum opsPosPerms[] = {Permutation::Enum::OPS,
-                                                    Permutation::Enum::POS};
-    handleRepeatedVariables(ql::span<const Permutation::Enum>{opsPosPerms},
-                            &Tr::s_);
+    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
   } else if (o == p) {
-    static const Permutation::Enum psoSpoPerms[] = {Permutation::Enum::PSO,
-                                                    Permutation::Enum::SPO};
-    handleRepeatedVariables(ql::span<const Permutation::Enum>{psoSpoPerms},
-                            &Tr::o_);
+    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
   } else {
     // Three distinct variables
     // Add plans for all six permutations.

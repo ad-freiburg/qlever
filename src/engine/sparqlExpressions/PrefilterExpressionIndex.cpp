@@ -178,7 +178,7 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   auto blockRangeBegin = blockRange.begin();
   // Each `CompressedBlockMetadata` value contains two bounding `ValueId`s, one
   // for `firstTriple_` and `lastTriple_` respectively. `ValueIdIt idRangeBegin`
-  // is the first valid iterator on our flattened `absl::Span<const
+  // is the first valid iterator on our flattened `ql::span<const
   // CompressedBlockMetadata> blockRange` with respect to the contained
   // `ValueId`s.
   // `blockRange.begin()` represents the first valid iterator on our original
@@ -202,7 +202,7 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   auto blockOffsetBegin = std::distance(idRangeBegin, beginIdIt) / 2;
   auto blockOffsetEnd = (std::distance(idRangeBegin, endIdIt) + 1) / 2;
   AD_CORRECTNESS_CHECK(static_cast<size_t>(blockOffsetEnd) <=
-                       static_cast<size_t>(blockRange.size()));
+                       blockRange.size());
   return {blockRangeBegin + blockOffsetBegin, blockRangeBegin + blockOffsetEnd};
 }
 
@@ -459,8 +459,7 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
-        ValueIdIt{&blockRange, static_cast<uint64_t>(blockRange.size()) * 2,
-                  accessValueIdOp}};
+        ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
     result =
         getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
             evaluateImpl(idRange, blockRange),

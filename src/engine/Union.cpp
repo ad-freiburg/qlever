@@ -388,11 +388,8 @@ Result::LazyResult Union::computeResultKeepOrder(
     const auto& [left, right] = _columnOrigins.at(index);
     return left == NO_COLUMN || right == NO_COLUMN;
   });
-  // TODO<joka921> If we fix ql::span to accept also pairs of iterators, then
-  // the following can be much simpler.
-  ql::span trimmedTargetOrder{
-      targetOrder_.data(),
-      (end == targetOrder_.end() ? end : end + 1) - targetOrder_.begin()};
+  ql::span trimmedTargetOrder{targetOrder_.begin(),
+                              end == targetOrder_.end() ? end : end + 1};
 
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {

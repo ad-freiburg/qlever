@@ -393,8 +393,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     AccessValueIdFromBlockMetadata accessValueIdOp(2);
     ValueIdSubrange inputRange{
         ValueIdIt{&evalBlocks, 0, accessValueIdOp},
-        ValueIdIt{&evalBlocks, static_cast<size_t>(evalBlocks.size() * 2),
-                  accessValueIdOp}};
+        ValueIdIt{&evalBlocks, evalBlocks.size() * 2, accessValueIdOp}};
     std::vector<ValueIdItPair> iteratorRanges = getRangesForId(
         inputRange.begin(), inputRange.end(), referenceId, compOp);
     using namespace prefilterExpressions::detail::mapping;

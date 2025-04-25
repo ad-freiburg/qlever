@@ -495,8 +495,8 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-        auto blocks = getBlocksFromMetadata(metadataAndBlocks);
-        auto result = ql::views::transform(blocks, getSingleBlock);
+        auto result = ql::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
       };
@@ -794,8 +794,7 @@ CPP_template_def(typename IdGetter)(
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
-  for (auto i = decltype(relevantBlocksMetadata.size())(0);
-       i < relevantBlocksMetadata.size(); ++i) {
+  for (size_t i : ad_utility::integerRange(relevantBlocksMetadata.size())) {
     const auto& blockMetadata = relevantBlocksMetadata[i];
     Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
     Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);

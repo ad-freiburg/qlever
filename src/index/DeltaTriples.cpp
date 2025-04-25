@@ -46,8 +46,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
-  std::vector<DeltaTriples::LocatedTripleHandles> handles{
-      static_cast<size_t>(idTriples.size())};
+  std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
     for (size_t i = 0; i < idTriples.size(); i++) {
       handles[i].forPermutation(permutation) =

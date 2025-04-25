@@ -405,7 +405,7 @@ PathsLimited PathSearch::allPaths(
       }
     }
   } else {
-    for (size_t i = 0; i < static_cast<size_t>(sources.size()); i++) {
+    for (size_t i = 0; i < sources.size(); i++) {
       for (const auto& path : findPaths(sources[i], {targets[i].getBits()},
                                         binSearch, numPathsPerTarget)) {
         paths.push_back(path);

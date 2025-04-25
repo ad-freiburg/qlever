@@ -21,7 +21,7 @@ std::vector<std::vector<int>> ints1{{1}, {42, 19}, {6, 5, -4, 96}, {-38, 4, 7}};
 
 auto iterablesEqual(const auto& a, const auto& b) {
   ASSERT_EQ(a.size(), b.size());
-  for (decltype(a.size()) i = 0; i < a.size(); ++i) {
+  for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
   }
 }
@@ -32,12 +32,7 @@ auto vectorsEqual = [](const auto& compactVector, const auto& compareVector) {
     using value_type =
         typename std::decay_t<decltype(compareVector)>::value_type;
     value_type a = [&]() {
-      if constexpr (std::is_same_v<value_type, std::vector<int>> ||
-                    std::is_same_v<value_type, std::vector<char>>) {
-        return value_type(compactVector[i].begin(), compactVector[i].end());
-      } else {
-        return value_type(compactVector[i].data(), compactVector[i].size());
-      }
+      return value_type(compactVector[i].begin(), compactVector[i].end());
     }();
     iterablesEqual(a, compareVector[i]);
   }

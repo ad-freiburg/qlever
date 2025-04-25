@@ -103,9 +103,7 @@ class ServiceTest : public ::testing::Test {
         for (size_t start = 0; start < resultStr.length();) {
           size_t size = distribution(rng);
           std::string resultCopy{resultStr.substr(start, size)};
-          co_yield ql::span<std::byte>(
-              reinterpret_cast<std::byte*>(resultCopy.data()),
-              resultCopy.size());
+          co_yield ql::as_writeable_bytes(ql::span{resultCopy});
           start += size;
         }
       };

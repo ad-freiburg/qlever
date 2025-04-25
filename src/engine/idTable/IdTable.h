@@ -281,11 +281,9 @@ class IdTable {
       AD_CORRECTNESS_CHECK(numColumns == NumColumns);
     }
     AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
-    AD_CORRECTNESS_CHECK(
-        ql::ranges::all_of(this->data(), [this](const auto& column) {
-          return column.size() ==
-                 static_cast<decltype(column.size())>(numRows_);
-        }));
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+        this->data(),
+        [this](const auto& column) { return column.size() == numRows_; }));
   }
 
  public:
@@ -601,13 +599,12 @@ class IdTable {
     AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
-    viewSpans.reserve(static_cast<size_t>(columnIndices.size()));
+    viewSpans.reserve(columnIndices.size());
     for (auto idx : columnIndices) {
       viewSpans.push_back(getColumn(idx));
     }
     return IdTable<T, 0, ColumnStorage, IsView::True>{
-        std::move(viewSpans), static_cast<size_t>(columnIndices.size()),
-        numRows_, allocator_};
+        std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
 
   // Modify the table, such that it contains only the specified `subset` of the
