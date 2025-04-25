@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -182,6 +183,21 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
       return createUnary(&makeLatitudeExpression);
+    } else if (functionName == "sfIntersects") {
+      return createBinary(
+          &makeGeoRelationExpression<SpatialJoinType::INTERSECTS>);
+    } else if (functionName == "sfContains") {
+      return createBinary(
+          &makeGeoRelationExpression<SpatialJoinType::CONTAINS>);
+    } else if (functionName == "sfCrosses") {
+      return createBinary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>);
+    } else if (functionName == "sfTouches") {
+      return createBinary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>);
+    } else if (functionName == "sfEquals") {
+      return createBinary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>);
+    } else if (functionName == "sfOverlaps") {
+      return createBinary(
+          &makeGeoRelationExpression<SpatialJoinType::OVERLAPS>);
     }
   }
 
