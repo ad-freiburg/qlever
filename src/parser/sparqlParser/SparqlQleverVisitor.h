@@ -555,10 +555,11 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
+  template <typename Context>
+  SparqlExpressionPimpl visitExpressionPimpl(Context* ctx);
 
-  template <typename Expr>
-  ExpressionPtr createExpression(auto... children) {
+  template <typename Expr, typename... Children>
+  ExpressionPtr createExpression(Children... children) {
     return std::make_unique<Expr>(
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
@@ -618,13 +619,15 @@ class SparqlQleverVisitor {
   // variables for the matching word and the score that will be created when
   // processing those triples in the query body, s.t. they can be selected as
   // part of the query result.
+  template <typename Context>
   void setMatchingWordAndScoreVisibleIfPresent(
-      auto* ctx, const TripleWithPropertyPath& triple);
+      Context* ctx, const TripleWithPropertyPath& triple);
 
   // If any of the variables used in `expression` did not appear previously in
   // the query, add a warning or throw an exception (depending on the setting of
   // the corresponding `RuntimeParameter`).
-  void warnOrThrowIfUnboundVariables(auto* ctx,
+  template <typename Context>
+  void warnOrThrowIfUnboundVariables(Context* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
 
