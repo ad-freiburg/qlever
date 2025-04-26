@@ -1138,6 +1138,7 @@ void IndexImpl::readConfiguration() {
     }
   };
 
+  loadDataMember("git-hash", gitHash_);
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
   loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.

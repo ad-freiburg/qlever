@@ -217,6 +217,7 @@ class Index {
   const std::string& getKbName() const;
   const std::string& getOnDiskBase() const;
   const std::string& getIndexId() const;
+  const std::string& getGitHash() const;
 
   NumNormalAndInternal numTriples() const;
 

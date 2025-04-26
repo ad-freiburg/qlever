@@ -1,8 +1,10 @@
-// Copyright 2011 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <b.buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold, UFR
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "engine/Server.h"
 
@@ -38,10 +40,11 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               bool usePatternTrick)
+               std::string_view gitHash, bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
+      gitHash_(gitHash),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -610,6 +613,8 @@ json Server::composeErrorResponseJson(
 json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
+  result["git-hash-index"] = index_.getGitHash();
+  result["git-hash-server"] = gitHash_;
   result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index_.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index_.numDistinctPredicates().internal;

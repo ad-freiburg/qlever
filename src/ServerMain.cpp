@@ -159,7 +159,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatternTrick);
+                  std::move(accessToken), qlever::version::GitShortHash,
+                  !noPatternTrick);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations,
                persistUpdates);
   } catch (const std::exception& e) {

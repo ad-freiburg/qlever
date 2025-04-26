@@ -1,7 +1,10 @@
-// Copyright 2021 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold, UFR
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
@@ -45,7 +48,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  std::string_view gitHash, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -74,6 +77,7 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
+  std::string gitHash_;
   QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;

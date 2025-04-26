@@ -79,7 +79,8 @@ TEST(ServerTest, determineMediaType) {
 
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
+                "git hash"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
   const auto req = makeGetRequest("/");
@@ -103,7 +104,8 @@ TEST(ServerTest, getQueryId) {
 }
 
 TEST(ServerTest, createMessageSender) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
+                "git hash"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);
