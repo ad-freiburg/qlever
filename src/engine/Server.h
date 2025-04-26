@@ -59,15 +59,19 @@ class Server {
                   bool persistUpdates = false);
 
  public:
-  //! First initialize the server. Then loop, wait for requests and trigger
-  //! processing. This method never returns except when throwing an exception.
+  // First initialize the server. Then loop, wait for requests and trigger
+  // processing. This method never returns except when throwing an exception.
   void run(const string& indexBaseName, bool useText, bool usePatterns = true,
            bool loadAllPermutations = true, bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
 
-  /// Helper struct bundling a parsed query with a query execution tree.
+  // Get server statistics.
+  json composeStatsJson() const;
+  json composeCacheStatsJson() const;
+
+  // Helper struct bundling a parsed query with a query execution tree.
   struct PlannedQuery {
     ParsedQuery parsedQuery_;
     QueryExecutionTree queryExecutionTree_;
@@ -210,10 +214,6 @@ class Server {
       const string& query, const std::string& errorMsg,
       const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
-
-  json composeStatsJson() const;
-
-  json composeCacheStatsJson() const;
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// its completion, wrapping the result.
