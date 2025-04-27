@@ -28,6 +28,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
+#include "util/Timer.h"
 #include "util/TypeTraits.h"
 
 using std::array;
@@ -454,10 +455,17 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
+  // Have a nice progress bar that shows the number of triples parsed. Depending
+  // on how the input is generated, it may take a long time before the first
+  // triple is parsed. We do not want to count that time, hence we stop the
+  // timer at this point and start it again when the first triple is parsed.
+  size_t numTriplesParsed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
+  ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
+  numTriplesParsedTimer.stop();
+
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
-  size_t numTriplesProcessed = 0;
-  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples parsed: "};
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -483,13 +491,14 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                   this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
+        numTriplesParsedTimer.cont();
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
           }
         }
-        numTriplesProcessed++;
+        numTriplesParsed++;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
@@ -528,7 +537,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(
-            numTriplesProcessed, numFiles, actualCurrentPartialSize,
+            numTriplesParsed, numFiles, actualCurrentPartialSize,
             std::move(oldItemPtr), std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually

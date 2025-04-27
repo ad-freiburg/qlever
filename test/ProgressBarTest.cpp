@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
@@ -11,6 +11,7 @@
 #include "../test/util/GTestHelpers.h"
 #include "util/ProgressBar.h"
 #include "util/StringUtils.h"
+#include "util/Timer.h"
 
 using ad_utility::ProgressBar;
 
@@ -65,6 +66,24 @@ TEST(ProgressBar, typicalUsage) {
 TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
   size_t numSteps = 3'000;
   ProgressBar progressBar(numSteps, "Steps: ", 5'000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  std::string expectedUpdateRegex =
+#ifndef _QLEVER_NO_TIMING_TESTS
+      "Steps: 3,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
+#else
+      "Steps: 3,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
+#endif
+  ASSERT_THAT(progressBar.getFinalProgressString(),
+              ::testing::MatchesRegex(expectedUpdateRegex));
+}
+
+// Test `getTimer` by stopping the timer after 1ms and checking that this is
+// reflected in the reported speed.
+TEST(ProgressBar, getTimer) {
+  size_t numSteps = 3'000;
+  ProgressBar progressBar(numSteps, "Steps: ", 5'000);
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  progressBar.getTimer().stop();
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
   std::string expectedUpdateRegex =
 #ifndef _QLEVER_NO_TIMING_TESTS
