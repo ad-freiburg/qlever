@@ -216,10 +216,6 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
 }
 
 // Tests for `InputRangeFromLoopControlGet`.
-namespace {
-template <typename F>
-using ILC = ad_utility::InputRangeFromLoopControlGet<F>;
-}
 TEST(InputRangeFromLoopControlGet, BasicTests) {
   using namespace ad_utility;
   using namespace testing;
@@ -235,7 +231,7 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
     return L::breakWithValue(42);
   };
 
-  EXPECT_THAT(toVec(ILC(f)), ElementsAre(0, 42));
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f)), ElementsAre(0, 42));
 
   // Also add a test with a simple break;
   auto f2 = [i = 0]() mutable -> L {
@@ -257,6 +253,6 @@ TEST(InputRangeFromLoopControlGet, BasicTests) {
     }
     return L::makeBreak();
   };
-  EXPECT_THAT(toVec(ILC(f2)), ElementsAre(0, 42, 123));
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)), ElementsAre(0, 42, 123));
 }
 }  // namespace
