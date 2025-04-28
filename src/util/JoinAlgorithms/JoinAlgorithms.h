@@ -13,6 +13,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
@@ -488,8 +489,8 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 
   // The last columns from the left and right input. Those will be dealt with
   // separately.
-  std::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
-  std::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
+  ql::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
+  ql::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
     checkCancellation();
@@ -538,12 +539,12 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
     // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
     auto end = endSame1 - left.begin();
-    std::span<const Id> leftSub{lastColumnLeft.begin() + beg,
-                                lastColumnLeft.begin() + end};
+    ql::span<const Id> leftSub{lastColumnLeft.begin() + beg,
+                               lastColumnLeft.begin() + end};
     beg = it2 - right.begin();
     end = endSame2 - right.begin();
-    std::span<const Id> rightSub{lastColumnRight.begin() + beg,
-                                 lastColumnRight.begin() + end};
+    ql::span<const Id> rightSub{lastColumnRight.begin() + beg,
+                                lastColumnRight.begin() + end};
 
     // Set up the generator for the UNDEF values.
     // TODO<joka921> We could probably also apply this optimization if both
@@ -588,7 +589,7 @@ CPP_template(typename CompatibleActionT, typename NotFoundActionT,
 namespace detail {
 using Range = std::pair<size_t, size_t>;
 
-// Store a contiguous random-access range (e.g. `std::vector`or `std::span`,
+// Store a contiguous random-access range (e.g. `std::vector`or `ql::span`,
 // together with a pair of indices `[beginIndex, endIndex)` that denote a
 // contiguous subrange of the range. Note that this approach is more robust
 // than storing iterators or subranges directly instead of indices, because many

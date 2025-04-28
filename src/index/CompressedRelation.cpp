@@ -429,7 +429,7 @@ struct BlockLessThanBlock {
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
-    std::span<const Id> joinColumn,
+    ql::span<const Id> joinColumn,
     const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
@@ -533,7 +533,7 @@ CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 IdTable CompressedRelationReader::scan(
     const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blocks,
+    ql::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
@@ -784,7 +784,7 @@ CPP_template_def(typename IdGetter)(
   };
 
   // Get the blocks needed for the scan.
-  std::span<const CompressedBlockMetadata> relevantBlocksMetadata =
+  ql::span<const CompressedBlockMetadata> relevantBlocksMetadata =
       getRelevantBlocks(scanSpec, allBlocksMetadata);
 
   // TODO<joka921> We have to read the other columns for the merging of the
@@ -794,7 +794,7 @@ CPP_template_def(typename IdGetter)(
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
-  for (size_t i = 0; i < relevantBlocksMetadata.size(); ++i) {
+  for (size_t i : ad_utility::integerRange(relevantBlocksMetadata.size())) {
     const auto& blockMetadata = relevantBlocksMetadata[i];
     Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
     Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
@@ -972,7 +972,7 @@ CompressedRelationReader::readAndDecompressBlock(
 
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
-CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
+CompressedRelationWriter::compressAndWriteColumn(ql::span<const Id> column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
   auto compressedSize = compressedBlock.size();
@@ -1055,10 +1055,10 @@ void CompressedRelationWriter::compressAndWriteBlock(
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
+ql::span<const CompressedBlockMetadata>
 CompressedRelationReader::getRelevantBlocks(
     const ScanSpecification& scanSpec,
-    std::span<const CompressedBlockMetadata> blockMetadata) {
+    ql::span<const CompressedBlockMetadata> blockMetadata) {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   CompressedBlockMetadata key;
@@ -1092,7 +1092,7 @@ CompressedRelationReader::getRelevantBlocks(
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
+ql::span<const CompressedBlockMetadata>
 CompressedRelationReader::getBlocksFromMetadata(
     const ScanSpecAndBlocks& metadata) {
   return getRelevantBlocks(metadata.scanSpec_, metadata.blockMetadata_);
