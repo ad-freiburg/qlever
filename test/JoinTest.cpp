@@ -677,6 +677,13 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
   rightTables.push_back(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)));
   auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
   performJoin(std::move(leftTables), std::move(rightTables), expected7, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  auto expected8 = createIdTableOfSizeWithValue(2, I(2));
+  performJoin(std::move(leftTables), std::move(rightTables), expected8, false);
 }
 
 // _____________________________________________________________________________
