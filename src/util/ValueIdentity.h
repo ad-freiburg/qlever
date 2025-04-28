@@ -50,6 +50,26 @@ struct ApplyAsValueIdentity {
 template <typename F>
 ApplyAsValueIdentity(F&&) -> ApplyAsValueIdentity<F>;
 
+// Wrapper for functors, which function is to forward compile-time values
+// provided as template parameters to the functor itself as arguments by
+// wrapping each of them in a 'ValueIdentity' and passing them along with
+// the runtime arguments as a tuple. This is useful when the functor expects
+// its compile-time values and runtime arguments to be grouped together
+// in a single tuple.
+template <typename F>
+struct ApplyAsValueIdentityTuple {
+  F function;
+
+  template <auto... Is, typename... Args>
+  decltype(auto) operator()(Args&&... args) const {
+    using ad_utility::use_value_identity::vi;
+    return function(std::forward_as_tuple(AD_FWD(args)...), vi<Is>...);
+  }
+};
+
+template <typename F>
+ApplyAsValueIdentityTuple(F&&) -> ApplyAsValueIdentityTuple<F>;
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_VALUEIDENTITY_H
