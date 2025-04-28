@@ -195,12 +195,14 @@ decltype(auto) callFixedSizeVi(Int i, F&& functor, Args&&... args) {
 // `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
 // simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
 // the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                           \
-  ad_utility::callFixedSize(                                           \
-      integers, ad_utility::ApplyAsValueIdentityTuple(                 \
-                    [](auto argsTuple, auto... Is) -> decltype(auto) { \
-                      return std::apply(func<static_cast<int>(Is)...>, \
-                                        std::move(argsTuple));         \
-                    }) __VA_OPT__(, ) __VA_ARGS__)
+#define CALL_FIXED_SIZE(integers, func, ...)                 \
+  ad_utility::callFixedSize(                                 \
+      integers,                                              \
+      ad_utility::ApplyAsValueIdentityTuple(                 \
+          [](auto argsTuple, auto... Is) -> decltype(auto) { \
+            return std::apply(func<static_cast<int>(Is)...>, \
+                              std::move(argsTuple));         \
+          }),                                                \
+      ##__VA_ARGS__)
 
 #endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
