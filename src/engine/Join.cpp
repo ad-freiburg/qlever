@@ -380,7 +380,7 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
+CPP_template(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>>)
