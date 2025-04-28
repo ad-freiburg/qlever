@@ -281,7 +281,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
 };
 
-TEST(IndexTest, indexId) {
+TEST(IndexTest, indexIdAndGitHash) {
   std::string kb =
       "<a1> <b> <c1> .\n"
       "<a2> <b> <c2> .\n"
@@ -292,6 +292,9 @@ TEST(IndexTest, indexId) {
   // and two distinct objects.
   const Index& index = makeQec(kb, true, false)->getIndex();
   ASSERT_EQ(index.getIndexId(), "#.4.3.1.2");
+
+  // For the test index, the git hash is not set, see `src/CompilationInfo.h`.
+  ASSERT_EQ(index.getGitShortHash(), "git short hash not set");
 }
 
 TEST(IndexTest, scanTest) {
