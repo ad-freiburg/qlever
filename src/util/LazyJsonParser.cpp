@@ -38,10 +38,10 @@ LazyJsonParser::Generator LazyJsonParser::parse(
 
 // ____________________________________________________________________________
 LazyJsonParser::Generator LazyJsonParser::parse(
-    cppcoro::generator<std::span<std::byte>> partialJson,
+    cppcoro::generator<ql::span<std::byte>> partialJson,
     std::vector<std::string> arrayPath) {
   return parse(
-      [](cppcoro::generator<std::span<std::byte>> partialJson)
+      [](cppcoro::generator<ql::span<std::byte>> partialJson)
           -> cppcoro::generator<std::string_view> {
         for (const auto& bytes : partialJson) {
           co_yield std::string_view(reinterpret_cast<const char*>(bytes.data()),

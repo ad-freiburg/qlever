@@ -29,7 +29,7 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
-                                  std::span<const IdTriple<0>> idTriples,
+                                  ql::span<const IdTriple<0>> idTriples,
                                   bool shouldExist) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;

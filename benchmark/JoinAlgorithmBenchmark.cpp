@@ -117,7 +117,7 @@ struct SetOfIdTableColumnElements {
   Set the member variables for the given column.
   */
   explicit SetOfIdTableColumnElements(
-      const std::span<const ValueId>& idTableColumnRef) {
+      const ql::span<const ValueId>& idTableColumnRef) {
     ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
