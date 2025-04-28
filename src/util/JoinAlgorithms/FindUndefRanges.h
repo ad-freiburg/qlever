@@ -66,10 +66,24 @@ CPP_template(typename R,
     permutations.push_back(rowLower);
   }
 
-  return permutations | ql::views::transform([begin, end](const Row& row) {
-           return std::equal_range(begin, end, row,
-                                   ql::ranges::lexicographical_compare);
-         });
+  using VW =
+      decltype(ad_utility::OwningView{std::move(permutations)} |
+               ql::views::transform([begin, end](const Row& row) {
+                 return ql::ranges::equal_range(
+                     begin, end, row, ql::ranges::lexicographical_compare);
+               }));
+  using All = ql::views::all_t<VW>;
+  static_assert(ql::ranges::input_range<All>);
+  static_assert(ql::ranges::view<All>);
+  static_assert(ql::ranges::input_range<ql::ranges::range_reference_t<All>>);
+
+  return ql::views::join(
+      ad_utility::OwningView{std::move(permutations)} |
+      ql::views::transform([begin, end](const Row& row) {
+        auto rng = ql::ranges::equal_range(begin, end, row,
+                                           ql::ranges::lexicographical_compare);
+        return ad_utility::IteratorRange{rng.begin(), rng.end()};
+      }));
 }
 
 // This function has the additional precondition, that the `row` contains
@@ -100,37 +114,39 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 
   // If every entry in the row is UNDEF, then it is the smallest possible
   // row, and there can be no smaller row.
-  if (numLastUndefined == 0) {
-    return;
-  }
-  Row rowLower = row;
-
-  const size_t upperBound = 1u << numDefinedColumns;
   std::vector<Row> permutations;
-  for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
-       ++permutationCounter) {
-    for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
-      rowLower[colIdx] =
-          (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
-              ? row[colIdx]
-              : ValueId::makeUndefined();
+  if (numLastUndefined != 0) {
+    Row rowLower = row;
+
+    const size_t upperBound = 1u << numDefinedColumns;
+    for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
+         ++permutationCounter) {
+      for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
+        rowLower[colIdx] =
+            (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
+                ? row[colIdx]
+                : ValueId::makeUndefined();
+      }
+      permutations.push_back(rowLower);
     }
-    permutations.push_back(rowLower);
   }
 
-  return permutations |
+  return ad_utility::OwningView{std::move(permutations)} |
          ql::views::transform([begin, end, &resultMightBeUnsorted,
                                numDefinedColumns](const Row& row) {
            auto begOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
-           row[numDefinedColumns - 1] =
+           // TODO<joka921> There are very many copies here...
+           Row modified = row;
+           modified[numDefinedColumns - 1] =
                Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
            auto endOfUndef = std::lower_bound(
-               begin, end, row, ql::ranges::lexicographical_compare);
+               begin, end, modified, ql::ranges::lexicographical_compare);
 
            resultMightBeUnsorted = true;
-           return begOfUndef;
-         });
+           return ad_utility::IteratorRange{begOfUndef, endOfUndef};
+         }) |
+         ql::views::join;
 }
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
@@ -148,7 +164,8 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
   end = std::lower_bound(begin, end, row, ql::ranges::lexicographical_compare);
 
   const size_t numJoinColumns = row.size();
-  auto isCompatible = [&](const auto& otherRow) {
+  auto isCompatible = [numJoinColumns, &row](const auto& otherIt) {
+    const auto& otherRow = *otherIt;
     for (size_t k = 0u; k < numJoinColumns; ++k) {
       Id a = row[k];
       Id b = otherRow[k];
@@ -163,7 +180,7 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     return true;
   };
 
-  return ql::ranges::subrange(begin, end) |
+  return ad_utility::IteratorRange(begin, end) |
          ql::views::filter(
              [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
                if (isCompatible(otherRow)) {
@@ -198,16 +215,18 @@ struct FindSmallerUndefRanges {
 
     for (; it < rend; ++it) {
       if (*it == Id::makeUndefined()) {
-        return findSmallerUndefRangesArbitrary(row, begin, end,
-                                               resultMightBeUnsorted);
+        return ad_utility::InputRangeTypeErased{findSmallerUndefRangesArbitrary(
+            row, begin, end, resultMightBeUnsorted)};
       }
     }
     if (numLastUndefined == 0) {
-      return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                       resultMightBeUnsorted);
+      return ad_utility::InputRangeTypeErased{
+          findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
+                                                    resultMightBeUnsorted)};
     } else {
-      return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-          row, numLastUndefined, begin, end, resultMightBeUnsorted);
+      return ad_utility::InputRangeTypeErased{
+          findSmallerUndefRangesForRowsWithUndefInLastColumns(
+              row, numLastUndefined, begin, end, resultMightBeUnsorted)};
     }
   }
 };

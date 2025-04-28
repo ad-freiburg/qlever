@@ -431,6 +431,25 @@ class InputRangeTypeErased {
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
 
+template <typename Range>
+InputRangeTypeErased(Range)
+    -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
+
+template <typename It, typename End>
+struct IteratorRange {
+  It it_;
+  End end_;
+  It operator[](size_t index) const { return it_ + index; }
+
+  auto begin() { return IteratorForAccessOperator<IteratorRange>{this, 0}; }
+  auto end() {
+    return IteratorForAccessOperator<IteratorRange>{
+        this, static_cast<size_t>(end_ - it_)};
+  }
+};
+template <typename It, typename End>
+IteratorRange(It, End) -> IteratorRange<It, End>;
+
 // Analogous to `cppcoro::getSingleElement`, but generalized for all ranges.
 // Ensure that the range only contains a single element, move it out and return
 // it.
