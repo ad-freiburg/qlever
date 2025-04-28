@@ -55,7 +55,8 @@ class VocabularyInMemory
   auto operator[](uint64_t i) const { return _words[i]; }
 
   // Conversion function that is used by the Mixin base class.
-  WordAndIndex iteratorToWordAndIndex(auto it) const {
+  template <typename It>
+  WordAndIndex iteratorToWordAndIndex(It it) const {
     if (it == _words.end()) {
       return WordAndIndex::end();
     }

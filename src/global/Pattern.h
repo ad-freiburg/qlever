@@ -10,12 +10,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
@@ -55,7 +55,7 @@ class CompactVectorOfStrings {
   using offset_type = uint64_t;
   using value_type =
       std::conditional_t<std::is_same_v<data_type, char>, std::string_view,
-                         std::span<const data_type>>;
+                         ql::span<const data_type>>;
   using vector_type = std::conditional_t<std::is_same_v<data_type, char>,
                                          std::string, std::vector<data_type>>;
 

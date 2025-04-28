@@ -61,8 +61,8 @@ namespace {
 using ad_utility::makeExecutionTree;
 using SubtreePlan = QueryPlanner::SubtreePlan;
 
-template <typename Operation>
-SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, auto&&... args) {
+template <typename Operation, typename... Args>
+SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
@@ -590,8 +590,7 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       auto... rewritePositions)
+       ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
@@ -621,10 +620,10 @@ void QueryPlanner::indexScanSingleVarCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
 
   // Replace the position of the `triple` that is specified by the
@@ -634,7 +633,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -646,6 +645,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   const auto& [s, p, o, _] = triple;
 
   using Tr = SparqlTripleSimple;
+
   if (!s.isVariable()) {
     if (p == o) {
       handleRepeatedVariables({{SPO}}, &Tr::o_);
@@ -672,10 +672,10 @@ void QueryPlanner::indexScanTwoVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
@@ -688,7 +688,7 @@ void QueryPlanner::indexScanThreeVarsCase(
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -1038,7 +1038,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
     auto expression = makeNotEqualExpression(variable, iris.at(0));
     appendNotEqualString(descriptor, iris.at(0), variable);
     // Combine subsequent iris with a logical AND.
-    for (string_view iri : std::span{iris.begin() + 1, iris.end()}) {
+    for (const auto& iri : ql::views::drop(iris, 1)) {
       expression = makeAndExpression(std::move(expression),
                                      makeNotEqualExpression(variable, iri));
       descriptor << " && ";
@@ -1418,7 +1418,7 @@ size_t QueryPlanner::findUniqueNodeIds(
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-      nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
+      nodeIds, [](auto nodeId) { return absl::popcount(nodeId) == 1; }));
   ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
@@ -2564,8 +2564,9 @@ void QueryPlanner::checkCancellation(
 }
 
 // _____________________________________________________________________________
+template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const auto& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables) {
   using enum SubtreePlan::Type;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,

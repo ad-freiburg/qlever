@@ -153,16 +153,26 @@ namespace detail::parameterShortNames {
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
 struct fl {
-  float operator()(const auto& s) const { return std::stof(s); }
+  template <typename T>
+  float operator()(const T& s) const {
+    return std::stof(s);
+  }
 };
 struct dbl {
-  double operator()(const auto& s) const { return std::stod(s); }
+  template <typename T>
+  double operator()(const T& s) const {
+    return std::stod(s);
+  }
 };
 struct szt {
-  size_t operator()(const auto& s) const { return std::stoull(s); }
+  template <typename T>
+  size_t operator()(const T& s) const {
+    return std::stoull(s);
+  }
 };
 struct bl {
-  bool operator()(const auto& s) const {
+  template <typename T>
+  bool operator()(const T& s) const {
     if (s == "true") return true;
     if (s == "false") return false;
     AD_THROW(
@@ -171,7 +181,10 @@ struct bl {
 };
 
 struct toString {
-  std::string operator()(const auto& s) const { return std::to_string(s); }
+  template <typename T>
+  std::string operator()(const T& s) const {
+    return std::to_string(s);
+  }
 };
 struct boolToString {
   std::string operator()(const bool& v) const { return v ? "true" : "false"; }

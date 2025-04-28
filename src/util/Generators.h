@@ -53,9 +53,9 @@ CPP_template(typename InputRange, typename AggregatorT,
 // callable that takes a `callback` with signature `void(T)`. The arguments with
 // which this callback is called when running the `functionWithCallback` become
 // the elements that are yielded by the created `generator`.
-template <typename T>
-cppcoro::generator<T> generatorFromActionWithCallback(
-    std::invocable<std::function<void(T)>> auto functionWithCallback) {
+template <typename T, typename F>
+cppcoro::generator<T> generatorFromActionWithCallback(F functionWithCallback)
+    requires std::invocable<F, std::function<void(T)>> {
   std::mutex mutex;
   std::condition_variable cv;
 
