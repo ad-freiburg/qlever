@@ -455,10 +455,16 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
-  // Have a nice progress bar that shows the number of triples parsed. Depending
-  // on how the input is generated, it may take a long time before the first
-  // triple is parsed. We do not want to count that time, hence we stop the
-  // timer at this point and start it again when the first triple is parsed.
+  // Show progress and statistics for the number of triples parsed, in
+  // particular, the average processing time for a batch of 10M triples (see
+  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE`).
+  //
+  // NOTE: Some input generation processes (for example, `osm2rdf` for the OSM
+  // data) have a long startup time before they produce the first triple, but
+  // then produce triples fast. If we would count that startup time towards the
+  // first batch, the reported average batch processing time would be
+  // distorted. We therefore stop the timer here, and then start it when the
+  // first triple is parsed (see `numTriplesParsedTimer.cont()` below).
   size_t numTriplesParsed = 0;
   ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
   ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
