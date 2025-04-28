@@ -28,6 +28,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
+#include "util/Timer.h"
 #include "util/TypeTraits.h"
 
 using std::array;
@@ -454,10 +455,23 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
+  // Show progress and statistics for the number of triples parsed, in
+  // particular, the average processing time for a batch of 10M triples (see
+  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE`).
+  //
+  // NOTE: Some input generation processes (for example, `osm2rdf` for the OSM
+  // data) have a long startup time before they produce the first triple, but
+  // then produce triples fast. If we would count that startup time towards the
+  // first batch, the reported average batch processing time would be
+  // distorted. We therefore stop the timer here, and then start it when the
+  // first triple is parsed (see `numTriplesParsedTimer.cont()` below).
+  size_t numTriplesParsed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
+  ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
+  numTriplesParsedTimer.stop();
+
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
-  size_t numTriplesProcessed = 0;
-  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples parsed: "};
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -483,13 +497,14 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                   this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
+        numTriplesParsedTimer.cont();
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
           }
         }
-        numTriplesProcessed++;
+        numTriplesParsed++;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
@@ -528,7 +543,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(
-            numTriplesProcessed, numFiles, actualCurrentPartialSize,
+            numTriplesParsed, numFiles, actualCurrentPartialSize,
             std::move(oldItemPtr), std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
