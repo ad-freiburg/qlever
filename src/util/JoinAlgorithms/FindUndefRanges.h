@@ -180,7 +180,7 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     return true;
   };
 
-  return ad_utility::IteratorRange(begin, end) |
+  return ad_utility::OwningView{ad_utility::IteratorRange(begin, end)} |
          ql::views::filter(
              [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
                if (isCompatible(otherRow)) {
