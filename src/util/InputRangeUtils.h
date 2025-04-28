@@ -209,9 +209,6 @@ CPP_class_template(typename F)(
     // This loop is executed exactly once unless there is a `continue`
     // statement.
     while (true) {
-      if (receivedBreak_) {
-        return std::nullopt;
-      }
       auto loopControl = getFunction_();
       if (loopControl.isContinue()) {
         continue;
@@ -224,7 +221,9 @@ CPP_class_template(typename F)(
   }
 };
 
-// Actual class definition.
+// A class that takes a view and a function that transforms the elements of the
+// view into a `LoopControl` object, and synthesizes an `input_range` from these
+// arguments.
 CPP_class_template(typename View, typename F)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>)) struct CachingContinuableTransformInputRange

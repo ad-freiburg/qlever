@@ -250,7 +250,7 @@ CPP_template(typename Range)(
     requires ad_utility::Rvalue<
         Range&&>) auto moveToCachingInputRange(Range&& range) {
   return ad_utility::CachingTransformInputRange(
-      std::move(range), [](auto& input) { return std::move(input); });
+      AD_FWD(range), [](auto& input) { return std::move(input); });
 }
 }  // namespace
 
@@ -265,7 +265,7 @@ Result::LazyResult Service::computeResultLazily(
               idTable = IdTable{getResultWidth(),
                                 getExecutionContext()->getAllocator()},
               rowIdx = size_t{0}, varsChecked = false,
-              resultExists = false]() mutable -> LC {
+              resultExists = false]() mutable {
     auto& details = inputRange.underlyingView().base().details();
     try {
       while (auto partJsonOpt = inputRange.get()) {
