@@ -103,7 +103,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         range-v3
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
+        GIT_TAG  b661537be421fee77df40bdffa8f221ead53bb8e  # branch fork-for-qlever
 )
 
 #################################
