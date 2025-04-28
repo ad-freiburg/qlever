@@ -215,64 +215,48 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
       helpers, applyLimit4Offset3);
 }
 
-// Test for iterating past the end of a CachingTransformInput range
-TEST(ConcatenatedInputRange, IterateMultipleViews) {
-  // This test ensures that all values are returned in the order they are given
-  // and that nullopt is returned for all subsequent calls
-  std::vector<
-      std::unique_ptr<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>>
-      viewCollection;
-  viewCollection.push_back(
-      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
-          std::vector<int>{42}));
-  viewCollection.push_back(
-      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
-          std::vector<int>{43, 44}));
-  viewCollection.push_back(
-      std::make_unique<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>(
-          std::vector<int>{24, 25}));
-
-  ad_utility::ConcatenatedInputRange range{std::move(viewCollection)};
-
-  // The first five elements shall be returned in order
-  std::optional<int> element = range.get();
-  ASSERT_TRUE(element.has_value());
-  EXPECT_EQ(42, element.value());
-
-  element = range.get();
-  ASSERT_TRUE(element.has_value());
-  EXPECT_EQ(43, element.value());
-
-  element = range.get();
-  ASSERT_TRUE(element.has_value());
-  EXPECT_EQ(44, element.value());
-
-  element = range.get();
-  ASSERT_TRUE(element.has_value());
-  EXPECT_EQ(24, element.value());
-
-  element = range.get();
-  ASSERT_TRUE(element.has_value());
-  EXPECT_EQ(25, element.value());
-
-  // Subsequent calls shall return nullopt
-  EXPECT_FALSE(range.get().has_value());
-  EXPECT_FALSE(range.get().has_value());
-  EXPECT_FALSE(range.get().has_value());
+// Tests for `InputRangeFromLoopControlGet`.
+namespace {
+template <typename F>
+using ILC = ad_utility::InputRangeFromLoopControlGet<F>;
 }
+TEST(InputRangeFromLoopControlGet, BasicTests) {
+  using namespace ad_utility;
+  using namespace testing;
+  using L = LoopControl<int>;
+  auto f = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(0);
+    }
+    if (val == 1) {
+      return L::makeContinue();
+    }
+    return L::breakWithValue(42);
+  };
 
-// Test for iterating past the end of a CachingTransformInput range
-TEST(ConcatenatedInputRange, EmptyInput) {
-  // This test ensures that empty views do not result in errors and simply return nullopt
-  std::vector<
-      std::unique_ptr<ad_utility::RangeToInputRangeFromGet<std::vector<int>>>>
-      viewCollection;
+  EXPECT_THAT(toVec(ILC(f)), ElementsAre(0, 42));
 
-  ad_utility::ConcatenatedInputRange range{std::move(viewCollection)};
-
-  // Calls shall return nullopt
-  EXPECT_FALSE(range.get().has_value());
-  EXPECT_FALSE(range.get().has_value());
-  EXPECT_FALSE(range.get().has_value());
+  // Also add a test with a simple break;
+  auto f2 = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(0);
+    }
+    if (val == 1) {
+      return L::yieldValue(42);
+    }
+    if (val < 37) {
+      return L::makeContinue();
+    }
+    if (val == 38) {
+      return L::yieldValue(123);
+    }
+    if (val < 47) {
+      return L::makeContinue();
+    }
+    return L::makeBreak();
+  };
+  EXPECT_THAT(toVec(ILC(f2)), ElementsAre(0, 42, 123));
 }
 }  // namespace

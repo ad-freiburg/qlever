@@ -4,6 +4,8 @@
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
+#include <optional>
+
 #include "backports/algorithm.h"
 #include "util/Views.h"
 
@@ -67,7 +69,8 @@ CPP_class_template(typename View, typename F)(requires(
     return std::invoke(transfomation_, *it_.value());
   }
 
-  const View& view() { return view_; }
+  // Get access to the underlying view.
+  const View& underlyingView() { return view_; }
 
   // Give the mixin access to the private `get` function.
   friend class InputRangeFromGet<Res>;
@@ -76,8 +79,8 @@ CPP_class_template(typename View, typename F)(requires(
 // Deduction guides to correctly propagate the input as a value or reference.
 // This is the exact same way `std::ranges` and `range-v3` behave.
 template <typename Range, typename F>
-CachingTransformInputRange(Range&&,
-                           F) -> CachingTransformInputRange<all_t<Range>, F>;
+CachingTransformInputRange(Range&&, F)
+    -> CachingTransformInputRange<all_t<Range>, F>;
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
@@ -167,12 +170,59 @@ using LoopControl = loopControl::LoopControl<T>;
 // 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
 // is yielded and the iteration resumes.
 
-// First a small helper to get the actual value type of the class below.
+// First some small helpers to get the actual value types of the classes below.
 namespace detail {
 template <typename View, typename F>
 using Res = loopControl::loopControlValueT<
     std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>;
-}
+
+template <typename F>
+using ResFromFunction = loopControl::loopControlValueT<std::invoke_result_t<F>>;
+}  // namespace detail
+
+// A class that allows to synthesize an input range directly from a callable
+// that returns `LoopControl<T>`.
+CPP_class_template(typename F)(
+    requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
+    : InputRangeFromGet<detail::ResFromFunction<F>> {
+ private:
+  F getFunction_;
+  using Res = detail::ResFromFunction<F>;
+  static_assert(std::is_object_v<Res>,
+                "The functor of `InputRangeFromLoopControlGet` must yield an "
+                "object type, not a reference");
+
+  // If set to true then we have seen a `break` statement and no more values
+  // are yielded.
+  bool receivedBreak_ = false;
+
+ public:
+  // Constructor.
+  explicit InputRangeFromLoopControlGet(F transformation = {})
+      : getFunction_{std::move(transformation)} {}
+
+  // The central `get` function, required by the mixin.
+  std::optional<Res> get() {
+    if (receivedBreak_) {
+      return std::nullopt;
+    }
+    // This loop is executed exactly once unless there is a `continue`
+    // statement.
+    while (true) {
+      if (receivedBreak_) {
+        return std::nullopt;
+      }
+      auto loopControl = getFunction_();
+      if (loopControl.isContinue()) {
+        continue;
+      }
+      if (loopControl.isBreak()) {
+        receivedBreak_ = true;
+      }
+      return loopControl.moveValueIfPresent();
+    }
+  }
+};
 
 // Actual class definition.
 CPP_class_template(typename View, typename F)(requires(
@@ -228,37 +278,4 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
-
-// This class can be used to concatenate input ranges into a single range.
-// Elements within ranges are iterated in order until their end, at which point
-// the next element will be the first element of the next range. When all
-// elements of all ranges have been iterated, nullopt is returned for all
-// subsequent get() calls. Note: This class only works with Views that implement
-// "get()" like the InputRangeFromGet subclasses.
-CPP_class_template(typename ViewType)(
-    requires(ql::ranges::input_range<ViewType>)) struct ConcatenatedInputRange
-    : ad_utility::InputRangeFromGet<ql::ranges::range_value_t<ViewType>> {
-  using ViewCollection = std::vector<std::unique_ptr<ViewType>>;
-  ViewCollection viewCollection_;
-  ql::ranges::iterator_t<ViewCollection> collectionIt_;
-
-  ConcatenatedInputRange(ViewCollection viewCollection)
-      : viewCollection_(std::move(viewCollection)),
-        collectionIt_(viewCollection_.begin()) {}
-
-  std::optional<ql::ranges::range_value_t<ViewType>> get() {
-    while (collectionIt_ != viewCollection_.end()) {
-      auto elementOpt = (*collectionIt_)->get();
-      if (elementOpt.has_value()) {
-        // Element exists in the currently iterated view
-        return elementOpt;
-      }
-      // Done with current view, but not all views
-      ++collectionIt_;
-    }
-    // Done iterating over all views
-    return std::nullopt;
-  }
-};
-
 }  // namespace ad_utility

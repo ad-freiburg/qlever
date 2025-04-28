@@ -241,24 +241,32 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   checkCancellation();
 }
 
+namespace {
+// Convert a `Range` to a `CachingInputRange` by moving it into a
+// `CachingTransformInputRange` with a trivial transformation. This enables the
+// usage of the `Range` with the additional interface and caching properties of
+// the `CachingInputRange`.
+CPP_template(typename Range)(
+    requires ad_utility::Rvalue<
+        Range&&>) auto moveToCachingInputRange(Range&& range) {
+  return ad_utility::CachingTransformInputRange(
+      std::move(range), [](auto& input) { return std::move(input); });
+}
+}  // namespace
+
 // ____________________________________________________________________________
 Result::LazyResult Service::computeResultLazily(
     std::vector<std::string> vars, ad_utility::LazyJsonParser::Generator body,
     bool singleIdTable) {
-  auto inputRange = ad_utility::CachingTransformInputRange(
-      std::move(body), [](auto& input) { return std::move(input); });
-  auto get = [service = this, vars = std::move(vars),
-              singleIdTable = singleIdTable, inputRange = std::move(inputRange),
+  using LC = Result::IdTableLoopControl;
+  auto get = [service = this, vars = std::move(vars), singleIdTable,
+              inputRange = moveToCachingInputRange(std::move(body)),
               localVocab = LocalVocab{},
               idTable = IdTable{getResultWidth(),
                                 getExecutionContext()->getAllocator()},
-              rowIdx = size_t{0}, varsChecked = false, resultExists = false,
-              singleIdTableReturned =
-                  false]() mutable -> std::optional<Result::IdTableVocabPair> {
-    auto& details = inputRange.view().base().details();
-    if (singleIdTableReturned) {
-      return std::nullopt;
-    }
+              rowIdx = size_t{0}, varsChecked = false,
+              resultExists = false]() mutable -> LC {
+    auto& details = inputRange.underlyingView().base().details();
     try {
       while (auto partJsonOpt = inputRange.get()) {
         const nlohmann::json& partJson = partJsonOpt.value();
@@ -277,7 +285,7 @@ Result::LazyResult Service::computeResultLazily(
           idTable.clear();
           localVocab = LocalVocab{};
           rowIdx = 0;
-          return pair;
+          return LC::yieldValue(std::move(pair));
         }
       }
     } catch (const ad_utility::LazyJsonParser::Error& e) {
@@ -306,15 +314,13 @@ Result::LazyResult Service::computeResultLazily(
     }
 
     if (singleIdTable) {
-      singleIdTableReturned = true;
-      return Result::IdTableVocabPair(std::move(idTable),
-                                      std::move(localVocab));
+      return LC::breakWithValue(
+          Result::IdTableVocabPair(std::move(idTable), std::move(localVocab)));
     }
-
-    return std::nullopt;
+    return LC::makeBreak();
   };
   return Result::LazyResult{
-      ad_utility::InputRangeFromGetCallable{std::move(get)}};
+      ad_utility::InputRangeFromLoopControlGet{std::move(get)}};
 }
 
 // ____________________________________________________________________________
@@ -582,14 +588,13 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
-  constexpr auto identityFunction = [](auto& p) { return std::move(p); };
   // We move the results into a `CachingTransformInputRange` because it will
   // track the last accessed result and continue at the first unaccessed
   // result with subsequent calls to get(). Therefore, we do not need to
   // keep and pass an iterator to the sibling result if the max row threshold
   // is exceeded
-  auto generator = ad_utility::CachingTransformInputRange(
-      std::move(siblingResult->idTables()), identityFunction);
+  auto generator =
+      moveToCachingInputRange(std::move(siblingResult->idTables()));
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
   while (auto pairOpt = generator.get()) {
@@ -602,8 +607,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // threshold it is not useful for the service operation. Pass the
       // partially materialized result to the sibling.
       std::vector<Result::LazyResult> viewCollection;
-      viewCollection.emplace_back(ad_utility::CachingTransformInputRange{
-          std::move(resultPairs), identityFunction});
+      viewCollection.emplace_back(
+          moveToCachingInputRange(std::move(resultPairs)));
       viewCollection.emplace_back(std::move(generator));
       sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
