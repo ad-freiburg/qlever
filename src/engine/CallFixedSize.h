@@ -135,7 +135,8 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // where `INT<N>` is `std::integral_constant<int, N>` and `f` is
 // `mapToZeroIfTooLarge`.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          size_t NumIntegers, std::integral Int, typename F, typename... Args>
+          size_t NumIntegers, typename Int, typename F, typename... Args,
+          typename = std::enable_if_t<std::is_integral<Int>::value>>
 decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
                              Args&&... args) {
   static_assert(NumIntegers > 0);
@@ -152,11 +153,34 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
 }
 
 // Overload for a single integer.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          std::integral Int, typename F, typename... Args>
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, typename Int,
+          typename F, typename... Args,
+          typename = std::enable_if_t<std::is_integral<Int>::value>>
 decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
+}
+
+// Template function `callFixedSizeVi` is a wrapper around `callFixedSize`.
+// It allows calling a functor with an array of integers as template parameters.
+// The `ApplyAsValueIdentity` ensures that the functor is
+// transformed into a form that can be used as a template parameter.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+          size_t NumIntegers, typename Int, typename F, typename... Args,
+          typename = std::enable_if_t<std::is_integral_v<Int>>>
+decltype(auto) callFixedSizeVi(std::array<Int, NumIntegers> ints, F&& functor,
+                               Args&&... args) {
+  return callFixedSize<MaxValue>(ints, ApplyAsValueIdentity{AD_FWD(functor)},
+                                 AD_FWD(args)...);
+}
+
+// Overload for a single integer.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, typename Int,
+          typename F, typename... Args,
+          typename = std::enable_if_t<std::is_integral_v<Int>>>
+decltype(auto) callFixedSizeVi(Int i, F&& functor, Args&&... args) {
+  return callFixedSizeVi<MaxValue>(std::array{i}, AD_FWD(functor),
+                                   AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
