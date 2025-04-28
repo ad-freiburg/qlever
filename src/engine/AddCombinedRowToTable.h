@@ -307,9 +307,8 @@ class AddCombinedRowToIdTable {
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
     auto writeNonJoinColumn = ad_utility::ApplyAsValueIdentity{
-        [&result, oldSize, this](auto valueIdentity, size_t colIdx,
+        [&result, oldSize, this](auto isColFromLeft, size_t colIdx,
                                  size_t resultColIdx) {
-          static constexpr bool isColFromLeft = valueIdentity.value;
           decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
                                              : inputRight().getColumn(colIdx);
           // TODO<joka921> Implement prefetching.
@@ -327,7 +326,7 @@ class AddCombinedRowToIdTable {
           // Write the optional rows. For the right input those are always
           // undefined.
           for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-            Id id = [&col, sourceIndex = sourceIndex]() {
+            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
               if constexpr (isColFromLeft) {
                 return col[sourceIndex];
               } else {

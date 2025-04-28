@@ -403,8 +403,8 @@ Result::LazyResult Union::computeResultKeepOrder(
             trimmedTargetOrder.size(),
             ad_utility::ApplyAsValueIdentity{
                 [this, requestLaziness, &result1, &result2, &left, &right,
-                 &trimmedTargetOrder, &applyPermutation](auto valueIdentity) {
-                  static constexpr int COMPARATOR_WIDTH = valueIdentity.value;
+                 &trimmedTargetOrder,
+                 &applyPermutation](auto COMPARATOR_WIDTH) {
                   constexpr size_t extent = COMPARATOR_WIDTH == 0
                                                 ? ql::dynamic_extent
                                                 : COMPARATOR_WIDTH;

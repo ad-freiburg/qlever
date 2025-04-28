@@ -298,8 +298,7 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
 
       auto width = static_cast<int>(idTable.numColumns());
       auto doCompute = ad_utility::ApplyAsValueIdentity{
-          [this, &idTable, &patterns](auto valueIdentity) {
-            static constexpr int width = valueIdentity.value;
+          [this, &idTable, &patterns](auto width) {
             return computeSubqueryS<width>(&idTable, patterns);
           }};
       return ad_utility::callFixedSize(width, doCompute);

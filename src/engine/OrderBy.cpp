@@ -120,11 +120,9 @@ Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
   ad_utility::callFixedSize(
-      width, ad_utility::ApplyAsValueIdentity{
-                 [&idTable, &comparison](auto valueIdentity) {
-                   static constexpr size_t I = valueIdentity.value;
-                   Engine::sort<I>(&idTable, comparison);
-                 }});
+      width, ad_utility::ApplyAsValueIdentity{[&idTable, &comparison](auto I) {
+        Engine::sort<I>(&idTable, comparison);
+      }});
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();

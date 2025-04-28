@@ -160,8 +160,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   auto runForNumJoinCols = ad_utility::ApplyAsValueIdentity{
       [&notExistsIndices, isCheap, &noopRowAdder,
        &colsLeftDynamic = joinColumnsLeft, &colsRightDynamic = joinColumnsRight,
-       this](auto valueIdentity) {
-        static constexpr int NumJoinCols = valueIdentity.value;
+       this](auto NumJoinCols) {
         // The `actionForNotExisting` callback gets iterators as input, but
         // should output indices, hence the pointer arithmetic.
         auto joinColumnsLeft = colsLeftDynamic.asStaticView<NumJoinCols>();

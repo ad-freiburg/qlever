@@ -94,16 +94,14 @@ Result Filter::computeResult(bool requestLaziness) {
 
   LocalVocab resultLocalVocab{};
   ad_utility::callFixedSize(
-      width,
-      ad_utility::ApplyAsValueIdentity{
-          [this, &subRes, &result, &resultLocalVocab](auto valueIdentity) {
-            static constexpr int WIDTH = valueIdentity.value;
-            for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-              computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
-                                       pair.localVocab_, subRes->sortedBy());
-              resultLocalVocab.mergeWith(pair.localVocab_);
-            }
-          }});
+      width, ad_utility::ApplyAsValueIdentity{[this, &subRes, &result,
+                                               &resultLocalVocab](auto WIDTH) {
+        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                                   pair.localVocab_, subRes->sortedBy());
+          resultLocalVocab.mergeWith(pair.localVocab_);
+        }
+      }});
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
@@ -119,8 +117,7 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
   IdTable result{width, getExecutionContext()->getAllocator()};
 
   auto impl = ad_utility::ApplyAsValueIdentity{
-      [this, &result, &idTable, &localVocab, &sortedBy](auto valueIdentity) {
-        static constexpr int WIDTH = valueIdentity.value;
+      [this, &result, &idTable, &localVocab, &sortedBy](auto WIDTH) {
         return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable),
                                               localVocab, std::move(sortedBy));
       }};

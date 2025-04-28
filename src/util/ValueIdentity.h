@@ -22,6 +22,7 @@ namespace use_value_identity {
 template <auto V>
 struct ValueIdentity {
   static constexpr auto value = V;
+  constexpr operator decltype(V)() const { return value; }
 };
 
 template <auto V>

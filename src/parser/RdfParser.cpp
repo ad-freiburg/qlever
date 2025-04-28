@@ -1264,10 +1264,8 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
   };
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
       [&filename = file.filename_, &bufferSize, &graph](
-          auto valueIdentity1,
-          auto valueIdentity2) -> std::unique_ptr<RdfParserBase> {
-        static constexpr int useParallel = valueIdentity1.value;
-        static constexpr int isTurtleInput = valueIdentity2.value;
+          auto useParallel,
+          auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
         using InnerParser =
             std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
                                NQuadParser<TokenizerT>>;
