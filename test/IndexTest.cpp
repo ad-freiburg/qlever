@@ -294,7 +294,7 @@ TEST(IndexTest, indexIdAndGitHash) {
   ASSERT_EQ(index.getIndexId(), "#.4.3.1.2");
 
   // For the test index, the git hash is not set, see `src/CompilationInfo.h`.
-  ASSERT_EQ(index.getGitHash(), "git short hash not set");
+  ASSERT_EQ(index.getGitShortHash(), "git short hash not set");
 }
 
 TEST(IndexTest, scanTest) {

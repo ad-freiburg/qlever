@@ -80,8 +80,7 @@ TEST(ServerTest, determineMediaType) {
 
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                "git hash"};
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
   const auto req = makeGetRequest("/");
@@ -105,10 +104,9 @@ TEST(ServerTest, getQueryId) {
 }
 
 TEST(ServerTest, composeStatsJson) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                "git hash"};
-  json expectedJson{{"git-hash-index", ""},
-                    {"git-hash-server", "git hash"},
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  json expectedJson{{"git-hash-index", "git short hash not set"},
+                    {"git-hash-server", "git short hash not set"},
                     {"name-index", ""},
                     {"name-text-index", ""},
                     {"num-entity-occurrences", 0},
@@ -123,8 +121,7 @@ TEST(ServerTest, composeStatsJson) {
 }
 
 TEST(ServerTest, createMessageSender) {
-  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken",
-                "git hash"};
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);

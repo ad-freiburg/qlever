@@ -234,7 +234,9 @@ const std::string& Index::getOnDiskBase() const {
 const std::string& Index::getIndexId() const { return pimpl_->getIndexId(); }
 
 // ____________________________________________________________________________
-const std::string& Index::getGitHash() const { return pimpl_->getGitHash(); }
+const std::string& Index::getGitShortHash() const {
+  return pimpl_->getGitShortHash();
+}
 
 // ____________________________________________________________________________
 Index::NumNormalAndInternal Index::numTriples() const {

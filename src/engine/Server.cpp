@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "CompilationInfo.h"
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -40,11 +41,10 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               std::string_view gitHash, bool usePatternTrick)
+               bool usePatternTrick)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
-      gitHash_(gitHash),
       allocator_{ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMem),
                  [this](ad_utility::MemorySize numMemoryToAllocate) {
                    cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
@@ -613,8 +613,9 @@ json Server::composeErrorResponseJson(
 json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
-  result["git-hash-index"] = index_.getGitHash();
-  result["git-hash-server"] = gitHash_;
+  result["git-hash-index"] = index_.getGitShortHash();
+  result["git-hash-server"] =
+      *qlever::version::gitShortHashWithoutLinking.wlock();
   result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index_.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index_.numDistinctPredicates().internal;

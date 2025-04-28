@@ -48,7 +48,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  std::string_view gitHash, bool usePatternTrick = true);
+                  bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -81,7 +81,6 @@ class Server {
   const size_t numThreads_;
   unsigned short port_;
   std::string accessToken_;
-  std::string gitHash_;
   QueryResultCache cache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
