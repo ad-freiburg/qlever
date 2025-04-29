@@ -67,7 +67,7 @@ class IteratorForAccessOperator {
                          RandomAccessContainer&>,
       index_type>;
   using value_type = std::conditional_t<!std::is_void_v<ValueType>, ValueType,
-                                        std::remove_cvref<AccessorResult>>;
+                                        std::remove_cvref_t<AccessorResult>>;
   using reference =
       std::conditional_t<!std::is_void_v<Reference>, Reference, AccessorResult>;
   using pointer = value_type*;
@@ -440,33 +440,39 @@ InputRangeTypeErased(Range)
 // `ql::ranges::subrange`, but yields the iterators instead of the values when
 // being iterated over. Currently, the iterators must be random-access and the
 // resulting range thus also is random access.
-// TODO<joka921> Concepts+ enable_view + enable_borrowed_range.
-template <typename It, typename End>
-struct IteratorRange
+CPP_template(typename It, typename End)(
+    requires ::ranges::random_access_iterator<It>&&
+        ql::ranges::sized_sentinel_for<End, It>) struct IteratorRange
     : public ql::ranges::view_interface<IteratorRange<It, End>> {
  private:
   It it_;
   End end_;
   static constexpr int dummy = 0;
 
-  static auto makeAccessor(It it) {
-    return ad_utility::makeAssignableLambda(
-        [it]([[maybe_unused]] auto&& dummy, size_t idx) { return it + idx; });
-  }
-  using Accessor = decltype(makeAccessor(std::declval<It>()));
+  // The necessary infrastructure to reuse the `IteratorForAccessOperator`.
+  // In particular we currently need a dummy argument, even when capturing all
+  // the state in the accessor.
+  struct Accessor {
+    It iterator_{};
+    template <typename Dummy>
+    decltype(auto) operator()([[maybe_unused]] Dummy&&, size_t idx) const {
+      return iterator_ + idx;
+    }
+  };
 
  public:
   IteratorRange(It it, End end) : it_{std::move(it)}, end_{std::move(end)} {}
 
   auto begin() {
-    return IteratorForAccessOperator<int, Accessor>{&dummy, 0,
-                                                    makeAccessor(it_)};
+    return IteratorForAccessOperator<int, Accessor>{&dummy, 0, Accessor{it_}};
   }
   auto end() {
     return IteratorForAccessOperator<int, Accessor>{
-        &dummy, static_cast<size_t>(end_ - it_), makeAccessor(it_)};
+        &dummy, static_cast<size_t>(end_ - it_), Accessor{it_}};
   }
 };
+
+// Deduction Guides
 template <typename It, typename End>
 IteratorRange(It, End) -> IteratorRange<It, End>;
 
@@ -489,7 +495,6 @@ ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
 template <typename It, typename End>
 inline constexpr bool ::ranges::enable_borrowed_range<
     ad_utility::IteratorRange<It, End>> = true;
-
 #else
 template <typename It, typename End>
 inline constexpr bool
