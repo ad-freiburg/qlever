@@ -1,8 +1,11 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #pragma once
+#include <optional>
+
 #include "backports/algorithm.h"
 #include "util/Views.h"
 
@@ -57,7 +60,7 @@ CPP_class_template(typename View, typename F)(requires(
     // with lazy `generator`s.
     if (!it_.has_value()) {
       it_ = view_.begin();
-    } else {
+    } else if (*it_ != view_.end()) {
       ++(it_.value());
     }
     if (*it_ == view_.end()) {
@@ -65,6 +68,10 @@ CPP_class_template(typename View, typename F)(requires(
     }
     return std::invoke(transfomation_, *it_.value());
   }
+
+  // Get access to the underlying view.
+  const View& underlyingView() { return view_; }
+
   // Give the mixin access to the private `get` function.
   friend class InputRangeFromGet<Res>;
 };
@@ -163,14 +170,60 @@ using LoopControl = loopControl::LoopControl<T>;
 // 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
 // is yielded and the iteration resumes.
 
-// First a small helper to get the actual value type of the class below.
+// First some small helpers to get the actual value types of the classes below.
 namespace detail {
 template <typename View, typename F>
 using Res = loopControl::loopControlValueT<
     std::invoke_result_t<F, ql::ranges::range_reference_t<View>>>;
-}
 
-// Actual class definition.
+template <typename F>
+using ResFromFunction = loopControl::loopControlValueT<std::invoke_result_t<F>>;
+}  // namespace detail
+
+// A class that allows to synthesize an input range directly from a callable
+// that returns `LoopControl<T>`.
+CPP_class_template(typename F)(
+    requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
+    : InputRangeFromGet<detail::ResFromFunction<F>> {
+ private:
+  F getFunction_;
+  using Res = detail::ResFromFunction<F>;
+  static_assert(std::is_object_v<Res>,
+                "The functor of `InputRangeFromLoopControlGet` must yield an "
+                "object type, not a reference");
+
+  // If set to true then we have seen a `break` statement and no more values
+  // are yielded.
+  bool receivedBreak_ = false;
+
+ public:
+  // Constructor.
+  explicit InputRangeFromLoopControlGet(F transformation = {})
+      : getFunction_{std::move(transformation)} {}
+
+  // The central `get` function, required by the mixin.
+  std::optional<Res> get() {
+    if (receivedBreak_) {
+      return std::nullopt;
+    }
+    // This loop is executed exactly once unless there is a `continue`
+    // statement.
+    while (true) {
+      auto loopControl = getFunction_();
+      if (loopControl.isContinue()) {
+        continue;
+      }
+      if (loopControl.isBreak()) {
+        receivedBreak_ = true;
+      }
+      return loopControl.moveValueIfPresent();
+    }
+  }
+};
+
+// A class that takes a view and a function that transforms the elements of the
+// view into a `LoopControl` object, and synthesizes an `input_range` from these
+// arguments.
 CPP_class_template(typename View, typename F)(requires(
     ql::ranges::input_range<View>&& ql::ranges::view<View>&&
         std::is_object_v<F>)) struct CachingContinuableTransformInputRange
@@ -224,5 +277,4 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
-
 }  // namespace ad_utility

@@ -5,6 +5,7 @@
 //   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #include "Union.h"
 
+#include "backports/span.h"
 #include "engine/CallFixedSize.h"
 #include "engine/SortedUnionImpl.h"
 #include "util/ChunkedForLoop.h"
@@ -387,8 +388,8 @@ Result::LazyResult Union::computeResultKeepOrder(
     const auto& [left, right] = _columnOrigins.at(index);
     return left == NO_COLUMN || right == NO_COLUMN;
   });
-  std::span trimmedTargetOrder{targetOrder_.begin(),
-                               end == targetOrder_.end() ? end : end + 1};
+  ql::span trimmedTargetOrder{targetOrder_.begin(),
+                              end == targetOrder_.end() ? end : end + 1};
 
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {
@@ -402,9 +403,8 @@ Result::LazyResult Union::computeResultKeepOrder(
             trimmedTargetOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
              &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
-              constexpr size_t extent = COMPARATOR_WIDTH == 0
-                                            ? std::dynamic_extent
-                                            : COMPARATOR_WIDTH;
+              constexpr size_t extent =
+                  COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
                                                   std::move(left),
                                                   computePermutation<true>()};
@@ -414,7 +414,7 @@ Result::LazyResult Union::computeResultKeepOrder(
               return Result::LazyResult{sortedUnion::SortedUnionImpl{
                   std::move(leftData), std::move(rightData), requestLaziness,
                   _columnOrigins, allocator(),
-                  std::span<const ColumnIndex, extent>{trimmedTargetOrder},
+                  ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
                   std::move(applyPermutation)}};
             });
       },

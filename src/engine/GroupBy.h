@@ -383,7 +383,7 @@ class GroupBy : public Operation {
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
     std::vector<size_t> getHashEntries(
-        const ArrayOrVector<std::span<const Id>>& groupByCols);
+        const ArrayOrVector<ql::span<const Id>>& groupByCols);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
