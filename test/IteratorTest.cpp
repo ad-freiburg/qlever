@@ -246,13 +246,11 @@ TEST(Iterator, IteratorRange) {
 
     using R = std::decay_t<decltype(r)>;
     using It = ql::ranges::iterator_t<std::vector<int>>;
-    auto e = ql::ranges::end(r);
-    /*
+    // auto e = ql::ranges::end(r);
     using Value = ql::ranges::range_value_t<R>;
     using Ref = ql::ranges::range_reference_t<R>;
     static_assert(std::is_same_v<It, Value>);
     static_assert(std::is_same_v<It, Ref>);
-     */
     return std::pair{r.begin(), r.end()};
   };
   auto [beg, end] = testAndReturn();
