@@ -912,15 +912,15 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // Add the exact amount of graphs such that we are at the maximum number of
     // stored graphs.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        std::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
+        ql::span{triples}.subspan(0, numGraphsToMax), metadata, keyOrder, true,
         handle));
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
 
     // Adding one more graph will exceed the maximum.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        std::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1),
-        metadata, keyOrder, true, handle));
+        ql::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1), metadata,
+        keyOrder, true, handle));
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }

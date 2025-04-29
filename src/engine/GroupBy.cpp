@@ -1230,7 +1230,7 @@ GroupBy::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<std::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1511,10 +1511,10 @@ static constexpr auto makeProcessGroupsVisitor =
     };
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupBy::computeGroupByForHashMapOptimization(
-    std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
-    const std::vector<size_t>& columnIndices) const {
+    std::vector<HashMapAliasInformation>& aggregateAliases,
+    SubResults subresults, const std::vector<size_t>& columnIndices) const {
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;
@@ -1560,7 +1560,7 @@ Result GroupBy::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<std::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

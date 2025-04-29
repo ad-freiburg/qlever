@@ -35,8 +35,8 @@
  *
  */
 struct BinSearchMap {
-  std::span<const Id> startIds_;
-  std::span<const Id> targetIds_;
+  ql::span<const Id> startIds_;
+  ql::span<const Id> targetIds_;
 
   /**
    * @brief Return the successors for the given id.
@@ -44,7 +44,7 @@ struct BinSearchMap {
    * equal to the given id `node`.
    *
    * @param node The input id, which will be looked up in startIds_
-   * @return A std::span<Id>, which consists of all targetIds_ where
+   * @return A ql::span<Id>, which consists of all targetIds_ where
    * startIds_ == node.
    */
   auto successors(const Id node) const {
@@ -53,6 +53,17 @@ struct BinSearchMap {
     auto startIndex = std::distance(startIds_.begin(), range.begin());
 
     return targetIds_.subspan(startIndex, range.size());
+  }
+
+  // Retrieve pointer to equal id from `startIds_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto range = ql::ranges::equal_range(startIds_, node);
+    if (range.empty()) {
+      return nullptr;
+    }
+    return &range.front();
   }
 };
 
@@ -83,7 +94,7 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
   // is bound. When the left side is bound, we already have the correct
   // ordering.
   std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
-  std::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
+  ql::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
       const override {
     return {&alternativelySortedSubtree_, 1};
   }

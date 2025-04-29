@@ -274,7 +274,7 @@ class CartesianProductJoinLazyTest
     auto* qec = ad_utility::testing::getQec();
     size_t counter = 0;
     CartesianProductJoin::Children children{};
-    for (IdTable& table : std::span{tables}.subspan(0, tables.size() - 1)) {
+    for (IdTable& table : ql::span{tables}.subspan(0, tables.size() - 1)) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
       // Make sure size estimates are increasing to ensure the order stays the

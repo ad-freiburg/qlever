@@ -131,7 +131,7 @@ class CompressedExternalIdTableWriter {
             decltype(auto) column = table.getColumn(i);
             // TODO<C++23> Use `ql::views::chunkd`
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
-              size_t upper = std::min(lower + blockSize, column.size());
+              size_t upper = std::min<size_t>(lower + blockSize, column.size());
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
               auto compressed = ZstdWrapper::compress(
                   column.data() + lower, thisBlockSizeUncompressed);
@@ -222,9 +222,9 @@ class CompressedExternalIdTableWriter {
   }
 
   // The actual implementation of `makeGeneratorForIdTable` above.
-  template <size_t NumCols = 0>
+  template <size_t NumCols = 0, typename Cleanup>
   cppcoro::generator<const IdTableStatic<NumCols>> makeGeneratorForIdTableImpl(
-      size_t index, auto cleanup) {
+      size_t index, Cleanup cleanup) {
     using Table = IdTableStatic<NumCols>;
     auto firstBlock = startOfSingleIdTables_.at(index);
     auto lastBlock = index + 1 < startOfSingleIdTables_.size()
@@ -540,7 +540,8 @@ inline std::atomic<bool>
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
-  void operator()(auto& block) {
+  template <typename T>
+  void operator()(T& block) {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
