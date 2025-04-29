@@ -237,12 +237,17 @@ class TransitivePathImpl : public TransitivePathBase {
             ? std::nullopt
             : std::optional{std::move(target).toValueId(
                   _executionContext->getIndex().getVocab(), targetHelper)};
+    bool sameVariableOnBothSides =
+        !targetId.has_value() && lhs_.value_ == rhs_.value_;
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
+        if (sameVariableOnBothSides) {
+          targetId = startNode;
+        }
         Set connectedNodes = findConnectedNodes(edges, startNode, targetId);
         if (!connectedNodes.empty()) {
           runtimeInfo().addDetail("Hull time", timer.msecs());

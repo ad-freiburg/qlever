@@ -1257,6 +1257,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           }
         }
       }
+      compatibleRowAction_.flush();
       ++side.it_;
     }
   }
