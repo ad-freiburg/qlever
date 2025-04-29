@@ -675,7 +675,7 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-PreconditionAction Operation::createSortedClone(
+qlever::PreconditionAction Operation::createSortedClone(
     const vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {

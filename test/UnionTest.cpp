@@ -538,8 +538,7 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto action = unionOperation.createSortedClone({0, 1, 2, 3});
-    auto tree = std::move(action).getTree();
+    auto tree = unionOperation.createSortedClone({0, 1, 2, 3}).getTree();
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
@@ -557,8 +556,7 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto action = unionOperation.createSortedClone({0, 3, 1, 2});
-    auto tree = std::move(action).getTree();
+    auto tree = unionOperation.createSortedClone({0, 3, 1, 2}).getTree();
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),

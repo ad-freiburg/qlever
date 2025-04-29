@@ -172,7 +172,8 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     const vector<ColumnIndex>& sortColumns) {
   const auto& rootOperation = qet->getRootOperation();
   auto* qec = rootOperation->getExecutionContext();
-  PreconditionAction state = rootOperation->createSortedClone(sortColumns);
+  qlever::PreconditionAction state =
+      rootOperation->createSortedClone(sortColumns);
 
   return std::move(state)
       .handle([qec, &qet, &sortColumns]() mutable {

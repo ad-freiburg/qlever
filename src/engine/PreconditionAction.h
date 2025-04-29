@@ -15,6 +15,7 @@
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
+namespace qlever {
 // Represent how a precondition of an operation can be satisfied.
 // `isImplicitlySatisfied()` will return true if the `Operation` in question is
 // already naturally fulfilling the requested requirement.
@@ -80,5 +81,6 @@ const inline PreconditionAction PreconditionAction::IMPLICITLY_SATISFIED =
     PreconditionAction{ImplicitlySatisfied{}};
 const inline PreconditionAction PreconditionAction::SATISFY_EXTERNALLY =
     PreconditionAction{MustBeSatisfiedExternally{}};
+}  // namespace qlever
 
 #endif  // PRECONDITIONACTION_H

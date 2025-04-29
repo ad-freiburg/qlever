@@ -76,7 +76,7 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-PreconditionAction Sort::createSortedClone(
+qlever::PreconditionAction Sort::createSortedClone(
     const vector<ColumnIndex>& sortColumns) const {
   auto result = Operation::createSortedClone(sortColumns);
   return std::move(result).handle([this, &sortColumns]() {
@@ -84,9 +84,8 @@ PreconditionAction Sort::createSortedClone(
                     "with `Sort` with a different sort order. This is "
                     "indicates a flaw during query planning."
                  << std::endl;
-    auto* qec = getExecutionContext();
-    auto sort = std::make_shared<Sort>(qec, subtree_, sortColumns);
-    return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+    return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
+                                               sortColumns);
   });
 }
 

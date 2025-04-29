@@ -9,6 +9,8 @@
 #include "engine/PreconditionAction.h"
 #include "engine/QueryExecutionTree.h"
 
+using qlever::PreconditionAction;
+
 // _____________________________________________________________________________
 TEST(PreconditionAction, basicFunctionality) {
   EXPECT_EQ(

@@ -98,6 +98,8 @@ class Operation {
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
 
+  using PreconditionAction = qlever::PreconditionAction;
+
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 
