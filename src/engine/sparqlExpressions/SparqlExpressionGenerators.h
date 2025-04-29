@@ -8,6 +8,8 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+#include <absl/functional/bind_front.h>
+
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -15,7 +17,7 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
@@ -26,7 +28,7 @@ inline std::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
@@ -36,7 +38,7 @@ inline std::span<const ValueId> getIdsFromVariable(
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
@@ -158,12 +160,12 @@ CPP_template(typename Operation, typename... Operands)(requires(
 
   // Function that takes a single operand and a single value getter and computes
   // the corresponding generator.
-  auto getValue = std::bind_front(valueGetterGenerator, numElements, context);
+  auto getValue = absl::bind_front(valueGetterGenerator, numElements, context);
 
   // Function that takes all the generators as a parameter pack and computes the
   // generator for the operation result;
   auto getResultFromGenerators =
-      std::bind_front(applyFunction, Function{}, numElements);
+      absl::bind_front(applyFunction, Function{}, numElements);
 
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual

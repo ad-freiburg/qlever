@@ -5,6 +5,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstring>
@@ -1335,7 +1336,7 @@ RdfMultifileParser::RdfMultifileParser(
     for (const auto& file : files) {
       numActiveParsers_++;
       bool active =
-          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
+          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.

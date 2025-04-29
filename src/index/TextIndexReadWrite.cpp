@@ -70,7 +70,7 @@ namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
 template <typename T>
-void compressAndWrite(std::span<const T> src, ad_utility::File& out,
+void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
                       off_t& currentOffset) {
   auto compressed = ZstdWrapper::compress(src.data(), src.size() * sizeof(T));
   out.write(compressed.data(), compressed.size());
@@ -141,7 +141,7 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) {
 
 // ____________________________________________________________________________
 template <typename T>
-void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
+void encodeAndWriteSpanAndMoveOffset(ql::span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset) {
   size_t bytes = 0;

@@ -175,7 +175,7 @@ class BlankNodeExpression : public SparqlExpression {
   }
 
  private:
-  std::span<Ptr> childrenImpl() override {
+  ql::span<Ptr> childrenImpl() override {
     if (label_.has_value()) {
       return {&label_.value(), 1};
     }
