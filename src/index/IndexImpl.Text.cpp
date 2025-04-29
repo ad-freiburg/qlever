@@ -102,11 +102,17 @@ void IndexImpl::logEntityNotFound(const string& word,
 void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   config.checkValid();
   bool addWordsFromFiles =
-      config.docsFile.has_value() &&
-      (config.wordsFile.has_value() || config.useDocsFileForVocabulary);
-
-  string wordsFile = config.wordsFile.value_or("");
-  string docsFile = config.docsFile.value_or("");
+      config.docsFile_.has_value() &&
+      (config.wordsFile_.has_value() || config.useDocsFileForVocabulary_);
+  if (config.addOnlyEntitiesFromWordsFile_ &&
+      !config.useDocsFileForVocabulary_) {
+    throw std::runtime_error(
+        "The option to add entities from wordsfile can only be used together "
+        "with the option to build the text index from docsfile since "
+        "otherwise the wordsfile would be used anyway.");
+  }
+  string wordsFile = config.wordsFile_.value_or("");
+  string docsFile = config.docsFile_.value_or("");
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
@@ -116,7 +122,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   if (addWordsFromFiles) {
     LOG(INFO) << "Using specified docs- and/or wordsfile to build text index.";
   }
-  if (config.addWordsFromLiterals) {
+  if (config.addWordsFromLiterals_) {
     LOG(INFO) << (!addWordsFromFiles ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
@@ -132,8 +138,8 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   vocab_ = RdfsVocabulary{};
   readConfiguration();
   {
-    auto [b, k] = config.bAndKForBM25;
-    storeTextScoringParamsInConfiguration(config.textScoringMetric, b, k);
+    auto [b, k] = config.bAndKForBM25_;
+    storeTextScoringParamsInConfiguration(config.textScoringMetric_, b, k);
   }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
@@ -142,19 +148,20 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
 
   // Build the text vocabulary (first scan over the text records).
   processWordsForVocabulary(
-      config.useDocsFileForVocabulary ? docsFile : wordsFile,
-      config.addWordsFromLiterals, config.useDocsFileForVocabulary);
+      config.useDocsFileForVocabulary_ ? docsFile : wordsFile,
+      config.addWordsFromLiterals_, config.useDocsFileForVocabulary_);
   // Calculate the score data for the words
-  scoreData_.calculateScoreData(docsFile, config.addWordsFromLiterals,
+  scoreData_.calculateScoreData(docsFile, config.addWordsFromLiterals_,
                                 textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec vec{indexFilename + ".text-vec-sorter.tmp",
               memoryLimitIndexBuilding() / 3, allocator_};
-  processWordsForInvertedLists(wordsFile, docsFile, config.addWordsFromLiterals,
-                               config.useDocsFileForVocabulary,
-                               config.addOnlyEntitiesFromWordsFile, vec);
+  processWordsForInvertedLists(wordsFile, docsFile,
+                               config.addWordsFromLiterals_,
+                               config.useDocsFileForVocabulary_,
+                               config.addOnlyEntitiesFromWordsFile_, vec);
   createTextIndex(indexFilename, vec);
   openTextFileHandle();
 }

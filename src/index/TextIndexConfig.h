@@ -19,7 +19,7 @@
  *
  * The text index needs a source to be built from. This can either be the
  * literals of the KB (specified by addWordsFromLiterals) or external files
- * (given by filenames with wordsFile and docsFile). It is also possible to
+ * (given by filenames with wordsFile_ and docsFile_). It is also possible to
  * use both. For the external files the standard usage is to specify both and
  * let useDocsFileForVocabulary and addOnlyEntitiesFromWordsFile be false.
  * Since the wordsFile can be quite complicated compared to the docsFile the
@@ -30,9 +30,9 @@
  * to the wordsFile only being used to add entities to the text index.
  *
  * Fields:
- *  - std::optional<const std::string> wordsFile: Specifies the path to the
+ *  - std::optional<const std::string> wordsFile_: Specifies the path to the
  *                                                wordsFile.
- *  - std::optional<const std::string> docsFile: Specifies the path to the
+ *  - std::optional<const std::string> docsFile_: Specifies the path to the
  *                                               docsFile.
  *  - bool addWordsFromLiterals: If set to true the literals from the KB are
  *                               used to build the text index. During retrieval
@@ -65,40 +65,41 @@
  *                                         0 <= b <= 1 and 0 <= k.
  */
 struct TextIndexConfig {
-  std::optional<const std::string> wordsFile = std::nullopt;
-  std::optional<const std::string> docsFile = std::nullopt;
-  bool addWordsFromLiterals = true;
-  bool useDocsFileForVocabulary = false;
-  bool addOnlyEntitiesFromWordsFile = false;
-  TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT;
-  std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f};
+  std::optional<const std::string> wordsFile_ = std::nullopt;
+  std::optional<const std::string> docsFile_ = std::nullopt;
+  bool addWordsFromLiterals_ = true;
+  bool useDocsFileForVocabulary_ = false;
+  bool addOnlyEntitiesFromWordsFile_ = false;
+  TextScoringMetric textScoringMetric_ = TextScoringMetric::EXPLICIT;
+  std::pair<float, float> bAndKForBM25_ = {0.75f, 1.75f};
 
   void checkValid() const {
-    bool buildFromFiles = docsFile.has_value() &&
-                          (wordsFile.has_value() || useDocsFileForVocabulary);
+    bool buildFromFiles = docsFile_.has_value() &&
+                          (wordsFile_.has_value() || useDocsFileForVocabulary_);
     AD_CONTRACT_CHECK(
-        buildFromFiles || addWordsFromLiterals,
+        buildFromFiles || addWordsFromLiterals_,
         "No source to build text index from specified. A TextIndexConfig needs "
-        "a source to build the text index from. Either addWordsFromLiterals "
+        "a source to build the text index from. Either addWordsFromLiterals_ "
         "has to be true or external files to build from have to be given (or "
         "both). When using external files either the words- and docsFile have "
         "to be set or only the docsFile is set with the option "
-        "useDocsFileForVocabulary true.");
+        "useDocsFileForVocabulary_ true.");
     AD_CONTRACT_CHECK(
-        !(!wordsFile.has_value() && addOnlyEntitiesFromWordsFile),
+        !(!wordsFile_.has_value() && addOnlyEntitiesFromWordsFile_),
         "No wordsFile given while using option to add entities from wordsFile. "
-        "If the option addOnlyEntitiesFromWordsFile is set to true a wordsFile "
+        "If the option addOnlyEntitiesFromWordsFile_ is set to true a "
+        "wordsFile "
         "is expected.");
     AD_CONTRACT_CHECK(
-        !addOnlyEntitiesFromWordsFile ||
-            (addOnlyEntitiesFromWordsFile && useDocsFileForVocabulary),
-        "If the option addOnlyEntitiesFromWordsFile is set to true the option "
-        "useDocsFileForVocabulary needs to be set to true as well. The "
-        "functionality of addOnlyEntitiesFromWordsFile is to add entities to "
+        !addOnlyEntitiesFromWordsFile_ ||
+            (addOnlyEntitiesFromWordsFile_ && useDocsFileForVocabulary_),
+        "If the option addOnlyEntitiesFromWordsFile_ is set to true the option "
+        "useDocsFileForVocabulary_ needs to be set to true as well. The "
+        "functionality of addOnlyEntitiesFromWordsFile_ is to add entities to "
         "the texts given by the docsFile during text index building.");
-    if (textScoringMetric == TextScoringMetric::BM25) {
-      float b = bAndKForBM25.first;
-      float k = bAndKForBM25.second;
+    if (textScoringMetric_ == TextScoringMetric::BM25) {
+      float b = bAndKForBM25_.first;
+      float k = bAndKForBM25_.second;
       AD_CONTRACT_CHECK(0 <= b && b <= 1 && 0 <= k,
                         "Invalid values given for BM25 score: `b=", b,
                         "` and `k=", k,

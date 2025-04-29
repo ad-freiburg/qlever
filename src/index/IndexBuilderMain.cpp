@@ -334,20 +334,6 @@ int main(int argc, char** argv) {
 
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
-    if (!(buildFromDocsOrWordsFile || addWordsFromLiterals)) {
-      throw std::runtime_error(
-          "The text index can be build using a docsfile and a wordsfile or "
-          "only a docsfile while using the option to build only from the "
-          "docsfile. "
-          "If both options aren't given the option to add words from literals "
-          "has to be true. For details see --help.");
-    }
-    if (addEntitiesFromWordsfile && !useWordsFromDocsfile) {
-      throw std::runtime_error(
-          "The option to add entities from wordsfile can only be used together "
-          "with the option to build the text index from docsfile since "
-          "otherwise the wordsfile would be used anyway.");
-    }
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
       index.buildTextIndexFile(
           {wordsfile.empty() ? std::nullopt
