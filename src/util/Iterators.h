@@ -11,6 +11,7 @@
 
 #include "backports/algorithm.h"
 #include "util/Enums.h"
+#include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
@@ -60,15 +61,15 @@ class IteratorForAccessOperator {
   // It is possible to explicitly specify the `value_type` and `reference`
   // if they differ from the defaults. For an example, see the `IdTable` class
   // which uses a proxy type as its `reference`.
-  using value_type = std::conditional_t<
-      !std::is_void_v<ValueType>, ValueType,
-      std::remove_reference_t<std::invoke_result_t<
-          Accessor,
-          std::conditional_t<isConst, const RandomAccessContainer&,
-                             RandomAccessContainer&>,
-          index_type>>>;
+  using AccessorResult = std::invoke_result_t<
+      Accessor,
+      std::conditional_t<isConst, const RandomAccessContainer&,
+                         RandomAccessContainer&>,
+      index_type>;
+  using value_type = std::conditional_t<!std::is_void_v<ValueType>, ValueType,
+                                        std::remove_cvref<AccessorResult>>;
   using reference =
-      std::conditional_t<!std::is_void_v<Reference>, Reference, value_type&>;
+      std::conditional_t<!std::is_void_v<Reference>, Reference, AccessorResult>;
   using pointer = value_type*;
 
  private:
@@ -435,16 +436,35 @@ template <typename Range>
 InputRangeTypeErased(Range)
     -> InputRangeTypeErased<ql::ranges::range_value_t<Range>>;
 
+// A view that takes an iterator and a sentinel (similar to
+// `ql::ranges::subrange`, but yields the iterators instead of the values when
+// being iterated over. Currently, the iterators must be random-access and the
+// resulting range thus also is random access.
+// TODO<joka921> Concepts+ enable_view + enable_borrowed_range.
 template <typename It, typename End>
-struct IteratorRange {
+struct IteratorRange
+    : public ql::ranges::view_interface<IteratorRange<It, End>> {
+ private:
   It it_;
   End end_;
-  It operator[](size_t index) const { return it_ + index; }
+  static constexpr int dummy = 0;
 
-  auto begin() { return IteratorForAccessOperator<IteratorRange>{this, 0}; }
+  static auto makeAccessor(It it) {
+    return ad_utility::makeAssignableLambda(
+        [it]([[maybe_unused]] auto&& dummy, size_t idx) { return it + idx; });
+  }
+  using Accessor = decltype(makeAccessor(std::declval<It>()));
+
+ public:
+  IteratorRange(It it, End end) : it_{std::move(it)}, end_{std::move(end)} {}
+
+  auto begin() {
+    return IteratorForAccessOperator<int, Accessor>{&dummy, 0,
+                                                    makeAccessor(it_)};
+  }
   auto end() {
-    return IteratorForAccessOperator<IteratorRange>{
-        this, static_cast<size_t>(end_ - it_)};
+    return IteratorForAccessOperator<int, Accessor>{
+        &dummy, static_cast<size_t>(end_ - it_), makeAccessor(it_)};
   }
 };
 template <typename It, typename End>
@@ -462,5 +482,19 @@ ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
   return t;
 }
 }  // namespace ad_utility
+
+// `IteratorRanges` are `borrowed ranges`, as their iterators outlive the actual
+// range object.
+#ifdef QLEVER_CPP_17
+template <typename It, typename End>
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::IteratorRange<It, End>> = true;
+
+#else
+template <typename It, typename End>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::IteratorRange<It, End>> =
+        true;
+#endif
 
 #endif  // QLEVER_SRC_UTIL_ITERATORS_H
