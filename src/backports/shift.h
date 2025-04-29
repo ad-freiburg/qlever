@@ -5,8 +5,11 @@
 // std::shift_right
 
 #include <algorithm>
+#include <cassert>
 #include <iterator>
 #include <type_traits>
+
+#include "backports/algorithm.h"
 
 namespace ql {
 
@@ -18,17 +21,20 @@ namespace ql {
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + n + i to position first + i.
 ///
-template <class ForwardIt>
-constexpr ForwardIt shift_left(
-    ForwardIt first, ForwardIt last,
-    typename std::iterator_traits<ForwardIt>::difference_type n) {
-  if (n == 0 || n >= std::distance(first, last)) {
+CPP_template(typename ForwardIt)(
+    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
+    shift_left(ForwardIt first, ForwardIt last,
+               typename std::iterator_traits<ForwardIt>::difference_type n) {
+  assert(n >= 0);
+  if (n == 0) {
     return first;
   }
-  ForwardIt result = first;
-  ForwardIt input_it = std::next(first, n);
 
-  return std::move(input_it, last, result);
+  auto mid = ql::ranges::next(first, n, last);
+  if (mid == last) {
+    return first;
+  }
+  return std::move(std::move(mid), std::move(last), std::move(first));
 }
 
 ///
@@ -39,26 +45,25 @@ constexpr ForwardIt shift_left(
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + i to position first + n + i.
 ///
-template <class ForwardIt>
-constexpr ForwardIt shift_right(
-    ForwardIt first, ForwardIt last,
-    typename std::iterator_traits<ForwardIt>::difference_type n) {
-  if (n == 0 || n >= std::distance(first, last)) {
+CPP_template(typename ForwardIt)(
+    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
+    shift_right(ForwardIt first, ForwardIt last,
+                typename std::iterator_traits<ForwardIt>::difference_type n) {
+  assert(n >= 0);
+  if (n == 0) {
     return last;
   }
-  auto result = std::next(first, n);
-  if constexpr (std::is_base_of_v<std::bidirectional_iterator_tag,
-                                  typename std::iterator_traits<
-                                      ForwardIt>::iterator_category>) {
-    auto src_end = std::next(first, std::distance(first, last) - n);
-    std::move_backward(first, src_end, last);
-  } else {
-    using value_type = typename std::iterator_traits<ForwardIt>::value_type;
-    std::vector<value_type> temp(
-        first, std::next(first, std::distance(first, last) - n));
-    std::move(temp.begin(), temp.end(), result);
+  static_assert(ql::concepts::bidirectional_iterator<ForwardIt>,
+                "ql::shift_right is not yet implemented for "
+                "`forward_iterator`s. If you need it, please add it (see for "
+                "example the somewhat complicated but efficient implementation "
+                "in libstdc++, and don't forget to write unit tests");
+  auto mid = ql::ranges::next(last, -n, first);
+  if (mid == first) {
+    return last;
   }
-  return result;
+
+  return std::move_backward(std::move(first), std::move(mid), std::move(last));
 }
 
 }  // namespace ql
