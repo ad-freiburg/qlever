@@ -97,6 +97,19 @@ class SparqlTriple
             PropertyPath::fromIri(triple.p_.getIri().toStringRepresentation()),
             triple.o_};
   }
+
+  // Helper function to match a potentially nested iri
+  bool predicateIsIri(std::string_view iri) const {
+    return std::holds_alternative<PropertyPath>(p_) &&
+           std::get<PropertyPath>(p_).iri_ == iri;
+  }
+
+  // Helper function to easily retreive a variable
+  std::optional<Variable> getPredicateVariable() const {
+    return std::holds_alternative<Variable>(p_)
+               ? std::optional{std::get<Variable>(p_)}
+               : std::nullopt;
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLTRIPLE_H

@@ -61,8 +61,8 @@ class QueryPlanner {
         if (triple_.s_.isVariable()) {
           _variables.insert(triple_.s_.getVariable());
         }
-        if (std::holds_alternative<Variable>(triple_.p_)) {
-          _variables.insert(std::get<Variable>(triple_.p_));
+        if (auto predicate = triple_.getPredicateVariable()) {
+          _variables.insert(predicate.value());
         }
         if (triple_.o_.isVariable()) {
           _variables.insert(triple_.o_.getVariable());

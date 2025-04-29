@@ -498,8 +498,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (std::holds_alternative<PropertyPath>(t.p_) &&
-        std::get<PropertyPath>(t.p_).iri_ == CONTAINS_WORD_PREDICATE) {
+    if (t.predicateIsIri(CONTAINS_WORD_PREDICATE)) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -518,8 +517,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (std::holds_alternative<PropertyPath>(t.p_) &&
-               std::get<PropertyPath>(t.p_).iri_ == CONTAINS_ENTITY_PREDICATE) {
+    } else if (t.predicateIsIri(CONTAINS_ENTITY_PREDICATE)) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(
@@ -786,7 +784,7 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        std::holds_alternative<Variable>(node.triple_.p_)) {
+        node.triple_.getPredicateVariable().has_value()) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -1118,9 +1116,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (std::holds_alternative<PropertyPath>(node.triple_.p_) &&
-      std::get<PropertyPath>(node.triple_.p_).iri_ ==
-          CONTAINS_ENTITY_PREDICATE) {
+  if (node.triple_.predicateIsIri(CONTAINS_ENTITY_PREDICATE)) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
@@ -1693,11 +1689,9 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   if (it == _nodeMap.end()) {
     return false;
   }
-  if (std::holds_alternative<Variable>(it->second->triple_.p_)) {
-    return false;
-  }
-  const auto& iri = std::get<PropertyPath>(it->second->triple_.p_).iri_;
-  return iri == CONTAINS_ENTITY_PREDICATE || iri == CONTAINS_WORD_PREDICATE;
+  const auto& triple = it->second->triple_;
+  return triple.predicateIsIri(CONTAINS_ENTITY_PREDICATE) ||
+         triple.predicateIsIri(CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
@@ -2746,8 +2740,8 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
     if (t.s_.isVariable()) {
       boundVariables_.insert(t.s_.getVariable());
     }
-    if (std::holds_alternative<Variable>(t.p_)) {
-      boundVariables_.insert(std::get<Variable>(t.p_));
+    if (auto predicate = t.getPredicateVariable()) {
+      boundVariables_.insert(predicate.value());
     }
     if (t.o_.isVariable()) {
       boundVariables_.insert(t.o_.getVariable());

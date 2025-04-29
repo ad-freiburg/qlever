@@ -289,8 +289,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
       // TODO<RobinTF> There might be more cases where the variable is matched
       // against a pattern.
       if (triple.s_ == variable || triple.o_ == variable ||
-          (std::holds_alternative<Variable>(triple.p_) &&
-           std::get<Variable>(triple.p_) == variable)) {
+          triple.getPredicateVariable() == variable) {
         // If at some point we find a triple using the variable, we know that it
         // is safe to join it with an index scan to filter out non-matching
         // language tags.
