@@ -104,7 +104,7 @@ class SparqlTriple
            std::get<PropertyPath>(p_).iri_ == iri;
   }
 
-  // Helper function to easily retreive a variable
+  // Helper function to easily retrieve a variable
   std::optional<Variable> getPredicateVariable() const {
     return std::holds_alternative<Variable>(p_)
                ? std::optional{std::get<Variable>(p_)}
