@@ -36,6 +36,8 @@
 using ad_utility::testing::makeAllocator;
 namespace {
 
+using qlever::joinHelpers::CHUNK_SIZE;
+
 using Vars = std::vector<std::optional<Variable>>;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);

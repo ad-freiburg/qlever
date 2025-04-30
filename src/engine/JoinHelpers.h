@@ -14,9 +14,13 @@
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
+namespace qlever::joinHelpers {
+
 static constexpr size_t CHUNK_SIZE = 100'000;
 
 using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+
+// _____________________________________________________________________________
 inline void applyPermutation(IdTable& idTable,
                              const OptionalPermutation& permutation) {
   if (permutation.has_value()) {
@@ -26,6 +30,7 @@ inline void applyPermutation(IdTable& idTable,
 
 using LazyInputView =
     cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>;
+
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
@@ -44,6 +49,7 @@ CPP_template(typename Input)(
 
 using MaterializedInputView =
     std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
+
 // Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
 // then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
 // lazy join algorithms. Note: The `convertGenerator` function above
@@ -69,6 +75,7 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
 using GeneratorWithDetails =
     cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
                        CompressedRelationReader::LazyScanMetadata>;
+
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
 inline GeneratorWithDetails convertGenerator(
@@ -118,5 +125,6 @@ CPP_template_2(typename ActionT)(
         yieldValue(std::move(lastBlock));
       });
 }
+}  // namespace qlever::joinHelpers
 
 #endif  // JOINHELPERS_H
