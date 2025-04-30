@@ -14,6 +14,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
+#include "util/json.h"
 
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -100,6 +101,23 @@ TEST(ServerTest, getQueryId) {
   // Without custom query ids, unique ids are generated.
   auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
+}
+
+TEST(ServerTest, composeStatsJson) {
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  json expectedJson{{"git-hash-index", "git short hash not set"},
+                    {"git-hash-server", "git short hash not set"},
+                    {"name-index", ""},
+                    {"name-text-index", ""},
+                    {"num-entity-occurrences", 0},
+                    {"num-permutations", 2},
+                    {"num-predicates-internal", 0},
+                    {"num-predicates-normal", 0},
+                    {"num-text-records", 0},
+                    {"num-triples-internal", 0},
+                    {"num-triples-normal", 0},
+                    {"num-word-occurrences", 0}};
+  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
 }
 
 TEST(ServerTest, createMessageSender) {

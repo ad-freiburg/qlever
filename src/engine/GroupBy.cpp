@@ -1230,7 +1230,7 @@ GroupBy::substituteAllAggregates(
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const ArrayOrVector<std::span<const Id>>& groupByCols) {
+    const ArrayOrVector<ql::span<const Id>>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1560,7 +1560,7 @@ Result GroupBy::computeGroupByForHashMapOptimization(
 
       // Perform HashMap lookup once for all groups in current block
       using U = HashMapAggregationData<
-          NUM_GROUP_COLUMNS>::template ArrayOrVector<std::span<const Id>>;
+          NUM_GROUP_COLUMNS>::template ArrayOrVector<ql::span<const Id>>;
       U groupValues;
       resizeIfVector(groupValues, columnIndices.size());
 

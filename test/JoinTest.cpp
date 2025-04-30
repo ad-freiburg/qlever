@@ -231,7 +231,7 @@ namespace {
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
-    std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -673,6 +673,13 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
   rightTables.push_back(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)));
   auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
   performJoin(std::move(leftTables), std::move(rightTables), expected7, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  auto expected8 = createIdTableOfSizeWithValue(2, I(2));
+  performJoin(std::move(leftTables), std::move(rightTables), expected8, false);
 }
 
 // _____________________________________________________________________________

@@ -323,7 +323,7 @@ class TransitivePathBase : public Operation {
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
   // which has to store both ways to sort the subtree until it knows which side
   // becomes bound.
-  virtual std::span<const std::shared_ptr<QueryExecutionTree>>
+  virtual ql::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};
   }

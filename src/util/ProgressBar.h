@@ -138,13 +138,19 @@ class ProgressBar {
   // Final progress string (should only be called once after the computation has
   // finished).
   std::string getFinalProgressString() {
-    AD_CONTRACT_CHECK(timer_.isRunning(),
+    AD_CONTRACT_CHECK(!finished_,
                       "`ProgressBar::getFinalProgressString()` should only be "
                       "called once after the computation has finished");
     timer_.stop();
     totalDuration_ = timer_.value();
+    finished_ = true;
     return getProgressString();
   }
+
+  // Get timer. This is useful for more advanced use cases, where parts of the
+  // processing should not be timed (for example, when it takes a long time
+  // before the first step is processed and we do not want to include that).
+  Timer& getTimer() { return timer_; }
 
  private:
   // The total number of units that have been processed so far.
@@ -161,6 +167,8 @@ class ProgressBar {
 
   // Timer that is started as soon as this progress bar is created.
   Timer timer_{Timer::Started};
+  // Finished yet or not.
+  bool finished_ = false;
   // Update the statistics when at least this many steps have been processed.
   size_t updateWhenThisManyStepsProcessed_ = statisticsBatchSize_;
 
