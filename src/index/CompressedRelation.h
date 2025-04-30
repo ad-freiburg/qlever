@@ -282,7 +282,7 @@ class CompressedRelationWriter {
   // Two helper types used to make the interface of the function
   // `createPermutationPair` below safer and more explicit.
   using MetadataCallback =
-      std::function<void(std::span<const CompressedRelationMetadata>)>;
+      std::function<void(ql::span<const CompressedRelationMetadata>)>;
 
   struct WriterAndCallback {
     CompressedRelationWriter& writer_;
@@ -374,7 +374,7 @@ class CompressedRelationWriter {
   // Compress the `column` and write it to the `outfile_`. Return the offset and
   // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
-      std::span<const Id> column);
+      ql::span<const Id> column);
 
   // Return the number of columns that is stored inside the blocks.
   size_t numColumns() const { return numColumns_; }
@@ -439,7 +439,7 @@ class CompressedRelationReader {
 
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
-  using ColumnIndicesRef = std::span<const ColumnIndex>;
+  using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
@@ -621,7 +621,7 @@ class CompressedRelationReader {
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
-      std::span<const Id> joinColumn,
+      ql::span<const Id> joinColumn,
       const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an

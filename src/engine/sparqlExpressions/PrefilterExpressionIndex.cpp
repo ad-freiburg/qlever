@@ -47,7 +47,7 @@ static Id getIdFromColumnIndex(
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
-    std::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
+   ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
   CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
       input, evaluationColumn);
 };
@@ -90,19 +90,19 @@ static BlockMetadataRange mapValueIdItPairToBlockRange(
   auto blockRangeBegin = blockRange.begin();
   // Each `CompressedBlockMetadata` value contains two bounding `ValueId`s, one
   // for `firstTriple_` and `lastTriple_` respectively. `ValueIdIt idRangeBegin`
-  // is the first valid iterator on our flattened `std::span<const
+  // is the first valid iterator on our flattened `ql::span<const
   // CompressedBlockMetadata> blockRange` with respect to the contained
   // `ValueId`s.
   // `blockRange.begin()` represents the first valid iterator on our original
-  // `std::span<const CompressedBlockMetadata> blockRange`.
+  // `ql::span<const CompressedBlockMetadata> blockRange`.
   //
   //  EXAMPLE
-  // `CompressedBlockMetadata` view on `std::span<const CompressedBlockMetadata>
+  // `CompressedBlockMetadata` view on `ql::span<const CompressedBlockMetadata>
   // blockRange`:
   // `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150,
   // 1158]}`. Range for `BlockMetadataIt` values.
   //
-  // `ValueId` view on (flat) `std::span<const CompressedBlockMetadata>
+  // `ValueId` view on (flat) `ql::span<const CompressedBlockMetadata>
   // blockRange`:
   //`{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`.
   // Range for `ValueIdIt` values.
@@ -332,7 +332,7 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // CUSTOM VALUE-ID ACCESS (STRUCT) OPERATOR
 //______________________________________________________________________________
 // Enables access to the i-th `ValueId` regarding our containerized
-// `std::span<const CompressedBlockMetadata> inputSpan`.
+// `ql::span<const CompressedBlockMetadata> inputSpan`.
 // Each `CompressedBlockMetadata` value holds exactly two bound `ValueId`s (one
 // in `firstTriple_` and `lastTriple_` respectively) over the specified column
 // `evaluationColumn_`.

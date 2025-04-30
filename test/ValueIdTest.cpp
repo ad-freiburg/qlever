@@ -61,7 +61,7 @@ TEST_F(ValueIdTest, makeFromDouble) {
   testRepresentableDouble(-std::numeric_limits<double>::infinity());
 
   // Test positive and negative 0.
-  ASSERT_NE(std::bit_cast<uint64_t>(0.0), std::bit_cast<uint64_t>(-0.0));
+  ASSERT_NE(absl::bit_cast<uint64_t>(0.0), absl::bit_cast<uint64_t>(-0.0));
   ASSERT_EQ(0.0, -0.0);
   testRepresentableDouble(0.0);
   testRepresentableDouble(-0.0);
@@ -222,7 +222,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) {
-    auto bits = std::bit_cast<uint64_t>(id.getDouble());
+    auto bits = absl::bit_cast<uint64_t>(id.getDouble());
     return bits & ad_utility::bitMaskForHigherBits(1);
   };
   auto beginOfNegatives =
