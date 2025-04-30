@@ -3,6 +3,10 @@
 #ifndef QLEVER_SRC_UTIL_VALUEIDENTITY_H
 #define QLEVER_SRC_UTIL_VALUEIDENTITY_H
 
+#include <tuple>
+
+#include "util/Forward.h"
+
 // The use case of the following aliases and constants is as follows:
 // Locally (inside a function) put a `using namespace
 // ad_utility::use_alue_identity`, then use `VI<someType>` as a convenient short
@@ -41,7 +45,7 @@ struct ApplyAsValueIdentity {
   F functor;
 
   template <auto... Is, typename... Args>
-  decltype(auto) operator()(Args&&... args) const {
+  constexpr decltype(auto) operator()(Args&&... args) const {
     using ad_utility::use_value_identity::vi;
     return functor(vi<Is>..., AD_FWD(args)...);
   }
@@ -61,7 +65,7 @@ struct ApplyAsValueIdentityTuple {
   F function;
 
   template <auto... Is, typename... Args>
-  decltype(auto) operator()(Args&&... args) const {
+  constexpr decltype(auto) operator()(Args&&... args) const {
     using ad_utility::use_value_identity::vi;
     return function(std::forward_as_tuple(AD_FWD(args)...), vi<Is>...);
   }
