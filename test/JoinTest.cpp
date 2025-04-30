@@ -212,13 +212,6 @@ std::vector<JoinTestCase> createJoinTestSet() {
 
   return myTestSet;
 }
-
-IdTable createIdTableOfSizeWithValue(size_t size, Id value) {
-  IdTable idTable{1, ad_utility::testing::makeAllocator()};
-  idTable.resize(size);
-  ql::ranges::fill(idTable.getColumn(0), value);
-  return idTable;
-}
 }  // namespace
 
 TEST(JoinTest, joinTest) {

@@ -108,6 +108,9 @@ CPP_template_2(typename ActionT)(
           std::function<void(Result::IdTableVocabPair)> callback) {
         auto yieldValue = [&permutation,
                            &callback](Result::IdTableVocabPair value) {
+          if (value.idTable_.empty()) {
+            return;
+          }
           applyPermutation(value.idTable_, permutation);
           callback(std::move(value));
         };

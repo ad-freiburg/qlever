@@ -12,6 +12,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
@@ -22,7 +23,6 @@ namespace {
 auto V = VocabId;
 constexpr auto U = Id::makeUndefined();
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
-}  // namespace
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
@@ -64,6 +64,66 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     ASSERT_EQ(result.idTable(), expectedResult);
   }
 }
+
+// Helper function to test lazy join implementations.
+void testLazyOptionalJoin(std::vector<IdTable> leftTables,
+                          std::vector<IdTable> rightTables,
+                          const std::vector<IdTable>& expectedResult,
+                          bool singleVar = false,
+                          ad_utility::source_location location =
+                              ad_utility::source_location::current()) {
+  auto g = generateLocationTrace(location);
+  auto qec = ad_utility::testing::getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(leftTables),
+      singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
+                : std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                       Variable{"?y"}},
+      false, std::vector<ColumnIndex>{0});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(rightTables),
+      singleVar ? std::vector<std::optional<Variable>>{Variable{"?x"}}
+                : std::vector<std::optional<Variable>>{Variable{"?x"},
+                                                       Variable{"?z"}},
+      false, std::vector<ColumnIndex>{0});
+  OptionalJoin opt{qec, left, right};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = opt.computeResultOnlyForTesting(true);
+
+    ASSERT_FALSE(result.isFullyMaterialized());
+
+    std::vector<IdTable> actualResult;
+
+    for (auto& [idTable, _] : result.idTables()) {
+      actualResult.push_back(std::move(idTable));
+    }
+
+    // Provide nicer error messages
+    EXPECT_EQ(actualResult.size(), expectedResult.size());
+    EXPECT_EQ(actualResult, expectedResult);
+  }
+
+  {
+    qec->getQueryTreeCache().clearAll();
+
+    auto result = opt.computeResultOnlyForTesting(false);
+
+    ASSERT_TRUE(result.isFullyMaterialized());
+
+    IdTable expected{opt.getResultWidth(), qec->getAllocator()};
+
+    for (const IdTable& idTable : expectedResult) {
+      expected.insertAtEnd(idTable);
+    }
+
+    EXPECT_EQ(result.idTable(), expected);
+  }
+}
+}  // namespace
 
 TEST(OptionalJoin, singleColumnRightIsEmpty) {
   auto a = makeIdTableFromVector({{U}, {2}, {3}});
@@ -351,15 +411,14 @@ TEST(OptionalJoin, clone) {
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoin) {
-  auto qec = ad_utility::testing::getQec();
-
-  auto expected = makeIdTableFromVector({{V(1), V(11), U},
-                                         {V(2), V(10), V(22)},
-                                         {V(2), V(12), V(22)},
-                                         {V(3), V(10), V(23)},
-                                         {V(3), V(13), V(23)},
-                                         {V(4), V(14), U},
-                                         {V(5), V(15), U}});
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{V(1), V(11), U},
+                                            {V(2), V(10), V(22)},
+                                            {V(2), V(12), V(22)},
+                                            {V(3), V(10), V(23)},
+                                            {V(3), V(13), V(23)},
+                                            {V(4), V(14), U},
+                                            {V(5), V(15), U}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
@@ -369,53 +428,19 @@ TEST(OptionalJoin, lazyOptionalJoin) {
   rightTables.push_back(makeIdTableFromVector({{V(2), V(22)}}));
   rightTables.push_back(makeIdTableFromVector({{3, 23}}));
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(leftTables),
-      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-      false, std::vector<ColumnIndex>{0});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(rightTables),
-      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-      false, std::vector<ColumnIndex>{0});
-  OptionalJoin opt{qec, left, right};
-
-  {
-    qec->getQueryTreeCache().clearAll();
-
-    auto result = opt.computeResultOnlyForTesting(true);
-
-    ASSERT_FALSE(result.isFullyMaterialized());
-
-    auto& lazyResult = result.idTables();
-    auto it = lazyResult.begin();
-    ASSERT_NE(it, lazyResult.end());
-
-    EXPECT_EQ(it->idTable_, expected);
-
-    EXPECT_EQ(++it, lazyResult.end());
-  }
-
-  {
-    qec->getQueryTreeCache().clearAll();
-
-    auto result = opt.computeResultOnlyForTesting(false);
-
-    ASSERT_TRUE(result.isFullyMaterialized());
-
-    EXPECT_EQ(result.idTable(), expected);
-  }
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected));
 }
 
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinWithUndefRight) {
-  auto qec = ad_utility::testing::getQec();
-
-  auto expected = makeIdTableFromVector({{U, V(10), V(20)},
-                                         {V(1), V(11), V(20)},
-                                         {V(2), V(12), V(20)},
-                                         {V(2), V(10), V(22)},
-                                         {V(2), V(12), V(22)},
-                                         {V(3), V(13), V(20)}});
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{U, V(10), V(20)},
+                                            {V(1), V(11), V(20)},
+                                            {V(2), V(12), V(20)},
+                                            {V(2), V(10), V(22)},
+                                            {V(2), V(12), V(22)},
+                                            {V(3), V(13), V(20)}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
@@ -423,41 +448,8 @@ TEST(OptionalJoin, lazyOptionalJoinWithUndefRight) {
   std::vector<IdTable> rightTables;
   rightTables.push_back(makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}));
 
-  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(leftTables),
-      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-      false, std::vector<ColumnIndex>{0});
-  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(rightTables),
-      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-      false, std::vector<ColumnIndex>{0});
-  OptionalJoin opt{qec, left, right};
-
-  {
-    qec->getQueryTreeCache().clearAll();
-
-    auto result = opt.computeResultOnlyForTesting(true);
-
-    ASSERT_FALSE(result.isFullyMaterialized());
-
-    auto& lazyResult = result.idTables();
-    auto it = lazyResult.begin();
-    ASSERT_NE(it, lazyResult.end());
-
-    EXPECT_EQ(it->idTable_, expected);
-
-    EXPECT_EQ(++it, lazyResult.end());
-  }
-
-  {
-    qec->getQueryTreeCache().clearAll();
-
-    auto result = opt.computeResultOnlyForTesting(false);
-
-    ASSERT_TRUE(result.isFullyMaterialized());
-
-    EXPECT_EQ(result.idTable(), expected);
-  }
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected));
 }
 
 // _____________________________________________________________________________
@@ -530,4 +522,25 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
 
     EXPECT_EQ(++it, lazyResult.end());
   }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
+  std::vector<IdTable> expected;
+  expected.push_back(createIdTableOfSizeWithValue(
+      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(1)));
+  expected.push_back(createIdTableOfSizeWithValue(
+      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(2)));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(
+      makeIdTableFromVector({{Id::makeFromInt(1)}, {Id::makeFromInt(2)}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(createIdTableOfSizeWithValue(
+      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(1)));
+  rightTables.push_back(createIdTableOfSizeWithValue(
+      qlever::joinHelpers::CHUNK_SIZE + 1, Id::makeFromInt(2)));
+
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected), true);
 }
