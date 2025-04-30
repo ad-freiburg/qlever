@@ -127,7 +127,7 @@ struct TurtleToken {
       "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + ")*>";
   const RE2 Iriref;
   const string IrirefStringRelaxed =
-      "<([^\\x00-\\x19<>\"\\\\]|"s + UcharString + ")*>";
+      "<([^\\x00-\\x19<>\\\\]|"s + UcharString + ")*>";
   const RE2 IrirefRelaxed;
 
   const string PercentString = "%" + cls(HexString) + "{2}";
