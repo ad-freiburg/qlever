@@ -35,42 +35,63 @@ MATCHER_P(AlwaysFalse, msg, "") {
 // Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
 // default dataset defined in `IndexTestHelpers::makeTestIndex`.
 TEST(ExecuteUpdate, executeUpdate) {
-  QueryExecutionContext* qec = ad_utility::testing::getQec(std::nullopt);
-  const Index& index = qec->getIndex();
   // Perform the given `update` and store result in given `deltaTriples`.
-  auto expectExecuteUpdateHelper = [&qec, &index](const std::string& update,
-                                                  DeltaTriples& deltaTriples) {
-    const auto sharedHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    const std::vector<DatasetClause> datasets = {};
-    auto pqs = SparqlParser::parseUpdate(update);
-    for (auto& pq : pqs) {
-      QueryPlanner qp{qec, sharedHandle};
-      const auto qet = qp.createExecutionTree(pq);
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
-    }
-  };
+  auto expectExecuteUpdateHelper =
+      [](const std::string& update, QueryExecutionContext& qec, Index& index) {
+        const auto sharedHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        const std::vector<DatasetClause> datasets = {};
+        auto pqs = SparqlParser::parseUpdate(update);
+        for (auto& pq : pqs) {
+          QueryPlanner qp{&qec, sharedHandle};
+          const auto qet = qp.createExecutionTree(pq);
+          index.deltaTriplesManager().modify<void>(
+              [&index, &pq, &qet, &sharedHandle](DeltaTriples& deltaTriples) {
+                ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
+                                             sharedHandle);
+              });
+          qec.updateLocatedTriplesSnapshot();
+        }
+      };
   // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
-      [&index, &expectExecuteUpdateHelper](
+      [&expectExecuteUpdateHelper](
           const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
-        DeltaTriples deltaTriples{index};
-        expectExecuteUpdateHelper(update, deltaTriples);
-        EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
+        Index index = ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate",
+            ad_utility::testing::TestIndexConfig());
+        QueryResultCache cache = QueryResultCache();
+        QueryExecutionContext qec(index, &cache,
+                                  ad_utility::testing::makeAllocator(
+                                      ad_utility::MemorySize::megabytes(100)),
+                                  SortPerformanceEstimator{});
+        expectExecuteUpdateHelper(update, qec, index);
+        index.deltaTriplesManager().modify<void>(
+            [&deltaTriplesMatcher](DeltaTriples& deltaTriples) {
+              EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
+            });
       };
   // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails =
-      [&index, &expectExecuteUpdateHelper](
+      [&expectExecuteUpdateHelper](
           const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher,
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
-        DeltaTriples deltaTriples{index};
+        Index index = ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate",
+            ad_utility::testing::TestIndexConfig());
+        QueryResultCache cache = QueryResultCache();
+        QueryExecutionContext qec(index, &cache,
+                                  ad_utility::testing::makeAllocator(
+                                      ad_utility::MemorySize::megabytes(100)),
+                                  SortPerformanceEstimator{});
+
         AD_EXPECT_THROW_WITH_MESSAGE(
-            expectExecuteUpdateHelper(update, deltaTriples), messageMatcher);
+            expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };
   // Now the actual tests.
   expectExecuteUpdate("INSERT DATA { <s> <p> <o> . }", NumTriples(1, 0, 1));
@@ -104,7 +125,7 @@ TEST(ExecuteUpdate, executeUpdate) {
       "INSERT DATA { <a> <b> <c> }; DELETE DATA { <a> <b> <c> }",
       NumTriples(0, 1, 1));
   expectExecuteUpdate("INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
-                      NumTriples(0, 8, 8));
+                      NumTriples(0, 9, 9));
 }
 
 // _____________________________________________________________________________
@@ -207,7 +228,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
              IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))}));
     expectComputeGraphUpdateQuadsFails(
         "SELECT * WHERE { ?s ?p ?o }",
-        HasSubstr(R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')");
+        HasSubstr(
+            R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
     expectComputeGraphUpdateQuadsFails(
         "CLEAR DEFAULT",
         HasSubstr(

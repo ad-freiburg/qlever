@@ -1450,13 +1450,14 @@ TEST(ParserTest, parseWithDatasets) {
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), "?b", Var("?c")}})), datasets));
   EXPECT_THAT(
-      SparqlParser::parseQuery("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
-                               "?z FILTER EXISTS {?a ?b ?c} }",
-                               {{{Iri("<h>"), false}}}),
-      m::UpdateClause(m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"),
-                                       std::monostate{}}},
-                                     {}, std::nullopt),
-                      filterGraphPattern, m::datasetClausesMatcher(datasets)));
+      SparqlParser::parseUpdate("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+                                "?z FILTER EXISTS {?a ?b ?c} }",
+                                {{{Iri("<h>"), false}}}),
+      testing::ElementsAre(m::UpdateClause(
+          m::GraphUpdate(
+              {{Var("?x"), Iri("<b>"), Iri("<c>"), std::monostate{}}}, {},
+              std::nullopt),
+          filterGraphPattern, m::datasetClausesMatcher(datasets))));
   EXPECT_THAT(
       SparqlParser::parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",

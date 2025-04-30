@@ -287,7 +287,9 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
-  activeDatasetClauses_ = {};
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = {};
+  }
   prologueString_ = {};
   parsedQuery_ = {};
   isInsideConstructTriples_ = false;
@@ -594,6 +596,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+    parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   }
 
   return std::move(parsedQuery_);
@@ -656,6 +659,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns = triples.toGraphPatternOperations();
