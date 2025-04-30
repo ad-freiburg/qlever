@@ -909,6 +909,94 @@ TEST_P(TransitivePathTest, clone) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, sameVariableOnBothSidesBound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {2, 1},
+      {3, 4},
+      {4, 3},
+  });
+
+  auto sideTable = makeIdTableFromVector({
+      {1},
+      {2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 1},
+      {2, 2},
+  });
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?var"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?var"}, 1);
+    auto T = makePathBound(false, sub.clone(),
+                           {Variable{"?internal1"}, Variable{"?internal2"}},
+                           split(sideTable), 0, {Variable{"?var"}}, left, right,
+                           1, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?var"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?var"}, 1);
+    auto T = makePathBound(true, sub.clone(),
+                           {Variable{"?internal1"}, Variable{"?internal2"}},
+                           split(sideTable), 0, {Variable{"?var"}}, left, right,
+                           1, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, sameVariableOnBothSidesUnbound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {2, 1},
+      {3, 4},
+      {4, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 1},
+      {2, 2},
+      {3, 3},
+      {4, 4},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?var"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?var"}, 1);
+  auto T = makePathUnbound(std::move(sub),
+                           {Variable{"?internal1"}, Variable{"?internal2"}},
+                           left, right, 1, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, sameVariableResultsInDifferentCacheKey) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+  });
+
+  TransitivePathSide left{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right1{std::nullopt, 1, Variable{"?var"}, 1};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?other"}, 1};
+  auto T1 = makePathUnbound(
+      std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+      right1, 1, std::numeric_limits<size_t>::max());
+  auto T2 = makePathUnbound(
+      std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+      right2, 1, std::numeric_limits<size_t>::max());
+
+  EXPECT_NE(T1->getCacheKey(), T2->getCacheKey());
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),

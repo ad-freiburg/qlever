@@ -1,16 +1,21 @@
-// Copyright 2011 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Björn Buchhold <b.buchhold@gmail.com>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2015 - 2025 The QLever Authors, in particular:
+//
+// 2015 - 2017 Björn Buchhold, UFR
+// 2020 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2022 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include "engine/Server.h"
+
+#include <absl/functional/bind_front.h>
 
 #include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "CompilationInfo.h"
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -300,8 +305,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
-                                        std::cref(parameters));
+  auto checkParameter = absl::bind_front(
+      &ad_utility::url_parser::checkParameter, std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
@@ -600,6 +605,9 @@ json Server::composeErrorResponseJson(
 json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
+  result["git-hash-index"] = index_.getGitShortHash();
+  result["git-hash-server"] =
+      *qlever::version::gitShortHashWithoutLinking.wlock();
   result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
   result["num-predicates-normal"] = index_.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index_.numDistinctPredicates().internal;

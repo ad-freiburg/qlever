@@ -30,7 +30,7 @@ class CountStarExpression : public SparqlExpression {
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override;
 
   // ___________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 SparqlExpression::Ptr makeCountStarExpression(bool distinct);
