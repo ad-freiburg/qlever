@@ -144,16 +144,16 @@ class Server {
       Awaitable<void> processOperation(
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send);
+          const RequestT& request, ResponseT& send,
+          std::optional<PlannedQuery>& plannedQuery);
   // Do the actual execution of a query.
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
           const ad_utility::url_parser::ParamValueMap& params,
-          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+          PlannedQuery&& plannedQuery, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit);
+          const RequestT& request, ResponseT&& send);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static json createResponseMetadataForUpdate(
@@ -167,10 +167,9 @@ class Server {
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          ParsedQuery&& update, const ad_utility::Timer& requestTimer,
+          PlannedQuery&& update, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit);
+          const RequestT& request, ResponseT&& send);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
