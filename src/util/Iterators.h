@@ -440,8 +440,8 @@ InputRangeTypeErased(Range)
 // being iterated over. Currently, the iterators must be random-access and the
 // resulting range thus also is random access.
 CPP_template(typename It, typename End)(
-    requires ::ranges::random_access_iterator<It>&&
-        ql::ranges::sized_sentinel_for<End, It>) struct IteratorRange
+    requires ql::concepts::random_access_iterator<It> CPP_and
+        ql::concepts::sized_sentinel_for<End, It>) struct IteratorRange
     : public ql::ranges::view_interface<IteratorRange<It, End>> {
  private:
   It it_;
