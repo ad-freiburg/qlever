@@ -181,8 +181,8 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.blockIndex_;
 }
 
-// `std::span` containing `CompressedBlockMetadata` values.
-using BlockMetadataSpan = std::span<const CompressedBlockMetadata>;
+// `ql::span` containing `CompressedBlockMetadata` values.
+using BlockMetadataSpan = ql::span<const CompressedBlockMetadata>;
 // Iterator with respect to a `CompressedBlockMetadata` value of
 // `std::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
 using BlockMetadataIt = BlockMetadataSpan::iterator;

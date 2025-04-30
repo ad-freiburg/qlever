@@ -47,7 +47,7 @@ static Id getIdFromColumnIndex(
 // (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
-   ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
+    ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
   CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
       input, evaluationColumn);
 };
