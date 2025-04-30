@@ -145,13 +145,13 @@ class Server {
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
-          std::optional<PlannedQuery>& plannedQuery);
+          const std::optional<PlannedQuery>& plannedQuery);
   // Do the actual execution of a query.
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
           const ad_utility::url_parser::ParamValueMap& params,
-          PlannedQuery&& plannedQuery, const ad_utility::Timer& requestTimer,
+          PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           const RequestT& request, ResponseT&& send);
   // For an executed update create a json with some stats on the update (timing,
@@ -167,7 +167,7 @@ class Server {
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          PlannedQuery&& update, const ad_utility::Timer& requestTimer,
+          const PlannedQuery& update, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           const RequestT& request, ResponseT&& send);
 

@@ -432,10 +432,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   }
 
   // Store the QueryExecutionTree in case of errors.
-  std::optional<PlannedQuery> pq;
+  std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, &pq,
+       &requestTimer, &plannedQuery,
        this](ParsedQuery parsedOperation, std::string operationName,
              std::function<bool(const ParsedQuery&)> expectedOperation,
              const std::string msg) -> Awaitable<void> {
@@ -457,24 +457,20 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           absl::StrCat(msg, ad_utility::truncateOperationString(
                                 parsedOperation._originalString)));
     }
+    plannedQuery =
+        co_await planQuery(parsedOperation.hasUpdateClause() ? updateThreadPool_
+                                                             : queryThreadPool_,
+                           std::move(parsedOperation), requestTimer,
+                           timeLimit.value(), qec, cancellationHandle);
     if (parsedOperation.hasUpdateClause()) {
-      AD_CORRECTNESS_CHECK(parsedOperation.hasUpdateClause());
-      PlannedQuery plannedQuery = co_await planQuery(
-          updateThreadPool_, std::move(parsedOperation), requestTimer,
-          timeLimit.value(), qec, cancellationHandle);
-      pq = plannedQuery;
-      co_return co_await processUpdate(std::move(plannedQuery), requestTimer,
+      co_return co_await processUpdate(plannedQuery.value(), requestTimer,
                                        cancellationHandle, std::move(request),
                                        send);
     } else {
       AD_CORRECTNESS_CHECK(parsedOperation.hasSelectClause() ||
                            parsedOperation.hasAskClause() ||
                            parsedOperation.hasConstructClause());
-      PlannedQuery plannedQuery = co_await planQuery(
-          queryThreadPool_, std::move(parsedOperation), requestTimer,
-          timeLimit.value(), qec, cancellationHandle);
-      pq = plannedQuery;
-      co_return co_await processQuery(parameters, std::move(plannedQuery),
+      co_return co_await processQuery(parameters, plannedQuery.value(),
                                       requestTimer, cancellationHandle,
                                       std::move(request), send);
     }
@@ -540,7 +536,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
-      requestTimer, request, send, pq);
+      requestTimer, request, send, plannedQuery);
 }
 
 // ____________________________________________________________________________
@@ -781,7 +777,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
         const ad_utility::url_parser::ParamValueMap& params,
-        PlannedQuery&& plannedQuery, const ad_utility::Timer& requestTimer,
+        PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         const RequestT& request, ResponseT&& send) {
   MediaType mediaType = determineMediaType(params, request);
@@ -927,7 +923,7 @@ json Server::processUpdateImpl(
 CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        PlannedQuery&& plannedQuery, const ad_utility::Timer& requestTimer,
+        const PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         const RequestT& request, ResponseT&& send) {
   auto coroutine = computeInNewThread(
@@ -960,7 +956,7 @@ CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
         ad_utility::url_parser::sparqlOperation::Operation operation,
         VisitorT visitor, const ad_utility::Timer& requestTimer,
         const RequestT& request, ResponseT& send,
-        std::optional<PlannedQuery>& plannedQuery) {
+        const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
