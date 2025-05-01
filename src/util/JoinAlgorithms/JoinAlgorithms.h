@@ -122,7 +122,15 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   }
   auto cover = [&coveredFromLeft, begLeft = std::begin(left)](auto it) {
     if constexpr (hasNotFoundAction) {
-      coveredFromLeft[it - begLeft] = true;
+      // Ignore if undef values come before begLeft, this happens for the
+      // BlockZipperJoin implementation, which means that it has already been
+      // handled. This sometimes leverages the fact that iterators of two
+      // different ranges yield large distance values, which isn't clean but
+      // works good enough with the current implementation.
+      auto index = ql::ranges::distance(begLeft, it);
+      if (index >= 0 && static_cast<size_t>(index) < coveredFromLeft.size()) {
+        coveredFromLeft[index] = true;
+      }
     }
     (void)coveredFromLeft, (void)begLeft;
   };
@@ -1007,6 +1015,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       }
     }
     // Reset back to original input
+    begL = fullBlockLeft.get().begin();
+    begR = fullBlockRight.get().begin();
     compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
     // No need for further iteration because we know we won't encounter any new
     // undefined values at this point.
@@ -1054,6 +1064,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     auto begL = fullBlockLeft.get().begin();
     auto begR = fullBlockRight.get().begin();
     auto addRowIndex = [&begL, &begR, this](auto itFromL, auto itFromR) {
+      AD_EXPENSIVE_CHECK(itFromL >= begL);
+      AD_EXPENSIVE_CHECK(itFromR >= begR);
       compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
     };
 

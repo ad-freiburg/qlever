@@ -453,6 +453,43 @@ TEST(OptionalJoin, lazyOptionalJoinWithUndefRight) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoin, lazyOptionalJoinWithUndefLeft) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{V(1), V(10), V(101)},
+                                            {V(1), V(11), V(101)},
+                                            {V(3), V(10), V(303)},
+                                            {V(3), V(12), V(303)}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(
+      makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {V(3), V(12)}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(
+      makeIdTableFromVector({{V(1), V(101)}, {V(3), V(303)}}));
+
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected));
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, lazyOptionalJoinWithUndefLeftInSeparateTable) {
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector({{V(1), V(10), V(101)},
+                                            {V(1), V(11), V(101)},
+                                            {V(3), V(10), V(303)},
+                                            {V(3), V(12), V(303)}}));
+
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{U, V(10)}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}, {3, 12}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 101}, {3, 303}}));
+
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected));
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
   auto qec = ad_utility::testing::getQec();
 
