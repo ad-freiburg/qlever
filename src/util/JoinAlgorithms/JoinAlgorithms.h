@@ -84,6 +84,10 @@ CPP_concept BinaryIteratorFunction =
  * with UNDEF values in the left input. TODO<joka921> The second of the
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
+ * The `CoverUndefRanges` parameter is used to disable coverage checks for
+ * undefined ranges. This is useful when the iterator pointing to undefined
+ * ranges is not within `Range1` and has already been processed by something
+ * else.
  */
 CPP_template(typename Range1, typename Range2, typename LessThan,
              typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
@@ -1082,6 +1086,10 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // If we have undefined values stored, we need to provide a generator that
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
+      // We pass `std::false_type`, to disable coverage checks for the undefined
+      // values that are stored in `side.undefBlocks_`, which we already have
+      // processed ourselves and don't lie within the passed subrange, which
+      // this function assumes otherwise.
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
