@@ -89,7 +89,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
              typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
              typename FindSmallerUndefRangesRight,
              typename ElFromFirstNotFoundAction = decltype(noop),
-             typename CheckCancellation = decltype(noop))(
+             typename CheckCancellation = decltype(noop),
+             typename CoverUndefRanges = std::true_type)(
     requires ql::ranges::random_access_range<Range1> CPP_and
         ql::ranges::random_access_range<Range2>)
     [[nodiscard]] auto zipperJoinWithUndef(
@@ -98,7 +99,7 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
         const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
         const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
         ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
-        CheckCancellation checkCancellation = {}) {
+        CheckCancellation checkCancellation = {}, CoverUndefRanges = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -122,15 +123,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   }
   auto cover = [&coveredFromLeft, begLeft = std::begin(left)](auto it) {
     if constexpr (hasNotFoundAction) {
-      // Ignore if undef values come before begLeft, this happens for the
-      // BlockZipperJoin implementation, which means that it has already been
-      // handled. This sometimes leverages the fact that iterators of two
-      // different ranges yield large distance values, which isn't clean but
-      // works good enough with the current implementation.
-      auto index = ql::ranges::distance(begLeft, it);
-      if (index >= 0 && static_cast<size_t>(index) < coveredFromLeft.size()) {
-        coveredFromLeft[index] = true;
-      }
+      AD_EXPENSIVE_CHECK(it >= begLeft);
+      coveredFromLeft.at(it - begLeft) = true;
     }
     (void)coveredFromLeft, (void)begLeft;
   };
@@ -158,7 +152,9 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
                                                        outOfOrderFound)) {
         if (lessThan(*it, *itFromRight)) {
           compatibleRowAction(it, itFromRight);
-          cover(it);
+          if constexpr (CoverUndefRanges::value) {
+            cover(it);
+          }
         }
       }
     }
@@ -1092,7 +1088,7 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
           addRowIndex,
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
-          addNotFoundRowIndex);
+          addNotFoundRowIndex, noop, std::false_type{});
     } else {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
