@@ -206,22 +206,22 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              bool includeGraphColumn) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
-  auto mergeTriplesImplHelper = ad_utility::ApplyAsValueIdentity{
-      [numIndexColumns, blockIndex, &block, this](auto valueIdentity) {
-        static constexpr bool hasGraphColumn = valueIdentity.value;
-        if (numIndexColumns == 3) {
-          return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
-        } else if (numIndexColumns == 2) {
-          return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
-        } else {
-          AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-          return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
-        }
-      }};
+  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
+                                 this](auto hasGraphColumn) {
+    if (numIndexColumns == 3) {
+      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+    } else if (numIndexColumns == 2) {
+      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+    } else {
+      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
+      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+    }
+  };
+  using ad_utility::use_value_identity::vi;
   if (includeGraphColumn) {
-    return mergeTriplesImplHelper.template operator()<true>();
+    return mergeTriplesImplHelper(vi<true>);
   } else {
-    return mergeTriplesImplHelper.template operator()<false>();
+    return mergeTriplesImplHelper(vi<false>);
   }
 }
 
