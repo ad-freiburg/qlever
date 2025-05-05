@@ -61,7 +61,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
 // `ScanType`.
 static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
   using enum HasPredicateScan::ScanType;
-  AD_CONTRACT_CHECK(triple.predicateIsIri(HAS_PREDICATE_PREDICATE));
+  AD_CONTRACT_CHECK(triple.getSimplePredicate() == HAS_PREDICATE_PREDICATE);
   if (triple.s_.isVariable() && triple.o_.isVariable()) {
     if (triple.s_ == triple.o_) {
       throw std::runtime_error{

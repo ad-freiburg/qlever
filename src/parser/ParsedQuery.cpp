@@ -278,11 +278,9 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple.o_ == variable &&
-          (std::holds_alternative<PropertyPath>(triple.p_) &&
-           std::get<PropertyPath>(triple.p_).operation_ ==
-               PropertyPath::Operation::IRI) &&
-          !std::get<PropertyPath>(triple.p_).iri_.starts_with(
+      auto predicate = triple.getSimplePredicate();
+      if (triple.o_ == variable && predicate.has_value() &&
+          !predicate.value().starts_with(
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }

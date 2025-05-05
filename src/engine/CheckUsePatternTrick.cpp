@@ -100,8 +100,7 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
     auto matchingTriple = ql::ranges::find_if(
         triples, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&
-                 std::holds_alternative<PropertyPath>(t.p_) &&
-                 std::get<PropertyPath>(t.p_).isIri();
+                 t.getSimplePredicate().has_value();
         });
     if (matchingTriple == triples.end()) {
       return false;
@@ -215,7 +214,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
 
   const auto patternTrickDataIfTripleIsPossible =
       [&]() -> std::optional<PatternTrickData> {
-    if (triple.predicateIsIri(HAS_PREDICATE_PREDICATE) &&
+    if (triple.getSimplePredicate() == HAS_PREDICATE_PREDICATE &&
         triple.s_.isVariable() && triple.o_.isVariable() &&
         triple.s_ != triple.o_) {
       Variable predicateVariable{triple.o_.getVariable()};
@@ -223,10 +222,10 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
                               triple.s_.getVariable(),
                               {predicateVariable},
                               true};
-    } else if (triple.s_.isVariable() &&
-               triple.getPredicateVariable().has_value() &&
+    } else if (auto variable = triple.getPredicateVariable();
+               triple.s_.isVariable() && variable.has_value() &&
                triple.o_.isVariable()) {
-      auto predicateVariable = triple.getPredicateVariable().value();
+      auto predicateVariable = variable.value();
       // Check that the three variables are pairwise distinct.
       std::array variables{triple.s_.getVariable().name(),
                            triple.o_.getVariable().name(),

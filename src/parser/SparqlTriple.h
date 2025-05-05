@@ -78,7 +78,7 @@ class SparqlTriple
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
     bool holdsVariable = std::holds_alternative<Variable>(p_);
-    AD_CONTRACT_CHECK(holdsVariable || std::get<PropertyPath>(p_).isIri());
+    AD_CONTRACT_CHECK(holdsVariable || getSimplePredicate().has_value());
     TripleComponent p = holdsVariable
                             ? TripleComponent{std::get<Variable>(p_)}
                             : TripleComponent(TripleComponent::Iri::fromIriref(
@@ -98,10 +98,14 @@ class SparqlTriple
             triple.o_};
   }
 
-  // Helper function to match a potentially nested iri
-  bool predicateIsIri(std::string_view iri) const {
-    return std::holds_alternative<PropertyPath>(p_) &&
-           std::get<PropertyPath>(p_).iri_ == iri;
+  // Helper function to easily retreive a simple IRI.
+  std::optional<std::string_view> getSimplePredicate() const {
+    if (!std::holds_alternative<PropertyPath>(p_)) {
+      return std::nullopt;
+    }
+    const auto& path = std::get<PropertyPath>(p_);
+    return path.isIri() ? std::optional<std::string_view>{path.iri_}
+                        : std::nullopt;
   }
 
   // Helper function to easily retrieve a variable

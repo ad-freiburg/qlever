@@ -498,7 +498,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t.predicateIsIri(CONTAINS_WORD_PREDICATE)) {
+    if (t.getSimplePredicate() == CONTAINS_WORD_PREDICATE) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -517,7 +517,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (t.predicateIsIri(CONTAINS_ENTITY_PREDICATE)) {
+    } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(
@@ -1116,7 +1116,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (node.triple_.predicateIsIri(CONTAINS_ENTITY_PREDICATE)) {
+  if (node.triple_.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
@@ -1690,8 +1690,9 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
     return false;
   }
   const auto& triple = it->second->triple_;
-  return triple.predicateIsIri(CONTAINS_ENTITY_PREDICATE) ||
-         triple.predicateIsIri(CONTAINS_WORD_PREDICATE);
+  auto predicate = triple.getSimplePredicate();
+  return predicate == CONTAINS_ENTITY_PREDICATE ||
+         predicate == CONTAINS_WORD_PREDICATE;
 }
 
 // _____________________________________________________________________________
@@ -2752,8 +2753,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
     if (std::holds_alternative<Variable>(triple.p_) ||
-        std::get<PropertyPath>(triple.p_).operation_ ==
-            PropertyPath::Operation::IRI) {
+        triple.getSimplePredicate().has_value()) {
       candidateTriples_._triples.push_back(triple);
     } else {
       auto children = planner_.seedFromPropertyPath(
