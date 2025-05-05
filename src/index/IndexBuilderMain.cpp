@@ -335,16 +335,16 @@ int main(int argc, char** argv) {
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
-      index.buildTextIndexFile(
-          {wordsfile.empty() ? std::nullopt
-                             : std::optional<const string>(wordsfile),
-           docsfile.empty() ? std::nullopt
-                            : std::optional<const string>(docsfile),
-           addWordsFromLiterals,
-           useWordsFromDocsfile,
-           addEntitiesFromWordsfile,
-           {getTextScoringMetricFromString(scoringMetric),
-            {bScoringParam, kScoringParam}}});
+      index.buildTextIndexFile(TextIndexConfig{
+          wordsfile.empty() ? std::nullopt
+                            : std::optional<const string>(wordsfile),
+          docsfile.empty() ? std::nullopt
+                           : std::optional<const string>(docsfile),
+          addWordsFromLiterals,
+          useWordsFromDocsfile,
+          addEntitiesFromWordsfile,
+          {getTextScoringMetricFromString(scoringMetric),
+           {bScoringParam, kScoringParam}}});
     }
 
     if (!docsfile.empty()) {

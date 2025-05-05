@@ -100,9 +100,8 @@ void IndexImpl::logEntityNotFound(const string& word,
 
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(TextIndexConfig&& config) {
-  config.checkValid();
-  string wordsFile = config.wordsFile_.value_or("");
-  string docsFile = config.docsFile_.value_or("");
+  string wordsFile = config.getWordsFile();
+  string docsFile = config.getDocsFile();
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
@@ -112,7 +111,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig&& config) {
   if (config.addWordsFromFiles()) {
     LOG(INFO) << "Using specified docs- and/or wordsfile to build text index.";
   }
-  if (config.addWordsFromLiterals_) {
+  if (config.getAddWordsFromLiterals()) {
     LOG(INFO) << (!config.addWordsFromFiles() ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
@@ -127,7 +126,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig&& config) {
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  { storeTextScoringParamsInConfiguration(config.textScoringConfig_); }
+  { storeTextScoringParamsInConfiguration(config.getTextScoringConfig()); }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
@@ -136,7 +135,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig&& config) {
   // Build the text vocabulary (first scan over the text records).
   processWordsForVocabulary(config);
   // Calculate the score data for the words
-  scoreData_.calculateScoreData(docsFile, config.addWordsFromLiterals_,
+  scoreData_.calculateScoreData(docsFile, config.getAddWordsFromLiterals(),
                                 textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
@@ -223,9 +222,9 @@ void IndexImpl::addTextFromOnDiskIndex() {
 // _____________________________________________________________________________
 size_t IndexImpl::processWordsForVocabulary(
     const TextIndexConfig& textIndexConfig) {
-  const std::string file = textIndexConfig.useDocsFileForVocabulary_
-                               ? textIndexConfig.docsFile_.value_or("")
-                               : textIndexConfig.wordsFile_.value_or("");
+  const std::string file = textIndexConfig.getUseDocsFileForVocabulary()
+                               ? textIndexConfig.getDocsFile()
+                               : textIndexConfig.getWordsFile();
   size_t numLines = 0;
   ad_utility::HashSet<string> distinctWords;
   auto processLine = [&numLines, &distinctWords](const WordsFileLine& line) {
@@ -235,13 +234,13 @@ size_t IndexImpl::processWordsForVocabulary(
     }
   };
   const auto& localeManager = textVocab_.getLocaleManager();
-  if (textIndexConfig.useDocsFileForVocabulary_) {
+  if (textIndexConfig.getUseDocsFileForVocabulary()) {
     ql::ranges::for_each(getWordsLineFromDocsFile(file, localeManager),
                          processLine);
   } else {
     ql::ranges::for_each(WordsFileParser{file, localeManager}, processLine);
   }
-  if (textIndexConfig.addWordsFromLiterals_) {
+  if (textIndexConfig.getAddWordsFromLiterals()) {
     ql::ranges::for_each(wordsInLiterals(0), processLine);
   }
   textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
@@ -255,8 +254,8 @@ void IndexImpl::processWordsForInvertedLists(
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
-  const auto wordsFile = textIndexConfig.wordsFile_.value_or("");
-  const auto docsFile = textIndexConfig.docsFile_.value_or("");
+  const auto wordsFile = textIndexConfig.getWordsFile();
+  const auto docsFile = textIndexConfig.getDocsFile();
   // The nofContexts can be misleading since it also counts empty contexts
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
@@ -289,8 +288,8 @@ void IndexImpl::processWordsForInvertedLists(
 
   // Parse external files
   const auto& localeManager = textVocab_.getLocaleManager();
-  if (textIndexConfig.useDocsFileForVocabulary_) {
-    if (textIndexConfig.addOnlyEntitiesFromWordsFile_) {
+  if (textIndexConfig.getUseDocsFileForVocabulary()) {
+    if (textIndexConfig.getAddOnlyEntitiesFromWordsFile()) {
       // Case where: useDocsFileForVocabulary && addEntitiesFromWordsFile
       wordsFromDocsFileEntitiesFromWordsFile(wordsFile, docsFile, localeManager,
                                              processLine);
@@ -307,7 +306,7 @@ void IndexImpl::processWordsForInvertedLists(
   lastTextRecordIndexOfNonLiterals_ = currentContext.get();
 
   // Parse literals if specified
-  if (textIndexConfig.addWordsFromLiterals_) {
+  if (textIndexConfig.getAddWordsFromLiterals()) {
     ql::ranges::for_each(wordsInLiterals(currentContext.get() + 1),
                          processLine);
   }
@@ -342,13 +341,12 @@ void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
     const LocaleManager& localeManager, T processLine) const {
   // Initialize DocsFileParser and WordsFileParser and the respective
   // iterators to parse in parallel
-  auto docsFileParser = DocsFileParser{docsFile, localeManager};
-  auto docsFileIterator = docsFileParser.begin();
   auto wordsFileParser = WordsFileParser{wordsFile, localeManager};
   auto wordsFileIterator = wordsFileParser.begin();
-  // Get the respective lines
-  WordsFileLine currentWordsFileLine = *wordsFileIterator;
-  DocsFileLine currentDocsFileLine = *docsFileIterator;
+  AD_CORRECTNESS_CHECK(wordsFileParser.begin() != wordsFileParser.end(),
+                       "When adding entities from wordsfile the given "
+                       "wordsfile can't be an empty file.");
+  WordsFileLine currentWordsFileLine;
 
   // Iterate over docsfile and wordsfile in parallel. The wordsfile IDs are
   // in smaller increments than the docsfile IDs in general and the
@@ -358,9 +356,8 @@ void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
   // to the respective context in this case the respective document. Once
   // the wordsfile ID is larger than the docsfile ID the docsfile line is
   // processed and so on.
-  while (docsFileIterator != docsFileParser.end()) {
-    currentDocsFileLine = *docsFileIterator;
-    while (wordsFileIterator != wordsFileParser.end()) {
+  for (auto& currentDocsFileLine : DocsFileParser{docsFile, localeManager}) {
+    for (; wordsFileIterator != wordsFileParser.end(); ++wordsFileIterator) {
       currentWordsFileLine = *wordsFileIterator;
       if (currentDocsFileLine.docId_.get() <
           currentWordsFileLine.contextId_.get()) {
@@ -372,7 +369,6 @@ void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
             TextRecordIndex::make(currentDocsFileLine.docId_.get());
         processLine(lineToProcess);
       }
-      ++wordsFileIterator;
     }
     for (const auto& word : tokenizeAndNormalizeText(
              currentDocsFileLine.docContent_, localeManager)) {
@@ -381,7 +377,6 @@ void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
           0, false};
       processLine(lineToProcess);
     }
-    ++docsFileIterator;
   }
 }
 

@@ -188,20 +188,22 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile({std::nullopt,
-                                    std::nullopt,
-                                    true,
-                                    false,
-                                    false,
-                                    {TextScoringMetric::BM25, {2.0f, 0.5f}}}),
+          index.buildTextIndexFile(
+              TextIndexConfig{std::nullopt,
+                              std::nullopt,
+                              true,
+                              false,
+                              false,
+                              {TextScoringMetric::BM25, {2.0f, 0.5f}}}),
           ::testing::HasSubstr("Invalid values"));
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile({std::nullopt,
-                                    std::nullopt,
-                                    true,
-                                    false,
-                                    false,
-                                    {TextScoringMetric::BM25, {0.5f, -1.0f}}}),
+          index.buildTextIndexFile(
+              TextIndexConfig{std::nullopt,
+                              std::nullopt,
+                              true,
+                              false,
+                              false,
+                              {TextScoringMetric::BM25, {0.5f, -1.0f}}}),
           ::testing::HasSubstr("Invalid values"));
       c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
       c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
@@ -214,12 +216,12 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       auto buildTextIndex = [&index, &c](auto wordsFile, auto docsFile,
                                          bool addWordsFromLiterals) {
         index.buildTextIndexFile(
-            {std::move(wordsFile),
-             std::move(docsFile),
-             addWordsFromLiterals,
-             c.useDocsFileForVocab,
-             c.addEntitiesFromWordsFile,
-             {c.scoringMetric.value(), c.bAndKParam.value()}});
+            TextIndexConfig{std::move(wordsFile),
+                            std::move(docsFile),
+                            addWordsFromLiterals,
+                            c.useDocsFileForVocab,
+                            c.addEntitiesFromWordsFile,
+                            {c.scoringMetric.value(), c.bAndKParam.value()}});
       };
       if (c.contentsOfDocsFile.has_value() &&
           (c.contentsOfWordsFile.has_value() || c.useDocsFileForVocab)) {

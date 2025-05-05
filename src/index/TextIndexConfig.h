@@ -12,8 +12,7 @@
 
 /**
  * @brief A configuration that stores all parameters to build the text index.
- *        The correctness of all parameters can be checked by calling the
- *        checkValid function.
+ *        The correctness of all parameters is checked during construction.
  *
  * @details
  *
@@ -64,7 +63,40 @@
  *                                         BM25 scores. Two things have to hold:
  *                                         0 <= b <= 1 and 0 <= k.
  */
-struct TextIndexConfig {
+class TextIndexConfig {
+ public:
+  explicit TextIndexConfig(
+      std::optional<const std::string> wordsFile = std::nullopt,
+      std::optional<const std::string> docsFile = std::nullopt,
+      bool addWordsFromLiterals = true, bool useDocsFileForVocabulary = false,
+      bool addOnlyEntitiesFromWordsFile = false,
+      TextScoringConfig textScoringConfig = TextScoringConfig())
+      : wordsFile_(std::move(wordsFile)),
+        docsFile_(std::move(docsFile)),
+        addWordsFromLiterals_(addWordsFromLiterals),
+        useDocsFileForVocabulary_(useDocsFileForVocabulary),
+        addOnlyEntitiesFromWordsFile_(addOnlyEntitiesFromWordsFile),
+        textScoringConfig_(std::move(textScoringConfig)) {
+    checkValid();
+  };
+
+  bool addWordsFromFiles() const {
+    return docsFile_.has_value() &&
+           (wordsFile_.has_value() || useDocsFileForVocabulary_);
+  }
+
+  std::string getWordsFile() const { return wordsFile_.value_or(""); }
+  std::string getDocsFile() const { return docsFile_.value_or(""); }
+  bool getAddWordsFromLiterals() const { return addWordsFromLiterals_; }
+  bool getUseDocsFileForVocabulary() const { return useDocsFileForVocabulary_; }
+  bool getAddOnlyEntitiesFromWordsFile() const {
+    return addOnlyEntitiesFromWordsFile_;
+  }
+  const TextScoringConfig& getTextScoringConfig() const {
+    return textScoringConfig_;
+  }
+
+ private:
   std::optional<const std::string> wordsFile_ = std::nullopt;
   std::optional<const std::string> docsFile_ = std::nullopt;
   bool addWordsFromLiterals_ = true;
@@ -102,11 +134,6 @@ struct TextIndexConfig {
                         "` and `k=", k,
                         "`, `b` must be in [0, 1] and `k` must be >= 0 ");
     }
-  }
-
-  bool addWordsFromFiles() const {
-    return docsFile_.has_value() &&
-           (wordsFile_.has_value() || useDocsFileForVocabulary_);
   }
 };
 
