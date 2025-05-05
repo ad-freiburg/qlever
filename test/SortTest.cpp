@@ -179,23 +179,10 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0});
-    EXPECT_FALSE(sort.createSortedClone({0})
-                     .handle([]() {
-                       ADD_FAILURE() << "This should not be called";
-                       return nullptr;
-                     })
-                     .getTree()
-                     .has_value());
-    EXPECT_FALSE(sort.createSortedClone({})
-                     .handle([]() {
-                       ADD_FAILURE() << "This should not be called";
-                       return nullptr;
-                     })
-                     .getTree()
-                     .has_value());
-    auto clone = sort.createSortedClone({0, 1});
+    EXPECT_THROW(sort.makeSortedTree({0}), ad_utility::Exception);
+    EXPECT_THROW(sort.makeSortedTree({}), ad_utility::Exception);
     // Check that we don't double sort
-    auto operation = std::move(clone).getTree();
+    auto operation = sort.makeSortedTree({0, 1});
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);
@@ -205,9 +192,8 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
     VectorTable input{{0, 0}, {1, 1}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0, 1});
-    auto clone = sort.createSortedClone({1, 0});
     // Check that we don't double sort
-    auto operation = std::move(clone).getTree();
+    auto operation = sort.makeSortedTree({1, 0});
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);

@@ -76,17 +76,15 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-qlever::PreconditionAction Sort::createSortedClone(
+std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
     const vector<ColumnIndex>& sortColumns) const {
-  auto result = Operation::createSortedClone(sortColumns);
-  return std::move(result).handle([this, &sortColumns]() {
-    AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
-                    "with `Sort` with a different sort order. This is "
-                    "indicates a flaw during query planning."
-                 << std::endl;
-    return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                               sortColumns);
-  });
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
+                  "with `Sort` with a different sort order. This is "
+                  "indicates a flaw during query planning."
+               << std::endl;
+  return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
+                                             sortColumns);
 }
 
 // _____________________________________________________________________________

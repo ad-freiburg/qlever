@@ -65,7 +65,7 @@ class Sort : public Operation {
     return {subtree_.get()};
   }
 
-  PreconditionAction createSortedClone(
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
       const vector<ColumnIndex>& sortColumns) const override;
 
  private:

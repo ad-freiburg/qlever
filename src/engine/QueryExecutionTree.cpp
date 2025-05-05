@@ -171,17 +171,18 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<ColumnIndex>& sortColumns) {
   const auto& rootOperation = qet->getRootOperation();
-  auto* qec = rootOperation->getExecutionContext();
-  qlever::PreconditionAction state =
-      rootOperation->createSortedClone(sortColumns);
+  if (rootOperation->isSortedBy(sortColumns)) {
+    return qet;
+  }
+  auto sortedQet = rootOperation->makeSortedTree(sortColumns);
 
-  return std::move(state)
-      .handle([qec, &qet, &sortColumns]() mutable {
-        auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
-        return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
-      })
-      .getTree()
-      .value_or(qet);
+  if (sortedQet.has_value()) {
+    AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    return std::move(sortedQet).value();
+  }
+
+  return ad_utility::makeExecutionTree<Sort>(
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
 }
 
 // _____________________________________________________________________________

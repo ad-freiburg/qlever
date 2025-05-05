@@ -363,13 +363,11 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-qlever::PreconditionAction Union::createSortedClone(
+std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
     const vector<ColumnIndex>& sortColumns) const {
-  if (sortColumns.empty()) {
-    return PreconditionAction::IMPLICITLY_SATISFIED;
-  }
-  return PreconditionAction{ad_utility::makeExecutionTree<Union>(
-      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns)};
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return ad_utility::makeExecutionTree<Union>(
+      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________

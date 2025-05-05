@@ -538,7 +538,7 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.createSortedClone({0, 1, 2, 3}).getTree();
+    auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
@@ -556,7 +556,7 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree = unionOperation.createSortedClone({0, 3, 1, 2}).getTree();
+    auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
@@ -574,13 +574,7 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    EXPECT_FALSE(unionOperation.createSortedClone({})
-                     .handle([]() {
-                       ADD_FAILURE() << "This should not be called";
-                       return nullptr;
-                     })
-                     .getTree()
-                     .has_value());
+    EXPECT_THROW(unionOperation.makeSortedTree({}), ad_utility::Exception);
   }
 }
 

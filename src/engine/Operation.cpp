@@ -675,16 +675,22 @@ std::unique_ptr<Operation> Operation::clone() const {
 }
 
 // _____________________________________________________________________________
-qlever::PreconditionAction Operation::createSortedClone(
-    const vector<ColumnIndex>& sortColumns) const {
+bool Operation::isSortedBy(const vector<ColumnIndex>& sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
-    return PreconditionAction::SATISFY_EXTERNALLY;
+    return false;
   }
   for (size_t i = 0; i < sortColumns.size(); ++i) {
     if (sortColumns[i] != inputSortedOn[i]) {
-      return PreconditionAction::SATISFY_EXTERNALLY;
+      return false;
     }
   }
-  return PreconditionAction::IMPLICITLY_SATISFIED;
+  return true;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return std::nullopt;
 }
