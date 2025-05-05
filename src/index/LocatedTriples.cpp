@@ -61,22 +61,15 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 namespace {
-template <typename T>
-class TieHelper {
-  T& t;
 
- public:
-  TieHelper(T& t) : t(t) {}
+template <typename Row, size_t... I>
+auto tieHelper(Row& row, std::index_sequence<I...>) {
+  return std::tie(row[I]...);
+};
 
-  template <size_t... I>
-  auto operator()(std::index_sequence<I...>) {
-    return std::tie(t[I]...);
-  }
-
-  template <size_t... I>
-  auto operator()(ad_utility::ValueSequence<size_t, I...>) {
-    return std::tie(t[I]...);
-  }
+template <typename Row, size_t... I>
+auto tieHelper(Row& row, ad_utility::ValueSequence<size_t, I...>) {
+  return std::tie(row[I]...);
 };
 }  // namespace
 
@@ -88,9 +81,9 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieIdTableRow(T& row) {
-  return TieHelper(row)(
-      std::make_index_sequence<numIndexColumns +
-                               static_cast<size_t>(includeGraphColumn)>{});
+  return tieHelper(
+      row, std::make_index_sequence<numIndexColumns +
+                                    static_cast<size_t>(includeGraphColumn)>{});
 }
 
 // Return a `std::tie` of the relevant entries of a located triple,
@@ -116,7 +109,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
     return a;
   }();
   auto& ids = lt->triple_.ids();
-  return TieHelper(ids)(ad_utility::toIntegerSequence<indices>());
+  return tieHelper(ids, ad_utility::toIntegerSequence<indices>());
 }
 
 // ____________________________________________________________________________
