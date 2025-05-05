@@ -1073,7 +1073,7 @@ bool Server::checkAccessToken(
 
 // _____________________________________________________________________________
 void Server::adjustParsedQueryLimitOffset(
-    PlannedQuery& plannedQuery, const ad_utility::MediaType mediaType,
+    PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
     const ad_utility::url_parser::ParamValueMap& parameters) {
   // Read the export limit from the send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.

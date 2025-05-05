@@ -44,6 +44,7 @@ CPP_concept QueryOrUpdate =
 class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
+  FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -190,8 +191,8 @@ class Server {
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit);
   // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
-  void adjustParsedQueryLimitOffset(
-      PlannedQuery& plannedQuery, const ad_utility::MediaType mediaType,
+  static void adjustParsedQueryLimitOffset(
+      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
       const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Plan a parsed query.
