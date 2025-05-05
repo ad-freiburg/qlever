@@ -263,7 +263,7 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(TextIndexConfig config);
+  void buildTextIndexFile(TextIndexConfig&& config);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -551,15 +551,9 @@ class IndexImpl {
   static void logEntityNotFound(const string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
-  size_t processWordsForVocabulary(const string& file,
-                                   bool addWordsFromLiterals,
-                                   bool useDocsFileForVocabulary);
+  size_t processWordsForVocabulary(const TextIndexConfig& textIndexConfig);
 
-  void processWordsForInvertedLists(const string& wordsFile,
-                                    const string& docsFile,
-                                    bool addWordsFromLiterals,
-                                    bool useDocsFileForVocabulary,
-                                    bool addEntitiesFromWordsFile,
+  void processWordsForInvertedLists(const TextIndexConfig& textIndexConfig,
                                     TextVec& vec);
 
   template <typename T>

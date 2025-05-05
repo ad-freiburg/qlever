@@ -26,8 +26,8 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase,
 }
 
 // ____________________________________________________________________________
-void Index::buildTextIndexFile(TextIndexConfig config) {
-  pimpl_->buildTextIndexFile(config);
+void Index::buildTextIndexFile(TextIndexConfig&& config) {
+  pimpl_->buildTextIndexFile(std::move(config));
 }
 
 // ____________________________________________________________________________
