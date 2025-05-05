@@ -179,11 +179,10 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         size_t startSideCol,
                                                         size_t targetSideCol,
                                                         bool yieldOnce) const {
-  return ad_utility::callFixedSize(
-      getResultWidth(), ad_utility::ApplyAsValueIdentity{[&](auto WIDTH) {
-        return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
-                                               targetSideCol, yieldOnce);
-      }});
+  return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
+    return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
+                                           targetSideCol, yieldOnce);
+  });
 }
 
 // _____________________________________________________________________________

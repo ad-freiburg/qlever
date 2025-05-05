@@ -136,7 +136,7 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // `mapToZeroIfTooLarge`.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
           size_t NumIntegers, typename Int, typename F, typename... Args,
-          typename = std::enable_if_t<std::is_integral<Int>::value>>
+          typename = std::enable_if_t<std::is_integral_v<Int>>>
 decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
                              Args&&... args) {
   static_assert(NumIntegers > 0);
@@ -155,16 +155,15 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
 // Overload for a single integer.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, typename Int,
           typename F, typename... Args,
-          typename = std::enable_if_t<std::is_integral<Int>::value>>
+          typename = std::enable_if_t<std::is_integral_v<Int>>>
 decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
 }
 
 // Template function `callFixedSizeVi` is a wrapper around `callFixedSize`.
-// It allows calling a functor with an array of integers as template parameters.
-// The `ApplyAsValueIdentity` ensures that the functor is
-// transformed into a form that can be used as a template parameter.
+// It wraps the functor in an `ApplyAsValueIdentity`, passing the integers
+// as ValueIdentity objects to the functor rather than as template parameters.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
           size_t NumIntegers, typename Int, typename F, typename... Args,
           typename = std::enable_if_t<std::is_integral_v<Int>>>

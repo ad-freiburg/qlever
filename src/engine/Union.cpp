@@ -399,27 +399,24 @@ Result::LazyResult Union::computeResultKeepOrder(
   return std::visit(
       [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
        &applyPermutation](auto left, auto right) {
-        return ad_utility::callFixedSize(
+        return ad_utility::callFixedSizeVi(
             trimmedTargetOrder.size(),
-            ad_utility::ApplyAsValueIdentity{
-                [this, requestLaziness, &result1, &result2, &left, &right,
-                 &trimmedTargetOrder,
-                 &applyPermutation](auto COMPARATOR_WIDTH) {
-                  constexpr size_t extent = COMPARATOR_WIDTH == 0
-                                                ? ql::dynamic_extent
-                                                : COMPARATOR_WIDTH;
-                  sortedUnion::IterationData leftData{
-                      std::move(result1), std::move(left),
-                      computePermutation<true>()};
-                  sortedUnion::IterationData rightData{
-                      std::move(result2), std::move(right),
-                      computePermutation<false>()};
-                  return Result::LazyResult{sortedUnion::SortedUnionImpl{
-                      std::move(leftData), std::move(rightData),
-                      requestLaziness, _columnOrigins, allocator(),
-                      ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
-                      std::move(applyPermutation)}};
-                }});
+            [this, requestLaziness, &result1, &result2, &left, &right,
+             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
+              constexpr size_t extent =
+                  COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
+              sortedUnion::IterationData leftData{std::move(result1),
+                                                  std::move(left),
+                                                  computePermutation<true>()};
+              sortedUnion::IterationData rightData{std::move(result2),
+                                                   std::move(right),
+                                                   computePermutation<false>()};
+              return Result::LazyResult{sortedUnion::SortedUnionImpl{
+                  std::move(leftData), std::move(rightData), requestLaziness,
+                  _columnOrigins, allocator(),
+                  ql::span<const ColumnIndex, extent>{trimmedTargetOrder},
+                  std::move(applyPermutation)}};
+            });
       },
       std::move(leftRange), std::move(rightRange));
 }

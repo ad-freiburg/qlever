@@ -380,12 +380,12 @@ Result GroupBy::computeResult(bool requestLaziness) {
     // given `subresults`.
     auto computeWithHashMap = [this, &metadataForUnsequentialData,
                                &groupByCols](auto&& subresults) {
-      auto doCompute = ad_utility::ApplyAsValueIdentity{[&](auto NumCols) {
+      auto doCompute = [&](auto NumCols) {
         return computeGroupByForHashMapOptimization<NumCols>(
             metadataForUnsequentialData->aggregateAliases_, AD_FWD(subresults),
             groupByCols);
-      }};
-      return ad_utility::callFixedSize(groupByCols.size(), doCompute);
+      };
+      return ad_utility::callFixedSizeVi(groupByCols.size(), doCompute);
     };
 
     // Now call `computeWithHashMap` and return the result. It expects a range
