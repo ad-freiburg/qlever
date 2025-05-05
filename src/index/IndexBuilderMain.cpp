@@ -343,8 +343,8 @@ int main(int argc, char** argv) {
            addWordsFromLiterals,
            useWordsFromDocsfile,
            addEntitiesFromWordsfile,
-           getTextScoringMetricFromString(scoringMetric),
-           {bScoringParam, kScoringParam}});
+           {getTextScoringMetricFromString(scoringMetric),
+            {bScoringParam, kScoringParam}}});
     }
 
     if (!docsfile.empty()) {

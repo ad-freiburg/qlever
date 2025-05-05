@@ -810,8 +810,8 @@ class IndexImpl {
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
 
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
+  void storeTextScoringParamsInConfiguration(
+      const TextScoringConfig& textScoringConfig);
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

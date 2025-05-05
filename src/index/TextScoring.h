@@ -6,6 +6,7 @@
 #define QLEVER_SRC_INDEX_TEXTSCORING_H
 
 #include "index/Index.h"
+#include "index/TextScoringEnum.h"
 #include "parser/WordsAndDocsFileParser.h"
 
 // This class is used to calculate tf-idf and bm25 scores and use them in the
@@ -28,6 +29,12 @@ class ScoreData {
         k_(bAndKParam.second),
         localeManager_(std::move(localeManager)){};
 
+  ScoreData(LocaleManager localeManager, const TextScoringConfig& config)
+      : scoringMetric_(config.scoringMetric_),
+        b_(config.bAndKParam_.first),
+        k_(config.bAndKParam_.second),
+        localeManager_(std::move(localeManager)){};
+
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
   // Retrieves score from filled InvertedIndex
@@ -47,7 +54,7 @@ class ScoreData {
   LocaleManager localeManager_;
 
   // The invertedIndex_ connects words to documents (docIds) and the term
-  // frequency of  those words inside the documents
+  // frequency of those words inside the documents
   InvertedIndex invertedIndex_;
 
   // The docLengthMap_ connects documents (docIds) to their length measured in

@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#ifndef TEXTINDEXCONFIG_H
-#define TEXTINDEXCONFIG_H
+#ifndef QLEVER_SRC_INDEX_TEXTINDEXCONFIG_H
+#define QLEVER_SRC_INDEX_TEXTINDEXCONFIG_H
 
 #include <optional>
 #include <string>
@@ -70,14 +70,11 @@ struct TextIndexConfig {
   bool addWordsFromLiterals_ = true;
   bool useDocsFileForVocabulary_ = false;
   bool addOnlyEntitiesFromWordsFile_ = false;
-  TextScoringMetric textScoringMetric_ = TextScoringMetric::EXPLICIT;
-  std::pair<float, float> bAndKForBM25_ = {0.75f, 1.75f};
+  TextScoringConfig textScoringConfig_ = TextScoringConfig();
 
   void checkValid() const {
-    bool buildFromFiles = docsFile_.has_value() &&
-                          (wordsFile_.has_value() || useDocsFileForVocabulary_);
     AD_CONTRACT_CHECK(
-        buildFromFiles || addWordsFromLiterals_,
+        addWordsFromFiles() || addWordsFromLiterals_,
         "No source to build text index from specified. A TextIndexConfig needs "
         "a source to build the text index from. Either addWordsFromLiterals_ "
         "has to be true or external files to build from have to be given (or "
@@ -97,15 +94,20 @@ struct TextIndexConfig {
         "useDocsFileForVocabulary_ needs to be set to true as well. The "
         "functionality of addOnlyEntitiesFromWordsFile_ is to add entities to "
         "the texts given by the docsFile during text index building.");
-    if (textScoringMetric_ == TextScoringMetric::BM25) {
-      float b = bAndKForBM25_.first;
-      float k = bAndKForBM25_.second;
+    if (textScoringConfig_.scoringMetric_ == TextScoringMetric::BM25) {
+      float b = textScoringConfig_.bAndKParam_.first;
+      float k = textScoringConfig_.bAndKParam_.second;
       AD_CONTRACT_CHECK(0 <= b && b <= 1 && 0 <= k,
                         "Invalid values given for BM25 score: `b=", b,
                         "` and `k=", k,
                         "`, `b` must be in [0, 1] and `k` must be >= 0 ");
     }
   }
+
+  bool addWordsFromFiles() const {
+    return docsFile_.has_value() &&
+           (wordsFile_.has_value() || useDocsFileForVocabulary_);
+  }
 };
 
-#endif  // TEXTINDEXCONFIG_H
+#endif  // QLEVER_SRC_INDEX_TEXTINDEXCONFIG_H

@@ -220,6 +220,7 @@ class Index {
   size_t getNofTextRecords() const;
   size_t getNofWordPostings() const;
   size_t getNofEntityPostings() const;
+  // This is only used for testing
   size_t getLastTextRecordIndexOfNonLiterals() const;
 
   NumNormalAndInternal numDistinctSubjects() const;

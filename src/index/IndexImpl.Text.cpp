@@ -101,16 +101,6 @@ void IndexImpl::logEntityNotFound(const string& word,
 // _____________________________________________________________________________
 void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   config.checkValid();
-  bool addWordsFromFiles =
-      config.docsFile_.has_value() &&
-      (config.wordsFile_.has_value() || config.useDocsFileForVocabulary_);
-  if (config.addOnlyEntitiesFromWordsFile_ &&
-      !config.useDocsFileForVocabulary_) {
-    throw std::runtime_error(
-        "The option to add entities from wordsfile can only be used together "
-        "with the option to build the text index from docsfile since "
-        "otherwise the wordsfile would be used anyway.");
-  }
   string wordsFile = config.wordsFile_.value_or("");
   string docsFile = config.docsFile_.value_or("");
   LOG(INFO) << std::endl;
@@ -119,11 +109,11 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   // Either read words from wordsfile or docsfile or consider each literal as
   // text record or both (but at least one of them, otherwise this function is
   // not called)
-  if (addWordsFromFiles) {
+  if (config.addWordsFromFiles()) {
     LOG(INFO) << "Using specified docs- and/or wordsfile to build text index.";
   }
   if (config.addWordsFromLiterals_) {
-    LOG(INFO) << (!addWordsFromFiles ? "C" : "Additionally c")
+    LOG(INFO) << (!config.addWordsFromFiles() ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
@@ -137,10 +127,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig config) {
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  {
-    auto [b, k] = config.bAndKForBM25_;
-    storeTextScoringParamsInConfiguration(config.textScoringMetric_, b, k);
-  }
+  { storeTextScoringParamsInConfiguration(config.textScoringConfig_); }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
@@ -896,20 +883,20 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 
 // _____________________________________________________________________________
 void IndexImpl::storeTextScoringParamsInConfiguration(
-    TextScoringMetric scoringMetric, float b, float k) {
-  configurationJson_["text-scoring-metric"] = scoringMetric;
-  textScoringMetric_ = scoringMetric;
-  auto bAndK = [b, k, this]() {
+    const TextScoringConfig& textScoringConfig) {
+  textScoringMetric_ = textScoringConfig.scoringMetric_;
+  configurationJson_["text-scoring-metric"] = textScoringMetric_;
+  auto bAndK = [textScoringConfig, this]() {
+    auto [b, k] = textScoringConfig.bAndKParam_;
     if (0 <= b && b <= 1 && 0 <= k) {
       return std::pair{b, k};
-    } else {
-      if (textScoringMetric_ == TextScoringMetric::BM25) {
-        throw std::runtime_error{absl::StrCat(
-            "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
-            "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
-      }
-      return std::pair{0.75f, 1.75f};
     }
+    if (textScoringMetric_ == TextScoringMetric::BM25) {
+      throw std::runtime_error{absl::StrCat(
+          "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
+          "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
+    }
+    return std::pair{0.75f, 1.75f};
   }();
   bAndKParamForTextScoring_ = bAndK;
   configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;

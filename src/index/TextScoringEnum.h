@@ -23,4 +23,9 @@ std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 TextScoringMetric getTextScoringMetricFromString(
     const std::string& textScoringMetricString);
 
+struct TextScoringConfig {
+  TextScoringMetric scoringMetric_ = TextScoringMetric::EXPLICIT;
+  std::pair<float, float> bAndKParam_ = {0.75f, 1.75f};
+};
+
 #endif  // QLEVER_SRC_INDEX_TEXTSCORINGENUM_H
