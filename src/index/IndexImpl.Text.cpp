@@ -234,21 +234,15 @@ size_t IndexImpl::processWordsForVocabulary(
       distinctWords.insert(line.word_);
     }
   };
+  const auto& localeManager = textVocab_.getLocaleManager();
   if (textIndexConfig.useDocsFileForVocabulary_) {
-    for (const auto& line :
-         getWordsLineFromDocsFile(file, textVocab_.getLocaleManager())) {
-      processLine(line);
-    }
+    ql::ranges::for_each(getWordsLineFromDocsFile(file, localeManager),
+                         processLine);
   } else {
-    for (const auto& line :
-         WordsFileParser{file, textVocab_.getLocaleManager()}) {
-      processLine(line);
-    }
+    ql::ranges::for_each(WordsFileParser{file, localeManager}, processLine);
   }
   if (textIndexConfig.addWordsFromLiterals_) {
-    for (const auto& line : wordsInLiterals(0)) {
-      processLine(line);
-    }
+    ql::ranges::for_each(wordsInLiterals(0), processLine);
   }
   textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
   return numLines;
@@ -294,33 +288,28 @@ void IndexImpl::processWordsForInvertedLists(
   };
 
   // Parse external files
+  const auto& localeManager = textVocab_.getLocaleManager();
   if (textIndexConfig.useDocsFileForVocabulary_) {
-    const auto& localeManager = textVocab_.getLocaleManager();
     if (textIndexConfig.addOnlyEntitiesFromWordsFile_) {
       // Case where: useDocsFileForVocabulary && addEntitiesFromWordsFile
       wordsFromDocsFileEntitiesFromWordsFile(wordsFile, docsFile, localeManager,
                                              processLine);
     } else {
-      // Cas where: useDocsFileForVocabulary && !addEntitiesFromWordsFile
-      for (const auto& line :
-           getWordsLineFromDocsFile(docsFile, localeManager)) {
-        processLine(line);
-      }
+      // Case where: useDocsFileForVocabulary && !addEntitiesFromWordsFile
+      ql::ranges::for_each(getWordsLineFromDocsFile(docsFile, localeManager),
+                           processLine);
     }
   } else {
     // Case where: !useDocsFileForVocabulary
-    for (const auto& line :
-         WordsFileParser{wordsFile, textVocab_.getLocaleManager()}) {
-      processLine(line);
-    }
+    ql::ranges::for_each(WordsFileParser{wordsFile, localeManager},
+                         processLine);
   }
   lastTextRecordIndexOfNonLiterals_ = currentContext.get();
 
   // Parse literals if specified
   if (textIndexConfig.addWordsFromLiterals_) {
-    for (const auto& line : wordsInLiterals(currentContext.get() + 1)) {
-      processLine(line);
-    }
+    ql::ranges::for_each(wordsInLiterals(currentContext.get() + 1),
+                         processLine);
   }
 
   // Warnings
