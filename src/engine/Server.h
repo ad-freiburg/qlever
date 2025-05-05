@@ -150,8 +150,8 @@ class Server {
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
-          const ad_utility::url_parser::ParamValueMap& params,
-          PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
+          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+          const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           const RequestT& request, ResponseT&& send);
   // For an executed update create a json with some stats on the update (timing,
@@ -189,6 +189,10 @@ class Server {
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit);
+  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
+  void adjustParsedQueryLimitOffset(
+      PlannedQuery& plannedQuery, const ad_utility::MediaType mediaType,
+      const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(

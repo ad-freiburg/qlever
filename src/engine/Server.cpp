@@ -470,7 +470,13 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       AD_CORRECTNESS_CHECK(parsedOperation.hasSelectClause() ||
                            parsedOperation.hasAskClause() ||
                            parsedOperation.hasConstructClause());
-      co_return co_await processQuery(parameters, plannedQuery.value(),
+      MediaType mediaType = determineMediaType(parameters, request);
+      LOG(INFO) << "Requested media type of result is \""
+                << ad_utility::toString(mediaType) << "\"" << std::endl;
+
+      adjustParsedQueryLimitOffset(plannedQuery.value(), mediaType, parameters);
+
+      co_return co_await processQuery(mediaType, plannedQuery.value(),
                                       requestTimer, cancellationHandle,
                                       std::move(request), send);
     }
@@ -776,38 +782,14 @@ CPP_template_2(typename RequestT)(
 CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
-        const ad_utility::url_parser::ParamValueMap& params,
-        PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
+        ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+        const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         const RequestT& request, ResponseT&& send) {
-  MediaType mediaType = determineMediaType(params, request);
-  LOG(INFO) << "Requested media type of result is \""
-            << ad_utility::toString(mediaType) << "\"" << std::endl;
-
-  auto qet = plannedQuery.queryExecutionTree_;
-
-  // Read the export limit from the send` parameter (historical name). This
-  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
-  // It should only have an effect for the QLever JSON export.
-  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
-  auto& exportLimit = limitOffset.exportLimit_;
-  auto sendParameter =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
-    exportLimit = std::stoul(sendParameter.value());
-  }
-
-  // Make sure that the offset is not applied again when exporting the result
-  // (it is already applied by the root operation in the query execution
-  // tree). Note that we don't need this for the limit because applying a
-  // fixed limit is idempotent.
-  AD_CORRECTNESS_CHECK(limitOffset._offset >=
-                       qet.getRootOperation()->getLimit()._offset);
-  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
-
   // This actually processes the query and sends the result in the requested
   // format.
-  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
+  co_await sendStreamableResponse(request, send, mediaType, plannedQuery,
+                                  plannedQuery.queryExecutionTree_,
                                   requestTimer, cancellationHandle);
 
   // Print the runtime info. This needs to be done after the query
@@ -825,7 +807,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   //
   // TODO<joka921> Also log an identifier of the query.
   LOG(DEBUG) << "Runtime Info:\n"
-             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+             << plannedQuery.queryExecutionTree_.getRootOperation()
+                    ->runtimeInfo()
+                    .toString()
+             << std::endl;
   co_return;
 }
 
@@ -1084,4 +1069,29 @@ bool Server::checkAccessToken(
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
   }
+}
+
+// _____________________________________________________________________________
+void Server::adjustParsedQueryLimitOffset(
+    PlannedQuery& plannedQuery, const ad_utility::MediaType mediaType,
+    const ad_utility::url_parser::ParamValueMap& parameters) {
+  // Read the export limit from the send` parameter (historical name). This
+  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
+  // It should only have an effect for the QLever JSON export.
+  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
+  auto& exportLimit = limitOffset.exportLimit_;
+  auto sendParameter =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, "send");
+  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
+    exportLimit = std::stoul(sendParameter.value());
+  }
+
+  // Make sure that the offset is not applied again when exporting the
+  // result (it is already applied by the root operation in the query
+  // execution tree). Note that we don't need this for the limit because
+  // applying a fixed limit is idempotent.
+  auto& qet = plannedQuery.queryExecutionTree_;
+  AD_CORRECTNESS_CHECK(limitOffset._offset >=
+                       qet.getRootOperation()->getLimit()._offset);
+  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 }
