@@ -98,7 +98,7 @@ class SparqlTriple
             triple.o_};
   }
 
-  // Helper function to easily retreive a simple IRI.
+  // Helper function to easily retrieve a simple IRI.
   std::optional<std::string_view> getSimplePredicate() const {
     if (!std::holds_alternative<PropertyPath>(p_)) {
       return std::nullopt;
