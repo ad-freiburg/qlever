@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "util/Generator.h"
 
@@ -93,4 +93,99 @@ TEST(Generator, getSingleElement) {
     co_yield 3;
   }();
   EXPECT_ANY_THROW(cppcoro::getSingleElement(std::move(gen3)));
+}
+
+struct HandleFrame {
+  using F = void(void*);
+  void* target;
+  F* resumeFunc;
+};
+
+template <typename Promise = void>
+struct Handle {
+  HandleFrame* ptr;
+  void resume() { ptr->resumeFunc(ptr->target); }
+  static Handle from_promise(Promise& p) {
+    // TODO<joka921> That is not correct.
+    auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
+                                              sizeof(HandleFrame));
+    std::cerr << "Address of frame computed " << reinterpret_cast<intptr_t>(ptr)
+              << std::endl;
+    return Handle{ptr};
+  }
+
+  operator bool() { return static_cast<bool>(ptr); }
+
+  // TODO
+  bool done() const { return false; }
+
+  Promise& promise() {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+  const Promise& promise() const {
+    return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
+                                       sizeof(HandleFrame));
+  }
+
+  // TODO<joka921> Don't leak money.
+  void destroy() { return; }
+};
+
+/*
+template<>
+struct Handle<void> {
+  void* ptr;
+};
+ */
+
+using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
+struct GeneratorStateMachine {
+  size_t curState = 0;
+  int payLoad = 0;
+  HandleFrame frm;
+  PromiseType pt;
+
+  static void resume(void* blubb) {
+    static_cast<GeneratorStateMachine*>(blubb)->doStep();
+  }
+
+  GeneratorStateMachine() {
+    frm.target = this;
+    frm.resumeFunc = &GeneratorStateMachine::resume;
+    std::cerr << "Address of frame actually "
+              << reinterpret_cast<intptr_t>(&frm) << std::endl;
+  }
+
+  void doStep() {
+    switch (curState) {
+      case 0:
+        payLoad++;
+        pt.yield_value(payLoad);
+        curState = 1;
+        return;
+      case 1:
+        payLoad += 2;
+        pt.yield_value(payLoad);
+        curState = 0;
+        return;
+    }
+  }
+};
+
+struct DummyGen {
+  GeneratorStateMachine ptr;
+  decltype(ptr.pt.get_return_object()) pt = ptr.pt.get_return_object();
+};
+
+TEST(NewGenerator, Blubb) {
+  std::vector<int> v;
+  DummyGen gen;
+  auto it = gen.pt.begin();
+  for (size_t i = 0; i < 5; ++i) {
+    v.push_back(*it);
+    std::cerr << "got value " << *it << std::endl;
+    ++it;
+  }
+  EXPECT_THAT(v, ::testing::ElementsAre(0, 1, 0, 3));
 }
