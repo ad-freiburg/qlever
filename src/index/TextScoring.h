@@ -15,25 +15,25 @@ class ScoreData {
  public:
   ScoreData() = default;
 
-  explicit ScoreData(LocaleManager localeManager)
-      : localeManager_(std::move(localeManager)){};
+  explicit ScoreData(const LocaleManager& localeManager)
+      : localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(std::move(scoringMetric)),
-        localeManager_(std::move(localeManager)){};
+        localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
+  ScoreData(const LocaleManager& localeManager, TextScoringMetric scoringMetric,
             const std::pair<float, float>& bAndKParam)
       : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
         k_(bAndKParam.second),
-        localeManager_(std::move(localeManager)){};
+        localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, const TextScoringConfig& config)
+  ScoreData(const LocaleManager& localeManager, const TextScoringConfig& config)
       : scoringMetric_(config.scoringMetric_),
         b_(config.bAndKParam_.first),
         k_(config.bAndKParam_.second),
-        localeManager_(std::move(localeManager)){};
+        localeManager_(localeManager){};
 
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 

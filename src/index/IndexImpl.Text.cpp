@@ -99,12 +99,13 @@ void IndexImpl::logEntityNotFound(const string& word,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::buildTextIndexFile(TextIndexConfig&& config) {
-  string wordsFile = config.getWordsFile();
-  string docsFile = config.getDocsFile();
+void IndexImpl::buildTextIndexFile(TextIndexConfig&& textIndexConfig) {
+  const auto config = TextIndexConfig(std::move(textIndexConfig));
+  const string wordsFile = config.getWordsFile();
+  const string docsFile = config.getDocsFile();
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
-  string indexFilename = onDiskBase_ + ".text.index";
+  const string indexFilename = onDiskBase_ + ".text.index";
   // Either read words from wordsfile or docsfile or consider each literal as
   // text record or both (but at least one of them, otherwise this function is
   // not called)

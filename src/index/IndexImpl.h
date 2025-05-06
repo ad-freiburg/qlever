@@ -263,7 +263,7 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(TextIndexConfig&& config);
+  void buildTextIndexFile(TextIndexConfig&& textIndexConfig);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
