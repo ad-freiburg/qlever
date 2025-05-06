@@ -58,7 +58,7 @@ static auto getMaskedTriple(
     case 0:
       return std::make_tuple(undefined, undefined, undefined);
     default:
-      //
+      // ignoreIndex out of bound.
       AD_FAIL();
   }
 };

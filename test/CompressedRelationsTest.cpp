@@ -39,6 +39,7 @@ auto getBlockMetadataRangesfromVec =
   // If the BlockMetadataSpan contains more than three block values, split it
   // into three random subspan.
   BlockMetadataRanges ranges;
+  auto begin = blockMetadataSpan.begin();
   ad_utility::FastRandomIntGenerator<size_t> gen;
   const size_t minNumBlocksSplit = 1;
   size_t remainingBlocksForSplit = numBlocks - 3 * minNumBlocksSplit;
@@ -46,14 +47,16 @@ auto getBlockMetadataRangesfromVec =
   size_t offset = gen() % (remainingBlocksForSplit + 1);
   size_t split1 = minNumBlocksSplit + offset;
   remainingBlocksForSplit = numBlocks - split1 - 2 * minNumBlocksSplit;
+  BlockMetadataRange subRange1(begin, begin + split1, split1);
   // Split 2
   offset = gen() % (remainingBlocksForSplit + 1);
   size_t split2 = split1 + minNumBlocksSplit + offset;
-  auto begin = blockMetadataSpan.begin();
-  ranges.emplace_back(BlockMetadataRange{begin, begin + split1});
-  ranges.emplace_back(BlockMetadataRange{begin + split1, begin + split2});
-  ranges.emplace_back(
-      BlockMetadataRange{begin + split2, blockMetadataSpan.end()});
+  BlockMetadataRange subRange2(begin + split1, begin + split2, split2 - split1);
+  BlockMetadataRange subRange3(begin + split2, blockMetadataSpan.end(),
+                               numBlocks - split2);
+  ranges.push_back(subRange1);
+  ranges.push_back(subRange2);
+  ranges.push_back(subRange3);
   return ranges;
 };
 
