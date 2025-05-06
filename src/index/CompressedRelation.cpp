@@ -32,6 +32,14 @@ static auto getBeginAndEnd(T& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+// TODO @realHannes:
+// Create a separate header file CompressedRelationMetadata for all the
+// metadata related helper structs and functions. This should include
+// CompressedRelationMetadata, CompressedBlockMetadata, ScanSpecAndBlocks
+// containing the newly introduced BlockMetadataRanges type, and the
+// helper functions/methods from below (getMaskedTriple,
+// containsConsistentTriples, isConsistentWith) for consistency checking.
+
 // Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
 // position (column index) defined by `ignoreIndex`. The ignored positions are
 // filled with Ids `Id::min()`. `Id::min()` is guaranteed
@@ -50,7 +58,7 @@ static auto getMaskedTriple(
     case 0:
       return std::make_tuple(undefined, undefined, undefined);
     default:
-      // ignoreIndex out of bounds
+      //
       AD_FAIL();
   }
 };
@@ -1620,7 +1628,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
     return std::nullopt;
   }
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
-  AD_CONTRACT_CHECK(std::distance(blocks.begin(), blocks.end()) <= 1,
+  AD_CONTRACT_CHECK(scanSpecAndBlocks.sizeBlockMetadata_ <= 1,
                     "Should only be called for small relations");
   auto block = readPossiblyIncompleteBlock(
       scanSpec, config, blocks.front(), std::nullopt, locatedTriplesPerBlock);
@@ -1688,28 +1696,29 @@ auto CompressedRelationReader::getScanConfig(
 // message construction.
 auto createErrorMessage = [](const auto& b1, const auto& b2,
                              const std::string& errCause) {
-  std::stringstream errBlocks;
-  errBlocks << "First Block:\n" << b1 << "Second Block:\n" << b2 << std::endl;
-  return absl::StrCat(errCause, errBlocks.str());
+  auto toString = [](const auto& b) {
+    std::ostringstream oss;
+    oss << b;
+    return oss.str();
+  };
+  return absl::StrCat(errCause, "First Block:\n", toString(b1),
+                      "Second Block:\n", toString(b2));
 };
 
 // _____________________________________________________________________________
 // Check if the provided `Range` holds less than two `CompressedBlockMetadata`
 // values.
 template <typename Range>
-requires ranges::input_range<Range>
+requires ql::ranges::input_range<Range>
 static bool checkBlockRangeSizeLessThanTwo(const Range& blockMetadataRange) {
-  auto begin = ranges::begin(blockMetadataRange);
-  auto end = ranges::end(blockMetadataRange);
-  if (begin == end || ranges::next(begin) == end) {
-    return true;
-  }
-  return false;
+  auto begin = ql::ranges::begin(blockMetadataRange);
+  auto end = ql::ranges::end(blockMetadataRange);
+  return begin == end || ql::ranges::next(begin) == end;
 };
 
 // _____________________________________________________________________________
 template <typename Range>
-requires ranges::input_range<Range>
+requires ql::ranges::input_range<Range>
 static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
     const Range& blockMetadataRange) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
@@ -1730,7 +1739,7 @@ static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
                                     "Found block metadata order violation\n");
         });
   };
-  auto blockMetadataRangeShifted = blockMetadataRange | ranges::views::drop(1);
+  auto blockMetadataRangeShifted = blockMetadataRange | ql::views::drop(1);
   auto zippedBlockPairs =
       ranges::views::zip(blockMetadataRange, blockMetadataRangeShifted);
   ql::ranges::for_each(zippedBlockPairs, checkUniquenessAndOrder);
@@ -1738,13 +1747,13 @@ static void checkBlockMetadataInvariantOrderAndUniquenessImpl(
 
 // ____________________________________________________________________________
 template <typename Range>
-requires ranges::input_range<Range>
+requires ql::ranges::input_range<Range>
 static void checkBlockMetadataInvariantBlockConsistencyImpl(
     const Range& blockMetadataRange, size_t firstFreeColIndex) {
   if (checkBlockRangeSizeLessThanTwo(blockMetadataRange)) {
     return;
   }
-  auto blockMetadataRangeShifted = blockMetadataRange | ranges::views::drop(1);
+  auto blockMetadataRangeShifted = blockMetadataRange | ql::views::drop(1);
   auto zippedBlockPairs =
       ranges::views::zip(blockMetadataRange, blockMetadataRangeShifted);
 
@@ -1782,8 +1791,10 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
     checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
     checkBlockMetadataInvariantBlockConsistencyImpl(
         blockRangeView, scanSpec_.firstFreeColIndex());
+    blockMetadata_ = blockMetadataRanges;
+  } else {
+    blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
   }
-  blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
 }
 
