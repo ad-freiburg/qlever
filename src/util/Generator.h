@@ -17,6 +17,12 @@
 #include "util/TypeTraits.h"
 
 namespace cppcoro {
+
+struct SuspendAlways {
+  constexpr bool await_ready() const noexcept { return false; }
+  constexpr void await_suspend([[maybe_unused]] auto handle) const noexcept {}
+  constexpr void await_resume() const noexcept {}
+};
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
 // generator). For an example see `GeneratorTest.cpp`.
@@ -49,17 +55,21 @@ class generator_promise {
 
   generator<T, Details, GeneratorHandle> get_return_object() noexcept;
 
-  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
-  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
+  constexpr cppcoro::SuspendAlways initial_suspend() const noexcept {
+    return {};
+  }
+  constexpr cppcoro::SuspendAlways final_suspend() const noexcept { return {}; }
 
   template <typename U = T,
             std::enable_if_t<!std::is_rvalue_reference<U>::value, int> = 0>
-  std::suspend_always yield_value(std::remove_reference_t<T>& value) noexcept {
+  cppcoro::SuspendAlways yield_value(
+      std::remove_reference_t<T>& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }
 
-  std::suspend_always yield_value(std::remove_reference_t<T>&& value) noexcept {
+  cppcoro::SuspendAlways yield_value(
+      std::remove_reference_t<T>&& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }

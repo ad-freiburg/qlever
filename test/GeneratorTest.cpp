@@ -112,8 +112,10 @@ struct Handle {
     // TODO<joka921> That is not correct.
     auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
                                               sizeof(HandleFrame));
+    /*
     std::cerr << "Address of frame computed " << reinterpret_cast<intptr_t>(ptr)
               << std::endl;
+              */
     return Handle{ptr};
   }
 
@@ -135,11 +137,12 @@ struct Handle {
   void destroy() { ptr->destroyFunc(ptr->target); }
 };
 
-bool co_await_impl(auto& promise, auto&& awaiter, auto handle) {
+bool co_await_impl(auto&& awaiter, auto handle) {
   if (awaiter.await_ready()) {
     return true;
   }
   using type = decltype(awaiter.await_suspend(handle));
+  static_assert(std::is_void_v<decltype(awaiter.await_resume())>);
   if constexpr (std::is_void_v<type>) {
     awaiter.await_suspend(handle);
     return false;
@@ -150,6 +153,56 @@ bool co_await_impl(auto& promise, auto&& awaiter, auto handle) {
                   "await_suspend with symmetric transfer is not yet supported");
   }
 }
+#define CO_YIELD(value)                                   \
+  {                                                       \
+    auto&& awaiter = promise().yield_value(value);        \
+    curState = __LINE__;                                  \
+    if (!co_await_impl(awaiter, Hdl::from_promise(pt))) { \
+      return;                                             \
+    }                                                     \
+  }                                                       \
+  [[fallthrough]];                                        \
+  case __LINE__:
+
+template <typename Derived, typename PromiseType, typename... payloadVars>
+struct GeneratorStateMachineMixin {
+  HandleFrame frm;
+  PromiseType pt;
+  size_t curState = 0;
+  std::tuple<payloadVars...> payLoad;
+  using Hdl = Handle<PromiseType>;
+
+  PromiseType& promise() { return pt; }
+
+  static void resume(void* blubb) {
+    static_cast<GeneratorStateMachine*>(blubb)->doStep();
+  }
+
+  // TODO<joka921> Allocator support.
+  static void destroy(void* blubb) {
+    delete (reinterpret_cast<GeneratorStateMachine*>(blubb));
+  }
+  static bool done([[maybe_unused]] void* blubb) {
+    // TODO extend to more general things.
+    return false;
+  }
+
+  GeneratorStateMachine() {
+    frm.target = this;
+    frm.resumeFunc = &GeneratorStateMachine::resume;
+    frm.destroyFunc = &GeneratorStateMachine::destroy;
+    frm.doneFunc = &GeneratorStateMachine::done;
+    std::cerr << "Address of frame actually "
+              << reinterpret_cast<intptr_t>(&frm) << std::endl;
+  }
+
+  virtual void doStep() = 0;
+  static auto make() {
+    // TODO allocator support
+    auto* frame = new GeneratorStateMachine;
+    return frame->pt.get_return_object();
+  }
+};
 
 cppcoro::generator<int, int, Handle> dummyGen() {
   using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
@@ -159,6 +212,8 @@ cppcoro::generator<int, int, Handle> dummyGen() {
     size_t curState = 0;
     int payLoad = 0;
     using Hdl = Handle<PromiseType>;
+
+    PromiseType& promise() { return pt; }
 
     static void resume(void* blubb) {
       static_cast<GeneratorStateMachine*>(blubb)->doStep();
@@ -185,19 +240,12 @@ cppcoro::generator<int, int, Handle> dummyGen() {
     void doStep() {
       switch (curState) {
         case 0:
-          payLoad++;
-          {
-            auto&& awaiter = pt.yield_value(payLoad);
-            curState = 1;
-            if (!co_await_impl(pt, awaiter, Hdl::from_promise(pt))) {
-              return;
-            }
+          while (true) {
+            payLoad++;
+            CO_YIELD(payLoad);
+            payLoad += 2;
+            CO_YIELD(payLoad);
           }
-        case 1:
-          payLoad += 2;
-          pt.yield_value(payLoad);
-          curState = 0;
-          return;
       }
     }
     static auto make() {
