@@ -107,7 +107,7 @@ auto pr =
 struct MakePrefilterVec {
   template <QL_CONCEPT_OR_TYPENAME(
       std::convertible_to<sparqlExpression::PrefilterExprVariablePair>)... Args>
-  constexpr auto operator()(Args&&... prefilterArgs) {
+  constexpr auto operator()(Args&&... prefilterArgs) const {
     std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
         {};
     if constexpr (sizeof...(prefilterArgs) > 0) {
@@ -119,7 +119,7 @@ struct MakePrefilterVec {
     return prefilterVarPairs;
   }
 };
-inline MakePrefilterVec makePrefilterVec;
+constexpr inline MakePrefilterVec makePrefilterVec;
 
 }  // namespace filterHelper
 
