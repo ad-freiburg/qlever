@@ -551,11 +551,22 @@ class IndexImpl {
   static void logEntityNotFound(const string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
+  // Creates a vocabulary filled with the words given in the respective words-
+  // or docsfile and/or the literals of the index (for details see
+  // TextIndexConfig). Returns the number of words read (counting multiple
+  // occurrences)
   size_t processWordsForVocabulary(const TextIndexConfig& textIndexConfig);
 
+  // Fills the given vector with all occurrences of entities and words in the
+  // respective TextRecords. Depending on the configuration the words and
+  // entities are read from different files and/or added from literals (for
+  // details see TextIndexConfig).
   void processWordsForInvertedLists(const TextIndexConfig& textIndexConfig,
                                     TextVec& vec);
 
+  // This function is used when the TextIndexConfig specifies to add words from
+  // the docsfile but entities from the wordsfile. In this case both files are
+  // parsed in parallel to ensure a correct TextRecordIndex for the entities.
   template <typename T>
   void wordsFromDocsFileEntitiesFromWordsFile(
       const string& wordsFile, const string& docsFile,
