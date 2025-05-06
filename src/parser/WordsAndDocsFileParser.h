@@ -194,16 +194,21 @@ class DocsFileParser : public WordsAndDocsFileParser,
   Storage get() override;
 };
 
-inline cppcoro::generator<WordsFileLine> getWordsLineFromDocsFile(
-    const string docsFile, const LocaleManager localeManager) {
-  for (const auto& line : DocsFileParser{docsFile, localeManager}) {
-    for (const auto& word :
-         tokenizeAndNormalizeText(line.docContent_, localeManager)) {
-      auto lineToReturn = WordsFileLine{
-          word, false, TextRecordIndex::make(line.docId_.get()), 0, false};
-      co_yield lineToReturn;
-    }
-  }
+// Parses a docsfile and splits up the documents to return a WordsFileLine for
+// every word in the document.
+inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
+                                     const LocaleManager& localeManager) {
+  auto wordLines =
+      parser | ql::views::transform([&](const DocsFileLine& line) {
+        return tokenizeAndNormalizeText(line.docContent_, localeManager) |
+               std::views::transform([&](const std::string& word) {
+                 return WordsFileLine{word, false,
+                                      TextRecordIndex::make(line.docId_.get()),
+                                      0, false};
+               });
+      }) |
+      std::views::join;
+  return wordLines;
 }
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H

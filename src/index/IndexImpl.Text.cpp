@@ -235,7 +235,8 @@ size_t IndexImpl::processWordsForVocabulary(
   };
   const auto& localeManager = textVocab_.getLocaleManager();
   if (textIndexConfig.getUseDocsFileForVocabulary()) {
-    ql::ranges::for_each(getWordsLineFromDocsFile(file, localeManager),
+    auto parser = DocsFileParser(file, localeManager);
+    ql::ranges::for_each(getWordsLineFromDocsFile(parser, localeManager),
                          processLine);
   } else {
     ql::ranges::for_each(WordsFileParser{file, localeManager}, processLine);
@@ -295,7 +296,8 @@ void IndexImpl::processWordsForInvertedLists(
                                              processLine);
     } else {
       // Case where: useDocsFileForVocabulary && !addEntitiesFromWordsFile
-      ql::ranges::for_each(getWordsLineFromDocsFile(docsFile, localeManager),
+      auto parser = DocsFileParser(docsFile, localeManager);
+      ql::ranges::for_each(getWordsLineFromDocsFile(parser, localeManager),
                            processLine);
     }
   } else {
