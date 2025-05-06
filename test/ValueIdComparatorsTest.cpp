@@ -111,8 +111,7 @@ auto testGetRangesForId(It begin, It end, ValueId id,
                         source_location l = source_location::current()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
-    static constexpr Comparison comparison = valueIdentity.value;
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto comparison) {
     auto ranges = getRangesForId(begin, end, id, comparison);
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
@@ -128,20 +127,23 @@ auto testGetRangesForId(It begin, It end, ValueId id,
     using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id << comparison;
+        ASSERT_FALSE(isMatching(*it, id))
+            << *it << ' ' << id << comparison.value;
         auto expected = isMatchingDatatype(*it) ? False : Undef;
         ASSERT_EQ(compareIds(*it, id, comparison), expected)
             << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id << comparison;
+        ASSERT_TRUE(isMatching(*it, id))
+            << *it << ' ' << id << comparison.value;
         ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(isMatching(*it, id)) << *it << ", " << id << comparison;
+      ASSERT_FALSE(isMatching(*it, id))
+          << *it << ", " << id << comparison.value;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
@@ -221,8 +223,7 @@ template <typename It, typename IsMatchingDatatype>
 auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
                               IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity) {
-    static constexpr Comparison comparison = valueIdentity.value;
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto comparison) {
     if (comparison == Comparison::NE &&
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
@@ -236,7 +237,7 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
         ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
                     ::testing::AnyOf(False, Undef))
             << *it << " " << idBegin << ' ' << idEnd << ' '
-            << static_cast<int>(comparison);
+            << static_cast<int>(comparison.value);
         ++it;
       }
       while (it != rangeEnd) {
@@ -271,9 +272,8 @@ TEST_F(ValueIdComparators, IndexTypes) {
   std::sort(ids.begin(), ids.end(), compareByBits);
 
   // Perform the test for a single `Datatype`.
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto valueIdentity,
+  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto datatype,
                                                        auto getFromId) {
-    static constexpr Datatype datatype = valueIdentity.value;
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;

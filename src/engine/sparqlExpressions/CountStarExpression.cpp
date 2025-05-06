@@ -59,11 +59,9 @@ ExpressionResult CountStarExpression::evaluate(
   ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
-  ad_utility::callFixedSizeVi(
-      table.numColumns(), [&table](auto valueIdentity) {
-        static constexpr int I = valueIdentity.value;
-        Engine::sort<I>(&table, ql::ranges::lexicographical_compare);
-      });
+  ad_utility::callFixedSizeVi(table.numColumns(), [&table](auto I) {
+    Engine::sort<I>(&table, ql::ranges::lexicographical_compare);
+  });
   return Id::makeFromInt(
       static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));
 }

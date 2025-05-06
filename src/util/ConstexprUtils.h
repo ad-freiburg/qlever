@@ -115,8 +115,7 @@ void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
   ConstexprForLoop(
       std::make_index_sequence<MaxValue + 1>{},
-      ad_utility::ApplyAsValueIdentity{[&function, &value](auto valueIdentity) {
-        static constexpr size_t Index = valueIdentity.value;
+      ad_utility::ApplyAsValueIdentity{[&function, &value](auto Index) {
         if (Index == value) {
           function.template operator()<Index>();
         }

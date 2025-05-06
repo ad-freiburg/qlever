@@ -315,9 +315,7 @@ TEST(StringUtilsTest, insertThousandSeparator) {
              separatorSymbolNum++) {
           const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
           (ad_utility::ApplyAsValueIdentity{[&doNotExceptionTest,
-                                             &separatorSymbol](
-                                                auto valueIdentity) {
-             static constexpr char c = valueIdentity.value;
+                                             &separatorSymbol](auto c) {
              ASSERT_ANY_THROW(doNotExceptionTest.template operator()<c>(' '));
              ASSERT_ANY_THROW(
                  doNotExceptionTest.template operator()<'.'>(separatorSymbol));

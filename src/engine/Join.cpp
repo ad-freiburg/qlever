@@ -571,11 +571,10 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
    *  of the tables
    */
   auto performHashJoin = ad_utility::ApplyAsValueIdentity{
-      [&idTableToHashMap, &result](auto valueIdentity, const auto& largerTable,
+      [&idTableToHashMap, &result](auto leftIsLarger, const auto& largerTable,
                                    const ColumnIndex largerTableJoinColumn,
                                    const auto& smallerTable,
                                    const ColumnIndex smallerTableJoinColumn) {
-        static constexpr bool leftIsLarger = valueIdentity.value;
         // Put the smaller table into the hash table.
         auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
 

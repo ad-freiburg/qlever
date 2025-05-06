@@ -430,10 +430,9 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
 }
 
 TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
-  auto doTest = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
-    static constexpr bool allowPath = valueIdentity.value;
+  auto doTest = ad_utility::ApplyAsValueIdentity{[](auto allowPath) {
     auto input = "[ ?x ?y ] ?a ?b";
-    auto [output, internal] = [&input]() {
+    auto [output, internal] = [&input, allowPath]() {
       if constexpr (allowPath) {
         return std::pair(parse<&Parser::triplesSameSubjectPath>(input),
                          m::InternalVariable("0"));
@@ -500,9 +499,8 @@ TEST(SparqlParser, ObjectList) {
 }
 
 TEST(SparqlParser, BlankNodePropertyList) {
-  auto doMatch = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
-    static constexpr bool InsideConstruct = valueIdentity.value;
-    const auto blank = [] {
+  auto doMatch = ad_utility::ApplyAsValueIdentity{[](auto InsideConstruct) {
+    const auto blank = [InsideConstruct] {
       if constexpr (InsideConstruct) {
         return m::BlankNode(true, "0");
       } else {
