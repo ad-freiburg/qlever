@@ -177,156 +177,151 @@ TEST(StringUtilsTest, insertThousandSeparator) {
   Do the tests, that are not exception tests, with the given arguments for
   `insertThousandSeparator`.
   */
-  auto doNotExceptionTest = ad_utility::ApplyAsValueIdentity{
-      [](auto valueIdentity, const char separatorSymbol,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
-        static constexpr char floatingPointSignifier = valueIdentity.value;
-        // For generating better messages, when failing a test.
-        auto trace{generateLocationTrace(l, "doNotExceptionTest")};
-
-        // For easier usage with `absl::StrCat()`.
-        const std::string floatingPointSignifierString{floatingPointSignifier};
-
-        /*
-        @brief Make a comparison check, that the given string, given in pieces,
-        generates the wanted string, when called with `insertThousandSeparator`
-        with the arguments from `doNotExceptionTest`.
-
-        @param stringPieces The input for `insertThousandSeparator` are those
-        pieces concatenated and the expected output are those pieces
-        concatenated with `separatorSymbol` between them. For example: `{"This
-        number 4", "198."}`.
-        */
-        auto simpleComparisonTest =
-            [&separatorSymbol](const std::vector<std::string>& stringPieces,
+  auto doNotExceptionTest = [](auto valueIdentity, const char separatorSymbol,
                                ad_utility::source_location l =
                                    ad_utility::source_location::current()) {
-              // For generating better messages, when failing a test.
-              auto trace{generateLocationTrace(l, "simpleComparisonTest")};
-              ASSERT_STREQ(
-                  ad_utility::lazyStrJoin(stringPieces,
-                                          std::string{separatorSymbol})
-                      .c_str(),
-                  ad_utility::insertThousandSeparator<floatingPointSignifier>(
-                      ad_utility::lazyStrJoin(stringPieces, ""),
-                      separatorSymbol)
-                      .c_str());
-            };
+    static constexpr char floatingPointSignifier = valueIdentity.value;
+    // For generating better messages, when failing a test.
+    auto trace{generateLocationTrace(l, "doNotExceptionTest")};
 
-        // Empty string.
-        simpleComparisonTest({});
+    // For easier usage with `absl::StrCat()`.
+    const std::string floatingPointSignifierString{floatingPointSignifier};
 
-        // No numbers.
-        simpleComparisonTest(
-            {"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
-             "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut "
-             "enim "
-             "ad minim veniam, quis nostrud exercitation ullamco laboris nisi "
-             "ut "
-             "aliquip ex ea commodo consequat. Duis aute irure dolor in "
-             "reprehenderit in voluptate velit esse cillum dolore eu fugiat "
-             "nulla "
-             "pariatur. Excepteur sint occaecat cupidatat non proident, sunt "
-             "in "
-             "culpa qui officia deserunt mollit anim id est laborum."});
+    /*
+    @brief Make a comparison check, that the given string, given in pieces,
+    generates the wanted string, when called with `insertThousandSeparator`
+    with the arguments from `doNotExceptionTest`.
 
-        // Only whole numbers.
-        simpleComparisonTest({"1"});
-        simpleComparisonTest({"21"});
-        simpleComparisonTest({"321"});
-        simpleComparisonTest({"4", "321"});
-        simpleComparisonTest({"54", "321"});
-        simpleComparisonTest({"654", "321"});
-        simpleComparisonTest({"7", "654", "321"});
-        simpleComparisonTest({"87", "654", "321"});
-        simpleComparisonTest({"987", "654", "321"});
+    @param stringPieces The input for `insertThousandSeparator` are those
+    pieces concatenated and the expected output are those pieces
+    concatenated with `separatorSymbol` between them. For example: `{"This
+    number 4", "198."}`.
+    */
+    auto simpleComparisonTest =
+        [&separatorSymbol](const std::vector<std::string>& stringPieces,
+                           ad_utility::source_location l =
+                               ad_utility::source_location::current()) {
+          // For generating better messages, when failing a test.
+          auto trace{generateLocationTrace(l, "simpleComparisonTest")};
+          ASSERT_STREQ(
+              ad_utility::lazyStrJoin(stringPieces,
+                                      std::string{separatorSymbol})
+                  .c_str(),
+              ad_utility::insertThousandSeparator<floatingPointSignifier>(
+                  ad_utility::lazyStrJoin(stringPieces, ""), separatorSymbol)
+                  .c_str());
+        };
 
-        // Floating points.
-        simpleComparisonTest(
-            {absl::StrCat("1", floatingPointSignifierString, "000")});
-        simpleComparisonTest(
-            {absl::StrCat("2", floatingPointSignifierString, "1")});
-        simpleComparisonTest(
-            {absl::StrCat("362", floatingPointSignifierString, "1")});
-        simpleComparisonTest(
-            {absl::StrCat("3", floatingPointSignifierString, "21")});
-        simpleComparisonTest(
-            {"876", absl::StrCat("703", floatingPointSignifierString, "21")});
-        simpleComparisonTest(
-            {absl::StrCat("3", floatingPointSignifierString,
-                          "217710466665135481349068158967136466")});
-        simpleComparisonTest(
-            {"140", "801",
-             absl::StrCat("813", floatingPointSignifierString,
-                          "217710466665135481349068158967136466")});
+    // Empty string.
+    simpleComparisonTest({});
 
-        // Mixing numbers and normal symbols.
-        simpleComparisonTest(
-            {"140", "801",
-             absl::StrCat("813", floatingPointSignifierString,
-                          "217710466665135481349068158967136466", " 3",
-                          floatingPointSignifierString,
-                          "217710466665135481349068158967136466", " 876"),
-             absl::StrCat("703", floatingPointSignifierString, "21 3",
-                          floatingPointSignifierString, "21 362",
-                          floatingPointSignifierString, "1 2",
-                          floatingPointSignifierString, "1 987"),
-             "654", "321 87", "654", "321 7", "654", "321 654", "321 54",
-             "321 4", "321 321 21 1"});
-        simpleComparisonTest(
-            {absl::StrCat("Lorem ipsum dolor sit "
-                          "813",
-                          floatingPointSignifierString,
-                          "217710466665135481349068158967136466 amet, "
-                          "consectetur adipiscing elit. Quippe:  876"),
-             absl::StrCat("703", floatingPointSignifierString,
-                          "21 habes enim a rhetoribus; Bork Falli igitur "
-                          "possumus. Bonum "
-                          "integritas corporis: misera debilitas 987"),
-             "654",
-             "321.  Nos commodius agimus.Duo "
-             "Reges : constructio interrete 42.  Quod cum dixissent, ille "
-             "contra.Tuo "
-             "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
-             "insanos esse vultis.Sed haec in pueris; "});
-      }};
-  doNotExceptionTest.template operator()<','>(' ');
-  doNotExceptionTest.template operator()<'+'>('t');
-  doNotExceptionTest.template operator()<'t'>('+');
-  doNotExceptionTest.template operator()<'?'>('\"');
-  doNotExceptionTest.template operator()<'-'>('~');
+    // No numbers.
+    simpleComparisonTest(
+        {"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
+         "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut "
+         "enim "
+         "ad minim veniam, quis nostrud exercitation ullamco laboris nisi "
+         "ut "
+         "aliquip ex ea commodo consequat. Duis aute irure dolor in "
+         "reprehenderit in voluptate velit esse cillum dolore eu fugiat "
+         "nulla "
+         "pariatur. Excepteur sint occaecat cupidatat non proident, sunt "
+         "in "
+         "culpa qui officia deserunt mollit anim id est laborum."});
+
+    // Only whole numbers.
+    simpleComparisonTest({"1"});
+    simpleComparisonTest({"21"});
+    simpleComparisonTest({"321"});
+    simpleComparisonTest({"4", "321"});
+    simpleComparisonTest({"54", "321"});
+    simpleComparisonTest({"654", "321"});
+    simpleComparisonTest({"7", "654", "321"});
+    simpleComparisonTest({"87", "654", "321"});
+    simpleComparisonTest({"987", "654", "321"});
+
+    // Floating points.
+    simpleComparisonTest(
+        {absl::StrCat("1", floatingPointSignifierString, "000")});
+    simpleComparisonTest(
+        {absl::StrCat("2", floatingPointSignifierString, "1")});
+    simpleComparisonTest(
+        {absl::StrCat("362", floatingPointSignifierString, "1")});
+    simpleComparisonTest(
+        {absl::StrCat("3", floatingPointSignifierString, "21")});
+    simpleComparisonTest(
+        {"876", absl::StrCat("703", floatingPointSignifierString, "21")});
+    simpleComparisonTest(
+        {absl::StrCat("3", floatingPointSignifierString,
+                      "217710466665135481349068158967136466")});
+    simpleComparisonTest(
+        {"140", "801",
+         absl::StrCat("813", floatingPointSignifierString,
+                      "217710466665135481349068158967136466")});
+
+    // Mixing numbers and normal symbols.
+    simpleComparisonTest(
+        {"140", "801",
+         absl::StrCat("813", floatingPointSignifierString,
+                      "217710466665135481349068158967136466", " 3",
+                      floatingPointSignifierString,
+                      "217710466665135481349068158967136466", " 876"),
+         absl::StrCat("703", floatingPointSignifierString, "21 3",
+                      floatingPointSignifierString, "21 362",
+                      floatingPointSignifierString, "1 2",
+                      floatingPointSignifierString, "1 987"),
+         "654", "321 87", "654", "321 7", "654", "321 654", "321 54", "321 4",
+         "321 321 21 1"});
+    simpleComparisonTest(
+        {absl::StrCat("Lorem ipsum dolor sit "
+                      "813",
+                      floatingPointSignifierString,
+                      "217710466665135481349068158967136466 amet, "
+                      "consectetur adipiscing elit. Quippe:  876"),
+         absl::StrCat("703", floatingPointSignifierString,
+                      "21 habes enim a rhetoribus; Bork Falli igitur "
+                      "possumus. Bonum "
+                      "integritas corporis: misera debilitas 987"),
+         "654",
+         "321.  Nos commodius agimus.Duo "
+         "Reges : constructio interrete 42.  Quod cum dixissent, ille "
+         "contra.Tuo "
+         "vero id quidem, inquam, arbitratu.Omnia contraria, quos etiam "
+         "insanos esse vultis.Sed haec in pueris; "});
+  };
+  using ad_utility::use_value_identity::vi;
+  doNotExceptionTest(vi<','>, ' ');
+  doNotExceptionTest(vi<'+'>, 't');
+  doNotExceptionTest(vi<'t'>, '+');
+  doNotExceptionTest(vi<'?'>, '\"');
+  doNotExceptionTest(vi<'-'>, '~');
 
   // Set the `floatingPointSignifier` to characters, that are reserved regex
   // characters.
-  auto reservedRegexCharTest = ad_utility::ApplyAsValueIdentity{
-      [&doNotExceptionTest](auto... valueIdentities) {
-        (doNotExceptionTest.template operator()<valueIdentities.value>(' '),
-         ...);
-      }};
-  reservedRegexCharTest
-      .template operator()<'.', '(', ')', '[', ']', '|', '{', '}', '*', '+',
-                           '?', '^', '$', '\\', '-', '/'>();
+  auto reservedRegexCharTest = [&doNotExceptionTest](auto... valueIdentities) {
+    (doNotExceptionTest(vi<valueIdentities.value>, ' '), ...);
+  };
+  reservedRegexCharTest(vi<'.'>, vi<'('>, vi<')'>, vi<'['>, vi<']'>, vi<'|'>,
+                        vi<'{'>, vi<'}'>, vi<'*'>, vi<'+'>, vi<'?'>, vi<'^'>,
+                        vi<'$'>, vi<'\\'>, vi<'-'>, vi<'/'>);
 
   // Numbers as `separatorSymbol`, or `floatingPointSignifier`, are not allowed.
-  auto forbiddenSymbolTest = ad_utility::ApplyAsValueIdentity{
+  auto forbiddenSymbolTest =
       [&doNotExceptionTest](auto... floatingPointSignifiers) {
         for (size_t separatorSymbolNum = 0; separatorSymbolNum < 10;
              separatorSymbolNum++) {
           const char separatorSymbol{absl::StrCat(separatorSymbolNum).front()};
           (ad_utility::ApplyAsValueIdentity{[&doNotExceptionTest,
                                              &separatorSymbol](auto c) {
-             ASSERT_ANY_THROW(doNotExceptionTest.template operator()<c>(' '));
-             ASSERT_ANY_THROW(
-                 doNotExceptionTest.template operator()<'.'>(separatorSymbol));
-             ASSERT_ANY_THROW(
-                 doNotExceptionTest.template operator()<c>(separatorSymbol));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, ' '));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<'.'>, separatorSymbol));
+             ASSERT_ANY_THROW(doNotExceptionTest(vi<c>, separatorSymbol));
            }}.template operator()<floatingPointSignifiers.value>(),
            ...);
         }
-      }};
-  forbiddenSymbolTest
-      .template operator()<'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'>();
+      };
+  forbiddenSymbolTest(vi<'0'>, vi<'1'>, vi<'2'>, vi<'3'>, vi<'4'>, vi<'5'>,
+                      vi<'6'>, vi<'7'>, vi<'8'>, vi<'9'>);
 }
 
 TEST(StringUtilsTest, findLiteralEnd) {

@@ -54,28 +54,26 @@ TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
 
 // ___________________________________________________________________
 TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
-  auto runTest = ad_utility::ApplyAsValueIdentity{
-      [](auto valueIdentity1, auto valueIdentity2) {
-        static constexpr bool trackTimes = valueIdentity1.value;
-        static constexpr bool destructorRunsFinish = valueIdentity2.value;
-        // We need the size of the queue to be larger than the number of pushes,
-        // otherwise we cannot test the case where the destructor runs before
-        // any of the threads have reached the call to `finish()`.
-        ad_utility::TaskQueue<trackTimes> q{200, 5};
-        for (size_t i = 0; i <= 100; ++i) {
-          q.push([&q] {
-            if (destructorRunsFinish) {
-              std::this_thread::sleep_for(10ms);
-            }
-            q.finish();
-          });
-        }
-        if (!destructorRunsFinish) {
+  auto runTest = [](auto trackTimes, auto destructorRunsFinish) {
+    // We need the size of the queue to be larger than the number of pushes,
+    // otherwise we cannot test the case where the destructor runs before
+    // any of the threads have reached the call to `finish()`.
+    ad_utility::TaskQueue<trackTimes> q{200, 5};
+    for (size_t i = 0; i <= 100; ++i) {
+      q.push([&q, destructorRunsFinish] {
+        if (destructorRunsFinish) {
           std::this_thread::sleep_for(10ms);
         }
-      }};
-  EXPECT_NO_THROW((runTest.template operator()<true, true>()));
-  EXPECT_NO_THROW((runTest.template operator()<true, false>()));
-  EXPECT_NO_THROW((runTest.template operator()<false, true>()));
-  EXPECT_NO_THROW((runTest.template operator()<false, false>()));
+        q.finish();
+      });
+    }
+    if (!destructorRunsFinish) {
+      std::this_thread::sleep_for(10ms);
+    }
+  };
+  using ad_utility::use_value_identity::vi;
+  EXPECT_NO_THROW((runTest(vi<true>, vi<true>)));
+  EXPECT_NO_THROW((runTest(vi<true>, vi<false>)));
+  EXPECT_NO_THROW((runTest(vi<false>, vi<true>)));
+  EXPECT_NO_THROW((runTest(vi<false>, vi<false>)));
 }

@@ -111,7 +111,7 @@ auto testGetRangesForId(It begin, It end, ValueId id,
                         source_location l = source_location::current()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto comparison) {
+  auto testImpl = [&](auto comparison) {
     auto ranges = getRangesForId(begin, end, id, comparison);
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
@@ -148,14 +148,15 @@ auto testGetRangesForId(It begin, It end, ValueId id,
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
     }
-  }};
+  };
 
-  testImpl.template operator()<Comparison::LT>();
-  testImpl.template operator()<Comparison::LE>();
-  testImpl.template operator()<Comparison::EQ>();
-  testImpl.template operator()<Comparison::NE>();
-  testImpl.template operator()<Comparison::GE>();
-  testImpl.template operator()<Comparison::GT>();
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Comparison::LT>);
+  testImpl(vi<Comparison::LE>);
+  testImpl(vi<Comparison::EQ>);
+  testImpl(vi<Comparison::NE>);
+  testImpl(vi<Comparison::GE>);
+  testImpl(vi<Comparison::GT>);
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
@@ -223,7 +224,7 @@ template <typename It, typename IsMatchingDatatype>
 auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
                               IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto comparison) {
+  auto testImpl = [&](auto comparison) {
     if (comparison == Comparison::NE &&
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
@@ -254,14 +255,15 @@ auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
                   ::testing::AnyOf(False, Undef));
       ++it;
     }
-  }};
+  };
 
-  testImpl.template operator()<Comparison::LT>();
-  testImpl.template operator()<Comparison::LE>();
-  testImpl.template operator()<Comparison::EQ>();
-  testImpl.template operator()<Comparison::NE>();
-  testImpl.template operator()<Comparison::GE>();
-  testImpl.template operator()<Comparison::GT>();
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Comparison::LT>);
+  testImpl(vi<Comparison::LE>);
+  testImpl(vi<Comparison::EQ>);
+  testImpl(vi<Comparison::NE>);
+  testImpl(vi<Comparison::GE>);
+  testImpl(vi<Comparison::GT>);
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
@@ -272,8 +274,7 @@ TEST_F(ValueIdComparators, IndexTypes) {
   std::sort(ids.begin(), ids.end(), compareByBits);
 
   // Perform the test for a single `Datatype`.
-  auto testImpl = ad_utility::ApplyAsValueIdentity{[&](auto datatype,
-                                                       auto getFromId) {
+  auto testImpl = [&](auto datatype, auto getFromId) {
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
@@ -312,14 +313,15 @@ TEST_F(ValueIdComparators, IndexTypes) {
       testGetRangesForEqualIds(ids.begin(), ids.end(), *begin, *end,
                                isTypeMatching);
     }
-  }};
+  };
 
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....
-  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
-  testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
-  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
-  testImpl.operator()<Datatype::WordVocabIndex>(&getWordVocabIndex);
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Datatype::VocabIndex>, &getVocabIndex);
+  testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex);
+  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex);
+  testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex);
 }
 
 // _______________________________________________________________________
