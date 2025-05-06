@@ -97,8 +97,11 @@ TEST(Generator, getSingleElement) {
 
 struct HandleFrame {
   using F = void(void*);
+  using B = bool(void*);
   void* target;
   F* resumeFunc;
+  F* destroyFunc;
+  B* doneFunc;
 };
 
 template <typename Promise = void>
@@ -114,11 +117,11 @@ struct Handle {
     return Handle{ptr};
   }
 
-  operator bool() { return static_cast<bool>(ptr); }
+  operator bool() const { return static_cast<bool>(ptr); }
 
-  // TODO
-  bool done() const { return false; }
+  bool done() const { return ptr->doneFunc(ptr->target); }
 
+  // TODO<joka921> This has to take into account the alignment.
   Promise& promise() {
     return *reinterpret_cast<Promise*>(reinterpret_cast<char*>(ptr) +
                                        sizeof(HandleFrame));
@@ -129,63 +132,117 @@ struct Handle {
   }
 
   // TODO<joka921> Don't leak money.
-  void destroy() { return; }
+  void destroy() { ptr->destroyFunc(ptr->target); }
 };
 
-/*
-template<>
-struct Handle<void> {
-  void* ptr;
-};
- */
-
-using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
-struct GeneratorStateMachine {
-  size_t curState = 0;
-  int payLoad = 0;
-  HandleFrame frm;
-  PromiseType pt;
-
-  static void resume(void* blubb) {
-    static_cast<GeneratorStateMachine*>(blubb)->doStep();
+bool co_await_impl(auto& promise, auto&& awaiter, auto handle) {
+  if (awaiter.await_ready()) {
+    return true;
   }
-
-  GeneratorStateMachine() {
-    frm.target = this;
-    frm.resumeFunc = &GeneratorStateMachine::resume;
-    std::cerr << "Address of frame actually "
-              << reinterpret_cast<intptr_t>(&frm) << std::endl;
+  using type = decltype(awaiter.await_suspend(handle));
+  if constexpr (std::is_void_v<type>) {
+    awaiter.await_suspend(handle);
+    return false;
+  } else if constexpr (std::same_as<type, bool>) {
+    return !awaiter.await_suspend(handle);
+  } else {
+    static_assert(ad_utility::alwaysFalse<type>,
+                  "await_suspend with symmetric transfer is not yet supported");
   }
+}
 
-  void doStep() {
-    switch (curState) {
-      case 0:
-        payLoad++;
-        pt.yield_value(payLoad);
-        curState = 1;
-        return;
-      case 1:
-        payLoad += 2;
-        pt.yield_value(payLoad);
-        curState = 0;
-        return;
+cppcoro::generator<int, int, Handle> dummyGen() {
+  using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
+  struct GeneratorStateMachine {
+    HandleFrame frm;
+    PromiseType pt;
+    size_t curState = 0;
+    int payLoad = 0;
+    using Hdl = Handle<PromiseType>;
+
+    static void resume(void* blubb) {
+      static_cast<GeneratorStateMachine*>(blubb)->doStep();
     }
-  }
-};
 
-struct DummyGen {
-  GeneratorStateMachine ptr;
-  decltype(ptr.pt.get_return_object()) pt = ptr.pt.get_return_object();
+    // TODO<joka921> Allocator support.
+    static void destroy(void* blubb) {
+      delete (reinterpret_cast<GeneratorStateMachine*>(blubb));
+    }
+    static bool done([[maybe_unused]] void* blubb) {
+      // TODO extend to more general things.
+      return false;
+    }
+
+    GeneratorStateMachine() {
+      frm.target = this;
+      frm.resumeFunc = &GeneratorStateMachine::resume;
+      frm.destroyFunc = &GeneratorStateMachine::destroy;
+      frm.doneFunc = &GeneratorStateMachine::done;
+      std::cerr << "Address of frame actually "
+                << reinterpret_cast<intptr_t>(&frm) << std::endl;
+    }
+
+    void doStep() {
+      switch (curState) {
+        case 0:
+          payLoad++;
+          {
+            auto&& awaiter = pt.yield_value(payLoad);
+            curState = 1;
+            if (!co_await_impl(pt, awaiter, Hdl::from_promise(pt))) {
+              return;
+            }
+          }
+        case 1:
+          payLoad += 2;
+          pt.yield_value(payLoad);
+          curState = 0;
+          return;
+      }
+    }
+    static auto make() {
+      // TODO allocator support
+      auto* frame = new GeneratorStateMachine;
+      return frame->pt.get_return_object();
+    }
+  };
+  return GeneratorStateMachine::make();
 };
 
 TEST(NewGenerator, Blubb) {
   std::vector<int> v;
-  DummyGen gen;
-  auto it = gen.pt.begin();
-  for (size_t i = 0; i < 5; ++i) {
-    v.push_back(*it);
-    std::cerr << "got value " << *it << std::endl;
-    ++it;
+  auto gen = dummyGen();
+  for (auto i : gen | ql::views::take(5)) {
+    v.push_back(i);
   }
-  EXPECT_THAT(v, ::testing::ElementsAre(0, 1, 0, 3));
+  EXPECT_THAT(v, ::testing::ElementsAre(1, 3, 4, 6, 7));
 }
+
+// A simple allocator that logs all allocations and deallocations to stderr
+template <typename T>
+struct LoggingAllocator {
+  using value_type = T;
+
+  LoggingAllocator() = default;
+
+  template <typename U>
+  LoggingAllocator(const LoggingAllocator<U>&) {}
+
+  T* allocate(size_t n) {
+    auto p = static_cast<T*>(::operator new(n * sizeof(T)));
+    std::cerr << "Allocating " << n << " elements of size " << sizeof(T)
+              << " at " << static_cast<void*>(p) << std::endl;
+    return p;
+  }
+
+  void deallocate(T* p, size_t n) {
+    std::cerr << "Deallocating " << n << " elements at "
+              << static_cast<void*>(p) << std::endl;
+    ::operator delete(p);
+  }
+
+  template <typename U>
+  bool operator==(const LoggingAllocator<U>&) const {
+    return true;
+  }
+};
