@@ -174,84 +174,52 @@ struct GeneratorStateMachineMixin {
 
   PromiseType& promise() { return pt; }
 
-  static void resume(void* blubb) {
-    static_cast<GeneratorStateMachine*>(blubb)->doStep();
+  static auto cast(void* blubb) {
+    return static_cast<Derived*>(reinterpret_cast<GeneratorStateMachineMixin*>(
+        reinterpret_cast<char*>(blubb) -
+        offsetof(GeneratorStateMachineMixin, frm)));
   }
 
+  static void resume(void* blubb) { cast(blubb)->doStep(); }
+
   // TODO<joka921> Allocator support.
-  static void destroy(void* blubb) {
-    delete (reinterpret_cast<GeneratorStateMachine*>(blubb));
-  }
+  static void destroy(void* blubb) { delete (cast(blubb)); }
   static bool done([[maybe_unused]] void* blubb) {
     // TODO extend to more general things.
     return false;
   }
 
-  GeneratorStateMachine() {
+  GeneratorStateMachineMixin() {
     frm.target = this;
-    frm.resumeFunc = &GeneratorStateMachine::resume;
-    frm.destroyFunc = &GeneratorStateMachine::destroy;
-    frm.doneFunc = &GeneratorStateMachine::done;
+    frm.resumeFunc = &GeneratorStateMachineMixin::resume;
+    frm.destroyFunc = &GeneratorStateMachineMixin::destroy;
+    frm.doneFunc = &GeneratorStateMachineMixin::done;
     std::cerr << "Address of frame actually "
               << reinterpret_cast<intptr_t>(&frm) << std::endl;
   }
 
-  virtual void doStep() = 0;
   static auto make() {
     // TODO allocator support
-    auto* frame = new GeneratorStateMachine;
+    auto* frame = new Derived;
     return frame->pt.get_return_object();
   }
 };
 
 cppcoro::generator<int, int, Handle> dummyGen() {
   using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
-  struct GeneratorStateMachine {
-    HandleFrame frm;
-    PromiseType pt;
-    size_t curState = 0;
-    int payLoad = 0;
-    using Hdl = Handle<PromiseType>;
-
-    PromiseType& promise() { return pt; }
-
-    static void resume(void* blubb) {
-      static_cast<GeneratorStateMachine*>(blubb)->doStep();
-    }
-
-    // TODO<joka921> Allocator support.
-    static void destroy(void* blubb) {
-      delete (reinterpret_cast<GeneratorStateMachine*>(blubb));
-    }
-    static bool done([[maybe_unused]] void* blubb) {
-      // TODO extend to more general things.
-      return false;
-    }
-
-    GeneratorStateMachine() {
-      frm.target = this;
-      frm.resumeFunc = &GeneratorStateMachine::resume;
-      frm.destroyFunc = &GeneratorStateMachine::destroy;
-      frm.doneFunc = &GeneratorStateMachine::done;
-      std::cerr << "Address of frame actually "
-                << reinterpret_cast<intptr_t>(&frm) << std::endl;
-    }
-
+  struct GeneratorStateMachine
+      : GeneratorStateMachineMixin<GeneratorStateMachine, PromiseType, int> {
+    auto& payload() { return std::get<0>(payLoad); };
     void doStep() {
       switch (curState) {
         case 0:
           while (true) {
-            payLoad++;
-            CO_YIELD(payLoad);
-            payLoad += 2;
-            CO_YIELD(payLoad);
+            payload()++;
+            CO_YIELD(payload());
+            payload() += 2;
+            CO_YIELD(payload());
           }
       }
-    }
-    static auto make() {
-      // TODO allocator support
-      auto* frame = new GeneratorStateMachine;
-      return frame->pt.get_return_object();
     }
   };
   return GeneratorStateMachine::make();
