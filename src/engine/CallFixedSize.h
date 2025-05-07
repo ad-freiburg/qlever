@@ -72,13 +72,15 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
+  auto apply = [&]() {
+    return applyOnIntegerSequence(toIntegerSequence<ArrayType{}>(),
+                                  AD_FWD(lambda), AD_FWD(args)...);
+  };
 
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
-  using Result = decltype(applyOnIntegerSequence(
-      ad_utility::toIntegerSequence<ArrayType{}>(), AD_FWD(lambda),
-      AD_FWD(args)...));
+  using Result = decltype(apply());
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
@@ -88,13 +90,15 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
   // store the result in `result` (unless it is `void`).
   auto applyIf = ApplyAsValueIdentity{[&](auto valueIdentity) {
     static constexpr auto Array = valueIdentity.value;
+    auto apply = [&]() {
+      return applyOnIntegerSequence(toIntegerSequence<Array>(), AD_FWD(lambda),
+                                    AD_FWD(args)...);
+    };
     if (array == Array) {
       if constexpr (resultIsVoid) {
-        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>(),
-                               AD_FWD(lambda), AD_FWD(args)...);
+        apply();
       } else {
-        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>(),
-                                        AD_FWD(lambda), AD_FWD(args)...);
+        result = apply();
       }
     }
   }};
