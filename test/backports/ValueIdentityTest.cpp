@@ -7,16 +7,19 @@
 using namespace ad_utility;
 using namespace ad_utility::use_value_identity;
 
-TEST(ApplyAsValueIdentity, FunctorInvocation) {
-  constexpr static auto functor = [](auto... compile_time_values,
-                                     auto... runtime_values) {
+struct Functor {
+  template <typename... CompileTimeValues, typename... RuntimeValues>
+  constexpr int operator()(CompileTimeValues... compile_time_values,
+                           RuntimeValues... runtime_values) const {
     constexpr int compile_time_values_sum =
         (0 + ... + compile_time_values.value);
     int runtime_sum = (0 + ... + runtime_values);
     return compile_time_values_sum + runtime_sum;
-  };
+  }
+};
 
-  constexpr ApplyAsValueIdentity apply{functor};
+TEST(ApplyAsValueIdentity, FunctorInvocation) {
+  constexpr ApplyAsValueIdentity apply{Functor{}};
 
   constexpr int result_single_arg = apply.operator()<5, 10, 15>(20);
   constexpr int result_double_arg = apply.operator()<5, 10, 15>(20, 25);
@@ -24,15 +27,18 @@ TEST(ApplyAsValueIdentity, FunctorInvocation) {
   EXPECT_EQ(result_double_arg, 75);
 }
 
-TEST(ApplyAsValueIdentityTuple, FunctorInvocationWithTuple) {
-  constexpr static auto functor = [](auto runtime_tuple,
-                                     auto... compile_time_values) {
+struct FunctorTuple {
+  template <typename... CompileTimeValues, typename Tuple>
+  constexpr int operator()(Tuple runtime_tuple,
+                           CompileTimeValues... compile_time_values) const {
     int runtime_sum = std::apply(
         [](auto&&... elems) { return (0 + ... + elems); }, runtime_tuple);
     return (compile_time_values.value + ... + runtime_sum);
-  };
+  }
+};
 
-  constexpr ApplyAsValueIdentityTuple apply{functor};
+TEST(ApplyAsValueIdentityTuple, FunctorInvocationWithTuple) {
+  constexpr ApplyAsValueIdentityTuple apply{FunctorTuple{}};
 
   constexpr int result_single_arg = apply.operator()<5, 10>(15);
   constexpr int result_double_arg = apply.operator()<5, 10>(15, 20);
