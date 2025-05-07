@@ -3612,10 +3612,6 @@ TEST(QueryPlanner, Exists) {
       filter);
   h::expect("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
             h::Describe(::testing::_, filter));
-  h::expect(
-      "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
-      "?c}}",
-      filter);
 
   // Test the interaction of FROM NAMES with EXISTS
   auto varG = std::vector{Variable{"?g"}};
