@@ -65,6 +65,7 @@ jobs:
             compiler-version: 8
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
             build-type: Debug
+            skipIfPr: false
             expensive-tests: false
             continue-on-error: true
             use-keep-going: true
@@ -92,19 +93,21 @@ jobs:
             ubsan-flags: " -fsanitize=undefined"
             build-type: RelWithDebInfo
             expensive-tests: false
+            skipIfPr: false
           - compiler: clang
             compiler-version: 17
             build-type: Debug
             expensive-tests: false
             ubsan-flags: " -fsanitize=thread -O1 -g"
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
+            skipIfPr: false
 
     runs-on: ubuntu-22.04
 
 
     steps:
       - name: Skip early if conditions are not met
-        if: (matrix.isPr && matrix.skipIfPr)
+        if: (github.event_name == 'pull_request' && matrix.skipIfPr)
         run: exit 0;
       - uses: actions/checkout@v4
         with:
