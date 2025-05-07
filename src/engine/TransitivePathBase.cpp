@@ -165,13 +165,12 @@ TransitivePathBase::decideDirection() {
 Result::Generator TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     size_t skipCol, bool yieldOnce, size_t inputWidth) const {
-  return ad_utility::callFixedSize(
+  return ad_utility::callFixedSizeVi(
       std::array{inputWidth, getResultWidth()},
-      ad_utility::ApplyAsValueIdentity{[&](auto INPUT_WIDTH,
-                                           auto OUTPUT_WIDTH) {
+      [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
             std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
-      }});
+      });
 }
 
 // _____________________________________________________________________________
