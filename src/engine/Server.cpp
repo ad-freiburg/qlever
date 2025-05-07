@@ -552,7 +552,7 @@ std::pair<bool, bool> Server::determineResultPinning(
 Server::PlannedQuery Server::planQuery(
     ParsedQuery&& operation, const ad_utility::Timer& requestTimer,
     TimeLimit timeLimit, QueryExecutionContext& qec,
-    ad_utility::SharedCancellationHandle handle) {
+    ad_utility::SharedCancellationHandle handle) const {
   QueryPlanner qp(&qec, handle);
   auto executionTree = qp.createExecutionTree(operation);
   PlannedQuery plannedQuery{std::move(operation), std::move(executionTree)};
@@ -942,6 +942,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           PlannedQuery plannedUpdate =
               planQuery(std::move(update), requestTimer, timeLimit, qec,
                         cancellationHandle);
+          // TODO<qup42>: optimize the case of chained updates
+          // As we have an exclusive lock on the DeltaTriples we the execution
+          // could happen directly against the DeltaTriples instead of the
+          // snapshot that has to be refreshed after each step.
           qec.updateLocatedTriplesSnapshot();
           // Update the delta triples.
           results.push_back(index_.deltaTriplesManager().modify<nlohmann::json>(

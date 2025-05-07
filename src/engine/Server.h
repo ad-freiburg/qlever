@@ -196,7 +196,7 @@ class Server {
   PlannedQuery planQuery(ParsedQuery&& operation,
                          const ad_utility::Timer& requestTimer,
                          TimeLimit timeLimit, QueryExecutionContext& qec,
-                         SharedCancellationHandle handle);
+                         SharedCancellationHandle handle) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
