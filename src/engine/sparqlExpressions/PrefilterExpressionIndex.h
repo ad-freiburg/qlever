@@ -182,20 +182,14 @@ class PrefixRegexExpression : public PrefilterExpression {
   // ?var)`. With `"str"` appearing as a left-hand side value, the expression is
   // considered mirrored. This case requires a different evaluation logic.
   //
-  // With `mirrored_ = false`, we perform the standard prefilter evaluation
-  // procedure for expressions like `STRSTARTS(?var, "prefix")` or `REGEX(?var,
-  // "^prefix")`.
-  bool mirrored_;
   // `isNegated_ = true` implies that we prefilter a negated expression, hence
   // `!REGEX()` or `!STRSTARTS()`.
   bool isNegated_;
 
  public:
   explicit PrefixRegexExpression(const std::string& prefix,
-                                 bool mirrored = false, bool isNegated = false)
-      : prefix_(absl::StrCat("\"", prefix)),
-        mirrored_(mirrored),
-        isNegated_(isNegated) {}
+                                 bool isNegated = false)
+      : prefix_(absl::StrCat("\"", prefix)), isNegated_(isNegated) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -206,9 +200,6 @@ class PrefixRegexExpression : public PrefilterExpression {
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange) const override;
-  BlockMetadataRanges evaluateMirroredImpl(const Vocab& vocab,
-                                           const ValueIdSubrange& idRange,
-                                           BlockMetadataSpan blockSpan) const;
 };
 
 //______________________________________________________________________________

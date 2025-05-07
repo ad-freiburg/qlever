@@ -341,6 +341,7 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
 // values that contain bounding `ValueId`s with different underlying datatypes.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
+  using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
@@ -349,7 +350,16 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
   const auto checkDifferentDtype = [](const auto& idPair) {
     auto firstId = idPair.begin();
-    return (*firstId).getDatatype() != (*std::next(firstId)).getDatatype();
+    auto dType1 = (*firstId).getDatatype();
+    auto dType2 = (*std::next(firstId)).getDatatype();
+    // ValueIds representing LocalVocab and Vocab entries are contained in mixed
+    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
+    // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
+    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
+        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
+      return false;
+    }
+    return dType1 != dType2;
   };
   ql::ranges::for_each(idRange | ranges::views::chunk(2) |
                            ranges::views::filter(checkDifferentDtype),
@@ -494,7 +504,7 @@ ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> PrefixRegexExpression::logicalComplement()
     const {
-  return make<PrefixRegexExpression>(prefix_, mirrored_, !isNegated_);
+  return make<PrefixRegexExpression>(prefix_, !isNegated_);
 };
 
 //______________________________________________________________________________
@@ -505,8 +515,7 @@ bool PrefixRegexExpression::operator==(const PrefilterExpression& other) const {
     return false;
   }
   return isNegated_ == otherPrefixRegex->isNegated_ &&
-         prefix_ == otherPrefixRegex->prefix_ &&
-         mirrored_ == otherPrefixRegex->mirrored_;
+         prefix_ == otherPrefixRegex->prefix_;
 };
 
 //______________________________________________________________________________
@@ -519,81 +528,50 @@ std::string PrefixRegexExpression::asString(
     [[maybe_unused]] size_t depth) const {
   return absl::StrCat(
       "Prefilter PrefixRegexExpression with prefix ", prefix_,
-      ".\nExpression is negated: ", isNegated_ ? "true" : "false",
-      ".\nExpression is mirrored: ", mirrored_ ? "true.\n" : "false.\n");
+      ".\nExpression is negated: ", isNegated_ ? "true.\n" : "false.\n");
 };
 
 //______________________________________________________________________________
 BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
     BlockMetadataSpan blockRange) const {
-  if (mirrored_) {
-    return evaluateMirroredImpl(vocab, idRange, blockRange);
-  }
-
+  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
+  static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
+  using LVE = LocalVocabEntry;
+  LocalVocab localVocab{};
   std::string_view prefixSv(&prefix_.front(), prefix_.size());
   const auto& prefixRanges = vocab.prefixRanges(prefixSv);
   const auto& ranges = prefixRanges.ranges();
-  const auto& firstRange = ranges.front();
-  auto lowerId = Id::makeFromVocabIndex(firstRange.first);
-  auto upperId = Id::makeFromVocabIndex(firstRange.second);
+  const auto& [lowerVocabIndex, upperVocabIndex] = ranges.front();
+
+  // Set lower reference.
+  const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
+  const auto& lowerIdLocalVocab = getValueIdFromIdOrLocalVocabEntry(
+      LVE::fromStringRepresentation(absl::StrCat(prefix_, "\"")), localVocab);
+  auto lowerId =
+      lowerIdVocab < lowerIdLocalVocab ? lowerIdVocab : lowerIdLocalVocab;
 
   if (isNegated_) {
     // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
-    // Prefilter ?var >= Id(next("prefix)) || ?var < Id("prefix).
+    // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
     return OrExpression(make<LessThanExpression>(lowerId),
-                        make<GreaterEqualExpression>(upperId))
+                        make<GreaterEqualExpression>(Id::makeFromVocabIndex(
+                            upperVocabIndex.decremented())))
         .evaluateImpl(vocab, idRange, blockRange);
   }
+
+  // Set adjusted upper reference.
+  const auto& upperId =
+      upperVocabIndex == VocabIndex::make(vocab.size())
+          ? getValueIdFromIdOrLocalVocabEntry(
+                LVE::fromStringRepresentation("<"), localVocab)
+          : Id::makeFromVocabIndex(upperVocabIndex.incremented());
+
   // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
   // Prefilter ?var > Id("prefix) && ?var < Id(next("prefix)).
   return AndExpression(make<GreaterEqualExpression>(lowerId),
                        make<LessThanExpression>(upperId))
       .evaluateImpl(vocab, idRange, blockRange);
-};
-
-//______________________________________________________________________________
-BlockMetadataRanges PrefixRegexExpression::evaluateMirroredImpl(
-    const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockSpan) const {
-  static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
-
-  if (prefix_.size() == 1) {
-    // Case `STRSTARTS("", ?var)`.
-    // The empty incomplete literal acts as a reference bound here.
-    std::string_view lowerStr(&prefix_.front(), 1);
-    auto emptyBound = Id::makeFromVocabIndex(
-        vocab.prefixRanges(lowerStr).ranges().front().first);
-    if (isNegated_) {
-      // Case: `!STRSTARTS("", ?var)`.
-      // Prefilter ?var > ".
-      return GreaterThanExpression(emptyBound)
-          .evaluateImpl(vocab, idRange, blockSpan);
-    }
-    // Case: `STRSTARTS("", ?var)`.
-    // Prefilter ?var <= ".
-    return LessEqualExpression(emptyBound)
-        .evaluateImpl(vocab, idRange, blockSpan);
-  }
-
-  std::string_view lowerStr(&prefix_.front(), 2);
-  auto lowerId = Id::makeFromVocabIndex(
-      vocab.prefixRanges(lowerStr).ranges().front().first);
-  auto upperLVE =
-      LocalVocabEntry::fromStringRepresentation(absl::StrCat(prefix_, "\""));
-
-  if (isNegated_) {
-    // Case: `!STRSTARTS("someStr", ?var)`.
-    // Prefilter ?var < "s || ?var > "someStr".
-    return OrExpression(make<LessThanExpression>(lowerId),
-                        make<GreaterThanExpression>(upperLVE))
-        .evaluateImpl(vocab, idRange, blockSpan);
-  }
-  // Standard case: `STRSTARTS("someStr", ?var)`.
-  // Prefilter ?var >= "s && ?var <= "someStr".
-  return AndExpression(make<GreaterEqualExpression>(lowerId),
-                       make<LessEqualExpression>(upperLVE))
-      .evaluateImpl(vocab, idRange, blockSpan);
 };
 
 // SECTION RELATIONAL OPERATIONS

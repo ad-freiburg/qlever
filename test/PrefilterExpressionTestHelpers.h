@@ -55,9 +55,8 @@ auto notPrefilterExpression = [](std::unique_ptr<PrefilterExpression> child)
 
 // Make PrefixRegexExpression
 auto makePrefixRegexExpression = [](const std::string& prefix,
-                                    bool mirrored = false,
                                     bool isNegated = false) {
-  return std::make_unique<PrefixRegexExpression>(prefix, mirrored, isNegated);
+  return std::make_unique<PrefixRegexExpression>(prefix, isNegated);
 };
 
 }  // namespace

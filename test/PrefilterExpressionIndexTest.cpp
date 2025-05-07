@@ -95,7 +95,8 @@ static const inline std::string turtleInput =
     "<x7> <name> \"Hamburg\" . "
     "<x8> <name> \"Hamburg Altona\" . "
     "<x9> <name> \"München\" . "
-    "<x10> <name> \"Stuttgart\" .";
+    "<x10> <name> \"Stuttgart\" . "
+    "<x11> <name> \"Stuttgart-West\" . ";
 
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
@@ -120,6 +121,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const LocalVocabEntry köln = LVE("\"Köln\"");
   const LocalVocabEntry münchen = LVE("\"München\"");
   const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"");
+  const LocalVocabEntry wolfsburg = LVE("\"Wolfsburg\"");
   const LocalVocabEntry iri0 = LVE("<a>");
   const LocalVocabEntry iri1 = LVE("<iri>");
   const LocalVocabEntry iri2 = LVE("<iri>");
@@ -139,6 +141,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id vocabIdHamburgAltona = getVocabId("\"Hamburg Altona\"");
   const Id vocabIdMünchen = getVocabId("\"München\"");
   const Id vocabIdStuttgart = getVocabId("\"Stuttgart\"");
+  const Id idWolfsburg = getId(wolfsburg, vocab);
+  const Id idB = getId(LVE("\"B\""), vocab);
+  const Id idBe = getId(LVE("\"Be\""), vocab);
+  const Id idBerl = getId(LVE("\"Berl\""), vocab);
+  const Id idHamburgAlt = getId(LVE("\"Hamburg Alt\""), vocab);
+  const Id idStuttgartZuffenhausen =
+      getId(LVE("\"Stuttgart-Zuffenhausen\""), vocab);
   const Id idBerlin = getId(berlin, vocab);
   const Id idDüsseldorf = getId(düsseldorf, vocab);
   const Id idFrankfurt = getId(frankfurt, vocab);
@@ -233,20 +242,40 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const CompressedBlockMetadata b12Date =
       makeBlock(makeIdForLYearDate(14579), makeIdForLYearDate(38263));
 
-  // VocabId blocks.
-  const CompressedBlockMetadata bVocabId0 =
+  // VocabId and LocalVocabId blocks.
+  // "B" to "Be"
+  const CompressedBlockMetadata bRegexTest = makeBlock(idB, vocabIdBe);
+  // "Be" to "Berl"
+  const CompressedBlockMetadata b0RegexTest = makeBlock(idBe, idBerl);
+  // "Berlin" to "Berlin"
+  const CompressedBlockMetadata b1RegexTest =
       makeBlock(vocabIdBerlin, vocabIdBerlin);
-  const CompressedBlockMetadata bVocabId1 =
+  // "Berlin" to "Bern"
+  const CompressedBlockMetadata b2RegexTest =
       makeBlock(vocabIdBerlin, vocabIdBern);
-  const CompressedBlockMetadata bVocabId2 =
+  // "Bern" to "Düsseldorf"
+  const CompressedBlockMetadata b3RegexTest =
       makeBlock(vocabIdBern, vocabIdDüsseldorf);
-  const CompressedBlockMetadata bVocabId3 = makeBlock(vocabIdH, vocabIdHam);
-  const CompressedBlockMetadata bVocabId4 =
+  // "H" to "Ham"
+  const CompressedBlockMetadata b4RegexTest = makeBlock(vocabIdH, vocabIdHam);
+  // "Hamb" to "Hamburg"
+  const CompressedBlockMetadata b5RegexTest =
       makeBlock(vocabIdHamb, vocabIdHamburg);
-  const CompressedBlockMetadata bVocabId5 =
+  // "Hamburg" to "Hamburg Alt"
+  const CompressedBlockMetadata b6RegexTest =
+      makeBlock(idHamburg, idHamburgAlt);
+  // "Hamburg Altona" to "München"
+  const CompressedBlockMetadata b7RegexTest =
       makeBlock(vocabIdHamburgAltona, vocabIdMünchen);
-  const CompressedBlockMetadata bVocabId6 =
+  // "Stuttgart" to "Stuttgart"
+  const CompressedBlockMetadata b8RegexTest =
       makeBlock(vocabIdStuttgart, vocabIdStuttgart);
+  // "Stuttgart" to "Stuttgart-Zuffenhausen"
+  const CompressedBlockMetadata b9RegexTest =
+      makeBlock(vocabIdStuttgart, idStuttgartZuffenhausen);
+  // "Stuttgart-Zuffenhausen" to "Wolfsburg"
+  const CompressedBlockMetadata b10RegexTest =
+      makeBlock(idStuttgartZuffenhausen, idWolfsburg);
 
   // All blocks that contain mixed (ValueId) types over column 2,
   // or possibly incomplete ones.
@@ -271,9 +300,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const std::vector<CompressedBlockMetadata> mixedBlocksTestIsDatatype = {
       b2, b4, b11, b18, b25, b28};
 
-  const std::vector<CompressedBlockMetadata> vocabIdBlocks = {
-      bVocabId0, bVocabId1, bVocabId2, bVocabId3,
-      bVocabId4, bVocabId5, bVocabId6};
+  const std::vector<CompressedBlockMetadata> blocksRegexTest = {
+      bRegexTest,  b0RegexTest, b1RegexTest, b2RegexTest,
+      b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+      b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest};
 
   // Selection of date related blocks.
   const std::vector<CompressedBlockMetadata> dateBlocks = {
@@ -465,7 +495,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Simple `ASSERT_EQ` VocabIdBlocks
   auto makeTestPrefixRegex(std::unique_ptr<PrefilterExpression> expr,
                            std::vector<CompressedBlockMetadata>&& expected) {
-    ASSERT_EQ(expr->evaluate(indexVocab, vocabIdBlocks, 2), expected);
+    ASSERT_EQ(expr->evaluate(indexVocab, blocksRegexTest, 2), expected);
   }
 
   // Test `PrefilterExpression` helper `mergeRelevantBlockItRanges<bool>`.
@@ -748,78 +778,75 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(referenceDate1), {b26, b27, b28});
 }
 
-// Test Prefix-Regex Expression
+// Test PrefixRegex Expression
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
-  // test `mirrored_ = false` and `isNegated_ = false`
-  makeTestPrefixRegex(prefixRegex("Ber", false, false),
-                      {bVocabId0, bVocabId1, bVocabId2});
-  makeTestPrefixRegex(prefixRegex("Düssel", false, false), {bVocabId2});
-  makeTestPrefixRegex(prefixRegex("H", false, false),
-                      {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Ham", false, false),
-                      {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hambu", false, false),
-                      {bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hamburg Alt", false, false), {bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Hamburg Altona", false, false), {bVocabId5});
-  makeTestPrefixRegex(prefixRegex("No Prefix", false, false), {});
-  makeTestPrefixRegex(prefixRegex("", false, false),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
-                       bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Stutt", false, false), {bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Stuttgart", false, false), {bVocabId6});
+  // `isNegated_ = false`
+  makeTestPrefixRegex(
+      prefixRegex("B", false),
+      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
+  makeTestPrefixRegex(
+      prefixRegex("Be", false),
+      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
+  makeTestPrefixRegex(prefixRegex("Ber", false),
+                      {b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
+  makeTestPrefixRegex(prefixRegex("Düssel", false), {b3RegexTest, b4RegexTest});
+  makeTestPrefixRegex(prefixRegex("H", false),
+                      {b4RegexTest, b5RegexTest, b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex("Ham", false),
+                      {b4RegexTest, b5RegexTest, b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex("Hambu", false),
+                      {b5RegexTest, b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex("Hamburg Alt", false),
+                      {b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona", false), {b7RegexTest});
+  makeTestPrefixRegex(prefixRegex("No Prefix", false),
+                      {b8RegexTest, b9RegexTest});
+  makeTestPrefixRegex(prefixRegex("", false),
+                      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
+                       b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+                       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Stutt", false),
+                      {b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Stuttgart", false),
+                      {b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Stuttgart-Zuffen", false),
+                      {b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Wolfs", false), {b10RegexTest});
 
   // test `mirrored_ = false` and `isNegated_ = true`
-  makeTestPrefixRegex(prefixRegex("H", false, true),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Be", false, true),
-                      {bVocabId2, bVocabId3, bVocabId4, bVocabId5, bVocabId6});
   makeTestPrefixRegex(
-      prefixRegex("Ham", false, true),
-      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId5, bVocabId6});
+      prefixRegex("H", true),
+      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest,
+       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(
-      prefixRegex("Stuttgart", false, true),
-      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5});
+      prefixRegex("Be", true),
+      {bRegexTest, b2RegexTest, b3RegexTest, b4RegexTest, b5RegexTest,
+       b6RegexTest, b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(
-      prefixRegex("Hamb", false, true),
-      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("", false, true), {});
-}
-
-// Test Prefix-Regex Expression (mirrored)
-//______________________________________________________________________________
-TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpressionMirrored) {
-  // test `mirrored_ = true` and `isNegated_ = false`
-  makeTestPrefixRegex(prefixRegex("Hamburg Altona", true, false),
-                      {bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("B", true, false), {});
-  makeTestPrefixRegex(prefixRegex("Bernd", true, false),
-                      {bVocabId0, bVocabId1, bVocabId2});
-  makeTestPrefixRegex(prefixRegex("Ham", true, false), {bVocabId3});
-  makeTestPrefixRegex(prefixRegex("Hamb", true, false), {bVocabId3, bVocabId4});
-  makeTestPrefixRegex(prefixRegex("Stuttgart", true, false), {bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Düss", true, false), {bVocabId2});
-  makeTestPrefixRegex(prefixRegex("", true, false), {});
-
-  // test `mirrored_ = true` and `isNegated = true`.
+      prefixRegex("Ham", true),
+      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest,
+       b4RegexTest, b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Stuttgart", true),
+                      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
+                       b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+                       b7RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(
-      prefixRegex("Stuttgart", true, true),
-      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5});
-  makeTestPrefixRegex(prefixRegex("Be", true, true),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
-                       bVocabId5, bVocabId6});
-  makeTestPrefixRegex(
-      prefixRegex("Berlinnn", true, true),
-      {bVocabId1, bVocabId2, bVocabId3, bVocabId4, bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Hamburg Alt", true, true),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("Münch", true, true),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
-                       bVocabId5, bVocabId6});
-  makeTestPrefixRegex(prefixRegex("", true, true),
-                      {bVocabId0, bVocabId1, bVocabId2, bVocabId3, bVocabId4,
-                       bVocabId5, bVocabId6});
+      prefixRegex("Hamb", true),
+      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest,
+       b4RegexTest, b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Hamburg Al", true),
+                      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
+                       b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+                       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Hamburg Altona", true),
+                      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
+                       b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+                       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+  makeTestPrefixRegex(prefixRegex("Stuttgart-Zu", true),
+                      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
+                       b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+                       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
 }
 
 // Test IsDatatype Expressions
@@ -1175,8 +1202,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
                        neq(LVE("<iri/id10>"))));
   makeTestClone(prefixRegex("prefixPreeefix"));
-  makeTestClone(prefixRegex("prefixPreeefix", true, false));
-  makeTestClone(prefixRegex("prefixPreeefix", false, true));
+  makeTestClone(prefixRegex("prefixPreeefix", true));
+  makeTestClone(prefixRegex("prefixPreeefix", false));
 }
 
 //______________________________________________________________________________
@@ -1217,10 +1244,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   // PrefixRegex PrefilterExpression
   ASSERT_NE(*prefixRegex("prefix", true), *prefixRegex("pref", true));
   ASSERT_NE(*prefixRegex("prefix", false), *prefixRegex("prefix", true));
-  ASSERT_NE(*prefixRegex("prefix", false, false),
-            *prefixRegex("prefix", false, true));
   ASSERT_EQ(*prefixRegex("", false), *prefixRegex("", false));
-  ASSERT_EQ(*prefixRegex("", true, true), *prefixRegex("", true, true));
+  ASSERT_EQ(*prefixRegex("", true), *prefixRegex("", true));
   ASSERT_EQ(*notExpr(prefixRegex("")), *notExpr(prefixRegex("")));
 }
 
@@ -1350,15 +1375,11 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
       *prefixRegex("str"),
       matcher(
           "Prefilter PrefixRegexExpression with prefix \"str.\nExpression is "
-          "negated: false.\nExpression is mirrored: false.\n.\n"));
-  EXPECT_THAT(*prefixRegex("someStr", true, false),
-              matcher("Prefilter PrefixRegexExpression with prefix "
-                      "\"someStr.\nExpression is "
-                      "negated: false.\nExpression is mirrored: true.\n.\n"));
+          "negated: false.\n.\n"));
   EXPECT_THAT(
-      *prefixRegex("", true, true),
+      *prefixRegex("", true),
       matcher("Prefilter PrefixRegexExpression with prefix \".\nExpression is "
-              "negated: true.\nExpression is mirrored: true.\n.\n"));
+              "negated: true.\n.\n"));
 }
 
 //______________________________________________________________________________

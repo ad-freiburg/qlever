@@ -478,10 +478,8 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   const auto varY = Variable{"?y"};
   evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
                        pr(prefixRegex("de"), varX));
-  evalAndEqualityCheck(strStartsSprql(L("\"\""), varX),
-                       pr(prefixRegex("", true), varX));
-  evalAndEqualityCheck(strStartsSprql(L("\"someRefStr\""), varX),
-                       pr(prefixRegex("someRefStr", true), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"\""), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"someRefStr\""), varX));
   evalAndEqualityCheck(notSprqlExpr(strStartsSprql(varX, L("\"de\""))),
                        pr(notExpr(prefixRegex("de")), varX));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
