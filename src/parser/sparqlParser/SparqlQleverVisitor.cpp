@@ -3,6 +3,8 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
@@ -38,9 +40,11 @@
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
+#include "util/TypeIdentity.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;
+using namespace ad_utility::use_type_identity;
 using namespace sparqlExpression;
 using namespace updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -59,7 +63,7 @@ using Parser = SparqlAutomaticParser;
 namespace {
 constexpr std::string_view a =
     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-}
+}  // namespace
 
 // _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
@@ -149,11 +153,31 @@ ExpressionPtr Visitor::processIriFunctionCall(
     checkNumArgs(2);  // Check is binary.
     return function(std::move(argList[0]), std::move(argList[1]));
   };
+  // Create `SparqlExpression` with two or three children (currently used for
+  // backward-compatible geof:distance function)
+  auto createBinaryOrTernary =
+      CPP_template_lambda(&argList)(typename F)(F function)(
+          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                         ExpressionPtr,
+                                         std::optional<ExpressionPtr>>) {
+    if (argList.size() == 2) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::nullopt);
+    } else if (argList.size() == 3) {
+      return function(std::move(argList[0]), std::move(argList[1]),
+                      std::move(argList[2]));
+    } else {
+      AD_THROW(
+          "Incorrect number of arguments: two or optionally three required");
+    }
+  };
 
   // Geo functions.
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
-      return createBinary(&makeDistExpression);
+      return createBinaryOrTernary(&makeDistWithUnitExpression);
+    } else if (functionName == "metricDistance") {
+      return createBinary(&makeMetricDistExpression);
     } else if (functionName == "longitude") {
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
@@ -225,8 +249,9 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
+template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
-                                       auto objectList) {
+                                       List objectList) {
   PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
@@ -236,7 +261,8 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
+template <typename Context>
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(Context* ctx) {
   return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
@@ -320,7 +346,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) {
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
-  auto toTripleComponent = []<typename T>(const T& item) {
+  auto toTripleComponent = [](const auto& item) {
+    using T = std::decay_t<decltype(item)>;
     namespace tc = ad_utility::triple_component;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
@@ -335,7 +362,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+    using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return PropertyPath::fromVariable(item);
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
@@ -1445,8 +1473,9 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::warnOrThrowIfUnboundVariables(
-    auto* ctx, const SparqlExpressionPimpl& expression,
+    Context* ctx, const SparqlExpressionPimpl& expression,
     std::string_view clauseName) {
   for (const auto& var : expression.containedVariables()) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
@@ -1610,6 +1639,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
     // <entity>` is contained in the query, then the variable
@@ -1617,7 +1647,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // Similarly, if a triple `?var ql:contains-word "words"` is contained in
     // the query, then the variable `ql_matchingword_var` is implicitly created
     // and visible in the query body.
-    auto* ctx, const TripleWithPropertyPath& triple) {
+    Context* ctx, const TripleWithPropertyPath& triple) {
   const auto& [subject, predicate, object] = triple;
 
   auto* var = std::get_if<Variable>(&subject);
@@ -2095,24 +2125,26 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return std::move(children[0]);
   }
 
-  auto make = [&]<typename Expr>() {
+  auto make = [&](auto t) {
+    using Expr = typename decltype(t)::type;
     return createExpression<Expr>(std::move(children[0]),
                                   std::move(children[1]));
   };
+
   std::string relation = ctx->children[1]->getText();
   if (relation == "=") {
-    return make.operator()<EqualExpression>();
+    return make(ti<EqualExpression>);
   } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
+    return make(ti<NotEqualExpression>);
   } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
+    return make(ti<LessThanExpression>);
   } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
+    return make(ti<GreaterThanExpression>);
   } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
+    return make(ti<LessEqualExpression>);
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
-    return make.operator()<GreaterEqualExpression>();
+    return make(ti<GreaterEqualExpression>);
   }
 }
 
@@ -2585,7 +2617,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     return makeCountStarExpression(distinct);
   }
   auto childExpression = visit(ctx->expression());
-  auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
+  auto makePtr = [&](auto t, auto&&... additionalArgs) {
+    using ExpressionType = typename decltype(t)::type;
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
@@ -2593,15 +2626,15 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   };
 
   if (functionName == "count") {
-    return makePtr.operator()<CountExpression>();
+    return makePtr(ti<CountExpression>);
   } else if (functionName == "sum") {
-    return makePtr.operator()<SumExpression>();
+    return makePtr(ti<SumExpression>);
   } else if (functionName == "max") {
-    return makePtr.operator()<MaxExpression>();
+    return makePtr(ti<MaxExpression>);
   } else if (functionName == "min") {
-    return makePtr.operator()<MinExpression>();
+    return makePtr(ti<MinExpression>);
   } else if (functionName == "avg") {
-    return makePtr.operator()<AvgExpression>();
+    return makePtr(ti<AvgExpression>);
   } else if (functionName == "group_concat") {
     // Use a space as a default separator
 
@@ -2618,12 +2651,12 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       separator = " "s;
     }
 
-    return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+    return makePtr(ti<GroupConcatExpression>, std::move(separator));
   } else if (functionName == "stdev") {
-    return makePtr.operator()<StdevExpression>();
+    return makePtr(ti<StdevExpression>);
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
-    return makePtr.operator()<SampleExpression>();
+    return makePtr(ti<SampleExpression>);
   }
 }
 

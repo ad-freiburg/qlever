@@ -165,6 +165,13 @@ jobs:
         run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
         if: steps.complete_tests.outcome == 'success'
 
-      - name: E2E
+      # Run the E2E test only once, but for GCC add the text index separately.
+      # Note that the dispatch by the compiler is arbitrary, we just want
+      # to have both cases tested.
+      - name: E2E with index in one go
+        if: (matrix.compiler == 'clang') && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh
-        if: steps.complete_tests.outcome == 'success'
+      
+      - name: E2E with separate text index build
+        if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
+        run: ${{github.workspace}}/e2e/e2e.sh -t

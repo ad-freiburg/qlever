@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Florian Kramer [2018]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_GROUPBY_H
 #define QLEVER_SRC_ENGINE_GROUPBY_H
@@ -317,10 +319,10 @@ class GroupBy : public Operation {
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
-  template <size_t NUM_GROUP_COLUMNS>
+  template <size_t NUM_GROUP_COLUMNS, typename SubResults>
   Result computeGroupByForHashMapOptimization(
-      std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
-      const std::vector<size_t>& columnIndices) const;
+      std::vector<HashMapAliasInformation>& aggregateAliases,
+      SubResults subresults, const std::vector<size_t>& columnIndices) const;
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
@@ -352,8 +354,9 @@ class GroupBy : public Operation {
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           using namespace ad_utility::use_type_identity;
-          auto addIf = [this, &aggregate]<typename T>(
-                           TI<T>, HashMapAggregateType target) {
+          auto addIf = [this, &aggregate](auto ti,
+                                          HashMapAggregateType target) {
+            using T = typename decltype(ti)::type;
             if (aggregate.aggregateType_.type_ == target)
               aggregationData_.emplace_back(
                   sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
@@ -380,7 +383,7 @@ class GroupBy : public Operation {
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
     std::vector<size_t> getHashEntries(
-        const ArrayOrVector<std::span<const Id>>& groupByCols);
+        const ArrayOrVector<ql::span<const Id>>& groupByCols);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {

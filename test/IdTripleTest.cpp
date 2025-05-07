@@ -20,26 +20,24 @@ TEST(IdTripleTest, constructors) {
 
   {
     auto idTriple = IdTriple(ids);
-    EXPECT_THAT(idTriple,
-                AD_FIELD(IdTriple<>, ids_, testing::ElementsAreArray(ids)));
+    EXPECT_THAT(idTriple.ids(), testing::ElementsAreArray(ids));
   }
 
   {
-    auto idTriple = IdTriple(ids, payload);
-    EXPECT_THAT(idTriple,
-                AD_FIELD(IdTriple<2>, ids_, testing::ElementsAreArray(ids)));
-    EXPECT_THAT(idTriple, AD_FIELD(IdTriple<2>, payload_,
-                                   testing::ElementsAreArray(payload)));
+    auto idTriple = IdTriple<2>(ids, payload);
+    EXPECT_THAT(idTriple.ids(), testing::ElementsAreArray(ids));
+    EXPECT_THAT(idTriple.payload(), ::testing::ElementsAreArray(payload));
   }
 }
 
+// TODO<joka921> Also add tests for the permuting of graph permutations.
 TEST(IdTripleTest, permute) {
   auto V = VocabId;
   std::array<Id, 4> ids{V(0), V(1), V(2), V(3)};
   // Without a payload
   {
     IdTriple<0> idTriple{ids};
-    EXPECT_THAT(idTriple.permute({1, 0, 2}),
+    EXPECT_THAT(idTriple.permute({1, 0, 2, 3}),
                 testing::Eq(IdTriple{std::array<Id, 4>{
                     VocabId(1), VocabId(0), VocabId(2), VocabId(3)}}));
   }
@@ -47,7 +45,7 @@ TEST(IdTripleTest, permute) {
   // With a payload
   {
     IdTriple<2> idTriple(ids, {IntId(10), IntId(5)});
-    EXPECT_THAT(idTriple.permute({1, 0, 2}),
+    EXPECT_THAT(idTriple.permute({1, 0, 2, 3}),
                 testing::Eq(IdTriple<2>(
                     {VocabId(1), VocabId(0), VocabId(2), VocabId(3)},
                     {IntId(10), IntId(5)})));

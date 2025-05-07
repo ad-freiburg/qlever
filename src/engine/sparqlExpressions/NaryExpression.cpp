@@ -21,6 +21,13 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(DistExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
                    GeoPointValueGetter>);
+NARY_EXPRESSION(MetricDistExpression, 2,
+                FV<NumericIdWrapper<ad_utility::WktMetricDistGeoPoints, true>,
+                   GeoPointValueGetter>);
+NARY_EXPRESSION(
+    DistWithUnitExpression, 3,
+    FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
+       GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
 
 }  // namespace detail
 
@@ -28,6 +35,23 @@ using namespace detail;
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
+}
+SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2) {
+  return std::make_unique<MetricDistExpression>(std::move(child1),
+                                                std::move(child2));
+}
+SparqlExpression::Ptr makeDistWithUnitExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    std::optional<SparqlExpression::Ptr> child3) {
+  // Unit is optional
+  if (child3.has_value()) {
+    return std::make_unique<DistWithUnitExpression>(
+        std::move(child1), std::move(child2), std::move(child3.value()));
+  } else {
+    return std::make_unique<DistExpression>(std::move(child1),
+                                            std::move(child2));
+  }
 }
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {

@@ -117,7 +117,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
+           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
         std::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
@@ -216,6 +216,9 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
         std::move(idTables()),
         [varColMap = varColMap, performCheck = std::move(performCheck)](
             Result::IdTableVocabPair& pair) {
+          // The lambda capture is only required when expensive checks are
+          // enabled.
+          (void)performCheck;
           AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
           return std::move(pair);
         }};

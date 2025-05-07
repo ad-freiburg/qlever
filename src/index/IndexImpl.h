@@ -11,7 +11,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <stxxl/vector>
 #include <vector>
 
 #include "backports/algorithm.h"
@@ -23,13 +22,13 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
+#include "index/ExternalSortFunctors.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/Postings.h"
-#include "index/StxxlSortFunctors.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
 #include "index/Vocabulary.h"
@@ -73,9 +72,8 @@ struct IndexBuilderDataBase {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
 };
 
-// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
-// triples.
-struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
+// All the data from IndexBuilderDataBase and (unsorted) external ID triples.
+struct IndexBuilderDataAsExternalVector : IndexBuilderDataBase {
   using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
@@ -109,8 +107,7 @@ class IndexImpl {
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, Context Id, Word Id, Score, entity
-  using TextVec = stxxl::vector<
-      tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
+  using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -163,6 +160,7 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+  string gitShortHash_ = "git short hash not set";
 
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
@@ -267,7 +265,8 @@ class IndexImpl {
   // called with the pair empty and bool false
   void buildTextIndexFile(
       const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-      bool addWordsFromLiterals);
+      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+      std::pair<float, float> bAndKForBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -320,10 +319,10 @@ class IndexImpl {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
-  std::string indexToString(VocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  std::string_view indexToString(WordVocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
   // ___________________________________________________________________________
@@ -443,13 +442,11 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
-                                             float b, float k);
-
   const string& getTextName() const { return textMeta_.getName(); }
   const string& getKbName() const { return pso_.getKbName(); }
   const string& getOnDiskBase() const { return onDiskBase_; }
   const string& getIndexId() const { return indexId_; }
+  const string& getGitShortHash() const { return gitShortHash_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -503,7 +500,7 @@ class IndexImpl {
       std::shared_ptr<RdfParserBase> parser);
 
   // ___________________________________________________________________
-  IndexBuilderDataAsStxxlVector passFileForVocabulary(
+  IndexBuilderDataAsExternalVector passFileForVocabulary(
       std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
   /**
@@ -532,9 +529,10 @@ class IndexImpl {
   std::unique_ptr<RdfParserBase> makeRdfParser(
       const std::vector<Index::InputFileSpecification>& files) const;
 
+  template <typename Func>
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, auto isQLeverInternalTriple);
+      size_t linesPerPartial, Func isQLeverInternalTriple);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -566,12 +564,13 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
+  template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
              IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                            const string& fileName2, auto&& sortedTriples,
-                            std::array<size_t, 3> permutation,
-                            auto&&... perTripleCallbacks);
+                            const string& fileName2, T&& sortedTriples,
+                            Permutation::KeyOrder permutation,
+                            Callbacks&&... perTripleCallbacks);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -602,20 +601,20 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
+  template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
              IndexMetaDataMmapDispatcher::WriteType>
-  createPermutations(size_t numColumns, auto&& sortedTriples,
+  createPermutations(size_t numColumns, T&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
-                     auto&&... perTripleCallbacks);
+                     Callbacks&&... perTripleCallbacks);
 
-  void createTextIndex(const string& filename, const TextVec& vec);
+  void createTextIndex(const string& filename, TextVec& vec);
 
   void openTextFileHandle();
 
-  void addContextToVector(TextVec::bufwriter_type& writer,
-                          TextRecordIndex context,
+  void addContextToVector(TextVec& vec, TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities);
+                          const ad_utility::HashMap<Id, Score>& entities) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
@@ -656,7 +655,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  bool isLiteral(const string& object) const;
+  bool isLiteral(std::string_view object) const;
 
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
@@ -731,8 +730,9 @@ class IndexImpl {
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
+  template <typename InternalTriplePsoSorter>
   std::pair<size_t, size_t> createInternalPSOandPOS(
-      auto&& internalTriplesPsoSorter);
+      InternalTriplePsoSorter&& internalTriplesPsoSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
@@ -769,12 +769,14 @@ class IndexImpl {
     }
   }
 
-  void createSecondPermutationPair(auto&&... args) {
+  template <typename... Args>
+  void createSecondPermutationPair(Args&&... args) {
     static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
     return createOSPAndOPS(AD_FWD(args)...);
   }
 
-  void createThirdPermutationPair(auto&&... args) {
+  template <typename... Args>
+  void createThirdPermutationPair(Args&&... args) {
     static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
     return createPSOAndPOS(AD_FWD(args)...);
   }
@@ -785,9 +787,10 @@ class IndexImpl {
   // subject pattern of the object (which is created by this function). Return
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
+  template <typename InternalTripleSorter>
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
-                       auto& internalTripleSorter);
+                       InternalTripleSorter& internalTripleSorter);
 
   // During the index, building add the number of internal triples and internal
   // predicates to the configuration. Note: the number of internal objects and
@@ -801,6 +804,9 @@ class IndexImpl {
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
       std::optional<bool> parallelParsingSpecifiedViaJson);
+
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEXIMPL_H

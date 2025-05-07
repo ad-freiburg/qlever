@@ -6,6 +6,8 @@
 
 #include "global/SpecialIds.h"
 
+using PatternId = Pattern::PatternId;
+
 // _________________________________________________________________________
 void PatternCreator::processTriple(
     std::array<Id, NumColumnsIndexBuilding> triple,
@@ -30,9 +32,9 @@ void PatternCreator::processTriple(
 }
 
 // _____________________________________________________________________________
-PatternID PatternCreator::finishPattern(const Pattern& pattern) {
+PatternId PatternCreator::finishPattern(const Pattern& pattern) {
   if (pattern.empty()) {
-    return NO_PATTERN;
+    return Pattern::NoPattern;
   }
   numDistinctSubjectPredicatePairs_ += pattern.size();
   auto it = patternToIdAndCount_.find(pattern);
@@ -43,7 +45,7 @@ PatternID PatternCreator::finishPattern(const Pattern& pattern) {
     return it->second.patternId_;
   }
   // This is a new pattern, assign a new pattern ID and a count of 1.
-  auto patternId = static_cast<PatternID>(patternToIdAndCount_.size());
+  auto patternId = static_cast<PatternId>(patternToIdAndCount_.size());
   patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
 
   // Count the total number of distinct predicates that appear in the
@@ -57,7 +59,7 @@ PatternID PatternCreator::finishPattern(const Pattern& pattern) {
 // ________________________________________________________________________________
 void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Write the pattern to disk and obtain its ID.
-  PatternID patternId = finishPattern(pattern);
+  PatternId patternId = finishPattern(pattern);
 
   // Write the triple `<subject> ql:has-pattern <patternId>`, but only if the
   // subject has a pattern.

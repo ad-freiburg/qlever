@@ -753,13 +753,12 @@ TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using ad_utility::triple_component::Iri;
 
-  TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
+  TransitivePathSide left{std::nullopt, 0, Iri::fromIriref("<s>"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
-      "SELECT ?y WHERE {"
-      "<s> <p>+ ?y }",
+      "SELECT ?y WHERE { <s> <p>+ ?y }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                         scan(internalVar(0), "<p>", internalVar(1))),
       qec);
@@ -769,13 +768,12 @@ TEST(QueryPlanner, TransitivePathRightId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using ad_utility::triple_component::Iri;
 
   TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 0, getId("<o>"), 1};
+  TransitivePathSide right{std::nullopt, 0, Iri::fromIriref("<o>"), 1};
   h::expect(
-      "SELECT ?y WHERE {"
-      "?x <p>+ <o> }",
+      "SELECT ?y WHERE { ?x <p>+ <o> }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                         scan(internalVar(0), "<p>", internalVar(1))),
       qec);
@@ -2674,14 +2672,23 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
+namespace {
+// Get a `QueryExecutionContext` with a text index. This is used in several
+// tests below.
+auto getQecWithTextIndex = []() {
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
+      "<a> <p> \"testing and picking\""};
+  config.createTextIndex = true;
+  return ad_utility::testing::getQec(std::move(config));
+};
+}  // namespace
+
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForWord) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"sentence for multiple words tests\" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
   auto wordScan = h::TextIndexScanForWord;
 
   h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
@@ -2706,12 +2713,7 @@ TEST(QueryPlanner, TextIndexScanForWord) {
 
 // __________________________________________________________________________
 TEST(QueryPlanner, TextIndexScanForEntity) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -3045,12 +3047,7 @@ TEST(QueryPlanner, TextSearchService) {
                            "variable: ?t2 is not contained in a word search."));
 
   // Begin checking query execution trees
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScanConf = h::TextIndexScanForWordConf;
   auto entityScanConf = h::TextIndexScanForEntityConf;
@@ -3233,12 +3230,7 @@ TEST(QueryPlanner, TextSearchService) {
 }
 
 TEST(QueryPlanner, TextLimit) {
-  auto qec = ad_utility::testing::getQec(
-      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
-      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
-      "test\" . <a> <p> \"only this text contains the word opti \" . "
-      "<a> <p> \"testing and picking\"",
-      true, true, true, 16_B, true);
+  auto qec = getQecWithTextIndex();
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
@@ -4022,4 +4014,192 @@ TEST(QueryPlanner, negatedPaths) {
                          "?_QLever_internal_variable_qp_1",
                          h::IndexScanFromStrings(
                              "?c", "?_QLever_internal_variable_qp_1", "?a"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, transitivePathWithoutVariables) {
+  TransitivePathSide left{std::nullopt, 1, 1, 0};
+  TransitivePathSide right{std::nullopt, 0, 1, 1};
+  h::expect(
+      "SELECT * { 1 <a>+ 1 }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { 1 <a>+ 1 . 1 <a> 1 }",
+      h::CartesianProductJoin(
+          h::IndexScan(1, TripleComponent::Iri::fromIriref("<a>"), 1),
+          h::TransitivePath(
+              left, right, 1, std::numeric_limits<size_t>::max(),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithLiterals) {
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { 1 <a>* ?var }",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Distinct(
+              {0},
+              h::Union(
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_x",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_z"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))),
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_z",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_x"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  TransitivePathSide left2{std::nullopt, 1, 1, 0};
+  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  h::expect(
+      "SELECT * { 1 <a>* 1 }",
+      h::TransitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Distinct(
+              {0},
+              h::Union(
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_x",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_z"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))),
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_z",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_x"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+  h::expect(
+      R"(PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * { 1 <a>* "1"^^xsd:integer })",
+      h::TransitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Distinct(
+              {0},
+              h::Union(
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_x",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_z"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))),
+                  h::Join(h::IndexScanFromStrings(
+                              "?internal_property_path_variable_z",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_x"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithMismatchingLiterals) {
+  TransitivePathSide left{std::nullopt, 1, 1, 0};
+  TransitivePathSide right{std::nullopt, 0, 2, 1};
+  // If the literals mismatch, we don't need to evaluate the empty path!
+  h::expect(
+      "SELECT * { 1 <a>* 2 }",
+      h::TransitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithLiteralsBound) {
+  TransitivePathSide left{std::nullopt, 0, 1, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { 1 <a>* ?var . VALUES ?var { 2 } }",
+      h::Join(
+          h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
+          h::Sort(h::TransitivePath(
+              left, right, 0, std::numeric_limits<size_t>::max(),
+              h::Distinct(
+                  {0},
+                  h::Union(
+                      h::Join(
+                          h::IndexScanFromStrings(
+                              "?internal_property_path_variable_x",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_z"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))),
+                      h::Join(
+                          h::IndexScanFromStrings(
+                              "?internal_property_path_variable_z",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_x"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))))),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1")))));
+
+  TransitivePathSide left2{std::nullopt, 1, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 0, 1, 1};
+  h::expect(
+      "SELECT * { ?var <a>* 1 . VALUES ?var { 2 } }",
+      h::Join(
+          h::Sort(h::ValuesClause("VALUES (?var) { (2) }")),
+          h::Sort(h::TransitivePath(
+              left2, right2, 0, std::numeric_limits<size_t>::max(),
+              h::Distinct(
+                  {0},
+                  h::Union(
+                      h::Join(
+                          h::IndexScanFromStrings(
+                              "?internal_property_path_variable_x",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_z"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))),
+                      h::Join(
+                          h::IndexScanFromStrings(
+                              "?internal_property_path_variable_z",
+                              "?internal_property_path_variable_y",
+                              "?internal_property_path_variable_x"),
+                          h::Sort(h::ValuesClause(
+                              "VALUES (?internal_property_path_variable_x) { "
+                              "(1) }"))))),
+              h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                      "?_QLever_internal_variable_qp_1")))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?x"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?x"}, 1};
+  h::expect("SELECT * { ?x <a>+ ?x . ?x <b> <c> }",
+            h::TransitivePath(std::move(left), std::move(right), 1,
+                              std::numeric_limits<size_t>::max(),
+                              h::IndexScanFromStrings("?x", "<b>", "<c>"),
+                              h::IndexScanFromStrings(
+                                  "?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
 }

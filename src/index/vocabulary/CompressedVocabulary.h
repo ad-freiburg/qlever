@@ -142,6 +142,7 @@ CPP_template(typename UnderlyingVocabulary,
     }};
     std::atomic<size_t> queueIndex_ = 0;
     ad_utility::TaskQueue<false> compressQueue_{10, 10};
+    uint64_t counter_ = 0;
 
    public:
     /// Constructor.
@@ -151,14 +152,15 @@ CPP_template(typename UnderlyingVocabulary,
           filenameDecoders_{filenameDecoders} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
-    void operator()(std::string_view uncompressedWord,
-                    bool isExternal = false) {
+    uint64_t operator()(std::string_view uncompressedWord,
+                        bool isExternal = false) {
       AD_CORRECTNESS_CHECK(!isFinished_);
       wordBuffer_.emplace_back(uncompressedWord);
       isExternalBuffer_.push_back(isExternal);
       if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
+      return counter_++;
     }
 
     /// Dump all the words that still might be contained in intermediate buffers
@@ -259,23 +261,12 @@ CPP_template(typename UnderlyingVocabulary,
   };
   using WordWriter = DiskWriterFromUncompressedWords;
 
-  // Return a `DiskWriter` that can be used to create the vocabulary.
-  DiskWriterFromUncompressedWords makeDiskWriter(
-      const std::string& filename) const {
-    return DiskWriterFromUncompressedWords{
+  // Return a `unique_ptr<DiskWriter>` that can be used to create the
+  // vocabulary.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<DiskWriterFromUncompressedWords>(
         absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix)};
-  }
-  /// Initialize the vocabulary from the given `words`.
-  // TODO<joka921> This can be a generic Mixin...
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
+        absl::StrCat(filename, decodersSuffix));
   }
 
   // Access to the underlying vocabulary.

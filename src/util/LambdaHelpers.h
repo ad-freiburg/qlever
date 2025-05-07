@@ -29,12 +29,14 @@ struct AssignableLambdaImpl<Lambda, false, false> {
       : _lambda{std::move(lambda)} {}
   AssignableLambdaImpl() = default;
 
-  decltype(auto) operator()(auto&&... args) noexcept(
+  template <typename... Args>
+  decltype(auto) operator()(Args&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 
-  decltype(auto) constexpr operator()(auto&&... args) const
+  template <typename... Args>
+  decltype(auto) constexpr operator()(Args&&... args) const
       noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
@@ -57,7 +59,7 @@ struct AssignableLambdaImpl<Lambda, true, false>
   AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
       QL_CONCEPT_OR_NOTHING(requires std::is_move_constructible_v<Lambda>) {
     std::destroy_at(&lambda());
-    std::construct_at(&lambda(), std::move(other.lambda()));
+    new (&lambda()) Lambda(std::move(other.lambda()));
     return *this;
   }
 
@@ -79,7 +81,7 @@ struct AssignableLambdaImpl<Lambda, true, true>
   AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other)
       QL_CONCEPT_OR_NOTHING(requires std::is_copy_constructible_v<Lambda>) {
     std::destroy_at(&lambda());
-    std::construct_at(&lambda(), other.lambda());
+    new (&lambda()) Lambda(other.lambda());
     return *this;
   }
 

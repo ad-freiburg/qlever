@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H
 #define QLEVER_TEST_UTIL_BENCHMARKMEASUREMENTCONTAINERHELPERS_H
@@ -33,11 +35,13 @@ arguments. Should be passed per deduction.
 */
 template <typename Function>
 static void doForTypeInResultTableEntryType(Function function) {
-  ad_utility::forEachTypeInTemplateType<ad_benchmark::ResultTable::EntryType>(
-      [&function]<typename IndexType>() {
+  ad_utility::forEachTypeInTemplateTypeWithTI(
+      ad_utility::use_type_identity::ti<ad_benchmark::ResultTable::EntryType>,
+      [&function](auto t) {
+        using IndexType = typename decltype(t)::type;
         // `std::monostate` is not important for these kinds of tests.
         if constexpr (!ad_utility::isSimilar<IndexType, std::monostate>) {
-          function.template operator()<IndexType>();
+          function(ad_utility::use_type_identity::ti<IndexType>);
         }
       });
 }
