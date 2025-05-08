@@ -6,10 +6,12 @@
 #define QLEVER_SRC_INDEX_TEXTINDEXREADWRITE_H
 
 #include "backports/span.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "global/IndexTypes.h"
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
+#include "index/TextScoringEnum.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
@@ -99,8 +101,29 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
   gapEncodedVector.resize(nofElements);
 }
 
+/**
+ * @brief Reads the given contextList from textIndexFile and returns the
+ *        elements as IdTable.
+ * @param allocator Used to create the IdTable.
+ * @param contextList Metadata used to read the correct lines from the file
+ * @param isWordCl Contains the right elements of context list. This is
+ *                 necessary since the context list contains both words and
+ *                 entities.
+ * @param textIndexFile The file to read the elements from.
+ * @param textScoringMetric The textScoringMetric used to save the contextList
+ *                          during index building. This is necessary to cast the
+ *                          scores to the right type.
+ *
+ */
+IdTable readContextListHelper(
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const ContextListMetaData& contextList, bool isWordCl,
+    const ad_utility::File& textIndexFile, TextScoringMetric textScoringMetric);
+
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
+
+/// WRITING PART
 
 // Compress src using zstd and write compressed bytes to file while advancing
 // currentOffset by the nofBytes written
@@ -147,6 +170,8 @@ void encodeAndWriteSpanAndMoveOffset(ql::span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset);
 
+/// READING PART
+
 template <typename T>
 vector<T> readZstdComprList(size_t nofElements, off_t from,
                             size_t nofBytesCompressed,
@@ -157,6 +182,20 @@ vector<T> readZstdComprList(size_t nofElements, off_t from,
   return ZstdWrapper::decompress<T>(compressed.data(), nofBytesCompressed,
                                     nofElements);
 }
+
+// Reads the given textblock and returns all words with their contextId, wordId
+// and score. Internally uses readContextListHelper.
+IdTable readWordCl(const TextBlockMetaData& tbmd,
+                   const ad_utility::AllocatorWithLimit<Id>& allocator,
+                   const ad_utility::File& textIndexFile,
+                   TextScoringMetric textScoringMetric);
+
+// Reads the given textblock and returns all entities with their contextId,
+// entityId and score. Internally uses readContextListHelper.
+IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
+                         const ad_utility::AllocatorWithLimit<Id>& allocator,
+                         const ad_utility::File& textIndexFile,
+                         TextScoringMetric textScoringMetric);
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
