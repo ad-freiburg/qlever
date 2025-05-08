@@ -260,6 +260,21 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     return std::nullopt;
   }
 }
+
+//______________________________________________________________________________
+// Given a `SparqlExpression*` pointing to a `StringLiteralExpression`, return
+// the contained `Literal`. For all other `LiteralExpression` types return
+// `std::nullopt`.
+inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
+    const SparqlExpression* child) {
+  using enum Datatype;
+  if (const auto* literalExpr =
+          dynamic_cast<const StringLiteralExpression*>(child)) {
+    return literalExpr->value();
+  }
+  return std::nullopt;
+}
+
 }  // namespace detail
 
 }  // namespace sparqlExpression

@@ -279,6 +279,19 @@ void PrefixRegexExpression::checkCancellation(
 }
 
 // _____________________________________________________________________________
+std::vector<PrefilterExprVariablePair>
+PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  std::vector<PrefilterExprVariablePair> prefilterVec;
+  prefilterVec.emplace_back(
+      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+          TripleComponent::Literal::fromStringRepresentation(
+              absl::StrCat("\"", prefixRegex_, "\""))),
+      variable_);
+  return prefilterVec;
+}
+
+// _____________________________________________________________________________
 std::optional<PrefixRegexExpression>
 PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
     Ptr& string, const SparqlExpression& regex) {
