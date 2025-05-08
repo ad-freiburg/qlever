@@ -15,6 +15,7 @@
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
+#include "parser/data/Types.h"
 
 class QueryPlanner {
   using TextLimitMap =
@@ -57,13 +58,13 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_.s_)) {
+        if (triple_.s_.isVariable()) {
           _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_.iri_});
+        if (auto predicate = triple_.getPredicateVariable()) {
+          _variables.insert(predicate.value());
         }
-        if (isVariable(triple_.o_)) {
+        if (triple_.o_.isVariable()) {
           _variables.insert(triple_.o_.getVariable());
         }
         if (graphVariable.has_value()) {
@@ -318,9 +319,10 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
-                                               const PropertyPath& path,
-                                               const TripleComponent& right);
+  static ParsedQuery::GraphPattern seedFromVarOrIri(
+      const TripleComponent& left,
+      const ad_utility::sparql_types::VarOrIri& varOrIri,
+      const TripleComponent& right);
 
   Variable generateUniqueVarName();
 

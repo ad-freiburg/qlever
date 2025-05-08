@@ -101,13 +101,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
       qec,
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs))),
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs))));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});
@@ -132,13 +130,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
       qec,
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs)),
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs)));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});

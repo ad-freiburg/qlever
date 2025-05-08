@@ -35,10 +35,15 @@ std::vector<IdTable> toVector(Result::LazyResult generator) {
   return result;
 }
 
+// Shorthand helper function
+ad_utility::triple_component::Iri iri(std::string_view string) {
+  return TripleComponent::Iri::fromIriref(string);
+}
+
 // _____________________________________________________________________________
 void checkSetPrefilterExpressionVariablePair(
     QueryExecutionContext* qec, const Permutation::Enum& permutation,
-    SparqlTriple triple,
+    SparqlTripleSimple triple,
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
     std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
     ColumnIndex columnIdx, bool prefilterIsApplicable) {
@@ -173,25 +178,26 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   // assigned to the IndexScan child (prefiltering is possible) with Filter
   // construction.
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
                    gtSprql(Variable{"?y"}, DoubleId(0))),
       neq(IntId(10)), 1, true);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::PSO,
-      {makeSparqlExpression::Iri::fromIriref("<a>"), "<p>", Variable{"?z"}},
+      {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
+       Variable{"?z"}},
       eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
 
   // We expect that no <PrefilterExpression, Variable> pair is assigned
   // (no prefilter procedure applicable) with Filter construction.
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::PSO, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      qec, Permutation::PSO, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 1, false);
   checkSetPrefilterExpressionVariablePair(
-      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
 }
 

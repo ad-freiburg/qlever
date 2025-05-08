@@ -374,7 +374,9 @@ inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
   TripleComponent subject{Variable{triple.at(0)}};
   TripleComponent object{Variable{triple.at(2)}};
   return ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{
+          subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildJoin(

@@ -35,14 +35,9 @@ class PropertyPath {
                std::initializer_list<PropertyPath> children);
 
   static PropertyPath fromIri(std::string iri) {
+    AD_CONTRACT_CHECK(!iri.starts_with("?"));
     PropertyPath p(Operation::IRI);
     p.iri_ = std::move(iri);
-    return p;
-  }
-
-  static PropertyPath fromVariable(const Variable& var) {
-    PropertyPath p(Operation::IRI);
-    p.iri_ = var.name();
     return p;
   }
 

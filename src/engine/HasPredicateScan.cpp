@@ -34,8 +34,10 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, std::string{HAS_PATTERN_PREDICATE},
-                   objectVariable});
+      SparqlTripleSimple{
+          subtreeVar,
+          ad_utility::triple_component::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+          objectVariable});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
@@ -59,17 +61,17 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
 // `ScanType`.
 static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
   using enum HasPredicateScan::ScanType;
-  AD_CONTRACT_CHECK(triple.p_.iri_ == HAS_PREDICATE_PREDICATE);
-  if (isVariable(triple.s_) && (isVariable(triple.o_))) {
+  AD_CONTRACT_CHECK(triple.getSimplePredicate() == HAS_PREDICATE_PREDICATE);
+  if (triple.s_.isVariable() && triple.o_.isVariable()) {
     if (triple.s_ == triple.o_) {
       throw std::runtime_error{
           "ql:has-predicate with same variable for subject and object not "
           "supported."};
     }
     return FULL_SCAN;
-  } else if (isVariable(triple.s_)) {
+  } else if (triple.s_.isVariable()) {
     return FREE_S;
-  } else if (isVariable(triple.o_)) {
+  } else if (triple.o_.isVariable()) {
     return FREE_O;
   } else {
     AD_FAIL();

@@ -207,10 +207,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
 // ____________________________________________________________________________
 SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
-  AD_CONTRACT_CHECK(triple.p_.isIri(),
+  AD_CONTRACT_CHECK(triple.getSimplePredicate().has_value(),
                     "The config triple for SpatialJoin must have a special IRI "
                     "as predicate");
-  const std::string& input = triple.p_.iri_;
+  const std::string& input = std::get<PropertyPath>(triple.p_).iri_;
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),

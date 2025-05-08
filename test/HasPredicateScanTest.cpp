@@ -146,7 +146,8 @@ TEST_F(HasPredicateScanTest, subtree) {
   // The first triple matches only `<y> <p3> <o4>`, so we get the pattern
   // for `y` with an additional column that always is `<p3.`
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", iri("<o4>")});
+      qec, Permutation::Enum::OPS,
+      SparqlTripleSimple{V{"?x"}, V{"?y"}, iri("<o4>")});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
   runTest(scan, {{p3, y, p}, {p3, y, p3}});
 }
@@ -160,7 +161,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
+  auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), V{"?y"}};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
@@ -172,7 +173,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
 }
 // ____________________________________________________________
 TEST_F(HasPredicateScanTest, cloneCountAvailablePredicates) {
-  auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
+  auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), V{"?y"}};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
@@ -195,7 +196,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, "<p3>", iri("<o4>")};
+  auto triple = SparqlTripleSimple{V{"?x"}, iri("<p3>"), iri("<o4>")};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
@@ -231,8 +232,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, std::string{HAS_PATTERN_PREDICATE},
-                             V{"?predicate"}};
+  auto triple =
+      SparqlTripleSimple{V{"?x"}, iri(HAS_PATTERN_PREDICATE), V{"?predicate"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
   auto patternTrick =

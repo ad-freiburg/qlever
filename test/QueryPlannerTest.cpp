@@ -78,15 +78,15 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0, SparqlTriple(Var{"?x"}, "?p", iri("<X>"))),
+                     0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     1, SparqlTriple(Var{"?x"}, "?p2", iri("<Y>"))),
+                     1, SparqlTriple(Var{"?x"}, Var{"?p2"}, iri("<Y>"))),
                  {0}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple(iri("<X>"), "?p", iri("<Y>"))),
+                     2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
                  {0})}));
     ASSERT_TRUE(tg.isSimilar(expected));
   }
