@@ -160,6 +160,7 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+  string gitShortHash_ = "git short hash not set";
 
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
@@ -445,6 +446,7 @@ class IndexImpl {
   const string& getKbName() const { return pso_.getKbName(); }
   const string& getOnDiskBase() const { return onDiskBase_; }
   const string& getIndexId() const { return indexId_; }
+  const string& getGitShortHash() const { return gitShortHash_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }

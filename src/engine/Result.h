@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"

@@ -169,7 +169,11 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
   } else {
-    runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+    auto& rti = runtimeInfo();
+    rti.status_ = RuntimeInformation::lazilyMaterialized;
+    rti.totalTime_ = timer.msecs();
+    rti.originalTotalTime_ = rti.totalTime_;
+    rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
         [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
             const Result::IdTableVocabPair& pair,

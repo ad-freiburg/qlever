@@ -59,7 +59,7 @@ struct AssignableLambdaImpl<Lambda, true, false>
   AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
       QL_CONCEPT_OR_NOTHING(requires std::is_move_constructible_v<Lambda>) {
     std::destroy_at(&lambda());
-    std::construct_at(&lambda(), std::move(other.lambda()));
+    new (&lambda()) Lambda(std::move(other.lambda()));
     return *this;
   }
 
@@ -81,7 +81,7 @@ struct AssignableLambdaImpl<Lambda, true, true>
   AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other)
       QL_CONCEPT_OR_NOTHING(requires std::is_copy_constructible_v<Lambda>) {
     std::destroy_at(&lambda());
-    std::construct_at(&lambda(), other.lambda());
+    new (&lambda()) Lambda(other.lambda());
     return *this;
   }
 

@@ -381,6 +381,8 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   EXPECT_THROW(
       valuesForTesting.runComputation(timer, ComputationMode::ONLY_IF_CACHED),
       ad_utility::Exception);
+  auto timeout = 3ms;
+  std::this_thread::sleep_for(timeout);
 
   auto result = valuesForTesting.runComputation(
       timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -388,9 +390,9 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   auto& rti = valuesForTesting.runtimeInfo();
 
   EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
-  EXPECT_EQ(rti.totalTime_, 0ms);
-  EXPECT_EQ(rti.originalTotalTime_, 0ms);
-  EXPECT_EQ(rti.originalOperationTime_, 0ms);
+  EXPECT_GE(rti.totalTime_, timeout);
+  EXPECT_GE(rti.originalTotalTime_, timeout);
+  EXPECT_GE(rti.originalOperationTime_, timeout);
 
   expectAtEachStageOfGenerator(
       std::move(result.idTables()),
