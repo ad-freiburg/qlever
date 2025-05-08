@@ -273,13 +273,13 @@ CPP_template(typename NaryOperation)(
     if (!varExpr.has_value()) {
       return prefilterVec;
     }
-    auto prefixStr = getStringViewFromLiteralExpression(child1);
+    auto prefixStr = getLiteralFromLiteralExpression(child1);
     if (!prefixStr.has_value()) {
       return prefilterVec;
     }
     prefilterVec.emplace_back(
         std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-            std::string(asStringViewUnsafe(prefixStr.value()))),
+            prefixStr.value()),
         varExpr.value());
     return prefilterVec;
   }

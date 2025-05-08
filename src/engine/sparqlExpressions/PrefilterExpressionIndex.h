@@ -177,19 +177,15 @@ class PrefilterExpression {
 // definitions of `PrefixRegexExpression`.
 class PrefixRegexExpression : public PrefilterExpression {
  private:
-  std::string prefix_;
-  // `mirrored_ = true` specifies "mirrored" cases like `STRSTARTS("str",
-  // ?var)`. With `"str"` appearing as a left-hand side value, the expression is
-  // considered mirrored. This case requires a different evaluation logic.
-  //
+  TripleComponent::Literal prefixLiteral_;
   // `isNegated_ = true` implies that we prefilter a negated expression, hence
   // `!REGEX()` or `!STRSTARTS()`.
   bool isNegated_;
 
  public:
-  explicit PrefixRegexExpression(const std::string& prefix,
+  explicit PrefixRegexExpression(const TripleComponent::Literal& prefixLiteral,
                                  bool isNegated = false)
-      : prefix_(absl::StrCat("\"", prefix)), isNegated_(isNegated) {}
+      : prefixLiteral_(prefixLiteral), isNegated_(isNegated) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -301,9 +297,6 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  // `PrefixRegexExpression::evaluateMirroredImpl` potentially requires direct
-  // access to the `evaluateImpl` below.
-  friend class PrefixRegexExpression;
   // If `getComplementOverAllDatatypes` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.

@@ -285,7 +285,8 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
       std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          prefixRegex_),
+          TripleComponent::Literal::fromStringRepresentation(
+              absl::StrCat("\"", prefixRegex_, "\""))),
       variable_);
   return prefilterVec;
 }

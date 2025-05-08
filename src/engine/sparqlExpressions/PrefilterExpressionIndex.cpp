@@ -504,7 +504,7 @@ ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> PrefixRegexExpression::logicalComplement()
     const {
-  return make<PrefixRegexExpression>(prefix_, !isNegated_);
+  return make<PrefixRegexExpression>(prefixLiteral_, !isNegated_);
 };
 
 //______________________________________________________________________________
@@ -515,7 +515,7 @@ bool PrefixRegexExpression::operator==(const PrefilterExpression& other) const {
     return false;
   }
   return isNegated_ == otherPrefixRegex->isNegated_ &&
-         prefix_ == otherPrefixRegex->prefix_;
+         prefixLiteral_ == otherPrefixRegex->prefixLiteral_;
 };
 
 //______________________________________________________________________________
@@ -527,7 +527,8 @@ std::unique_ptr<PrefilterExpression> PrefixRegexExpression::clone() const {
 std::string PrefixRegexExpression::asString(
     [[maybe_unused]] size_t depth) const {
   return absl::StrCat(
-      "Prefilter PrefixRegexExpression with prefix ", prefix_,
+      "Prefilter PrefixRegexExpression with prefix ",
+      prefixLiteral_.toStringRepresentation(),
       ".\nExpression is negated: ", isNegated_ ? "true.\n" : "false.\n");
 };
 
@@ -539,38 +540,46 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
   using LVE = LocalVocabEntry;
   LocalVocab localVocab{};
-  std::string_view prefixSv(&prefix_.front(), prefix_.size());
-  const auto& prefixRanges = vocab.prefixRanges(prefixSv);
-  const auto& ranges = prefixRanges.ranges();
-  const auto& [lowerVocabIndex, upperVocabIndex] = ranges.front();
+  auto prefixQuoted =
+      absl::StrCat("\"", asStringViewUnsafe(prefixLiteral_.getContent()));
+  auto [lowerVocabIndex, upperVocabIndex] =
+      vocab.prefixRanges(prefixQuoted).ranges().front();
 
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
-  const auto& lowerIdLocalVocab = getValueIdFromIdOrLocalVocabEntry(
-      LVE::fromStringRepresentation(absl::StrCat(prefix_, "\"")), localVocab);
-  auto lowerId =
-      lowerIdVocab < lowerIdLocalVocab ? lowerIdVocab : lowerIdLocalVocab;
+  const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
+      LVE::fromStringRepresentation("<"), localVocab);
 
   if (isNegated_) {
+    const auto& upperIdAdjusted =
+        upperVocabIndex.get() == 0
+            ? Id::makeFromVocabIndex(upperVocabIndex)
+            : Id::makeFromVocabIndex(upperVocabIndex.decremented());
     // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
     // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
-    return OrExpression(make<LessThanExpression>(lowerId),
-                        make<GreaterEqualExpression>(Id::makeFromVocabIndex(
-                            upperVocabIndex.decremented())))
+    return OrExpression(make<LessThanExpression>(lowerIdVocab),
+                        make<AndExpression>(
+                            make<GreaterEqualExpression>(upperIdAdjusted),
+                            make<LessThanExpression>(beginIdIri)))
         .evaluateImpl(vocab, idRange, blockRange);
   }
 
+  // Set adjusted lower reference.
+  const auto& lowerIdAdjusted =
+      lowerVocabIndex.get() == 0
+          ? lowerIdVocab
+          : Id::makeFromVocabIndex(lowerVocabIndex.decremented());
+
   // Set adjusted upper reference.
-  const auto& upperId =
-      upperVocabIndex == VocabIndex::make(vocab.size())
-          ? getValueIdFromIdOrLocalVocabEntry(
-                LVE::fromStringRepresentation("<"), localVocab)
+  const auto& upperIdAdjusted =
+      upperVocabIndex.get() == vocab.size()
+          ? beginIdIri
           : Id::makeFromVocabIndex(upperVocabIndex.incremented());
 
   // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
   // Prefilter ?var > Id("prefix) && ?var < Id(next("prefix)).
-  return AndExpression(make<GreaterEqualExpression>(lowerId),
-                       make<LessThanExpression>(upperId))
+  return AndExpression(make<GreaterEqualExpression>(lowerIdAdjusted),
+                       make<LessThanExpression>(upperIdAdjusted))
       .evaluateImpl(vocab, idRange, blockRange);
 };
 

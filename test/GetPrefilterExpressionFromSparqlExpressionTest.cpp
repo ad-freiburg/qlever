@@ -477,15 +477,15 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   const auto varX = Variable{"?x"};
   const auto varY = Variable{"?y"};
   evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
-                       pr(prefixRegex("de"), varX));
+                       pr(prefixRegex(L("\"de\"")), varX));
   evalAndEqualityCheck(strStartsSprql(L("\"\""), varX));
   evalAndEqualityCheck(strStartsSprql(L("\"someRefStr\""), varX));
   evalAndEqualityCheck(notSprqlExpr(strStartsSprql(varX, L("\"de\""))),
-                       pr(notExpr(prefixRegex("de")), varX));
+                       pr(notExpr(prefixRegex(L("\"de\""))), varX));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
-                       pr(prefixRegex("prefix"), varX));
+                       pr(prefixRegex(L("\"prefix\"")), varX));
   evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
-                       pr(notExpr(prefixRegex("prefix")), varX));
+                       pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
@@ -620,15 +620,15 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 }
 
 //______________________________________________________________________________
-// Test helper `getStringViewFromLiteralExpression` from LiteralExpression.h
+// Test helper `getLiteralFromLiteralExpression` from LiteralExpression.h
 TEST(GetPrefilterExpressionFromSparqlExpression,
-     getNormalizedStringViewFromStringLiteralExpression) {
+     getLiteralFromStringLiteralExpression) {
   using namespace sparqlExpression;
   ASSERT_TRUE(
-      sparqlExpression::detail::getStringViewFromLiteralExpression(
+      sparqlExpression::detail::getLiteralFromLiteralExpression(
           std::make_unique<StringLiteralExpression>(L("\"hello\"")).get())
           .has_value());
-  ASSERT_FALSE(sparqlExpression::detail::getStringViewFromLiteralExpression(
+  ASSERT_FALSE(sparqlExpression::detail::getLiteralFromLiteralExpression(
                    std::make_unique<IriExpression>(I("<iri>")).get())
                    .has_value());
 }

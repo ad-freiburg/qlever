@@ -54,7 +54,7 @@ auto notPrefilterExpression = [](std::unique_ptr<PrefilterExpression> child)
 };
 
 // Make PrefixRegexExpression
-auto makePrefixRegexExpression = [](const std::string& prefix,
+auto makePrefixRegexExpression = [](const TripleComponent::Literal& prefix,
                                     bool isNegated = false) {
   return std::make_unique<PrefixRegexExpression>(prefix, isNegated);
 };
