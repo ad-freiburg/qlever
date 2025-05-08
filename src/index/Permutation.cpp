@@ -39,8 +39,7 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
   // access a single `BlockMetadataRange` directly from the permutation here
   // (over `getBlockMetdataRanges`) when `optBlocks = std::nullopt`.
   return {scanSpec,
-          getBlockMetadataRanges(perm, locatedTriplesSnapshot, optBlocks),
-          optBlocks.has_value() ? true : false};
+          getBlockMetadataRanges(perm, locatedTriplesSnapshot, optBlocks)};
 }
 
 // _____________________________________________________________________

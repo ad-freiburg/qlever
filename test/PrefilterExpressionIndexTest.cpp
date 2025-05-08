@@ -979,16 +979,15 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   BlockMetadataRanges blockRanges;
   blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges,
-      true));
+      ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, std::nullopt, std::nullopt}, blockRanges,
-      true));
+      ScanSpecification{VocabId10, std::nullopt, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{std::nullopt, std::nullopt, std::nullopt}, blockRanges,
-      true));
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      blockRanges));
+  blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
   EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
-      ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges, true));
+      ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
 }
 
 //______________________________________________________________________________

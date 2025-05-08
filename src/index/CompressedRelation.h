@@ -491,34 +491,25 @@ class CompressedRelationReader {
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
   //
-  // Brief explanation of `ScanSpecAndBlocks` constructor.
+  // Brief explanation of `ScanSpecAndBlocks` constructor logic:
   // (1) The passed `ScanSpecification` remains as it is and is moved into
   // member variable `scanSpec_`.
   // (2) Member `blockMetadata_` is set to the `BlockMetadataRanges` computed
   // via `getRelevantBlocks` for the provided `ScanSpecification` and
   // `BlockMetadataRanges`.
-  // (3) `sizeBlockMetadata_` represents the number of
+  // (3) Compute `sizeBlockMetadata_`, which represents the number of
   // `CompressedBlockMetadata` values contained over all subranges in member
   // `BlockMetadataRanges_ blockMetadata_`.
-  // (4) `checkCompleteInvariant` is by default set to `false`. Setting it to
-  // `true` will assert the following three conditions on the provided
-  // `BlockMetadataRanges`:
-  //   - All contained `CompressedBlockMetadata` values  must be unique.
-  //   - The `CompressedBlockMetadata` values must be contained in sorted
-  //     order with respect to the first free scan column defined by
-  //     `scanSpec_`.
-  //   - The columns up to the first free column must contain constant values
-  //     over all blocks.
-  // `checkCompleteInvariant` should be set to `true` if the provided
-  // `BlockMetadataRanges` are prefiltered or modified.
+  // (4) Perform an invariant check. The `CompressedBlockMetadata` values must
+  // be unique, sorted in ascending order, and have consistent column values up
+  // to the first free column defined by `scanSpec_`.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     BlockMetadataRanges blockMetadata_;
     size_t sizeBlockMetadata_;
 
     ScanSpecAndBlocks(ScanSpecification scanSpec,
-                      const BlockMetadataRanges& blockMetadataRanges,
-                      bool checkCompleteInvariant = false);
+                      const BlockMetadataRanges& blockMetadataRanges);
 
     // Direct view access via `ql::views::join` over all
     // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges
@@ -527,17 +518,10 @@ class CompressedRelationReader {
       return ql::views::join(blockMetadata_);
     }
 
-    // If this `ScanSpecAndBlocks` holds exactly one `BlockMetadataRange` within
-    // its `BlockMetadataRanges blockMetadata_` member, the corresponding
-    // `CompressedBlockMetadata` values are accessible here over the returned
-    // `std::span<CompressedBlockMetadata>` object.
-    // Returns `std::nullopt` if member `blockMetadata_` holds multiple
-    // `BlockMetadataRange`s. This is because those `BlockMetadataRange`s
-    // (`BlockMetadataRange` is a `std::subrange`) represent non-contiguous
-    // memory ranges, hence no `std::span<const CompressedBlockMetadata>` view
-    // can be created.
-    std::optional<std::span<const CompressedBlockMetadata>>
-    getBlockMetadataSpan() const;
+    // If `BlockMetadataRanges blockMetadata_` contains exactly one
+    // `BlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
+    // corresponding CompressedBlockMetadata values as a span.
+    std::span<const CompressedBlockMetadata> getBlockMetadataSpan() const;
 
     // Check the provided `BlockMetadataRange`s for the following invariants:
     //   - All contained `CompressedBlockMetadata` values must be unique.

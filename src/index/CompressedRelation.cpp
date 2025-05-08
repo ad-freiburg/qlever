@@ -1783,29 +1783,23 @@ static void checkBlockMetadataInvariantBlockConsistencyImpl(
 
 // _____________________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
-    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges,
-    bool checkCompleteInvariant)
+    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges)
     : scanSpec_(std::move(scanSpec)) {
   const auto& blockRangeView = blockMetadataRanges | ql::views::join;
-  if (checkCompleteInvariant) {
-    checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
-    checkBlockMetadataInvariantBlockConsistencyImpl(
-        blockRangeView, scanSpec_.firstFreeColIndex());
-    blockMetadata_ = blockMetadataRanges;
-  } else {
-    blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
-  }
+  checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
+  blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
+  auto blockMetadataView = getBlockMetadataView();
+  checkBlockMetadataInvariantBlockConsistencyImpl(
+      blockMetadataView, scanSpec_.firstFreeColIndex());
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
 }
 
 // _____________________________________________________________________________
-std::optional<std::span<const CompressedBlockMetadata>>
+std::span<const CompressedBlockMetadata>
 CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
-  // ScanSpecAndBlocks should contain at least one BlockMetadataRange.
-  AD_CONTRACT_CHECK(blockMetadata_.size() >= 1);
-  if (blockMetadata_.size() > 1) {
-    return std::nullopt;
-  }
+  // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be
+  // accessible as a span.
+  AD_CONTRACT_CHECK(blockMetadata_.size() == 1);
   // `std::span` object requires contiguous range.
   static_assert(ql::ranges::contiguous_range<BlockMetadataRange>);
   const auto& blockMetadataRange = blockMetadata_.front();
