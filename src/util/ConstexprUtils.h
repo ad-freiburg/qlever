@@ -123,13 +123,12 @@ struct ConstexprSwitch {
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoop(
-      std::make_index_sequence<MaxValue + 1>{},
-      ad_utility::ApplyAsValueIdentity{[&function, &value](auto Index) {
-        if (Index == value) {
-          function.template operator()<Index>();
-        }
-      }});
+  ConstexprForLoopVi(std::make_index_sequence<MaxValue + 1>{},
+                     [&function, &value](auto Index) {
+                       if (Index == value) {
+                         function.template operator()<Index>();
+                       }
+                     });
 }
 
 /*
@@ -139,14 +138,8 @@ void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
  */
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValueVi(const size_t& value, Function function) {
-  AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoopVi(std::make_index_sequence<MaxValue + 1>{},
-                     [&function, &value](auto valueIdentity) {
-                       static constexpr auto Index = valueIdentity.value;
-                       if (Index == value) {
-                         function(valueIdentity);
-                       }
-                     });
+  return RuntimeValueToCompileTimeValue<MaxValue>(
+      value, ApplyAsValueIdentity{std::move(function)});
 }
 
 /*

@@ -210,11 +210,12 @@ struct adl_serializer<std::variant<Types...>> {
 
     // Interpreting the value based on its type.
     ad_utility::RuntimeValueToCompileTimeValueVi<sizeof...(Types) - 1>(
-        index, [&j, &var](auto valueIdentity) {
-          static constexpr size_t Index = valueIdentity.value;
+        index, [&j, &var](auto Index) {
           var = j["value"]
                     .template get<std::variant_alternative_t<
-                        Index, std::variant<Types...>>>();
+                        // TODO<joka921> We does this lead to doubly nested
+                        // `ValueIdentity`s.
+                        size_t{Index.value}, std::variant<Types...>>>();
         });
   }
 };
