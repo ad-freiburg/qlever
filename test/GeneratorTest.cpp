@@ -109,7 +109,7 @@ struct Handle {
   HandleFrame* ptr;
   void resume() { ptr->resumeFunc(ptr->target); }
   static Handle from_promise(Promise& p) {
-    // TODO<joka921> That is not correct.
+    // TODO<joka921> This has to take into account the alignment.
     auto ptr = reinterpret_cast<HandleFrame*>(reinterpret_cast<char*>(&p) -
                                               sizeof(HandleFrame));
     /*
@@ -133,7 +133,6 @@ struct Handle {
                                        sizeof(HandleFrame));
   }
 
-  // TODO<joka921> Don't leak money.
   void destroy() { ptr->destroyFunc(ptr->target); }
 };
 
@@ -168,6 +167,11 @@ template <typename Derived, typename PromiseType, typename... payloadVars>
 struct GeneratorStateMachineMixin {
   HandleFrame frm;
   PromiseType pt;
+  static void CHECK() {
+    static_assert(offsetof(GeneratorStateMachineMixin, pt) -
+                      offsetof(GeneratorStateMachineMixin, frm) ==
+                  sizeof(HandleFrame));
+  }
   size_t curState = 0;
   std::tuple<payloadVars...> payLoad;
   using Hdl = Handle<PromiseType>;
@@ -190,12 +194,11 @@ struct GeneratorStateMachineMixin {
   }
 
   GeneratorStateMachineMixin() {
+    CHECK();
     frm.target = this;
     frm.resumeFunc = &GeneratorStateMachineMixin::resume;
     frm.destroyFunc = &GeneratorStateMachineMixin::destroy;
     frm.doneFunc = &GeneratorStateMachineMixin::done;
-    std::cerr << "Address of frame actually "
-              << reinterpret_cast<intptr_t>(&frm) << std::endl;
   }
 
   static auto make() {
@@ -205,24 +208,45 @@ struct GeneratorStateMachineMixin {
   }
 };
 
-cppcoro::generator<int, int, Handle> dummyGen() {
-  using PromiseType = cppcoro::generator<int, int, Handle>::promise_type;
-  struct GeneratorStateMachine
-      : GeneratorStateMachineMixin<GeneratorStateMachine, PromiseType, int> {
-    auto& payload() { return std::get<0>(payLoad); };
+#define GENERATOR_HEADER(returnType, ...)                              \
+  using PromiseType =                                                  \
+      cppcoro::generator<returnType, int, Handle>::promise_type;       \
+  struct GeneratorStateMachine                                         \
+      : GeneratorStateMachineMixin<GeneratorStateMachine, PromiseType, \
+                                   __VA_ARGS__> {                      \
     void doStep() {
-      switch (curState) {
-        case 0:
-          while (true) {
-            payload()++;
-            CO_YIELD(payload());
-            payload() += 2;
-            CO_YIELD(payload());
-          }
-      }
-    }
-  };
+#define GENERATOR_FOOTER \
+  }                      \
+  }                      \
+  }                      \
+  ;                      \
   return GeneratorStateMachine::make();
+#define GENERATOR_HEADER_2 \
+  switch (curState) {      \
+    case 0:
+
+cppcoro::generator<int, int, std::coroutine_handle> actualGen() {
+  int payload = 0;
+  while (true) {
+    payload++;
+    co_yield (payload);
+    payload += 2;
+    co_yield (payload);
+  }
+}
+
+cppcoro::generator<int, int, Handle> dummyGen() {
+  GENERATOR_HEADER(int, int)
+  auto& [payload] = payLoad;
+  GENERATOR_HEADER_2
+  payload = 0;
+  while (true) {
+    payload++;
+    CO_YIELD(payload);
+    payload += 2;
+    CO_YIELD(payload);
+  }
+  GENERATOR_FOOTER
 };
 
 TEST(NewGenerator, Blubb) {
