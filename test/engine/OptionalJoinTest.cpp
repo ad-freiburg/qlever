@@ -12,6 +12,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
@@ -580,4 +581,51 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected), true);
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, columnOriginatesFromGraph) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = getQec();
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto index = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?c"}});
+
+  OptionalJoin optionalJoin1{qec, values1, values1};
+  EXPECT_FALSE(optionalJoin1.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(optionalJoin1.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_THROW(
+      optionalJoin1.columnOriginatesFromGraph(Variable{"?notExisting"}),
+      ad_utility::Exception);
+
+  OptionalJoin optionalJoin2{qec, values1, values2};
+  EXPECT_FALSE(optionalJoin2.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(optionalJoin2.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_FALSE(optionalJoin2.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(
+      optionalJoin2.columnOriginatesFromGraph(Variable{"?notExisting"}),
+      ad_utility::Exception);
+
+  OptionalJoin optionalJoin3{qec, index, values1};
+  EXPECT_TRUE(optionalJoin3.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(optionalJoin3.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_TRUE(optionalJoin3.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(
+      optionalJoin3.columnOriginatesFromGraph(Variable{"?notExisting"}),
+      ad_utility::Exception);
+
+  OptionalJoin optionalJoin4{qec, values1, index};
+  EXPECT_FALSE(optionalJoin4.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(optionalJoin4.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_FALSE(optionalJoin4.columnOriginatesFromGraph(Variable{"?c"}));
+  EXPECT_THROW(
+      optionalJoin4.columnOriginatesFromGraph(Variable{"?notExisting"}),
+      ad_utility::Exception);
 }

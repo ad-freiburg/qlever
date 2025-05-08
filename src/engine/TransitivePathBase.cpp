@@ -33,7 +33,8 @@ TransitivePathBase::TransitivePathBase(
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
-      maxDist_(maxDist) {
+      maxDist_(maxDist),
+      activeGraphs_{std::move(activeGraphs)} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
   if (lhs_.isVariable()) {
@@ -54,12 +55,10 @@ TransitivePathBase::TransitivePathBase(
       minDist_ = 1;
     } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
       boundVariableIsForEmptyPath_ = true;
-      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
-                               0);
+      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs_), 0);
     } else if (!startingSide.isVariable()) {
       startingSide.treeAndCol_.emplace(
-          joinWithIndexScan(qec, std::move(activeGraphs), startingSide.value_),
-          0);
+          joinWithIndexScan(qec, activeGraphs_, startingSide.value_), 0);
     }
   }
 
@@ -115,9 +114,10 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
-    QueryExecutionContext* qec, Graphs activeGraphs) {
+    QueryExecutionContext* qec, Graphs activeGraphs,
+    std::optional<Variable> variable) {
   // Dummy variables to get a full scan of the index.
-  auto x = makeInternalVariable("x");
+  auto x = std::move(variable).value_or(makeInternalVariable("x"));
   auto y = makeInternalVariable("y");
   auto z = makeInternalVariable("z");
   // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
@@ -419,8 +419,17 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
-  // TODO<RobinTF> Join tree with makeEmptyPathSide if minDist_ == 0 and we
-  // can't verify the column originates from an actual triple in the index.
+  auto originalVar =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
+  if (boundVariableIsForEmptyPath_ &&
+      !leftOrRightOp->getRootOperation()->columnOriginatesFromGraph(
+          originalVar)) {
+    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(leftOrRightOp),
+        makeEmptyPathSide(getExecutionContext(), activeGraphs_, originalVar),
+        inputCol, 0);
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
+  }
   // Enforce required sorting of `leftOrRightOp`.
   leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
                                                        {inputCol});
@@ -517,4 +526,11 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
   auto [it, success] = map.try_emplace(key, allocator());
   it->second.insert(value);
+}
+
+// _____________________________________________________________________________
+bool TransitivePathBase::columnOriginatesFromGraph(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  return variable == lhs_.value_ || variable == rhs_.value_;
 }
