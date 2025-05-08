@@ -20,7 +20,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   deltaTriples.deleteTriples(cancellationHandle,
                              std::move(toDelete.idTriples_));
   metadata.deletionTime_ = timer.msecs();
-  timer.reset();
+  timer.start();
   deltaTriples.insertTriples(cancellationHandle,
                              std::move(toInsert.idTriples_));
   metadata.insertionTime_ = timer.msecs();
