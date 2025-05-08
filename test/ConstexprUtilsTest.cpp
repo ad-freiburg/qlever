@@ -117,23 +117,20 @@ TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstexprForLoop(
-      std::make_index_sequence<100>{},
-      ad_utility::ApplyAsValueIdentity{[&i](auto /*valueIdentity*/) { i++; }});
+  ConstexprForLoopVi(std::make_index_sequence<100>{},
+                     [&i](auto /*valueIdentity*/) { i++; });
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
-  ConstexprForLoop(std::index_sequence<2, 5, 9>{},
-                   ad_utility::ApplyAsValueIdentity{
-                       [&i](auto NumberToAdd) { i += NumberToAdd; }});
+  ConstexprForLoopVi(std::index_sequence<2, 5, 9>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 16);
 
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
-  ConstexprForLoop(std::index_sequence<>{},
-                   ad_utility::ApplyAsValueIdentity{
-                       [&i](auto NumberToAdd) { i += NumberToAdd; }});
+  ConstexprForLoopVi(std::index_sequence<>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 0);
 }
 
@@ -141,16 +138,15 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
   // Create one function, that sets `i` to x, for every possible
   // version of x in [0,100].
   size_t i = 1;
-  auto setI =
-      ad_utility::ApplyAsValueIdentity{[&i](auto Number) { i = Number.value; }};
+  auto setI = [&i](auto Number) { i = Number.value; };
   for (size_t d = 0; d <= 100; d++) {
-    RuntimeValueToCompileTimeValue<100>(d, setI);
+    RuntimeValueToCompileTimeValueVi<100>(d, setI);
     ASSERT_EQ(i, d);
   }
 
   // Should cause an exception, if the given value is bigger than the
   // `MaxValue`.
-  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValue<5>(10, setI));
+  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValueVi<5>(10, setI));
 }
 
 // A helper struct for the following test.

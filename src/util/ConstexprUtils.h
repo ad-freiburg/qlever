@@ -56,6 +56,16 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
+/*
+ * @brief A compile time for loop, similar to ConstexprForLoop, but wrapping
+ * loop body in `ApplyAsValueIdentity`.
+ */
+template <typename Function, size_t... ForLoopIndexes>
+void ConstexprForLoopVi(const std::index_sequence<ForLoopIndexes...>&,
+                        const Function& loopBody) {
+  ((ApplyAsValueIdentity{loopBody}.template operator()<ForLoopIndexes>()), ...);
+}
+
 template <typename Func, typename CaseConstant, typename... ArgTypes>
 CPP_requires(
     is_invocable_with_case_,
@@ -120,6 +130,23 @@ void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
           function.template operator()<Index>();
         }
       }});
+}
+
+/*
+ * @brief Similar to RuntimeValueToCompileTimeValue, but using
+ * ConstexprForLoopVi which automatically wraps the function in
+ * `ApplyAsValueIdentity`.
+ */
+template <size_t MaxValue, typename Function>
+void RuntimeValueToCompileTimeValueVi(const size_t& value, Function function) {
+  AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
+  ConstexprForLoopVi(std::make_index_sequence<MaxValue + 1>{},
+                     [&function, &value](auto valueIdentity) {
+                       static constexpr auto Index = valueIdentity.value;
+                       if (Index == value) {
+                         function(valueIdentity);
+                       }
+                     });
 }
 
 /*

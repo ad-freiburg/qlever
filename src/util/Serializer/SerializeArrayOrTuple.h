@@ -59,10 +59,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
       return;
     }
   }
-  ad_utility::ConstexprForLoop(
+  ad_utility::ConstexprForLoopVi(
       std::make_index_sequence<std::tuple_size_v<Arr>>(),
-      ad_utility::ApplyAsValueIdentity{
-          [&serializer, &arg](auto I) { serializer | std::get<I>(arg); }});
+      [&serializer, &arg](auto I) { serializer | std::get<I>(arg); });
 }
 }  // namespace ad_utility::serialization
 

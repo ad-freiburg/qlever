@@ -209,13 +209,13 @@ struct adl_serializer<std::variant<Types...>> {
     }
 
     // Interpreting the value based on its type.
-    ad_utility::RuntimeValueToCompileTimeValue<sizeof...(Types) - 1>(
-        index, ad_utility::ApplyAsValueIdentity{[&j, &var](auto valueIdentity) {
+    ad_utility::RuntimeValueToCompileTimeValueVi<sizeof...(Types) - 1>(
+        index, [&j, &var](auto valueIdentity) {
           static constexpr size_t Index = valueIdentity.value;
           var = j["value"]
                     .template get<std::variant_alternative_t<
                         Index, std::variant<Types...>>>();
-        }});
+        });
   }
 };
 }  // namespace nlohmann
