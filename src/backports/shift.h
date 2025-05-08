@@ -52,41 +52,43 @@ CPP_template(typename ForwardIt)(
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + i to position first + n + i.
 ///
-template <class ForwardIt>
-constexpr ForwardIt shift_right(
-    ForwardIt first, ForwardIt last,
-    typename std::iterator_traits<ForwardIt>::difference_type n) {
+CPP_template(typename ForwardIt)(
+    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
+    shift_right(ForwardIt first, ForwardIt last,
+                typename std::iterator_traits<ForwardIt>::difference_type n) {
+  assert(n >= 0);
   if (n == 0 || n >= std::distance(first, last)) {
     return last;
   }
   if constexpr (std::is_base_of_v<std::bidirectional_iterator_tag,
                                   typename std::iterator_traits<
                                       ForwardIt>::iterator_category>) {
-    auto src_end = std::next(first, std::distance(first, last) - n);
-    return std::move_backward(first, src_end, last);
+    auto srcEnd = std::next(first, std::distance(first, last) - n);
+    return std::move_backward(first, srcEnd, last);
   } else {
     auto result = std::next(first, n);
     if (result == last) return last;
-    auto dest_head = first, dest_tail = result;
-    while (dest_head != result) {
-      if (dest_tail == last) {
-        std::move(std::move(first), std::move(dest_head), result);
+    auto destHead = first;
+    auto destTail = result;
+    while (destHead != result) {
+      if (destTail == last) {
+        std::move(std::move(first), std::move(destHead), result);
         return result;
       }
-      ++dest_head;
-      ++dest_tail;
+      ++destHead;
+      ++destTail;
     }
     for (;;) {
       auto cursor = first;
       while (cursor != result) {
-        if (dest_tail == last) {
-          dest_head = std::move(cursor, result, std::move(dest_head));
-          std::move(std::move(first), std::move(cursor), std::move(dest_head));
+        if (destTail == last) {
+          destHead = std::move(cursor, result, std::move(destHead));
+          std::move(std::move(first), std::move(cursor), std::move(destHead));
           return result;
         }
-        std::iter_swap(cursor, dest_head);
-        ++dest_head;
-        ++dest_tail;
+        std::iter_swap(cursor, destHead);
+        ++destHead;
+        ++destTail;
         ++cursor;
       }
     }
