@@ -73,8 +73,8 @@ class Union : public Operation {
   // push the sort down to its children. If one of the children is already
   // sorted properly then it is way cheaper to sort the other child and then
   // merge the two sorted results.
-  std::shared_ptr<Operation> createSortedVariant(
-      const vector<ColumnIndex>& sortColumns) const;
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const override;
 
   // Provide access the the left child of this union.
   const std::shared_ptr<QueryExecutionTree>& leftChild() const {

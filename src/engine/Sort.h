@@ -43,8 +43,6 @@ class Sort : public Operation {
     return subtree_->getMultiplicity(col);
   }
 
-  std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
-
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
     size_t logSize =
@@ -66,6 +64,9 @@ class Sort : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
