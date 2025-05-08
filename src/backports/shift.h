@@ -1,8 +1,15 @@
+// Copyright 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
 #ifndef QLEVER_SRC_BACKPORTS_SHIFT_H
 #define QLEVER_SRC_BACKPORTS_SHIFT_H
 
-// This header implements the cpp20 functions std::shift_left and
-// std::shift_right
+///
+// This header implements the cpp20 functions shift_left and
+// shift_right based on https://en.cppreference.com/w/cpp/algorithm/shift
+///
 
 #include <algorithm>
 #include <cassert>
@@ -45,25 +52,45 @@ CPP_template(typename ForwardIt)(
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + i to position first + n + i.
 ///
-CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
-    shift_right(ForwardIt first, ForwardIt last,
-                typename std::iterator_traits<ForwardIt>::difference_type n) {
-  assert(n >= 0);
-  if (n == 0) {
+template <class ForwardIt>
+constexpr ForwardIt shift_right(
+    ForwardIt first, ForwardIt last,
+    typename std::iterator_traits<ForwardIt>::difference_type n) {
+  if (n == 0 || n >= std::distance(first, last)) {
     return last;
   }
-  static_assert(ql::concepts::bidirectional_iterator<ForwardIt>,
-                "ql::shift_right is not yet implemented for "
-                "`forward_iterator`s. If you need it, please add it (see for "
-                "example the somewhat complicated but efficient implementation "
-                "in libstdc++, and don't forget to write unit tests");
-  auto mid = ql::ranges::next(last, -n, first);
-  if (mid == first) {
-    return last;
+  if constexpr (std::is_base_of_v<std::bidirectional_iterator_tag,
+                                  typename std::iterator_traits<
+                                      ForwardIt>::iterator_category>) {
+    auto src_end = std::next(first, std::distance(first, last) - n);
+    return std::move_backward(first, src_end, last);
+  } else {
+    auto result = std::next(first, n);
+    if (result == last) return last;
+    auto dest_head = first, dest_tail = result;
+    while (dest_head != result) {
+      if (dest_tail == last) {
+        std::move(std::move(first), std::move(dest_head), result);
+        return result;
+      }
+      ++dest_head;
+      ++dest_tail;
+    }
+    for (;;) {
+      auto cursor = first;
+      while (cursor != result) {
+        if (dest_tail == last) {
+          dest_head = std::move(cursor, result, std::move(dest_head));
+          std::move(std::move(first), std::move(cursor), std::move(dest_head));
+          return result;
+        }
+        std::iter_swap(cursor, dest_head);
+        ++dest_head;
+        ++dest_tail;
+        ++cursor;
+      }
+    }
   }
-
-  return std::move_backward(std::move(first), std::move(mid), std::move(last));
 }
 
 }  // namespace ql
