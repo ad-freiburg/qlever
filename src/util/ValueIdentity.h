@@ -26,7 +26,7 @@ namespace use_value_identity {
 template <auto V>
 struct ValueIdentity {
   static constexpr auto value = V;
-  constexpr operator decltype(V)() const { return value; }
+  explicit(false) constexpr operator decltype(V)() const { return value; }
 };
 
 template <auto V>
@@ -42,12 +42,12 @@ static constexpr auto vi = VI<V>{};
 // wrapping each of them in a 'ValueIdentity'.
 template <typename F>
 struct ApplyAsValueIdentity {
-  F functor;
+  [[no_unique_address]] F functor_;
 
   template <auto... Is, typename... Args>
   constexpr decltype(auto) operator()(Args&&... args) const {
     using ad_utility::use_value_identity::vi;
-    return functor(vi<Is>..., AD_FWD(args)...);
+    return functor_(vi<Is>..., AD_FWD(args)...);
   }
 };
 
@@ -62,12 +62,12 @@ ApplyAsValueIdentity(F&&) -> ApplyAsValueIdentity<F>;
 // in a single tuple.
 template <typename F>
 struct ApplyAsValueIdentityTuple {
-  F function;
+  [[no_unique_address]] F function_;
 
   template <auto... Is, typename... Args>
   constexpr decltype(auto) operator()(Args&&... args) const {
     using ad_utility::use_value_identity::vi;
-    return function(std::forward_as_tuple(AD_FWD(args)...), vi<Is>...);
+    return function_(std::forward_as_tuple(AD_FWD(args)...), vi<Is>...);
   }
 };
 

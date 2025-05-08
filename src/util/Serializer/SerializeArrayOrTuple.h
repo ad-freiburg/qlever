@@ -61,7 +61,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
   }
   ad_utility::ConstexprForLoopVi(
       std::make_index_sequence<std::tuple_size_v<Arr>>(),
-      [&serializer, &arg](auto I) { serializer | std::get<I>(arg); });
+      [&serializer, &arg](auto i) { serializer | std::get<i>(arg); });
 }
 }  // namespace ad_utility::serialization
 

@@ -4196,7 +4196,7 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
   TransitivePathSide left{std::nullopt, 1, Variable{"?x"}, 0};
   TransitivePathSide right{std::nullopt, 0, Variable{"?x"}, 1};
   h::expect("SELECT * { ?x <a>+ ?x . ?x <b> <c> }",
-            h::TransitivePath(std::move(left), std::move(right), 1,
+            h::transitivePath(std::move(left), std::move(right), 1,
                               std::numeric_limits<size_t>::max(),
                               h::IndexScanFromStrings("?x", "<b>", "<c>"),
                               h::IndexScanFromStrings(
