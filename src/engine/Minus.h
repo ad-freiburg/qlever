@@ -77,6 +77,8 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const std::vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
+  // Lazily compute the minus join of two results when at least one of the
+  // results is computed lazily.
   Result lazyMinusJoin(std::shared_ptr<const Result> left,
                        std::shared_ptr<const Result> right,
                        bool requestLaziness);
