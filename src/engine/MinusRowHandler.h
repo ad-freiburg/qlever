@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef MINUSANDEXISTSROWHANDLER_H
-#define MINUSANDEXISTSROWHANDLER_H
+#ifndef MINUSROWHANDLER_H
+#define MINUSROWHANDLER_H
 
 #include <cstdint>
 #include <optional>
@@ -31,64 +31,9 @@ CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
 namespace detail {
 
 constexpr size_t CHUNK_SIZE = 100'000;
+}  // namespace detail
 
-struct ExistsImpl {
-  template <typename CancellationAction>
-  static void handle(IdTable& idTable, const std::vector<size_t>&,
-                     const std::vector<size_t>& nonMatchingIndices,
-                     size_t startIndex, size_t endIndex,
-                     const IdTableView<0>& inputTable,
-                     const CancellationAction& action) {
-    AD_CORRECTNESS_CHECK(idTable.numColumns() == inputTable.numColumns() + 1);
-    size_t oldSize = idTable.size();
-    idTable.resize(oldSize + (endIndex - startIndex));
-    size_t col = 0;
-    for (auto column : inputTable.getColumns()) {
-      chunkedCopy(column.subspan(startIndex, endIndex - startIndex),
-                  idTable.getColumn(col).begin() + oldSize, CHUNK_SIZE, action);
-      col++;
-    }
-    auto lastColumn =
-        idTable.getColumn(idTable.numColumns() - 1).subspan(oldSize);
-    chunkedFill(lastColumn, Id::makeFromBool(true), CHUNK_SIZE, action);
-    for (size_t index : nonMatchingIndices) {
-      lastColumn[index - startIndex] = Id::makeFromBool(false);
-    }
-  }
-};
-
-struct MinusImpl {
-  template <typename CancellationAction>
-  static void handle(IdTable& idTable,
-                     const std::vector<size_t>& matchingIndices,
-                     const std::vector<size_t>&, size_t startIndex,
-                     size_t endIndex, const IdTableView<0>& inputTable,
-                     const CancellationAction& action) {
-    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(matchingIndices));
-    size_t oldSize = idTable.size();
-    AD_CORRECTNESS_CHECK(endIndex - startIndex >= matchingIndices.size());
-    idTable.resize(oldSize + (endIndex - startIndex - matchingIndices.size()));
-    size_t col = 0;
-    for (auto targetColumn : idTable.getColumns()) {
-      auto inputColumn = inputTable.getColumn(col);
-      auto columnIt = targetColumn.begin() + oldSize;
-      size_t lastIndex = startIndex;
-      for (size_t index : matchingIndices) {
-        auto inputRange = inputColumn.subspan(lastIndex, index - lastIndex);
-        chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
-        columnIt += inputRange.size();
-        lastIndex = index + 1;
-      }
-      auto inputRange = inputColumn.subspan(lastIndex, endIndex - lastIndex);
-      chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
-      AD_CORRECTNESS_CHECK(columnIt + inputRange.size() == targetColumn.end());
-      col++;
-    }
-  }
-};
-
-template <typename Impl>
-class MinusAndExistsRowHandler {
+class MinusRowHandler {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
   std::optional<IdTableView<0>> inputLeft_;
@@ -97,8 +42,6 @@ class MinusAndExistsRowHandler {
   const LocalVocab* currentVocab_ = nullptr;
 
   std::vector<size_t> indexBuffer_;
-  // Store the indices of OPTIONAL inputs that have not yet been written.
-  std::vector<size_t> optionalIndexBuffer_;
 
   std::optional<size_t> startIndex_ = std::nullopt;
   size_t endIndex_ = 0;
@@ -116,9 +59,9 @@ class MinusAndExistsRowHandler {
   // This means that the inputs have to be set to an explicit
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
-  explicit MinusAndExistsRowHandler(size_t numJoinColumns, IdTable output,
-                                    CancellationHandle cancellationHandle,
-                                    BlockwiseCallback blockwiseCallback)
+  explicit MinusRowHandler(size_t numJoinColumns, IdTable output,
+                           CancellationHandle cancellationHandle,
+                           BlockwiseCallback blockwiseCallback)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeft_{std::nullopt},
@@ -225,7 +168,6 @@ class MinusAndExistsRowHandler {
   // UNDEF
   void addOptionalRow(size_t rowIndexA) {
     AD_EXPENSIVE_CHECK(inputLeft_.has_value());
-    optionalIndexBuffer_.push_back(rowIndexA);
     if (!startIndex_.has_value()) {
       startIndex_ = rowIndexA;
     } else {
@@ -246,10 +188,10 @@ class MinusAndExistsRowHandler {
 
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
-  MinusAndExistsRowHandler(const MinusAndExistsRowHandler&) = delete;
-  MinusAndExistsRowHandler& operator=(const MinusAndExistsRowHandler&) = delete;
-  MinusAndExistsRowHandler(MinusAndExistsRowHandler&&) = delete;
-  MinusAndExistsRowHandler& operator=(MinusAndExistsRowHandler&&) = delete;
+  MinusRowHandler(const MinusRowHandler&) = delete;
+  MinusRowHandler& operator=(const MinusRowHandler&) = delete;
+  MinusRowHandler(MinusRowHandler&&) = delete;
+  MinusRowHandler& operator=(MinusRowHandler&&) = delete;
 
   // Write the result rows the indices of which have been stored in the buffers
   // since the last call to `flush()`. This function is automatically called by
@@ -258,7 +200,6 @@ class MinusAndExistsRowHandler {
   // will throw an exception.
   void flush() {
     cancellationHandle_->throwIfCancelled();
-    auto& result = resultTable_;
     // Sometimes the left input and right input are not valid anymore, because
     // the `IdTable`s they point to have already been destroyed. This case is
     // okay, as long as there was a manual call to `flush` (after which
@@ -268,15 +209,12 @@ class MinusAndExistsRowHandler {
     }
     AD_CORRECTNESS_CHECK(inputLeft_.has_value());
 
-    Impl::handle(result, indexBuffer_, optionalIndexBuffer_,
-                 startIndex_.value(), endIndex_, inputLeft(),
-                 [this]() { cancellationHandle_->throwIfCancelled(); });
+    handle();
 
     indexBuffer_.clear();
-    optionalIndexBuffer_.clear();
     startIndex_ = std::nullopt;
     endIndex_ = 0;
-    std::invoke(blockwiseCallback_, result, mergedVocab_);
+    std::invoke(blockwiseCallback_, resultTable_, mergedVocab_);
     // The current `IdTable`s might still be active, so we have to merge the
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
@@ -289,11 +227,36 @@ class MinusAndExistsRowHandler {
     }
   }
   const IdTableView<0>& inputLeft() const { return inputLeft_.value(); }
-};
-}  // namespace detail
 
-using MinusRowHandler = detail::MinusAndExistsRowHandler<detail::MinusImpl>;
-using ExistsRowHandler = detail::MinusAndExistsRowHandler<detail::ExistsImpl>;
+  void handle() {
+    const auto& matchingIndices = indexBuffer_;
+    size_t startIndex = startIndex_.value();
+    AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(matchingIndices));
+    size_t oldSize = resultTable_.size();
+    AD_CORRECTNESS_CHECK(endIndex_ - startIndex >= matchingIndices.size());
+    resultTable_.resize(oldSize +
+                        (endIndex_ - startIndex - matchingIndices.size()));
+
+    auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
+    size_t col = 0;
+    for (auto targetColumn : resultTable_.getColumns()) {
+      auto inputColumn = inputLeft().getColumn(col);
+      auto columnIt = targetColumn.begin() + oldSize;
+      size_t lastIndex = startIndex;
+      for (size_t index : matchingIndices) {
+        auto inputRange = inputColumn.subspan(lastIndex, index - lastIndex);
+        chunkedCopy(inputRange, columnIt, detail::CHUNK_SIZE, action);
+        columnIt += inputRange.size();
+        lastIndex = index + 1;
+      }
+      auto inputRange = inputColumn.subspan(lastIndex, endIndex_ - lastIndex);
+      chunkedCopy(inputRange, columnIt, detail::CHUNK_SIZE, action);
+      AD_CORRECTNESS_CHECK(columnIt + inputRange.size() == targetColumn.end());
+      col++;
+    }
+  }
+};
+
 }  // namespace ad_utility
 
-#endif  // MINUSANDEXISTSROWHANDLER_H
+#endif  // MINUSROWHANDLER_H

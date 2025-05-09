@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "Minus.h"
+#include "engine/Minus.h"
 
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
-#include "engine/MinusAndExistsRowHandler.h"
+#include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
