@@ -287,26 +287,12 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
-  activeDatasetClauses_ = {};
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = {};
+  }
   prologueString_ = {};
   parsedQuery_ = {};
   isInsideConstructTriples_ = false;
-}
-
-// ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && ctx->update()->update1().empty()) {
-    // An empty query currently matches the `update()` rule. We handle this
-    // case manually to get a better error message. If an update query doesn't
-    // have an `update1()`, then it consists of a (possibly empty) prologue, but
-    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
-    // details.
-    reportError(ctx->update(),
-                "Empty query (this includes queries that only consist "
-                "of comments or prefix declarations).");
-  }
-  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
-                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -610,6 +596,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+    parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   }
 
   return std::move(parsedQuery_);
@@ -672,6 +659,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns = triples.toGraphPatternOperations();
