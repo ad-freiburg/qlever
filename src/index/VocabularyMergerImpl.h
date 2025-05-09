@@ -146,7 +146,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
 // ________________________________________________________________________________
 CPP_template_def(typename C, typename L)(
-    requires WordCallback<C> CPP_and
+    requires WordCallback<C> CPP_and_def
         ranges::predicate<L, TripleComponentWithIndex,
                           TripleComponentWithIndex>) void VocabularyMerger::
     writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,

@@ -9,8 +9,8 @@
 #include <algorithm>
 #include <string>
 
-#include "../src/util/Iterators.h"
 #include "backports/algorithm.h"
+#include "util/Iterators.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
   auto it = begin;
@@ -234,4 +234,28 @@ TEST(Iterator, InputRangeTypeErased) {
     }
   };
   testIota(makeIotaFromStdIota);
+}
+
+TEST(Iterator, IteratorRange) {
+  using ad_utility::IteratorRange;
+  std::vector v{1, 3, 5, 7};
+  auto testAndReturn = [&]() {
+    IteratorRange r{v.begin(), v.end()};
+    EXPECT_EQ(*r.begin(), v.begin());
+    EXPECT_EQ(*(r.begin() + 3), v.begin() + 3);
+
+    using R = std::decay_t<decltype(r)>;
+    using It = ql::ranges::iterator_t<std::vector<int>>;
+    // auto e = ql::ranges::end(r);
+    using Value = ql::ranges::range_value_t<R>;
+    using Ref = ql::ranges::range_reference_t<R>;
+    static_assert(std::is_same_v<It, Value>);
+    static_assert(std::is_same_v<It, Ref>);
+    return std::pair{r.begin(), r.end()};
+  };
+  auto [beg, end] = testAndReturn();
+  EXPECT_EQ(*beg, v.begin());
+  EXPECT_EQ(**beg, 1);
+  EXPECT_EQ(beg[3], v.begin() + 3);
+  EXPECT_EQ(*beg[3], 7);
 }

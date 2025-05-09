@@ -89,9 +89,9 @@ using Compressors =
                      PrefixCompressionWrapper, DummyCompressionWrapper>;
 
 // _________________________________________________________________________
-CPP_template(typename Compressor)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        Compressor>) struct CompressedVocabularyF : public testing::Test {
+template <typename Compressor>
+struct CompressedVocabularyF : public testing::Test {
+  static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static constexpr auto createCompressedVocabulary(
