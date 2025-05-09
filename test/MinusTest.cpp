@@ -335,6 +335,38 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
 }
 
 // _____________________________________________________________________________
+TEST(Minus, lazyMinusWithPermutedColumns) {
+  auto qec = ad_utility::testing::getQec();
+
+  auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 11, 111}, {2, 22, 222}, {3, 33, 333}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"},
+                                           Variable{"?z"}},
+      false, std::vector<ColumnIndex>{2});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{2222, 222}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?z"}},
+      false, std::vector<ColumnIndex>{1});
+  Minus minus{qec, left, right};
+
+  qec->getQueryTreeCache().clearAll();
+
+  auto result = minus.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  auto& lazyResult = result.idTables();
+  auto it = lazyResult.begin();
+  ASSERT_NE(it, lazyResult.end());
+
+  EXPECT_EQ(it->idTable_, expected);
+
+  EXPECT_EQ(++it, lazyResult.end());
+}
+
+// _____________________________________________________________________________
 TEST(Minus, lazyMinusExceedingChunkSize) {
   {
     std::vector<IdTable> expected;
