@@ -12,26 +12,11 @@
 #include "backports/concepts.h"
 #include "engine/LocalVocab.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableConcepts.h"
 #include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
-#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-
-// TODO<RobinTF> merge with AddCombinedRowToTable
-namespace detail::concepts {
-template <typename T>
-CPP_requires(HasAsStaticView,
-             requires(T& table)(table.template asStaticView<0>()));
-
-template <typename T>
-CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
-}  // namespace detail::concepts
-
-namespace detail {
-
-constexpr size_t CHUNK_SIZE = 100'000;
-}  // namespace detail
 
 class MinusRowHandler {
   std::vector<size_t> numUndefinedPerColumn_;
@@ -53,6 +38,8 @@ class MinusRowHandler {
 
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   CancellationHandle cancellationHandle_;
+
+  static constexpr size_t CHUNK_SIZE = 100'000;
 
  public:
   // Similar to the previous constructor, but the inputs are not given.
@@ -245,12 +232,12 @@ class MinusRowHandler {
       size_t lastIndex = startIndex;
       for (size_t index : matchingIndices) {
         auto inputRange = inputColumn.subspan(lastIndex, index - lastIndex);
-        chunkedCopy(inputRange, columnIt, detail::CHUNK_SIZE, action);
+        chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
         columnIt += inputRange.size();
         lastIndex = index + 1;
       }
       auto inputRange = inputColumn.subspan(lastIndex, endIndex_ - lastIndex);
-      chunkedCopy(inputRange, columnIt, detail::CHUNK_SIZE, action);
+      chunkedCopy(inputRange, columnIt, CHUNK_SIZE, action);
       AD_CORRECTNESS_CHECK(columnIt + inputRange.size() == targetColumn.end());
       col++;
     }
