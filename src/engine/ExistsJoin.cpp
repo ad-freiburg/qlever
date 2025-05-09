@@ -4,10 +4,10 @@
 
 #include "engine/ExistsJoin.h"
 
-#include "Result.h"
 #include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Result.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
@@ -97,8 +97,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // so we consider this a tradeoff worth to make.
     right_->setLimit({1});
   }
-  auto rightRes =
-      right_->getResult(noJoinNecessary ? false : lazyJoinIsSupported);
+  auto rightRes = right_->getResult(!noJoinNecessary && lazyJoinIsSupported);
 
   if (noJoinNecessary && !leftRes->isFullyMaterialized()) {
     // Forward lazy result, otherwise let the existing code handle the join with
@@ -249,22 +248,37 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 
 namespace {
 
+// Implementation to add the `EXISTS` column to the result of a child operation
+// of this class. Works with lazy and non-lazy results.
 struct LazyExistsJoinImpl
     : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  // Store child results.
   std::shared_ptr<const Result> left_;
   std::shared_ptr<const Result> right_;
+
+  // Store the ranges of the child results. The left result is owned, the right
+  // is just a view to the wrapped `IdTable`s.
   ad_utility::InputRangeTypeErased<Result::IdTableVocabPair> leftRange_;
   ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
       rightRange_;
+
+  // Store the join columns.
   ColumnIndex leftJoinColumn_;
   ColumnIndex rightJoinColumn_;
 
+  // Store the current result of the right child. This is a view to the current
+  // `IdTable`.
   std::optional<std::reference_wrapper<const IdTable>> currentRight_ =
       std::nullopt;
+  // Store the current index in the right child that was last being checked.
   size_t currentRightIndex_ = 0;
 
+  // If we found undef values on the right, or the right ranges has been
+  // consumed, we can fast-forward and skip expensive checks.
   std::optional<bool> remainingMatches_ = std::nullopt;
 
+  // Convert result to an owned range of `IdTableVocabPair`s. This is used for
+  // the left side.
   static ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>
   toOwnedRange(const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
@@ -280,6 +294,7 @@ struct LazyExistsJoinImpl
             [](auto& value) { return std::move(value); }}};
   }
 
+  // Convert result to a view of `IdTable`s. This is used for the right side.
   static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
   toRangeView(const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
@@ -298,6 +313,8 @@ struct LazyExistsJoinImpl
             [](const auto& pair) { return std::cref(pair.idTable_); }}};
   }
 
+  // Construct an instance of `LazyExistsJoinImpl` with the given left and right
+  // join columns as well as the respective results.
   explicit LazyExistsJoinImpl(std::shared_ptr<const Result> left,
                               std::shared_ptr<const Result> right,
                               ColumnIndex leftJoinColumn,
@@ -309,6 +326,7 @@ struct LazyExistsJoinImpl
         leftJoinColumn_{leftJoinColumn},
         rightJoinColumn_{rightJoinColumn} {}
 
+  // Get the next non-empty result from the given range.
   static std::optional<Result::IdTableVocabPair> getNextNonEmptyResult(
       ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>& range) {
     std::optional<Result::IdTableVocabPair> current;
@@ -318,6 +336,7 @@ struct LazyExistsJoinImpl
     return current;
   }
 
+  // Get the next non-empty result from the given range.
   static std::optional<std::reference_wrapper<const IdTable>>
   getNextNonEmptyResult(
       ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>&
@@ -329,6 +348,8 @@ struct LazyExistsJoinImpl
     return current;
   }
 
+  // Check if the `id` has a match on the right side. This will increment the
+  // index until a match is found, or no matches exist.
   bool hasMatch(Id id) {
     if (id.isUndefined()) {
       return true;
@@ -352,6 +373,8 @@ struct LazyExistsJoinImpl
     return false;
   }
 
+  // Get the next result from the left side that is augmented with EXISTS
+  // information.
   std::optional<Result::IdTableVocabPair> get() override {
     if (!currentRight_.has_value() && !remainingMatches_.has_value()) {
       currentRight_ = getNextNonEmptyResult(rightRange_);
