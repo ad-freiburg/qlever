@@ -865,19 +865,20 @@ json Server::createResponseMetadataForUpdate(
       nlohmann::json(countAfter - countBefore);
   response["delta-triples"]["operation"] =
       json(updateMetadata.inUpdate_.value());
-  json time{{"total", formatTime(requestTimer.msecs())},
-            {"planning", formatTime(runtimeInfoWholeOp.timeQueryPlanning)},
-            {"where",
-             formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
-                 runtimeInfo.totalTime_))},
-            {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
-            {"delete", formatTime(updateMetadata.deletionTime_)},
-            {"insert", formatTime(updateMetadata.insertionTime_)},
-            {"snapshot", formatTime(timings.snapshotUpdateTime_)}};
+  response["time"] = nlohmann::json(
+      {{"total", formatTime(requestTimer.msecs())},
+       {"planning", formatTime(runtimeInfoWholeOp.timeQueryPlanning)},
+       {"where",
+        formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
+            runtimeInfo.totalTime_))},
+       {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
+       {"delete", formatTime(updateMetadata.deletionTime_)},
+       {"insert", formatTime(updateMetadata.insertionTime_)},
+       {"snapshot", formatTime(timings.snapshotUpdateTime_)}});
   if (timings.diskWritebackTime_.has_value()) {
-    time["diskWriteback"] = formatTime(timings.diskWritebackTime_.value());
+    response["time"]["diskWriteback"] =
+        formatTime(timings.diskWritebackTime_.value());
   }
-  response["time"] = time;
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
