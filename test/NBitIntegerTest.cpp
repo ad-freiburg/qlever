@@ -8,6 +8,7 @@
 
 #include "../src/util/Generator.h"
 #include "../src/util/NBitInteger.h"
+#include "../src/util/ValueIdentity.h"
 
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS
@@ -16,27 +17,32 @@ static constexpr int numElements = 100;
 static constexpr int numElements = 5;
 #endif
 
-auto testToFrom = []<size_t N>(int64_t x) {
-  using I = ad_utility::NBitInteger<N>;
-  if (x >= I::min() && x <= I::max()) {
-    ASSERT_EQ(x, I::fromNBit(I::toNBit(x)));
-  } else {
-    ASSERT_NE(x, I::fromNBit(I::toNBit(x)));
-  }
-};
+auto testToFrom =
+    ad_utility::ApplyAsValueIdentity{[](auto valueIdentity, int64_t x) {
+      static constexpr size_t N = valueIdentity.value;
+      using I = ad_utility::NBitInteger<N>;
+      if (x >= I::min() && x <= I::max()) {
+        ASSERT_EQ(x, I::fromNBit(I::toNBit(x)));
+      } else {
+        ASSERT_NE(x, I::fromNBit(I::toNBit(x)));
+      }
+    }};
 
 // Check that for any valid `NBitInteger x` (obtained via `toNBit`),
 // `toNBit(fromNBit(x))` is the identity function. Note: Calling `fromNbit` on
 // an arbitrary integer is not allowed in general, since it might violate the
 // invariants of `NBitInteger`.
-auto testFromTo = []<size_t N>(int64_t x) {
-  using I = ad_utility::NBitInteger<N>;
-  auto to = I::toNBit(x);
-  auto toFromTo = I::toNBit(I::fromNBit(to));
-  ASSERT_EQ(to, toFromTo);
-};
+auto testFromTo =
+    ad_utility::ApplyAsValueIdentity{[](auto valueIdentity, int64_t x) {
+      static constexpr size_t N = valueIdentity.value;
+      using I = ad_utility::NBitInteger<N>;
+      auto to = I::toNBit(x);
+      auto toFromTo = I::toNBit(I::fromNBit(to));
+      ASSERT_EQ(to, toFromTo);
+    }};
 
-auto testMinMax = []<size_t N>() {
+auto testMinMax = ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+  static constexpr size_t N = valueIdentity.value;
   using I = ad_utility::NBitInteger<N>;
   if constexpr (N == 64) {
     ASSERT_EQ(I::max(), std::numeric_limits<int64_t>::max());
@@ -45,7 +51,7 @@ auto testMinMax = []<size_t N>() {
     ASSERT_EQ(I::max(), (1ll << (N - 1)) - 1);
     ASSERT_EQ(I::min(), -1 * (1ll << (N - 1)));
   }
-};
+}};
 
 template <size_t N>
 cppcoro::generator<int64_t> valuesNearLimits() {
@@ -71,23 +77,29 @@ cppcoro::generator<int64_t> valuesNearLimits() {
   }
 }
 
-auto testUnaryFunctionNearLimits = []<size_t N>(auto unaryFunction) {
-  for (auto i : valuesNearLimits<N>()) {
-    unaryFunction.template operator()<N>(i);
-  }
-};
+auto testUnaryFunctionNearLimits = ad_utility::ApplyAsValueIdentity{
+    [](auto valueIdentity, auto unaryFunction) {
+      static constexpr size_t N = valueIdentity.value;
+      for (auto i : valuesNearLimits<N>()) {
+        unaryFunction.template operator()<N>(i);
+      }
+    }};
 
-auto testBinaryFunctionNearLimits = []<size_t N>(auto binaryFunction) {
-  for (auto i : valuesNearLimits<N>()) {
-    for (auto j : valuesNearLimits<N>())
-      binaryFunction.template operator()<N>(i, j);
-  }
-};
+auto testBinaryFunctionNearLimits = ad_utility::ApplyAsValueIdentity{
+    [](auto valueIdentity, auto binaryFunction) {
+      static constexpr size_t N = valueIdentity.value;
+      for (auto i : valuesNearLimits<N>()) {
+        for (auto j : valuesNearLimits<N>())
+          binaryFunction.template operator()<N>(i, j);
+      }
+    }};
 
-auto testTranslationNearLimits = []<size_t N>() {
-  testUnaryFunctionNearLimits.operator()<N>(testToFrom);
-  testUnaryFunctionNearLimits.operator()<N>(testFromTo);
-};
+auto testTranslationNearLimits =
+    ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+      static constexpr size_t N = valueIdentity.value;
+      testUnaryFunctionNearLimits.operator()<N>(testToFrom);
+      testUnaryFunctionNearLimits.operator()<N>(testFromTo);
+    }};
 
 // Test that the result of `from(to(f(a, b)))` is equal to `from(to(f(to(a),
 // to(b))))`, when `to` is `NBitInteger<N>::toNBit` and `from` is the
@@ -175,14 +187,28 @@ void multiplication(int64_t a, int64_t b) {
       a, b);
 }
 
-auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
-  addition<N>(a, b);
-  subtraction<N>(a, b);
-  multiplication<N>(a, b);
-};
+auto testNumeric = ad_utility::ApplyAsValueIdentity{
+    [](auto valueIdentity, int64_t a, int64_t b) {
+      static constexpr size_t N = valueIdentity.value;
+      addition<N>(a, b);
+      subtraction<N>(a, b);
+      multiplication<N>(a, b);
+    }};
 
-auto testNumericNearLimits = []<size_t N>() {
-  testBinaryFunctionNearLimits.operator()<N>(testNumeric);
+auto testNumericNearLimits =
+    ad_utility::ApplyAsValueIdentity{[](auto valueIdentity) {
+      static constexpr size_t N = valueIdentity.value;
+      testBinaryFunctionNearLimits.operator()<N>(testNumeric);
+    }};
+
+template <typename F>
+struct TestAllNHelper {
+  F& function;
+
+  template <size_t... Ns, typename... Args>
+  void operator()(std::index_sequence<Ns...>, Args&&... args) {
+    (..., function.template operator()<Ns + 1>(args...));
+  }
 };
 
 template <typename F, typename... Args>
@@ -191,9 +217,7 @@ void testAllN(F function, Args... args) {
   // Note that the `(std::make_index_sequence...)` is the argument to the
   // unnamed lambda (immediately invoked lambda). Clang format wants the
   // argument on a separate line for some reason.
-  [&]<size_t... Ns>(std::index_sequence<Ns...>) {
-    (..., function.template operator()<Ns + 1>(args...));
-  }(std::make_index_sequence<64>());
+  TestAllNHelper<F>{function}(std::make_index_sequence<64>(), AD_FWD(args)...);
 }
 
 // A generator that yields 100 values near int64_t::min(), 100 values near 0,

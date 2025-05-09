@@ -617,7 +617,8 @@ IdTable IndexImpl::readContextListHelper(
       textIndexFile_, wordIndexToId);
 
   // Helper lambdas to read scoreList
-  auto scoreToId = []<typename T>(T score) {
+  auto scoreToId = [](auto score) {
+    using T = decltype(score);
     if constexpr (std::is_same_v<T, uint16_t>) {
       return Id::makeFromInt(static_cast<uint64_t>(score));
     } else {

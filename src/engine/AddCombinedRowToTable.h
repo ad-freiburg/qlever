@@ -306,38 +306,39 @@ class AddCombinedRowToIdTable {
     // Note: There is quite some code duplication between this lambda and the
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
-    auto writeNonJoinColumn = [&result, oldSize, this]<bool isColFromLeft>(
-                                  size_t colIdx, size_t resultColIdx) {
-      decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
-                                         : inputRight().getColumn(colIdx);
-      // TODO<joka921> Implement prefetching.
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+    auto writeNonJoinColumn = ad_utility::ApplyAsValueIdentity{
+        [&result, oldSize, this](auto isColFromLeft, size_t colIdx,
+                                 size_t resultColIdx) {
+          decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
+                                             : inputRight().getColumn(colIdx);
+          // TODO<joka921> Implement prefetching.
+          decltype(auto) resultCol = result.getColumn(resultColIdx);
+          size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
 
-      // Write the matching rows.
-      static constexpr size_t idx = isColFromLeft ? 0 : 1;
-      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = col[sourceIndices[idx]];
-        numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
-        resultCol[oldSize + targetIndex] = resultId;
-      }
-
-      // Write the optional rows. For the right input those are always
-      // undefined.
-      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = [&col, sourceIndex = sourceIndex]() {
-          if constexpr (isColFromLeft) {
-            return col[sourceIndex];
-          } else {
-            (void)col;
-            (void)sourceIndex;
-            return Id::makeUndefined();
+          // Write the matching rows.
+          static constexpr size_t idx = isColFromLeft ? 0 : 1;
+          for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+            auto resultId = col[sourceIndices[idx]];
+            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
+            resultCol[oldSize + targetIndex] = resultId;
           }
-        }();
-        resultCol[oldSize + targetIndex] = id;
-        numUndef += static_cast<size_t>(id.isUndefined());
-      }
-    };
+
+          // Write the optional rows. For the right input those are always
+          // undefined.
+          for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
+              if constexpr (isColFromLeft) {
+                return col[sourceIndex];
+              } else {
+                (void)col;
+                (void)sourceIndex;
+                return Id::makeUndefined();
+              }
+            }();
+            resultCol[oldSize + targetIndex] = id;
+            numUndef += static_cast<size_t>(id.isUndefined());
+          }
+        }};
 
     size_t nextResultColIdx = 0;
     // First write all the join columns.

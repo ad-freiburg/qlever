@@ -1,6 +1,8 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
 #define QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H
@@ -12,6 +14,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/ValueIdentity.h"
 
 // The functions and macros are able to call functions that take a set of
 // integers as template parameters with integers that are only known at runtime.
@@ -48,7 +51,16 @@
 // the macro and the template function interface, see `CallFixedSizeTest.cpp`.
 
 namespace ad_utility {
+
 namespace detail {
+
+// Call the `lambda` when the correct compile-time `Int`s are given as a
+// `std::integer_sequence`.
+template <std::integral Int, Int... Is, typename F, typename... Args>
+auto applyOnIntegerSequence(ad_utility::ValueSequence<Int, Is...>, F&& lambda,
+                            Args&&... args) {
+  return lambda.template operator()<Is...>(AD_FWD(args)...);
+};
 
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
@@ -60,19 +72,15 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
-
-  // Call the `lambda` when the correct compile-time `Int`s are given as a
-  // `std::integer_sequence`.
-  auto applyOnIntegerSequence =
-      [&]<Int... Is>(ad_utility::ValueSequence<Int, Is...>) {
-        return lambda.template operator()<Is...>(AD_FWD(args)...);
-      };
+  auto apply = [&](auto integerSequence) {
+    return applyOnIntegerSequence(integerSequence, AD_FWD(lambda),
+                                  AD_FWD(args)...);
+  };
 
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
-  using Result = decltype(applyOnIntegerSequence(
-      ad_utility::toIntegerSequence<ArrayType{}>()));
+  using Result = decltype(apply(toIntegerSequence<ArrayType{}>()));
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
@@ -80,22 +88,23 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
   // Lambda: If the compile time parameter `I` and the runtime parameter `array`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
-  auto applyIf = [&]<ArrayType Array>() mutable {
+  auto applyIf = ApplyAsValueIdentity{[&](auto valueIdentity) {
+    static constexpr auto Array = valueIdentity.value;
+    const auto& seq = toIntegerSequence<Array>();
     if (array == Array) {
       if constexpr (resultIsVoid) {
-        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        apply(seq);
       } else {
-        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
+        result = apply(seq);
       }
     }
-  };
+  }};
 
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
   // runtime parameter always is `array`.
-  auto f =
-      [&applyIf]<ArrayType... Is>(ad_utility::ValueSequence<ArrayType, Is...>) {
-        (..., applyIf.template operator()<Is>());
-      };
+  auto f = [&](auto&& valueSequence) {
+    forEachValueInValueSequence(AD_FWD(valueSequence), AD_FWD(applyIf));
+  };
 
   // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
   // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
@@ -126,10 +135,12 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // It calls `functor(INT<f(ints[0])>, INT<f(ints[1])>, ..., args...)`
 // where `INT<N>` is `std::integral_constant<int, N>` and `f` is
 // `mapToZeroIfTooLarge`.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          size_t NumIntegers, std::integral Int, typename F, typename... Args>
-decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
-                             Args&&... args) {
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      size_t NumIntegers, typename Int, typename F,
+                      typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
+                  Args&&... args) {
   static_assert(NumIntegers > 0);
   // TODO<joka921, C++23> Use `std::bind_back`
   auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
@@ -144,11 +155,34 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
 }
 
 // Overload for a single integer.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          std::integral Int, typename F, typename... Args>
-decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      typename Int, typename F, typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
+}
+
+// Template function `callFixedSizeVi` is a wrapper around `callFixedSize`.
+// It wraps the functor in an `ApplyAsValueIdentity`, passing the integers
+// as ValueIdentity objects to the functor rather than as template parameters.
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      size_t NumIntegers, typename Int, typename F,
+                      typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSizeVi(std::array<Int, NumIntegers> ints, F&& functor,
+                    Args&&... args) {
+  return callFixedSize<MaxValue>(ints, ApplyAsValueIdentity{AD_FWD(functor)},
+                                 AD_FWD(args)...);
+}
+
+// Overload for a single integer.
+CPP_variadic_template(int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
+                      typename Int, typename F, typename... Args)(
+    requires std::is_integral_v<Int>) decltype(auto)
+    callFixedSizeVi(Int i, F&& functor, Args&&... args) {
+  return callFixedSizeVi<MaxValue>(std::array{i}, AD_FWD(functor),
+                                   AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
@@ -163,10 +197,14 @@ decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
 // `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
 // simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
 // the corresponding overload of `ad_utility::callFixedSize`.
-#define CALL_FIXED_SIZE(integers, func, ...)                      \
-  ad_utility::callFixedSize(                                      \
-      integers, []<int... Is>(auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<Is...>, AD_FWD(args)...);         \
-      } __VA_OPT__(, ) __VA_ARGS__)
+#define CALL_FIXED_SIZE(integers, func, ...)                 \
+  ad_utility::callFixedSize(                                 \
+      integers,                                              \
+      ad_utility::ApplyAsValueIdentityTuple(                 \
+          [](auto argsTuple, auto... Is) -> decltype(auto) { \
+            return std::apply(func<static_cast<int>(Is)...>, \
+                              std::move(argsTuple));         \
+          }),                                                \
+      ##__VA_ARGS__)
 
 #endif  // QLEVER_SRC_ENGINE_CALLFIXEDSIZE_H

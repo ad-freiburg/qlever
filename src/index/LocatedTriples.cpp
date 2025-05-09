@@ -3,6 +3,8 @@
 // Authors:
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "index/LocatedTriples.h"
 
@@ -11,6 +13,7 @@
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ValueIdentity.h"
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -57,6 +60,16 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
 
+namespace {
+
+// This code works for `std::integer_sequence` as well as
+// `ad_utility::ValueSequence`.
+template <typename Row, template <typename, size_t...> typename Tp, size_t... I>
+auto tieHelper(Row& row, Tp<size_t, I...>) {
+  return std::tie(row[I]...);
+};
+}  // namespace
+
 // Return a `std::tie` of the relevant entries of a row, according to
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
@@ -65,10 +78,9 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
              typename T)(requires(numIndexColumns >= 1 &&
                                   numIndexColumns <=
                                       3)) auto tieIdTableRow(T& row) {
-  return [&row]<size_t... I>(std::index_sequence<I...>) {
-    return std::tie(row[I]...);
-  }(std::make_index_sequence<numIndexColumns +
-                             static_cast<size_t>(includeGraphColumn)>{});
+  return tieHelper(
+      row, std::make_index_sequence<numIndexColumns +
+                                    static_cast<size_t>(includeGraphColumn)>{});
 }
 
 // Return a `std::tie` of the relevant entries of a located triple,
@@ -94,9 +106,7 @@ CPP_template(size_t numIndexColumns, bool includeGraphColumn,
     return a;
   }();
   auto& ids = lt->triple_.ids();
-  return [&ids]<size_t... I>(ad_utility::ValueSequence<size_t, I...>) {
-    return std::tie(ids[I]...);
-  }(ad_utility::toIntegerSequence<indices>());
+  return tieHelper(ids, ad_utility::toIntegerSequence<indices>());
 }
 
 // ____________________________________________________________________________
@@ -194,7 +204,7 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
   auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
-                                 this]<bool hasGraphColumn>() {
+                                 this](auto hasGraphColumn) {
     if (numIndexColumns == 3) {
       return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
     } else if (numIndexColumns == 2) {
@@ -204,10 +214,11 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
       return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
     }
   };
+  using ad_utility::use_value_identity::vi;
   if (includeGraphColumn) {
-    return mergeTriplesImplHelper.template operator()<true>();
+    return mergeTriplesImplHelper(vi<true>);
   } else {
-    return mergeTriplesImplHelper.template operator()<false>();
+    return mergeTriplesImplHelper(vi<false>);
   }
 }
 

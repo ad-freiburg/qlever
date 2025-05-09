@@ -155,23 +155,23 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   // Boolean column) should be `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
-  // Helper lambda for computing the exists join with `callFixedSize`, which
+  // Helper lambda for computing the exists join with `callFixedSizeVi`, which
   // makes the number of join columns a template parameter.
   auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
                             &colsLeftDynamic = joinColumnsLeft,
                             &colsRightDynamic = joinColumnsRight,
-                            this]<int NumJoinCols>() {
-    // The `actionForNotExisting` callback gets iterators as input, but should
-    // output indices, hence the pointer arithmetic.
+                            this](auto NumJoinCols) {
+    // The `actionForNotExisting` callback gets iterators as input, but
+    // should output indices, hence the pointer arithmetic.
     auto joinColumnsLeft = colsLeftDynamic.asStaticView<NumJoinCols>();
     auto joinColumnsRight = colsRightDynamic.asStaticView<NumJoinCols>();
     auto actionForNotExisting =
         [&notExistsIndices, begin = joinColumnsLeft.begin()](
             const auto& itLeft) { notExistsIndices.push_back(itLeft - begin); };
 
-    // Run `zipperJoinWithUndef` with the described callbacks and the mentioned
-    // optimization in case we know that there are no UNDEF values in the join
-    // columns.
+    // Run `zipperJoinWithUndef` with the described callbacks and the
+    // mentioned optimization in case we know that there are no UNDEF values
+    // in the join columns.
     auto checkCancellationLambda = [this] { checkCancellation(); };
     auto runZipperJoin = [&](auto findUndef) {
       [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
@@ -185,7 +185,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
       runZipperJoin(ad_utility::findSmallerUndefRanges);
     }
   };
-  ad_utility::callFixedSize(numJoinColumns, runForNumJoinCols);
+  ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);
 
   // Add the result column from the computed `notExistsIndices` (which tell us
   // where the value should be `false`).

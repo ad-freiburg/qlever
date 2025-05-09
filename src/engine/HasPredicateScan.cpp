@@ -297,10 +297,10 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
     case ScanType::SUBQUERY_S:
 
       auto width = static_cast<int>(idTable.numColumns());
-      auto doCompute = [this, &idTable, &patterns]<int width>() {
+      auto doCompute = [this, &idTable, &patterns](auto width) {
         return computeSubqueryS<width>(&idTable, patterns);
       };
-      return ad_utility::callFixedSize(width, doCompute);
+      return ad_utility::callFixedSizeVi(width, doCompute);
   }
   AD_FAIL();
 }

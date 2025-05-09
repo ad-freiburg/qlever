@@ -15,6 +15,7 @@
 #include "util/Forward.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
+#include "util/ValueIdentity.h"
 
 // Various helper functions for compile-time programming.
 
@@ -53,6 +54,16 @@ template <typename Function, size_t... ForLoopIndexes>
 void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
                       const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
+}
+
+/*
+ * @brief A compile time for loop, similar to ConstexprForLoop, but wrapping
+ * loop body in `ApplyAsValueIdentity`.
+ */
+template <typename Function, size_t... ForLoopIndexes>
+void ConstexprForLoopVi(const std::index_sequence<ForLoopIndexes...>&,
+                        const Function& loopBody) {
+  ((ApplyAsValueIdentity{loopBody}.template operator()<ForLoopIndexes>()), ...);
 }
 
 template <typename Func, typename CaseConstant, typename... ArgTypes>
@@ -112,12 +123,23 @@ struct ConstexprSwitch {
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
-                   [&function, &value]<size_t Index>() {
-                     if (Index == value) {
-                       function.template operator()<Index>();
-                     }
-                   });
+  ConstexprForLoopVi(std::make_index_sequence<MaxValue + 1>{},
+                     [&function, &value](auto index) {
+                       if (index == value) {
+                         function.template operator()<index.value>();
+                       }
+                     });
+}
+
+/*
+ * @brief Similar to RuntimeValueToCompileTimeValue, but using
+ * ConstexprForLoopVi which automatically wraps the function in
+ * `ApplyAsValueIdentity`.
+ */
+template <size_t MaxValue, typename Function>
+void RuntimeValueToCompileTimeValueVi(const size_t& value, Function function) {
+  return RuntimeValueToCompileTimeValue<MaxValue>(
+      value, ApplyAsValueIdentity{std::move(function)});
 }
 
 /*
@@ -287,6 +309,12 @@ template <typename TemplateType>
 constexpr void forEachTypeInTemplateTypeWithTI(
     use_type_identity::TI<TemplateType>, const auto& lambda) {
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
+}
+
+template <typename T, T... values, typename F>
+constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
+                                           F&& lambda) {
+  (lambda.template operator()<values>(), ...);
 }
 
 }  // namespace ad_utility

@@ -399,10 +399,10 @@ Result::LazyResult Union::computeResultKeepOrder(
   return std::visit(
       [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
        &applyPermutation](auto left, auto right) {
-        return ad_utility::callFixedSize(
+        return ad_utility::callFixedSizeVi(
             trimmedTargetOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
+             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),
