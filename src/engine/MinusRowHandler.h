@@ -18,17 +18,27 @@
 
 namespace ad_utility {
 
+// Row handler for the `Minus` operation. Instead of materializing matching rows
+// like `AddCombinedRowToIdTable` it only keeps non-matching rows and skips all
+// other rows.
 class MinusRowHandler {
-  std::vector<size_t> numUndefinedPerColumn_;
+  // Number of columns that are being joined. Currently always 1.
   size_t numJoinColumns_;
+  // Store reference to left input table.
   std::optional<IdTableView<0>> inputLeft_;
+  // Output `IdTable`.
   IdTable resultTable_;
+  // Output `LocalVocab`.
   LocalVocab mergedVocab_{};
+  // Pointer to the current `LocalVocab` of the left input.
   const LocalVocab* currentVocab_ = nullptr;
-
-  std::vector<size_t> indexBuffer_;
-
+  // Matching indices of the left input.
+  std::vector<size_t> indexBuffer_{};
+  // Index of the first processed row in the left input. This doesn't have to be
+  // a match.
   std::optional<size_t> startIndex_ = std::nullopt;
+  // Index of the last processed row in the left input. This doesn't have to be
+  // a match.
   size_t endIndex_ = 0;
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
@@ -39,18 +49,20 @@ class MinusRowHandler {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   CancellationHandle cancellationHandle_;
 
+  // The number of rows to handle at once before checking the cancellation
+  // handle during `handle()`.
   static constexpr size_t CHUNK_SIZE = 100'000;
 
  public:
-  // Similar to the previous constructor, but the inputs are not given.
-  // This means that the inputs have to be set to an explicit
-  // call to `setInput` before adding rows. This is used for the lazy join
-  // operations (see Join.cpp) where the input changes over time.
+  // Construct a `MinusRowHandler` from the number of join columns, the output
+  // `IdTable` which is used to materialize the individual rows, the
+  // `CancellationHandle` that is checked on every flush and the
+  // `BlockwiseCallback` that is called whenever there are new materialized
+  // values.
   explicit MinusRowHandler(size_t numJoinColumns, IdTable output,
                            CancellationHandle cancellationHandle,
                            BlockwiseCallback blockwiseCallback)
-      : numUndefinedPerColumn_(output.numColumns()),
-        numJoinColumns_{numJoinColumns},
+      : numJoinColumns_{numJoinColumns},
         inputLeft_{std::nullopt},
         resultTable_{std::move(output)},
         blockwiseCallback_{std::move(blockwiseCallback)},
@@ -58,12 +70,7 @@ class MinusRowHandler {
     AD_CONTRACT_CHECK(cancellationHandle_);
   }
 
-  // Return the number of UNDEF values per column.
-  const std::vector<size_t>& numUndefinedPerColumn() {
-    flush();
-    return numUndefinedPerColumn_;
-  }
-
+  // Add a matching row to the index buffer.
   void addRow(size_t index, size_t) {
     AD_EXPENSIVE_CHECK(inputLeft_.has_value());
     if (indexBuffer_.empty() || indexBuffer_.back() < index) {
@@ -130,13 +137,11 @@ class MinusRowHandler {
   // rows from the previous inputs get materialized before deleting the old
   // inputs. The arguments to `inputLeft` and `inputRight` can either be
   // `IdTable` or `IdTableView<0>`, or any other type that has a
-  // `asStaticView<0>` method that returns an `IdTableView<0>`.
+  // `asStaticView<0>` method that returns an `IdTableView<0>`. The right table
+  // is completely ignored.
   template <typename L, typename R>
   void setInput(const L& inputLeft, const R&) {
-    flushBeforeInputChange();
-    mergeVocab(inputLeft, currentVocab_);
-    inputLeft_ = toView(inputLeft);
-    AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
+    setOnlyLeftInputForOptionalJoin(inputLeft);
   }
 
   // Only set the left input. After this it is only allowed to call
@@ -145,14 +150,12 @@ class MinusRowHandler {
   void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocab_);
-    // The right input will be empty, but with the correct number of columns.
     inputLeft_ = toView(inputLeft);
     AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
   }
 
-  // The next free row in the output will be created from
-  // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
-  // UNDEF
+  // The next non-matching row in the output will be created from
+  // `inputLeft_[rowIndexA]`.
   void addOptionalRow(size_t rowIndexA) {
     AD_EXPENSIVE_CHECK(inputLeft_.has_value());
     if (!startIndex_.has_value()) {
@@ -171,6 +174,7 @@ class MinusRowHandler {
     return std::move(resultTable_);
   }
 
+  // Get the output `LocalVocab`.
   LocalVocab& localVocab() { return mergedVocab_; }
 
   // Disable copying and moving, it is currently not needed and makes it harder
@@ -213,8 +217,6 @@ class MinusRowHandler {
       }
     }
   }
-  const IdTableView<0>& inputLeft() const { return inputLeft_.value(); }
-
   // Process pending rows and materialize them into the actual table.
   void handle() {
     const auto& matchingIndices = indexBuffer_;
@@ -228,7 +230,7 @@ class MinusRowHandler {
     auto action = [this]() { cancellationHandle_->throwIfCancelled(); };
     size_t col = 0;
     for (auto targetColumn : resultTable_.getColumns()) {
-      auto inputColumn = inputLeft().getColumn(col);
+      auto inputColumn = inputLeft_.value().getColumn(col);
       auto columnIt = targetColumn.begin() + oldSize;
       size_t lastIndex = startIndex;
       for (size_t index : matchingIndices) {
