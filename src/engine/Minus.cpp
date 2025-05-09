@@ -270,7 +270,7 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
         [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
           ad_utility::zipperJoinForBlocksWithPotentialUndef(
               leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
-              std::true_type{});
+              std::true_type{}, std::true_type{});
         },
         leftRange, rightRange);
     auto localVocab = std::move(rowAdder.localVocab());

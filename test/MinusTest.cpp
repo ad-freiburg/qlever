@@ -189,8 +189,8 @@ TEST(Minus, clone) {
 // _____________________________________________________________________________
 TEST(Minus, lazyMinus) {
   std::vector<IdTable> expected;
-  expected.push_back(
-      makeIdTableFromVector({{V(1), V(11)}, {V(4), V(14)}, {V(5), V(15)}}));
+  expected.push_back(makeIdTableFromVector(
+      {{U, V(10)}, {V(1), V(11)}, {V(4), V(14)}, {V(5), V(15)}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
@@ -226,6 +226,8 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithUndefRight) {
   std::vector<IdTable> expected;
+  expected.push_back(
+      makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {3, 13}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}}));
@@ -239,7 +241,7 @@ TEST(Minus, lazyMinusWithUndefRight) {
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithUndefLeft) {
   std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector({{2, 12}}));
+  expected.push_back(makeIdTableFromVector({{U, V(10)}, {2, 12}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector(
@@ -254,7 +256,7 @@ TEST(Minus, lazyMinusWithUndefLeft) {
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithUndefLeftInSeparateTable) {
   std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector({{2, 12}}));
+  expected.push_back(makeIdTableFromVector({{U, V(10)}, {2, 12}}));
 
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{U, V(10)}}));
@@ -269,7 +271,7 @@ TEST(Minus, lazyMinusWithUndefLeftInSeparateTable) {
 TEST(Minus, lazyMinusWithOneMaterializedTable) {
   auto qec = ad_utility::testing::getQec();
 
-  auto expected = makeIdTableFromVector({{1, 11}, {3, 13}});
+  auto expected = makeIdTableFromVector({{U, V(10)}, {1, 11}, {3, 13}});
 
   {
     std::vector<IdTable> rightTables;
