@@ -82,6 +82,10 @@ class ExistsJoin : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  Result lazyExistsJoin(std::shared_ptr<const Result> left,
+                        std::shared_ptr<const Result> right,
+                        bool requestLaziness);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

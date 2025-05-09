@@ -4,7 +4,9 @@
 
 #include "engine/ExistsJoin.h"
 
-#include "CallFixedSize.h"
+#include "Result.h"
+#include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -84,23 +86,26 @@ size_t ExistsJoin::getCostEstimate() {
 // ____________________________________________________________________________
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
-  auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
+  // The lazy exists join implementation does only work if there's just a single
+  // join column. This might be extended in the future.
+  bool lazyJoinIsSupported = joinColumns_.size() == 1;
+  auto leftRes = left_->getResult(requestLaziness &&
+                                  (noJoinNecessary || lazyJoinIsSupported));
   if (noJoinNecessary) {
     // For non-lazy results applying the limit introduces some overhead, but for
     // lazy results it ensures that we don't have to compute the whole result,
     // so we consider this a tradeoff worth to make.
     right_->setLimit({1});
   }
-  auto rightRes = right_->getResult();
-  const auto& right = rightRes->idTable();
+  auto rightRes =
+      right_->getResult(noJoinNecessary ? false : lazyJoinIsSupported);
 
-  if (!leftRes->isFullyMaterialized()) {
-    AD_CORRECTNESS_CHECK(noJoinNecessary);
+  if (noJoinNecessary && !leftRes->isFullyMaterialized()) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
                 ad_utility::OwningView{std::move(leftRes->idTables())} |
-                ql::views::transform([exists = !right.empty(),
+                ql::views::transform([exists = !rightRes->idTable().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
                   // completely consumed.
@@ -113,6 +118,11 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
                 })},
             leftRes->sortedBy()};
   }
+  if (!leftRes->isFullyMaterialized() || !rightRes->isFullyMaterialized()) {
+    return lazyExistsJoin(std::move(leftRes), std::move(rightRes),
+                          requestLaziness);
+  }
+  const auto& right = rightRes->idTable();
   const auto& left = leftRes->idTable();
 
   // We reuse the generic `zipperJoinWithUndef` function, which has two two
@@ -235,4 +245,170 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+namespace {
+
+struct LazyExistsJoinImpl
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  std::shared_ptr<const Result> left_;
+  std::shared_ptr<const Result> right_;
+  ad_utility::InputRangeTypeErased<Result::IdTableVocabPair> leftRange_;
+  ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
+      rightRange_;
+  ColumnIndex leftJoinColumn_;
+  ColumnIndex rightJoinColumn_;
+
+  std::optional<std::reference_wrapper<const IdTable>> currentRight_ =
+      std::nullopt;
+  size_t currentRightIndex_ = 0;
+
+  std::optional<bool> remainingMatches_ = std::nullopt;
+
+  static ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>
+  toOwnedRange(const std::shared_ptr<const Result>& result) {
+    if (result->isFullyMaterialized()) {
+      return ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{
+          ad_utility::CachingTransformInputRange{
+              std::array{Result::IdTableVocabPair{
+                  result->idTable().clone(), result->getCopyOfLocalVocab()}},
+              [](auto& value) { return std::move(value); }}};
+    }
+    return ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{
+        ad_utility::CachingTransformInputRange{
+            std::move(result->idTables()),
+            [](auto& value) { return std::move(value); }}};
+  }
+
+  static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
+  toRangeView(const std::shared_ptr<const Result>& result) {
+    if (result->isFullyMaterialized()) {
+      return ad_utility::InputRangeTypeErased<
+          std::reference_wrapper<const IdTable>>{
+          ad_utility::CachingTransformInputRange{
+              std::array{std::cref(result->idTable())},
+              [](auto wrapper) -> std::reference_wrapper<const IdTable> {
+                return wrapper;
+              }}};
+    }
+    return ad_utility::InputRangeTypeErased<
+        std::reference_wrapper<const IdTable>>{
+        ad_utility::CachingTransformInputRange{
+            std::move(result->idTables()),
+            [](const auto& pair) { return std::cref(pair.idTable_); }}};
+  }
+
+  explicit LazyExistsJoinImpl(std::shared_ptr<const Result> left,
+                              std::shared_ptr<const Result> right,
+                              ColumnIndex leftJoinColumn,
+                              ColumnIndex rightJoinColumn)
+      : left_{std::move(left)},
+        right_{std::move(right)},
+        leftRange_{toOwnedRange(left_)},
+        rightRange_{toRangeView(right_)},
+        leftJoinColumn_{leftJoinColumn},
+        rightJoinColumn_{rightJoinColumn} {}
+
+  static std::optional<Result::IdTableVocabPair> getNextNonEmptyResult(
+      ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>& range) {
+    std::optional<Result::IdTableVocabPair> current;
+    do {
+      current = range.get();
+    } while (current.has_value() && current.value().idTable_.empty());
+    return current;
+  }
+
+  static std::optional<std::reference_wrapper<const IdTable>>
+  getNextNonEmptyResult(
+      ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>&
+          range) {
+    std::optional<std::reference_wrapper<const IdTable>> current;
+    do {
+      current = range.get();
+    } while (current.has_value() && current.value().get().empty());
+    return current;
+  }
+
+  bool hasMatch(Id id) {
+    if (id.isUndefined()) {
+      return true;
+    }
+    while (currentRight_.has_value() &&
+           currentRightIndex_ < currentRight_.value().get().size()) {
+      auto comparison = currentRight_.value().get().at(currentRightIndex_,
+                                                       rightJoinColumn_) <=> id;
+      if (comparison == 0) {
+        return true;
+      }
+      if (comparison > 0) {
+        return false;
+      }
+      currentRightIndex_++;
+      if (currentRightIndex_ == currentRight_.value().get().size()) {
+        currentRight_ = getNextNonEmptyResult(rightRange_);
+        currentRightIndex_ = 0;
+      }
+    }
+    return false;
+  }
+
+  std::optional<Result::IdTableVocabPair> get() override {
+    if (!currentRight_.has_value() && !remainingMatches_.has_value()) {
+      currentRight_ = getNextNonEmptyResult(rightRange_);
+      if (currentRight_.has_value()) {
+        if (currentRight_.value().get().at(0, 0).isUndefined()) {
+          remainingMatches_ = true;
+        }
+      } else {
+        remainingMatches_ = false;
+      }
+    }
+    if (remainingMatches_.has_value()) {
+      auto result = leftRange_.get();
+      if (result.has_value()) {
+        auto& idTable = result.value().idTable_;
+        idTable.addEmptyColumn();
+        ql::ranges::fill(idTable.getColumn(idTable.numColumns() - 1),
+                         Id::makeFromBool(remainingMatches_.value()));
+      }
+      return result;
+    }
+
+    auto result = getNextNonEmptyResult(leftRange_);
+    if (result.has_value()) {
+      auto& idTable = result.value().idTable_;
+      idTable.addEmptyColumn();
+      auto leftJoinColumn = idTable.getColumn(leftJoinColumn_);
+      auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
+
+      for (size_t rowIndex = 0; rowIndex < leftJoinColumn.size(); rowIndex++) {
+        outputColumn[rowIndex] =
+            Id::makeFromBool(hasMatch(leftJoinColumn[rowIndex]));
+      }
+    }
+    return result;
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
+                                  std::shared_ptr<const Result> right,
+                                  bool requestLaziness) {
+  // If both inputs are fully materialized, we can join them more
+  // efficiently.
+  AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||
+                    !right->isFullyMaterialized());
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(joinColumns_.size() == 1);
+
+  auto [leftCol, rightCol] = joinColumns_.at(0);
+
+  Result::LazyResult generator = Result::LazyResult{
+      LazyExistsJoinImpl{std::move(left), std::move(right), leftCol, rightCol}};
+
+  return requestLaziness
+             ? Result{std::move(generator), resultSortedOn()}
+             : Result{ad_utility::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
