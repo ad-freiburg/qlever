@@ -8,8 +8,11 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+
+using namespace qlever::joinHelpers;
 
 using std::endl;
 using std::string;
@@ -90,7 +93,7 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result OptionalJoin::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
@@ -99,17 +102,25 @@ Result OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
+  // The optional join implementation does only work if there's just a single
+  // join column. This might be extended in the future.
+  bool lazyJoinIsSupported = _joinColumns.size() == 1;
 
-  const auto leftResult = _left->getResult();
-  const auto rightResult = _right->getResult();
+  auto leftResult = _left->getResult(lazyJoinIsSupported);
+  auto rightResult = _right->getResult(lazyJoinIsSupported);
 
   checkCancellation();
 
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
+
+  if (!leftResult->isFullyMaterialized() ||
+      !rightResult->isFullyMaterialized()) {
+    return lazyOptionalJoin(std::move(leftResult), std::move(rightResult),
+                            requestLaziness);
+  }
 
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->idTable().size() << " and "
@@ -378,6 +389,52 @@ void OptionalJoin::optionalJoin(
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
+}
+
+// _____________________________________________________________________________
+Result OptionalJoin::lazyOptionalJoin(std::shared_ptr<const Result> left,
+                                      std::shared_ptr<const Result> right,
+                                      bool requestLaziness) {
+  // If both inputs are fully materialized, we can join them more
+  // efficiently.
+  AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||
+                    !right->isFullyMaterialized());
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(_joinColumns.size() == 1);
+  ad_utility::JoinColumnMapping joinColMap{
+      _joinColumns, _left->getResultWidth(), _right->getResultWidth()};
+
+  auto resultPermutation = joinColMap.permutationResult();
+
+  auto action = [this, left = std::move(left), right = std::move(right),
+                 joinColMap = std::move(joinColMap)](
+                    std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+    ad_utility::AddCombinedRowToIdTable rowAdder{
+        _joinColumns.size(), IdTable{getResultWidth(), allocator()},
+        cancellationHandle_, CHUNK_SIZE, std::move(yieldTable)};
+    auto leftRange = resultToView(*left, joinColMap.permutationLeft());
+    auto rightRange = resultToView(*right, joinColMap.permutationRight());
+    std::visit(
+        [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
+          ad_utility::zipperJoinForBlocksWithPotentialUndef(
+              leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
+              std::true_type{});
+        },
+        leftRange, rightRange);
+    auto localVocab = std::move(rowAdder.localVocab());
+    return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                    std::move(localVocab)};
+  };
+
+  if (requestLaziness) {
+    return {runLazyJoinAndConvertToGenerator(std::move(action),
+                                             std::move(resultPermutation)),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    applyPermutation(idTable, resultPermutation);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
 }
 
 // _____________________________________________________________________________
