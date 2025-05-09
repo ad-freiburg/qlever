@@ -427,7 +427,7 @@ Result ExistsJoin::lazyExistsJoin(std::shared_ptr<const Result> left,
 
   auto [leftCol, rightCol] = joinColumns_.at(0);
 
-  Result::LazyResult generator = Result::LazyResult{
+  Result::LazyResult generator{
       LazyExistsJoinImpl{std::move(left), std::move(right), leftCol, rightCol}};
 
   return requestLaziness
