@@ -158,10 +158,10 @@ class Server {
   // number of changed triples, etc.).
   static json createResponseMetadataForUpdate(
       const ad_utility::Timer& requestTimer, const Index& index,
-      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+      SharedLocatedTriplesSnapshot deltaTriples,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesCount& countAfter);
+      const DeltaTriplesModifyTimings& timings);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template_2(typename RequestT, typename ResponseT)(
@@ -204,7 +204,7 @@ class Server {
           const RequestT& request, const string& operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  json processUpdateImpl(
+  UpdateMetadata processUpdateImpl(
       const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);

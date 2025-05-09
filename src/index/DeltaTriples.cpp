@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -219,49 +220,57 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 
 // _____________________________________________________________________________
 template <typename ReturnType>
-ReturnType DeltaTriplesManager::modify(
+std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
+                   std::tuple<ReturnType, DeltaTriplesModifyTimings>>
+DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
     bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  return deltaTriples_.withWriteLock(
-      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
-        auto updateSnapshot = [this, &deltaTriples] {
-          auto newSnapshot = deltaTriples.getSnapshot();
-          currentLocatedTriplesSnapshot_.withWriteLock(
-              [&newSnapshot](auto& currentSnapshot) {
-                currentSnapshot = std::move(newSnapshot);
-              });
-        };
-        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
-                                       writeToDiskAfterRequest]() {
-          if (writeToDiskAfterRequest) {
-            // TODO<RobinTF> Find a good way to track the time it takes to write
-            // this and store it into the corresponding metadata object.
-            deltaTriples.writeToDisk();
-          }
-          updateSnapshot();
-        };
+  return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest](
+                                         DeltaTriples& deltaTriples) {
+    auto updateSnapshot = [this, &deltaTriples] {
+      auto newSnapshot = deltaTriples.getSnapshot();
+      currentLocatedTriplesSnapshot_.withWriteLock(
+          [&newSnapshot](auto& currentSnapshot) {
+            currentSnapshot = std::move(newSnapshot);
+          });
+    };
+    auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
+                                   writeToDiskAfterRequest]() {
+      ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+      DeltaTriplesModifyTimings timings;
+      if (writeToDiskAfterRequest) {
+        deltaTriples.writeToDisk();
+        timings.diskWritebackTime_ = timer.msecs();
+        timer.start();
+      }
+      updateSnapshot();
+      timings.snapshotUpdateTime_ = timer.msecs();
+      return timings;
+    };
 
-        if constexpr (std::is_void_v<ReturnType>) {
-          function(deltaTriples);
-          writeAndUpdateSnapshot();
-        } else {
-          ReturnType returnValue = function(deltaTriples);
-          writeAndUpdateSnapshot();
-          return returnValue;
-        }
-      });
+    if constexpr (std::is_void_v<ReturnType>) {
+      function(deltaTriples);
+      return writeAndUpdateSnapshot();
+    } else {
+      ReturnType returnValue = function(deltaTriples);
+      auto timings = writeAndUpdateSnapshot();
+      return std::make_tuple(returnValue, timings);
+    }
+  });
 }
-// Explicit instantions
-template void DeltaTriplesManager::modify<void>(
+// Explicit instantiations
+template DeltaTriplesModifyTimings DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
-template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&,
+template std::tuple<UpdateMetadata, DeltaTriplesModifyTimings>
+DeltaTriplesManager::modify<UpdateMetadata>(
+    const std::function<UpdateMetadata(DeltaTriples&)>&,
     bool writeToDiskAfterRequest);
-template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
+template std::tuple<DeltaTriplesCount, DeltaTriplesModifyTimings>
+DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
     bool writeToDiskAfterRequest);
 

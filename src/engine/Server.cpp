@@ -364,11 +364,13 @@ CPP_template_2(typename RequestT, typename ResponseT)(
         [this] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          return this->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
-              [](auto& deltaTriples) {
-                deltaTriples.clear();
-                return deltaTriples.getCounts();
-              });
+          auto [counts, _] =
+              this->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+                  [](auto& deltaTriples) {
+                    deltaTriples.clear();
+                    return deltaTriples.getCounts();
+                  });
+          return counts;
         },
         handle);
     auto countAfterClear = co_await std::move(coroutine);
@@ -830,9 +832,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 
 json Server::createResponseMetadataForUpdate(
     const ad_utility::Timer& requestTimer, const Index& index,
-    const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
-    const UpdateMetadata& updateMetadata, const DeltaTriplesCount& countAfter) {
+    SharedLocatedTriplesSnapshot snapshot, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet, const UpdateMetadata& updateMetadata,
+    const DeltaTriplesModifyTimings& timings) {
   auto formatTime = [](std::chrono::milliseconds time) {
     return absl::StrCat(time.count(), "ms");
   };
@@ -852,10 +854,15 @@ json Server::createResponseMetadataForUpdate(
       nlohmann::ordered_json(runtimeInfoWholeOp);
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInfo);
-  response["delta-triples"]["before"] = nlohmann::json(countBefore);
-  response["delta-triples"]["after"] = nlohmann::json(countAfter);
-  response["delta-triples"]["difference"] =
-      nlohmann::json(countAfter - countBefore);
+  if (updateMetadata.countBefore_.has_value() &&
+      updateMetadata.countAfter_.has_value()) {
+    auto countBefore = updateMetadata.countBefore_.value();
+    auto countAfter = updateMetadata.countAfter_.value();
+    response["delta-triples"]["before"] = nlohmann::json(countBefore);
+    response["delta-triples"]["after"] = nlohmann::json(countAfter);
+    response["delta-triples"]["difference"] =
+        nlohmann::json(countAfter - countBefore);
+  }
   if (updateMetadata.inUpdate_.has_value()) {
     response["delta-triples"]["operation"] =
         json(updateMetadata.inUpdate_.value());
@@ -871,13 +878,18 @@ json Server::createResponseMetadataForUpdate(
                            updateMetadata.insertionTime_)},
       {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
       {"delete", formatTime(updateMetadata.deletionTime_)},
-      {"insert", formatTime(updateMetadata.insertionTime_)}};
+      {"insert", formatTime(updateMetadata.insertionTime_)},
+      {"snapshot", formatTime(timings.snapshotUpdateTime_)}};
+  if (timings.diskWritebackTime_.has_value()) {
+    updateTime["diskWriteback"] =
+        formatTime(timings.diskWritebackTime_.value());
+  }
   response["time"]["update"] = updateTime;
   response["time"]["total"] = formatTime(requestTimer.msecs());
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
-        deltaTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
+        snapshot->getLocatedTriplesForPermutation(permutation).numBlocks();
     auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
@@ -889,7 +901,7 @@ json Server::createResponseMetadataForUpdate(
   return response;
 }
 // ____________________________________________________________________________
-json Server::processUpdateImpl(
+UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
@@ -900,8 +912,11 @@ json Server::processUpdateImpl(
   UpdateMetadata updateMetadata =
       ExecuteUpdate::executeUpdate(index_, plannedUpdate.parsedQuery_, qet,
                                    deltaTriples, cancellationHandle);
-  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
 
+  // TODO<qup42>: move this log out to processUpdate after the modify is
+  // finished.
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
             << std::endl;
@@ -913,9 +928,7 @@ json Server::processUpdateImpl(
   // cache key).
   cache_.clearAll();
 
-  return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
-                                         plannedUpdate, qet, countBefore,
-                                         updateMetadata, countAfter);
+  return updateMetadata;
 }
 
 // ____________________________________________________________________________
@@ -934,20 +947,23 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &plannedQuery]() {
         // Update the delta triples.
-        return index_.deltaTriplesManager().modify<nlohmann::json>(
+        return index_.deltaTriplesManager().modify<UpdateMetadata>(
             [this, &requestTimer, &cancellationHandle,
              &plannedQuery](auto& deltaTriples) {
-              // Use `this` explicitly to silence false-positive errors on
-              // captured `this` being unused.
+              // Use `this` explicitly to silence false-positive
+              // errors on captured `this` being unused.
               return this->processUpdateImpl(plannedQuery, requestTimer,
                                              cancellationHandle, deltaTriples);
             });
       },
       cancellationHandle);
-  auto response = co_await std::move(coroutine);
+  auto [updateMetadata, timings] = co_await std::move(coroutine);
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
+  auto response = createResponseMetadataForUpdate(
+      requestTimer, index_, index_.deltaTriplesManager().getCurrentSnapshot(),
+      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, timings);
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;

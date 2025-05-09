@@ -231,6 +231,13 @@ class DeltaTriples {
   friend class DeltaTriplesManager;
 };
 
+struct DeltaTriplesModifyTimings {
+  using Milliseconds = std::chrono::milliseconds;
+  static constexpr Milliseconds Zero = Milliseconds::zero();
+  Milliseconds snapshotUpdateTime_ = Zero;
+  std::optional<Milliseconds> diskWritebackTime_ = std::nullopt;
+};
+
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
@@ -251,8 +258,10 @@ class DeltaTriplesManager {
   // snapshot before or after a modification, but never one of an ongoing
   // modification.
   template <typename ReturnType>
-  ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function,
-                    bool writeToDiskAfterRequest = true);
+  std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
+                     std::tuple<ReturnType, DeltaTriplesModifyTimings>>
+  modify(const std::function<ReturnType(DeltaTriples&)>& function,
+         bool writeToDiskAfterRequest = true);
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
