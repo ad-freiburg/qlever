@@ -229,38 +229,38 @@ DeltaTriplesManager::modify(
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  return deltaTriples_.withWriteLock([this, &function, writeToDiskAfterRequest](
-                                         DeltaTriples& deltaTriples) {
-    auto updateSnapshot = [this, &deltaTriples] {
-      auto newSnapshot = deltaTriples.getSnapshot();
-      currentLocatedTriplesSnapshot_.withWriteLock(
-          [&newSnapshot](auto& currentSnapshot) {
-            currentSnapshot = std::move(newSnapshot);
-          });
-    };
-    auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
-                                   writeToDiskAfterRequest]() {
-      ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
-      DeltaTriplesModifyTimings timings;
-      if (writeToDiskAfterRequest) {
-        deltaTriples.writeToDisk();
-        timings.diskWritebackTime_ = timer.msecs();
-        timer.start();
-      }
-      updateSnapshot();
-      timings.snapshotUpdateTime_ = timer.msecs();
-      return timings;
-    };
+  return deltaTriples_.withWriteLock(
+      [this, &function, writeToDiskAfterRequest](DeltaTriples& deltaTriples) {
+        auto updateSnapshot = [this, &deltaTriples] {
+          auto newSnapshot = deltaTriples.getSnapshot();
+          currentLocatedTriplesSnapshot_.withWriteLock(
+              [&newSnapshot](auto& currentSnapshot) {
+                currentSnapshot = std::move(newSnapshot);
+              });
+        };
+        auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
+                                       writeToDiskAfterRequest]() {
+          ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+          DeltaTriplesModifyTimings timings;
+          if (writeToDiskAfterRequest) {
+            deltaTriples.writeToDisk();
+            timings.diskWritebackTime_ = timer.msecs();
+            timer.start();
+          }
+          updateSnapshot();
+          timings.snapshotUpdateTime_ = timer.msecs();
+          return timings;
+        };
 
-    if constexpr (std::is_void_v<ReturnType>) {
-      function(deltaTriples);
-      return writeAndUpdateSnapshot();
-    } else {
-      ReturnType returnValue = function(deltaTriples);
-      auto timings = writeAndUpdateSnapshot();
-      return std::make_tuple(returnValue, timings);
-    }
-  });
+        if constexpr (std::is_void_v<ReturnType>) {
+          function(deltaTriples);
+          return writeAndUpdateSnapshot();
+        } else {
+          ReturnType returnValue = function(deltaTriples);
+          auto timings = writeAndUpdateSnapshot();
+          return std::make_tuple(returnValue, timings);
+        }
+      });
 }
 // Explicit instantiations
 template DeltaTriplesModifyTimings DeltaTriplesManager::modify<void>(
