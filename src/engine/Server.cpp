@@ -854,38 +854,30 @@ json Server::createResponseMetadataForUpdate(
       nlohmann::ordered_json(runtimeInfoWholeOp);
   response["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInfo);
-  if (updateMetadata.countBefore_.has_value() &&
-      updateMetadata.countAfter_.has_value()) {
-    auto countBefore = updateMetadata.countBefore_.value();
-    auto countAfter = updateMetadata.countAfter_.value();
-    response["delta-triples"]["before"] = nlohmann::json(countBefore);
-    response["delta-triples"]["after"] = nlohmann::json(countAfter);
-    response["delta-triples"]["difference"] =
-        nlohmann::json(countAfter - countBefore);
-  }
-  if (updateMetadata.inUpdate_.has_value()) {
-    response["delta-triples"]["operation"] =
-        json(updateMetadata.inUpdate_.value());
-  }
-  response["time"]["planning"] =
-      formatTime(runtimeInfoWholeOp.timeQueryPlanning);
-  response["time"]["where"] =
-      formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
-          runtimeInfo.totalTime_));
-  json updateTime{
-      {"total", formatTime(updateMetadata.triplePreparationTime_ +
-                           updateMetadata.deletionTime_ +
-                           updateMetadata.insertionTime_)},
-      {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
-      {"delete", formatTime(updateMetadata.deletionTime_)},
-      {"insert", formatTime(updateMetadata.insertionTime_)},
-      {"snapshot", formatTime(timings.snapshotUpdateTime_)}};
+  AD_CORRECTNESS_CHECK(updateMetadata.countBefore_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.inUpdate_.has_value());
+  AD_CORRECTNESS_CHECK(updateMetadata.countAfter_.has_value());
+  auto countBefore = updateMetadata.countBefore_.value();
+  auto countAfter = updateMetadata.countAfter_.value();
+  response["delta-triples"]["before"] = nlohmann::json(countBefore);
+  response["delta-triples"]["after"] = nlohmann::json(countAfter);
+  response["delta-triples"]["difference"] =
+      nlohmann::json(countAfter - countBefore);
+  response["delta-triples"]["operation"] =
+      json(updateMetadata.inUpdate_.value());
+  json time{{"total", formatTime(requestTimer.msecs())},
+            {"planning", formatTime(runtimeInfoWholeOp.timeQueryPlanning)},
+            {"where",
+             formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
+                 runtimeInfo.totalTime_))},
+            {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
+            {"delete", formatTime(updateMetadata.deletionTime_)},
+            {"insert", formatTime(updateMetadata.insertionTime_)},
+            {"snapshot", formatTime(timings.snapshotUpdateTime_)}};
   if (timings.diskWritebackTime_.has_value()) {
-    updateTime["diskWriteback"] =
-        formatTime(timings.diskWritebackTime_.value());
+    time["diskWriteback"] = formatTime(timings.diskWritebackTime_.value());
   }
-  response["time"]["update"] = updateTime;
-  response["time"]["total"] = formatTime(requestTimer.msecs());
+  response["time"] = time;
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
