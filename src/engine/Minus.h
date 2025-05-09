@@ -16,7 +16,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
@@ -37,7 +37,7 @@ class Minus : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -49,7 +49,7 @@ class Minus : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
@@ -60,9 +60,10 @@ class Minus : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   template <int A_WIDTH, int B_WIDTH>
-  void computeMinus(const IdTable& a, const IdTable& b,
-                    const vector<std::array<ColumnIndex, 2>>& matchedColumns,
-                    IdTable* result) const;
+  void computeMinus(
+      const IdTable& a, const IdTable& b,
+      const std::vector<std::array<ColumnIndex, 2>>& matchedColumns,
+      IdTable* result) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -74,9 +75,13 @@ class Minus : public Operation {
   template <int A_WIDTH, int B_WIDTH>
   static RowComparison isRowEqSkipFirst(
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-      size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
+      size_t ib, const std::vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result lazyMinusJoin(std::shared_ptr<const Result> left,
+                       std::shared_ptr<const Result> right,
+                       bool requestLaziness);
+
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
