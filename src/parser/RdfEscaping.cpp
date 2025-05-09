@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
@@ -310,12 +311,12 @@ std::string escapeForXml(std::string input) {
 std::string normalizedContentFromLiteralOrIri(std::string&& input) {
   if (input.starts_with('<')) {
     AD_CORRECTNESS_CHECK(input.ends_with('>'));
-    std::shift_left(input.begin(), input.end(), 1);
+    ql::shift_left(input.begin(), input.end(), 1);
     input.resize(input.size() - 2);
   } else if (input.starts_with('"')) {
     auto posLastQuote = static_cast<int64_t>(input.rfind('"'));
     AD_CORRECTNESS_CHECK(posLastQuote > 0);
-    std::shift_left(input.begin(), input.begin() + posLastQuote, 1);
+    ql::shift_left(input.begin(), input.begin() + posLastQuote, 1);
     input.resize(posLastQuote - 1);
   }
   return std::move(input);

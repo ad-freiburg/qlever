@@ -7,6 +7,7 @@
 #include <utility>
 #include <variant>
 
+#include "backports/shift.h"
 #include "parser/LiteralOrIri.h"
 
 static constexpr char quote{'"'};
@@ -141,7 +142,7 @@ void Literal::setSubstr(std::size_t start, std::size_t length) {
       beginOfSuffix_ - 2;  // Ignore the two quotation marks
   AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
   auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
-  std::shift_left(contentBegin, contentBegin + start + length, start);
+  ql::shift_left(contentBegin, contentBegin + start + length, start);
   content_.erase(length + 1, contentLength - length);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
 }

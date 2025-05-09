@@ -9,6 +9,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
@@ -118,7 +119,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
            limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
-        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+        ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
   size_t targetSize = limitOffset.actualSize(idTable.numRows());
@@ -134,7 +135,7 @@ void Result::applyLimitOffset(
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
-  // `O(1)` (see the docs for `std::shift_left`).
+  // `O(1)` (see the docs for `ql::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
   if (limitOffset.isUnconstrained()) {
     return;
