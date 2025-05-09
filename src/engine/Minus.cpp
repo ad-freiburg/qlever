@@ -2,11 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "Minus.h"
+#include "engine/Minus.h"
 
 #include "engine/CallFixedSize.h"
+#include "engine/JoinHelpers.h"
+#include "engine/MinusRowHandler.h"
 #include "engine/Service.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
@@ -33,7 +36,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Minus::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   // If the right of the RootOperations is a Service, precompute the result of
@@ -42,11 +45,20 @@ Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
-  const auto leftResult = _left->getResult();
-  const auto rightResult = _right->getResult();
+  // The lazy minus implementation does only work if there's just a single
+  // join column. This might be extended in the future.
+  bool lazyJoinIsSupported = _matchedColumns.size() == 1;
+
+  const auto leftResult = _left->getResult(lazyJoinIsSupported);
+  const auto rightResult = _right->getResult(lazyJoinIsSupported);
+
+  if (!leftResult->isFullyMaterialized() ||
+      !rightResult->isFullyMaterialized()) {
+    return lazyMinusJoin(std::move(leftResult), std::move(rightResult),
+                         requestLaziness);
+  }
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
@@ -76,7 +88,7 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Minus::resultSortedOn() const {
+std::vector<ColumnIndex> Minus::resultSortedOn() const {
   return _left->resultSortedOn();
 }
 
@@ -227,4 +239,55 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
+                            std::shared_ptr<const Result> right,
+                            bool requestLaziness) {
+  // If both inputs are fully materialized, we can join them more
+  // efficiently.
+  AD_CONTRACT_CHECK(!left->isFullyMaterialized() ||
+                    !right->isFullyMaterialized());
+  // Currently only supports a single join column.
+  AD_CORRECTNESS_CHECK(_matchedColumns.size() == 1);
+
+  std::vector<ColumnIndex> permutation;
+  permutation.resize(_left->getResultWidth());
+  ql::ranges::copy(ql::ranges::iota_view<size_t, size_t>{0, permutation.size()},
+                   permutation.begin());
+  ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
+  permutation.at(0) = leftJoinColumn;
+  permutation.at(leftJoinColumn) = 0;
+
+  auto action =
+      [this, left = std::move(left), right = std::move(right),
+       permutation](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+        ad_utility::MinusRowHandler rowAdder{
+            _matchedColumns.size(), IdTable{getResultWidth(), allocator()},
+            cancellationHandle_, std::move(yieldTable)};
+        auto leftRange = qlever::joinHelpers::resultToView(*left, permutation);
+        auto rightRange = qlever::joinHelpers::resultToView(
+            *right, {_matchedColumns.at(0).at(1)});
+        std::visit(
+            [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
+              ad_utility::zipperJoinForBlocksWithPotentialUndef(
+                  leftBlocks, rightBlocks, std::less{}, rowAdder, {}, {},
+                  std::true_type{}, std::true_type{});
+            },
+            leftRange, rightRange);
+        auto localVocab = std::move(rowAdder.localVocab());
+        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                        std::move(localVocab)};
+      };
+
+  if (requestLaziness) {
+    return {qlever::joinHelpers::runLazyJoinAndConvertToGenerator(
+                std::move(action), std::move(permutation)),
+            resultSortedOn()};
+  } else {
+    auto [idTable, localVocab] = action(ad_utility::noop);
+    qlever::joinHelpers::applyPermutation(idTable, permutation);
+    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  }
 }
