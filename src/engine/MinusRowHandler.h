@@ -215,6 +215,7 @@ class MinusRowHandler {
   }
   const IdTableView<0>& inputLeft() const { return inputLeft_.value(); }
 
+  // Process pending rows and materialize them into the actual table.
   void handle() {
     const auto& matchingIndices = indexBuffer_;
     size_t startIndex = startIndex_.value();
