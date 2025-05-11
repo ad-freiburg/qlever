@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/TextIndexBuilder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/File.h"
@@ -333,7 +334,9 @@ int main(int argc, char** argv) {
           "has to be true. For details see --help."));
     }
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      index.buildTextIndexFile(
+      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
+          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+      textIndexBuilder.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
