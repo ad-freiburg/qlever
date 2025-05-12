@@ -346,7 +346,7 @@ static auto fourLetterPrefixes() {
                            ql::views::transform([=](char c) {
                              return ql::views::iota('a', 'z' + 1) |
                                     ql::views::transform([=](char d) {
-                                      return ql::string{a, b, c, d};
+                                      return std::string{a, b, c, d};
                                     });
                            });
                   });
