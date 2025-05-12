@@ -69,13 +69,9 @@ size_t TextIndexBuilder::processWordsForVocabulary(string const& contextFile,
                                                    bool addWordsFromLiterals) {
   size_t numLines = 0;
   ad_utility::HashSet<string> distinctWords;
-  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
+  for (const auto& line :
+       wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     ++numLines;
-    // LOG(INFO) << "LINE: "
-    //           << std::setw(50) << line.word_ << "   "
-    //           << line.isEntity_ << "\t"
-    //           << line.contextId_.get() << "\t"
-    //           << line.score_ << std::endl;
     if (!line.isEntity_) {
       distinctWords.insert(line.word_);
     }
@@ -99,7 +95,8 @@ void TextIndexBuilder::processWordsForInvertedLists(const string& contextFile,
   size_t entityNotFoundErrorMsgCount = 0;
   size_t nofLiterals = 0;
 
-  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
+  for (const auto& line :
+       wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line.contextId_ != currentContext) {
       ++nofContexts;
       addContextToVector(vec, currentContext, wordsInContext,
@@ -241,14 +238,14 @@ void TextIndexBuilder::addContextToVector(
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<TextBlockIndex> touchedBlocks;
-  for (auto it = words.begin(); it != words.end(); ++it) {
-    TextBlockIndex blockId = getWordBlockId(it->first);
+  ql::ranges::for_each(words, [&](const auto& word) {
+    TextBlockIndex blockId = getWordBlockId(word.first);
     touchedBlocks.insert(blockId);
     vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(false),
                         Id::makeFromInt(context.get()),
-                        Id::makeFromInt(it->first),
-                        Id::makeFromDouble(it->second)});
-  }
+                        Id::makeFromInt(word.first),
+                        Id::makeFromDouble(word.second)});
+  });
 
   // All entities have to be written in the entity list part for each block.
   // Ensure that they are added only once for each block.
@@ -283,7 +280,7 @@ void TextIndexBuilder::createTextIndex(const string& filename, TextVec& vec) {
     bool flag = value[1].getBool();
     TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
     WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
-    Score score = value[4].getDouble();
+    Score score = static_cast<Score>(value[4].getDouble());
     if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
       bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
@@ -338,33 +335,30 @@ void TextIndexBuilder::createTextIndex(const string& filename, TextVec& vec) {
 }
 
 /// yields  aaaa, aaab, ..., zzzz
-static cppcoro::generator<std::string> fourLetterPrefixes() {
+static auto fourLetterPrefixes() {
   static_assert(
       MIN_WORD_PREFIX_SIZE == 4,
       "If you need this to be changed, please contact the developers");
-  auto chars = []() -> cppcoro::generator<char> {
-    for (char c = 'a'; c <= 'z'; ++c) {
-      co_yield c;
-    }
-  };
-
-  for (char a : chars()) {
-    for (char b : chars()) {
-      for (char c : chars()) {
-        for (char d : chars()) {
-          std::string s{a, b, c, d};
-          co_yield s;
-        }
-      }
-    }
-  }
+  return std::views::iota('a', 'z' + 1) | std::views::transform([](char a) {
+           return std::views::iota('a', 'z' + 1) |
+                  std::views::transform([=](char b) {
+                    return std::views::iota('a', 'z' + 1) |
+                           std::views::transform([=](char c) {
+                             return std::views::iota('a', 'z' + 1) |
+                                    std::views::transform([=](char d) {
+                                      return std::string{a, b, c, d};
+                                    });
+                           });
+                  });
+         }) |
+         std::views::join | std::views::join | std::views::join;
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
 template <typename T>
 static bool areFourLetterPrefixesSorted(T comparator) {
   std::string first;
-  for (auto second : fourLetterPrefixes()) {
+  for (const auto& second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {
       return false;
     }

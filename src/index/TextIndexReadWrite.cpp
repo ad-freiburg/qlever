@@ -1,6 +1,4 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Felix Meisen (fesemeisen@outlook.de)
+
 
 #include "index/TextIndexReadWrite.h"
 
@@ -58,8 +56,7 @@ IdTable readContextListHelper(
     auto scores = readZstdComprList<Score>(
         contextList._nofElements, contextList._startScorelist,
         contextList.getByteLengthScorelist(), textIndexFile);
-    ql::ranges::transform(scores.begin(), scores.end(),
-                          idTable.getColumn(2).begin(), scoreToId);
+    ql::ranges::transform(scores, idTable.getColumn(2).begin(), scoreToId);
   }
   return idTable;
 }

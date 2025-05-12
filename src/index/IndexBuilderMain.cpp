@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
           "has to be true. For details see --help."));
     }
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
+      auto textIndexBuilder = TextIndexBuilder(
           ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       textIndexBuilder.buildTextIndexFile(
           wordsAndDocsFileSpecified
