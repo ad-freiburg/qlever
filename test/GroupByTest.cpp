@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
+#include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -75,7 +76,9 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.buildTextIndexFile(
+    TextIndexBuilder textIndexBuilder{ad_utility::makeUnlimitedAllocator<Id>(),
+                                      _index.getOnDiskBase()};
+    textIndexBuilder.buildTextIndexFile(
         std::pair<std::string, std::string>{"group_by_test.words",
                                             "group_by_test.documents"},
         false);
