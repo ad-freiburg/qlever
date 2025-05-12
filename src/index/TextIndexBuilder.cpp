@@ -339,19 +339,18 @@ static auto fourLetterPrefixes() {
   static_assert(
       MIN_WORD_PREFIX_SIZE == 4,
       "If you need this to be changed, please contact the developers");
-  return ql::views::iota('a', 'z' + 1) | ql::views::transform([](char a) {
-           return ql::views::iota('a', 'z' + 1) |
-                  ql::views::transform([=](char b) {
-                    return ql::views::iota('a', 'z' + 1) |
-                           ql::views::transform([=](char c) {
-                             return ql::views::iota('a', 'z' + 1) |
-                                    ql::views::transform([=](char d) {
-                                      return std::string{a, b, c, d};
-                                    });
-                           });
-                  });
-         }) |
-         ql::views::join | ql::views::join | ql::views::join;
+  return ql::views::join(ql::views::join(ql::views::join(
+      ql::views::transform(ql::views::iota('a', 'z' + 1), [](char a) {
+        return ql::views::transform(ql::views::iota('a', 'z' + 1), [=](char b) {
+          return ql::views::transform(
+              ql::views::iota('a', 'z' + 1), [=](char c) {
+                return ql::views::transform(ql::views::iota('a', 'z' + 1),
+                                            [=](char d) {
+                                              return std::string{a, b, c, d};
+                                            });
+              });
+        });
+      }))));
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
