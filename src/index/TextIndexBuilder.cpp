@@ -351,7 +351,7 @@ static auto fourLetterPrefixes() {
                            });
                   });
          }) |
-         sql::views::join | ql::views::join | ql::views::join;
+         ql::views::join | ql::views::join | ql::views::join;
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
