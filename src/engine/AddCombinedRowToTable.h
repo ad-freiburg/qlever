@@ -11,21 +11,13 @@
 
 #include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
-
-namespace detail::concepts {
-template <typename T>
-CPP_requires(HasAsStaticView,
-             requires(T& table)(table.template asStaticView<0>()));
-
-template <typename T>
-CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
-}  // namespace detail::concepts
 
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
