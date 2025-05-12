@@ -200,15 +200,14 @@ inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
                                      const LocaleManager& localeManager) {
   auto wordLines =
       parser | ql::views::transform([&](const DocsFileLine& line) {
-        return tokenizeAndNormalizeText(line.docContent_, localeManager) |
-               ql::views::transform([&](const std::string& word) {
+        auto words = tokenizeAndNormalizeText(line.docContent_, localeManager);
+        return words | ql::views::transform([&](const std::string& word) {
                  return WordsFileLine{word, false,
                                       TextRecordIndex::make(line.docId_.get()),
                                       0, false};
                });
-      }) |
-      ql::views::join;
-  return wordLines;
+      });
+  return wordLines | ql::views::join;
 }
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
