@@ -339,19 +339,19 @@ static auto fourLetterPrefixes() {
   static_assert(
       MIN_WORD_PREFIX_SIZE == 4,
       "If you need this to be changed, please contact the developers");
-  return std::views::iota('a', 'z' + 1) | std::views::transform([](char a) {
-           return std::views::iota('a', 'z' + 1) |
-                  std::views::transform([=](char b) {
-                    return std::views::iota('a', 'z' + 1) |
-                           std::views::transform([=](char c) {
-                             return std::views::iota('a', 'z' + 1) |
-                                    std::views::transform([=](char d) {
-                                      return std::string{a, b, c, d};
+  return ql::views::iota('a', 'z' + 1) | ql::views::transform([](char a) {
+           return ql::views::iota('a', 'z' + 1) |
+                  ql::views::transform([=](char b) {
+                    return ql::views::iota('a', 'z' + 1) |
+                           ql::views::transform([=](char c) {
+                             return ql::views::iota('a', 'z' + 1) |
+                                    ql::views::transform([=](char d) {
+                                      return ql::string{a, b, c, d};
                                     });
                            });
                   });
          }) |
-         std::views::join | std::views::join | std::views::join;
+         sql::views::join | ql::views::join | ql::views::join;
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
