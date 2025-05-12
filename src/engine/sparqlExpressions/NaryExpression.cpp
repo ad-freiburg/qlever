@@ -6,7 +6,9 @@
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -28,6 +30,11 @@ NARY_EXPRESSION(
     DistWithUnitExpression, 3,
     FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
        GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+
+template <SpatialJoinType Relation>
+NARY_EXPRESSION(
+    GeoRelationExpression, 2,
+    FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
 }  // namespace detail
 
@@ -54,6 +61,13 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
+template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2) {
+  return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
+                                                           std::move(child2));
+}
+
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LatitudeExpression>(std::move(child));
 }
@@ -62,3 +76,35 @@ SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
 }
 
 }  // namespace sparqlExpression
+
+// Explicit instantiations for the different geometric relations to avoid linker
+// problems
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::INTERSECTS>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);
+
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::CONTAINS>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);
+
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::CROSSES>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);
+
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::TOUCHES>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);
+
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::EQUALS>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);
+
+template sparqlExpression::SparqlExpression::Ptr
+    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::OVERLAPS>(
+        sparqlExpression::SparqlExpression::Ptr,
+        sparqlExpression::SparqlExpression::Ptr);

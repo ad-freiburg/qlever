@@ -12,8 +12,10 @@
 #include <optional>
 #include <string_view>
 
+#include "engine/SpatialJoin.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility {
@@ -86,6 +88,24 @@ class WktMetricDistGeoPoints {
   double operator()(const std::optional<GeoPoint>& point1,
                     const std::optional<GeoPoint>& point2) const {
     return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
+  }
+};
+
+// A generic operation for all geometric relation functions, like
+// geof:sfIntersects.
+template <SpatialJoinType Relation>
+class WktGeometricRelation {
+ public:
+  ValueId operator()(
+      // TODO<ullingerc> For implementation, use a new appropriate value getter
+      // for geometry literals and points.
+      [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
+      [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
+    AD_THROW(
+        "Geometric relations via the `geof:sf...` functions are not yet "
+        "implemented in QLever. Please refer to the custom `SERVICE qlss:` "
+        "with algorithm `qlss:libspatialjoin` for now. More details can be "
+        "found on the QLever Wiki.");
   }
 };
 
