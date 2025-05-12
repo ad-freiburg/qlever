@@ -201,13 +201,13 @@ inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
   auto wordLines =
       parser | ql::views::transform([&](const DocsFileLine& line) {
         return tokenizeAndNormalizeText(line.docContent_, localeManager) |
-               std::views::transform([&](const std::string& word) {
+               ql::views::transform([&](const std::string& word) {
                  return WordsFileLine{word, false,
                                       TextRecordIndex::make(line.docId_.get()),
                                       0, false};
                });
       }) |
-      std::views::join;
+      ql::views::join;
   return wordLines;
 }
 
