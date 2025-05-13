@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include "engine/Operation.h"
@@ -18,15 +19,32 @@
 
 // The supported spatial join types (geometry predicates).
 enum class SpatialJoinType {
-  INTERSECTS,
+  INTERSECTS = 0,
   CONTAINS,
   COVERS,
   CROSSES,
   TOUCHES,
   EQUALS,
   OVERLAPS,
-  WITHIN_DIST
+  WITHIN_DIST,
+  MaxValue = WITHIN_DIST
 };
+
+constexpr inline std::string_view SJ_INTERSECTS = "intersects";
+constexpr inline std::string_view SJ_CONTAINS = "contains";
+constexpr inline std::string_view SJ_COVERS = "covers";
+constexpr inline std::string_view SJ_CROSSES = "crosses";
+constexpr inline std::string_view SJ_TOUCHES = "touches";
+constexpr inline std::string_view SJ_EQUALS = "equals";
+constexpr inline std::string_view SJ_OVERLAPS = "overlaps";
+constexpr inline std::string_view SJ_WITHIN_DIST = "within-dist";
+
+std::optional<SpatialJoinType> stringToSpatialJoinType(
+    const std::string_view& type);
+
+const std::string_view& spatialJoinTypeToString(const SpatialJoinType& type);
+
+std::vector<SpatialJoinType> allSpatialJoinTypes();
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
@@ -52,13 +70,26 @@ using SpatialJoinTask =
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm {
-  BASELINE,
+  BASELINE = 0,
   S2_GEOMETRY,
   BOUNDING_BOX,
-  LIBSPATIALJOIN
+  LIBSPATIALJOIN,
+  MaxValue = LIBSPATIALJOIN
 };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
+
+constexpr inline std::string_view SJ_BASELINE = "baseline";
+constexpr inline std::string_view SJ_S2_GEOMETRY = "s2";
+constexpr inline std::string_view SJ_BOUNDING_BOX = "boundingBox";
+constexpr inline std::string_view SJ_LIBSPATIALJOIN = "libspatialjoin";
+
+std::optional<SpatialJoinAlgorithm> stringToSpatialJoinAlgorithm(
+    const std::string_view& algo);
+
+const std::string_view& spatialJoinAlgorithmToString(SpatialJoinAlgorithm algo);
+
+std::vector<SpatialJoinAlgorithm> allSpatialJoinAlgorithms();
 
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
