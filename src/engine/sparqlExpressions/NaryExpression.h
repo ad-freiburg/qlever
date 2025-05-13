@@ -57,6 +57,7 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);
