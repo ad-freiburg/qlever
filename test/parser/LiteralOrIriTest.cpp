@@ -410,7 +410,7 @@ TEST(LiteralTest, concat) {
   EXPECT_FALSE(literal.hasDatatype());
 }
 
-TEST(LiteralTest, spaceshipOperator) {
+TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
   LiteralOrIri l1 = LiteralOrIri::fromStringRepresentation(
       "\"Comparative evaluation of the protective effect of sodium "
       "valproate, phenazepam and ionol in stress-induced liver damage in "
@@ -420,9 +420,10 @@ TEST(LiteralTest, spaceshipOperator) {
       "valproate, phenazepam and ionol in stress-induced liver damage in "
       "rats\"@en");
   using namespace ad_utility::testing;
-  Index index =
-      makeTestIndex("LiteralTest_spaceshipOperator", TestIndexConfig{});
-  index.getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  // Ensure that the global singleton comparator (which is used for the <=>
+  // comparison) is available. Creating a QEC sets this comparator.
+  getQec(TestIndexConfig{});
+  ASSERT_NO_THROW(IndexImpl::staticGlobalSingletonComparator());
   EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
   EXPECT_THAT(l1 <=> l2,
               testing::Not(testing::Eq(std::strong_ordering::equal)));
