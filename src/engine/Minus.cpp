@@ -256,6 +256,8 @@ Result Minus::lazyMinusJoin(std::shared_ptr<const Result> left,
   permutation.resize(_left->getResultWidth());
   ql::ranges::copy(ql::ranges::iota_view<size_t, size_t>{0, permutation.size()},
                    permutation.begin());
+  // Create a permutation that swaps the join column with the first column. (And
+  // swaps it back afterwards, which is the same permutation.)
   ColumnIndex leftJoinColumn = _matchedColumns.at(0).at(0);
   permutation.at(0) = leftJoinColumn;
   permutation.at(leftJoinColumn) = 0;

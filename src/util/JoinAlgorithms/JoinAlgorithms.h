@@ -1370,6 +1370,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
                           AlwaysFalse>{leftSide_, rightSide_, lessThan_,
                                        compatibleRowAction_, AlwaysFalse{}}
+          // We can safely pass false here, because at this point all UNDEF
+          // values have already been processed.
           .template runJoin<DoOptionalJoin, false>();
       return;
     }
@@ -1455,7 +1457,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 }
 
 // Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
-// a single column join scenario.
+// a single column join scenario. For `MINUS` both `DoOptionalJoinTag` and
+// `DoMinusTag` need to be set to true.
+// TODO<RobinTF> use single parameter to indicate the type of join.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename CompatibleRowAction, typename LeftProjection = std::identity,
           typename RightProjection = std::identity,

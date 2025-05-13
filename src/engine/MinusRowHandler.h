@@ -25,7 +25,7 @@ class MinusRowHandler {
   // Number of columns that are being joined. Currently always 1.
   size_t numJoinColumns_;
   // Store reference to left input table.
-  std::optional<IdTableView<0>> inputLeft_;
+  std::optional<IdTableView<0>> inputLeft_ = std::nullopt;
   // Output `IdTable`.
   IdTable resultTable_;
   // Output `LocalVocab`.
@@ -63,7 +63,6 @@ class MinusRowHandler {
                            CancellationHandle cancellationHandle,
                            BlockwiseCallback blockwiseCallback)
       : numJoinColumns_{numJoinColumns},
-        inputLeft_{std::nullopt},
         resultTable_{std::move(output)},
         blockwiseCallback_{std::move(blockwiseCallback)},
         cancellationHandle_{std::move(cancellationHandle)} {
@@ -89,28 +88,6 @@ class MinusRowHandler {
       AD_EXPENSIVE_CHECK(startIndex_.value() <= index);
     }
     endIndex_ = std::max(endIndex_, index + 1);
-  }
-
-  // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
-  // `IdTableView<0>`. Identity for `IdTableView<0>`.
-  template <typename T>
-  static IdTableView<0> toView(const T& table) {
-    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
-      return table.template asStaticView<0>();
-    } else {
-      return table;
-    }
-  }
-
-  // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
-  // passed pointer reference to that vocab.
-  template <typename T>
-  void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
-    AD_CORRECTNESS_CHECK(currentVocab == nullptr);
-    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
-      currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(table.getLocalVocab());
-    }
   }
 
   // Flush remaining pending entries before changing the input.
@@ -148,8 +125,8 @@ class MinusRowHandler {
   template <typename L>
   void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
-    mergeVocab(inputLeft, currentVocab_);
-    inputLeft_ = toView(inputLeft);
+    detail::mergeVocabInto(inputLeft, currentVocab_, mergedVocab_);
+    inputLeft_ = detail::toView(inputLeft);
     AD_CONTRACT_CHECK(inputLeft_.value().numColumns() >= numJoinColumns_);
   }
 
