@@ -51,8 +51,8 @@ Result Minus::computeResult(bool requestLaziness) {
   // join column. This might be extended in the future.
   bool lazyJoinIsSupported = _matchedColumns.size() == 1;
 
-  const auto leftResult = _left->getResult(lazyJoinIsSupported);
-  const auto rightResult = _right->getResult(lazyJoinIsSupported);
+  auto leftResult = _left->getResult(lazyJoinIsSupported);
+  auto rightResult = _right->getResult(lazyJoinIsSupported);
 
   if (!leftResult->isFullyMaterialized() ||
       !rightResult->isFullyMaterialized()) {
