@@ -88,8 +88,7 @@ class MinusRowHandler {
     } else {
       AD_EXPENSIVE_CHECK(startIndex_.value() <= index);
     }
-    AD_EXPENSIVE_CHECK(endIndex_ <= index + 1);
-    endIndex_ = index + 1;
+    endIndex_ = std::max(endIndex_, index + 1);
   }
 
   // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
@@ -163,8 +162,7 @@ class MinusRowHandler {
     } else {
       AD_EXPENSIVE_CHECK(startIndex_.value() < rowIndexA);
     }
-    AD_EXPENSIVE_CHECK(endIndex_ <= rowIndexA + 1);
-    endIndex_ = rowIndexA + 1;
+    endIndex_ = std::max(endIndex_, rowIndexA + 1);
   }
 
   // Move the result out after the last write. The function ensures, that the
