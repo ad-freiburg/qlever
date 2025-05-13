@@ -6,7 +6,10 @@
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 
+#include "engine/SpatialJoin.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -52,6 +55,27 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     return std::make_unique<DistExpression>(std::move(child1),
                                             std::move(child2));
   }
+}
+
+std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr) {
+  // TODO<ullingerc> After merge of #1938 handle distance unit and
+  // metricDistance function
+
+  // Currently only DistExpression
+  auto distExpr = dynamic_cast<const DistExpression*>(&expr);
+  if (distExpr == nullptr) {
+    return std::nullopt;
+  }
+  auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+  return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1.value(), p2.value()};
 }
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {

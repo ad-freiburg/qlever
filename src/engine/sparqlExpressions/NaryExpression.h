@@ -10,9 +10,12 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <optional>
 
 #include "backports/concepts.h"
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/data/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
@@ -182,6 +185,19 @@ SparqlExpression::Ptr makeConcatExpression(
     std::vector<SparqlExpression::Ptr> children);
 constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
+
+// Helper struct for `getGeoFunctionExpressionParameters`
+struct GeoFunctionCall {
+  SpatialJoinType function;
+  Variable left;
+  Variable right;
+};
+
+// Helper to extract spatial join parameters from a parsed `geof:` function
+// call. Returns `std:nullopt` if the given `SparqlExpression` is not a
+// supported geo function.
+std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr);
 
 }  // namespace sparqlExpression
 
