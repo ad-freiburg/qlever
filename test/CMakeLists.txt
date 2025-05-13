@@ -448,7 +448,7 @@ addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
-addLinkAndDiscoverTest(ValueGetterTest engine)
+addLinkAndDiscoverTest(ValueGetterTest engine parser)
 
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
@@ -461,3 +461,5 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
+
+addLinkAndDiscoverTest(GeometryInfoTest util)
