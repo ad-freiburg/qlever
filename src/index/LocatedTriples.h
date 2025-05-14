@@ -14,6 +14,7 @@
 #include "index/CompressedRelation.h"
 #include "index/KeyOrder.h"
 #include "util/HashMap.h"
+#include "util/TimeTracer.h"
 
 class Permutation;
 
@@ -148,7 +149,9 @@ class LocatedTriplesPerBlock {
   // PRECONDITION: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      ql::span<const LocatedTriple> locatedTriples);
+      ql::span<const LocatedTriple> locatedTriples,
+      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+          tracer = std::nullopt);
 
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 

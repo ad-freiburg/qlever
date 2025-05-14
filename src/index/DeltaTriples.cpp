@@ -54,7 +54,7 @@ DeltaTriples::locateAndAddTriples(
     }
     intermediateHandles[static_cast<size_t>(permutation)] =
         this->locatedTriples()[static_cast<size_t>(permutation)].add(
-            locatedTriples);
+            locatedTriples, tracer);
     cancellationHandle->throwIfCancelled();
     if (tracer) {
       tracer->get().endTrace("addToLocatedTriples");

@@ -378,7 +378,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     response = createJsonResponse(nlohmann::json{countAfterClear}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
-    response = createJsonResponse(RuntimeParameters().toMap(), request);
+    response = createJsonResponse(json{RuntimeParameters().toMap()}, request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
     response =
@@ -430,7 +430,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
       RuntimeParameters().set(key, std::string{value.value()});
-      response = createJsonResponse(RuntimeParameters().toMap(), request);
+      response = createJsonResponse(json{RuntimeParameters().toMap()}, request);
     }
   }
 
@@ -831,16 +831,17 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   co_return;
 }
 
-json Server::createResponseMetadataForUpdate(
+ordered_json Server::createResponseMetadataForUpdate(
     const ad_utility::Timer& requestTimer, const Index& index,
     SharedLocatedTriplesSnapshot snapshot, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, const UpdateMetadata& updateMetadata,
-    const DeltaTriplesModifyTimings& timings) {
+    const DeltaTriplesModifyTimings& timings,
+    const ad_utility::timer::TimeTracer& tracer) {
   auto formatTime = [](std::chrono::milliseconds time) {
     return absl::StrCat(time.count(), "ms");
   };
 
-  json response;
+  ordered_json response;
   response["update"] = ad_utility::truncateOperationString(
       plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
@@ -866,20 +867,7 @@ json Server::createResponseMetadataForUpdate(
       nlohmann::json(countAfter - countBefore);
   response["delta-triples"]["operation"] =
       json(updateMetadata.inUpdate_.value());
-  response["time"] = nlohmann::json(
-      {{"total", formatTime(requestTimer.msecs())},
-       {"planning", formatTime(runtimeInfoWholeOp.timeQueryPlanning)},
-       {"where",
-        formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
-            runtimeInfo.totalTime_))},
-       {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
-       {"delete", formatTime(updateMetadata.deletionTime_)},
-       {"insert", formatTime(updateMetadata.insertionTime_)},
-       {"snapshot", formatTime(timings.snapshotUpdateTime_)}});
-  if (timings.diskWritebackTime_.has_value()) {
-    response["time"]["diskWriteback"] =
-        formatTime(timings.diskWritebackTime_.value());
-  }
+  response["time"] = tracer.getJSONShort()["update"];
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
@@ -975,7 +963,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   // successful update request is implementation defined."
   auto response = createResponseMetadataForUpdate(
       requestTimer, index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, timings);
+      plannedQuery, plannedQuery.queryExecutionTree_, updateMetadata, timings,
+      tracer);
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;

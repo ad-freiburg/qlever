@@ -31,6 +31,7 @@
 #include "util/json.h"
 
 using nlohmann::json;
+using nlohmann::ordered_json;
 using std::string;
 using std::vector;
 
@@ -156,12 +157,13 @@ class Server {
           TimeLimit timeLimit);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
-  static json createResponseMetadataForUpdate(
+  static ordered_json createResponseMetadataForUpdate(
       const ad_utility::Timer& requestTimer, const Index& index,
       SharedLocatedTriplesSnapshot deltaTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesModifyTimings& timings);
+      const DeltaTriplesModifyTimings& timings,
+      const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template_2(typename RequestT, typename ResponseT)(

@@ -19,14 +19,18 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Update 3.1.3)
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   tracer.beginTrace("deleteTriples");
-  deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete.idTriples_),
-                             tracer);
+  if (!toDelete.idTriples_.empty()) {
+    deltaTriples.deleteTriples(cancellationHandle,
+                               std::move(toDelete.idTriples_), tracer);
+  }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   metadata.deletionTime_ = timer.msecs();
   timer.start();
-  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert.idTriples_),
-                             tracer);
+  if (!toInsert.idTriples_.empty()) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               std::move(toInsert.idTriples_), tracer);
+  }
   tracer.endTrace("insertTriples");
   metadata.insertionTime_ = timer.msecs();
   return metadata;
