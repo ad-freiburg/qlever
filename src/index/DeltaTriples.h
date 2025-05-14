@@ -14,6 +14,7 @@
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 #include "util/Synchronized.h"
+#include "util/TimeTracer.h"
 
 // Typedef for one `LocatedTriplesPerBlock` object for each of the six
 // permutations.
@@ -163,10 +164,16 @@ class DeltaTriples {
   DeltaTriplesCount getCounts() const;
 
   // Insert triples.
-  void insertTriples(CancellationHandle cancellationHandle, Triples triples);
+  void insertTriples(
+      CancellationHandle cancellationHandle, Triples triples,
+      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+          tracer = std::nullopt);
 
   // Delete triples.
-  void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
+  void deleteTriples(
+      CancellationHandle cancellationHandle, Triples triples,
+      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+          tracer = std::nullopt);
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
@@ -198,16 +205,20 @@ class DeltaTriples {
   // maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       CancellationHandle cancellationHandle,
-      ql::span<const IdTriple<0>> idTriples, bool shouldExist);
+      ql::span<const IdTriple<0>> idTriples, bool shouldExist,
+      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+          tracer = std::nullopt);
 
   // Common implementation for `insertTriples` and `deleteTriples`.
   // `shouldExist` specifies the action: insert or delete. `targetMap` contains
   // triples for the current action. `inverseMap` contains triples for the
   // inverse action. These are then used to resolve idempotent actions and
   // update the corresponding maps.
-  void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
-                         bool shouldExist, TriplesToHandlesMap& targetMap,
-                         TriplesToHandlesMap& inverseMap);
+  void modifyTriplesImpl(
+      CancellationHandle cancellationHandle, Triples triples, bool shouldExist,
+      TriplesToHandlesMap& targetMap, TriplesToHandlesMap& inverseMap,
+      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+          tracer = std::nullopt);
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
   // local blank nodes are managed by the `localVocab_` of this class.
@@ -261,7 +272,9 @@ class DeltaTriplesManager {
   std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
                      std::tuple<ReturnType, DeltaTriplesModifyTimings>>
   modify(const std::function<ReturnType(DeltaTriples&)>& function,
-         bool writeToDiskAfterRequest = true);
+         bool writeToDiskAfterRequest = true,
+         std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
+             tracer = std::nullopt);
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 

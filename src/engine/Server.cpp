@@ -27,6 +27,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
+#include "util/TimeTracer.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
@@ -897,14 +898,14 @@ json Server::createResponseMetadataForUpdate(
 UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples) {
+    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree_;
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery_.hasUpdateClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata =
       ExecuteUpdate::executeUpdate(index_, plannedUpdate.parsedQuery_, qet,
-                                   deltaTriples, cancellationHandle);
+                                   deltaTriples, cancellationHandle, tracer);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
@@ -919,7 +920,9 @@ UpdateMetadata Server::processUpdateImpl(
   // Clear the cache, because all cache entries have been invalidated by the
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
+  tracer.beginTrace("clearCache");
   cache_.clearAll();
+  tracer.endTrace("clearCache");
 
   return updateMetadata;
 }
@@ -932,25 +935,41 @@ CPP_template_2(typename RequestT, typename ResponseT)(
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit) {
+  ad_utility::timer::TimeTracer tracer =
+      ad_utility::timer::TimeTracer("update");
+  tracer.beginTrace("planning");
   AD_CORRECTNESS_CHECK(update.hasUpdateClause());
   PlannedQuery plannedQuery =
       co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
                          timeLimit, qec, cancellationHandle);
+  tracer.endTrace("planning");
+  tracer.beginTrace("execution");
+  tracer.beginTrace("waitingForExecutionThread");
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &cancellationHandle, &plannedQuery]() {
+      [this, &requestTimer, &cancellationHandle, &plannedQuery, &tracer]() {
         // Update the delta triples.
+        tracer.endTrace("waitingForExecutionThread");
         return index_.deltaTriplesManager().modify<UpdateMetadata>(
-            [this, &requestTimer, &cancellationHandle,
-             &plannedQuery](auto& deltaTriples) {
+            [this, &requestTimer, &cancellationHandle, &plannedQuery,
+             &tracer](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive
               // errors on captured `this` being unused.
-              return this->processUpdateImpl(plannedQuery, requestTimer,
-                                             cancellationHandle, deltaTriples);
-            });
+              tracer.beginTrace("processUpdateImpl");
+              auto res = this->processUpdateImpl(plannedQuery, requestTimer,
+                                                 cancellationHandle,
+                                                 deltaTriples, tracer);
+              tracer.endTrace("processUpdateImpl");
+              return res;
+            },
+            true, tracer);
       },
       cancellationHandle);
   auto [updateMetadata, timings] = co_await std::move(coroutine);
+  tracer.endTrace("execution");
+  tracer.endTrace("update");
+  AD_LOG(INFO) << "TimeTracer output: " << tracer.getJSONShort().dump()
+               << std::endl;
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
