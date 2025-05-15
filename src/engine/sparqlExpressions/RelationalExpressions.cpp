@@ -37,12 +37,28 @@ using valueIdComparators::Comparison;
 CPP_template(typename S)(
     requires SingleExpressionResult<S> CPP_and
         isConstantResult<S>) auto idGenerator(const S& value, size_t targetSize,
-                                              const EvaluationContext* context)
-    -> cppcoro::generator<const decltype(makeValueId(value, context))> {
+                                              const EvaluationContext*
+                                                  context) {
   auto id = makeValueId(value, context);
-  for (size_t i = 0; i < targetSize; ++i) {
-    co_yield id;
-  }
+  using ReturnType = decltype(id);
+  struct ConstantGenerator : public ad_utility::InputRangeFromGet<ReturnType> {
+    ReturnType id_;
+    size_t remaining_;
+
+    ConstantGenerator(ReturnType id, size_t targetSize)
+        : id_(std::move(id)), remaining_(targetSize) {}
+
+    std::optional<ReturnType> get() override {
+      if (remaining_ > 0) {
+        --remaining_;
+        return id_;
+      }
+      return std::nullopt;
+    }
+  };
+
+  return ad_utility::InputRangeTypeErased<ReturnType>(
+      ConstantGenerator(std::move(id), targetSize));
 }
 
 // Version of `idGenerator` for vectors. Asserts that the size of the vector is
@@ -51,13 +67,30 @@ CPP_template(typename S)(
 CPP_template(typename S)(
     requires SingleExpressionResult<S> CPP_and
         isVectorResult<S>) auto idGenerator(const S& values, size_t targetSize,
-                                            const EvaluationContext* context)
-    -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
+                                            const EvaluationContext* context) {
   AD_CONTRACT_CHECK(targetSize == values.size());
-  for (const auto& el : values) {
-    auto id = makeValueId(el, context);
-    co_yield id;
-  }
+
+  using ReturnType = decltype(makeValueId(values[0], context));
+  struct VectorGenerator : public ad_utility::InputRangeFromGet<ReturnType> {
+    const S& values_;
+    const EvaluationContext* context_;
+    size_t index_ = 0;
+
+    VectorGenerator(const S& values, const EvaluationContext* context)
+        : values_(values), context_(context) {}
+
+    std::optional<ReturnType> get() override {
+      if (index_ < values_.size()) {
+        auto id = makeValueId(values_[index_], context_);
+        ++index_;
+        return id;
+      }
+      return std::nullopt;
+    }
+  };
+
+  return ad_utility::InputRangeTypeErased<ReturnType>(
+      VectorGenerator(values, context));
 }
 
 // For the `Variable` and `SetOfIntervals` class, the generator from the

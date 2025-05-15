@@ -23,25 +23,70 @@ inline auto identity = [](auto&& result, size_t) { return AD_FWD(result); };
 
 namespace detail {
 
+template <typename OperandGenerator>
+class UniqueElementsRange;
+
+template <typename OperandGenerator>
+auto createUniqueElementsRange(const EvaluationContext* context,
+                               size_t inputSize,
+                               OperandGenerator operandGenerator) {
+  using ElementType = ql::ranges::range_value_t<OperandGenerator>;
+  return ad_utility::InputRangeTypeErased<ElementType>(
+      UniqueElementsRange<OperandGenerator>(context, inputSize,
+                                            std::move(operandGenerator)));
+}
+
 // For a given `operandGenerator`, generate the sequence of distinct values.
 // This is needed for aggregation together with the `DISTINCT` keyword. For
 // example, `COUNT(DISTINCT ?x)` should count the number of distinct values for
 // `?x`.
 inline auto getUniqueElements = [](const EvaluationContext* context,
-                                   size_t inputSize, auto operandGenerator)
-    -> cppcoro::generator<
-        ql::ranges::range_value_t<decltype(operandGenerator)>> {
-  using OperandGenerator = decltype(operandGenerator);
-  ad_utility::HashSetWithMemoryLimit<
-      ql::ranges::range_value_t<OperandGenerator>>
-      uniqueHashSet(inputSize, context->_allocator);
-  for (auto& operand : operandGenerator) {
-    if (uniqueHashSet.insert(operand).second) {
-      auto elForYielding = std::move(operand);
-      co_yield elForYielding;
+                                   size_t inputSize, auto operandGenerator) {
+  return createUniqueElementsRange(context, inputSize,
+                                   std::move(operandGenerator));
+};
+
+template <typename OperandGenerator>
+class UniqueElementsRange : public ad_utility::InputRangeFromGet<
+                                ql::ranges::range_value_t<OperandGenerator>> {
+ private:
+  using ElementType = ql::ranges::range_value_t<OperandGenerator>;
+  const EvaluationContext* context_;
+  size_t inputSize_;
+  OperandGenerator operandGenerator_;
+  ad_utility::HashSetWithMemoryLimit<ElementType> uniqueHashSet_;
+  ql::ranges::iterator_t<OperandGenerator> it_;
+  ql::ranges::sentinel_t<OperandGenerator> end_;
+  bool initialized_ = false;
+
+ public:
+  UniqueElementsRange(const EvaluationContext* context, size_t inputSize,
+                      OperandGenerator operandGenerator)
+      : context_(context),
+        inputSize_(inputSize),
+        operandGenerator_(std::move(operandGenerator)),
+        uniqueHashSet_(inputSize, context->_allocator) {}
+
+  std::optional<ElementType> get() override;
+};
+
+template <typename OperandGenerator>
+std::optional<typename UniqueElementsRange<OperandGenerator>::ElementType>
+UniqueElementsRange<OperandGenerator>::get() {
+  if (!initialized_) {
+    initialized_ = true;
+    it_ = ql::ranges::begin(operandGenerator_);
+    end_ = ql::ranges::end(operandGenerator_);
+  }
+  while (it_ != end_) {
+    auto& operand = *it_;
+    ++it_;
+    if (uniqueHashSet_.insert(operand).second) {
+      return std::move(operand);
     }
   }
-};
+  return std::nullopt;
+}
 
 // Class for a SPARQL expression that aggregates a given set of values to a
 // single value using `AggregateOperation`, and then applies `FinalOperation`.
