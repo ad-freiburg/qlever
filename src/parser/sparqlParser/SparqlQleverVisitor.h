@@ -67,6 +67,8 @@ class SparqlQleverVisitor {
   // members.
 
   size_t _blankNodeCounter = 0;
+  // Counter that increments for every variable generated using
+  // `getNewInternalVariable` to ensure distinctness.
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
