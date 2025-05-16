@@ -11,6 +11,7 @@
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 
 using namespace ad_utility::testing;
 
@@ -217,4 +218,37 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
             makeIdTableFromVector({{V(0), V(1), Id::makeFromBool(false)}}));
 
   EXPECT_EQ(++it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
+  auto* qec = getQec();
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, "<something>",
+                        TripleComponent{Variable{"?b"}}}}});
+  // Only add ?a to see if ?b remains hidden.
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+
+  auto existsExpression =
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query));
+
+  sparqlExpression::SparqlExpressionPimpl pimpl{existsExpression, "dummy"};
+
+  auto tree = ExistsJoin::addExistsJoinsToSubtree(
+      pimpl, std::move(subtree), qec,
+      std::make_shared<ad_utility::CancellationHandle<>>());
+
+  const ExistsJoin& existsJoin =
+      *std::dynamic_pointer_cast<ExistsJoin>(tree->getRootOperation());
+
+  // Even though both variables match, only one of them should be joined.
+  EXPECT_THAT(existsJoin.joinColumns_,
+              ::testing::ElementsAre(std::array<ColumnIndex, 2>{0, 0}));
 }
