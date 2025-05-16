@@ -10,12 +10,15 @@
 
 // _____________________________________________________________________________
 string LoadURL::getCacheKeyImpl() const {
-  return absl::StrCat("LOAD URL ", url_, " ", cacheBreaker_);
+  // TODO<qup42> Allow some kind of caching: controlled by a runtime
+  // parameter or based on HTTP headers like ETag or Last-Modified.
+  return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(), " ",
+                      loadURLClause_.silent_ ? "SILENT " : "", cacheBreaker_);
 }
 
 // _____________________________________________________________________________
 string LoadURL::getDescriptor() const {
-  return absl::StrCat("LOAD URL ", url_);
+  return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString());
 }
 
 // _____________________________________________________________________________
@@ -47,7 +50,7 @@ bool LoadURL::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> LoadURL::cloneImpl() const {
-  auto load = std::make_unique<LoadURL>(_executionContext, url_);
+  auto load = std::make_unique<LoadURL>(_executionContext, loadURLClause_);
   load->cacheBreaker_ = cacheBreaker_;
   return load;
 }
@@ -56,12 +59,14 @@ std::unique_ptr<Operation> LoadURL::cloneImpl() const {
 vector<ColumnIndex> LoadURL::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-Result LoadURL::computeResult(bool requestLaziness) {
-  // TODO: do lazy loading
-  ad_utility::httpUtils::Url url{url_};
-  LOG(INFO) << "Loading RDF dataset from " << url.asString() << std::endl;
-  HttpOrHttpsResponse response = getResultFunction_(
-      url, cancellationHandle_, boost::beast::http::verb::get, "", "", "");
+Result LoadURL::computeResult(bool) {
+  // TODO<qup42> implement lazy loading; this requires some modifications to the
+  // parse
+  LOG(INFO) << "Loading RDF dataset from " << loadURLClause_.url_.asString()
+            << std::endl;
+  HttpOrHttpsResponse response =
+      getResultFunction_(loadURLClause_.url_, cancellationHandle_,
+                         boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;
@@ -131,11 +136,10 @@ VariableToColumnMap LoadURL::computeVariableToColumnMap() const {
 void LoadURL::throwErrorWithContext(std::string_view msg,
                                     std::string_view first100,
                                     std::string_view last100) const {
-  const ad_utility::httpUtils::Url url{url_};
-
   throw std::runtime_error(absl::StrCat(
-      "Error while executing a LoadURL request to <", url.asString(),
-      ">: ", msg, ". First 100 bytes of the response: '", first100,
+      "Error while executing a LoadURL request to <",
+      loadURLClause_.url_.asString(), ">: ", msg,
+      ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }

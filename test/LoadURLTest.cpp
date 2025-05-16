@@ -13,6 +13,10 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+auto pqLoadURL = [](std::string url, bool silent = false) {
+  return parsedQuery::LoadURL{ad_utility::httpUtils::Url{url}, silent};
+};
+
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
 class LoadURLTest : public ::testing::Test {
@@ -88,11 +92,11 @@ class LoadURLTest : public ::testing::Test {
 
 TEST_F(LoadURLTest, basicMethods) {
   // Create an instance of the operation.
-  LoadURL loadURL{testQec, "https://mundhahs.dev"};
+  LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev")};
 
   // Test the basic methods.
   EXPECT_THAT(loadURL.getDescriptor(),
-              testing::Eq("LOAD URL https://mundhahs.dev"));
+              testing::Eq("LOAD URL https://mundhahs.dev:443/"));
   EXPECT_THAT(loadURL.getCacheKey(), testing::StartsWith("LOAD URL"));
   EXPECT_THAT(loadURL.getResultWidth(), testing::Eq(3));
   EXPECT_THAT(loadURL.getMultiplicity(0), testing::Eq(1));
@@ -111,7 +115,7 @@ TEST_F(LoadURLTest, basicMethods) {
 
 TEST_F(LoadURLTest, computeResult) {
   {
-    LoadURL loadURL{testQec, "https://mundhahs.dev",
+    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
                     getResultFunctionFactory(
                         "<x> <b> <c>", boost::beast::http::status::not_found)};
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -120,7 +124,7 @@ TEST_F(LoadURLTest, computeResult) {
   }
   {
     LoadURL loadURL{
-        testQec, "https://mundhahs.dev",
+        testQec, pqLoadURL("https://mundhahs.dev"),
         getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                  "text/plain")};
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -128,7 +132,7 @@ TEST_F(LoadURLTest, computeResult) {
         testing::HasSubstr("Unsupported media type \"text/plain\"."));
   }
   {
-    LoadURL loadURL{testQec, "https://mundhahs.dev",
+    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
                     getResultFunctionFactory(
                         "<x> <b> <c>", boost::beast::http::status::ok, "")};
     AD_EXPECT_THROW_WITH_MESSAGE(
@@ -137,7 +141,7 @@ TEST_F(LoadURLTest, computeResult) {
                            "return the mediatype."));
   }
   {
-    LoadURL loadURL{testQec, "https://mundhahs.dev",
+    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
                     getResultFunctionFactory("this is not turtle",
                                              boost::beast::http::status::ok,
                                              "text/turtle")};
@@ -153,7 +157,7 @@ TEST_F(LoadURLTest, computeResult) {
         auto g = generateLocationTrace(loc);
 
         LoadURL loadURL{
-            testQec, "https://mundhahs.dev",
+            testQec, pqLoadURL("https://mundhahs.dev"),
             getResultFunctionFactory(
                 responseBody, boost::beast::http::status::ok, contentType)};
         auto res = loadURL.computeResultOnlyForTesting();
@@ -205,14 +209,14 @@ TEST_F(LoadURLTest, computeResult) {
 }
 
 TEST_F(LoadURLTest, getCacheKey) {
-  LoadURL load1{testQec, "https://mundhahs.dev"};
-  LoadURL load2{testQec, "https://mundhahs.dev"};
+  LoadURL load1{testQec, pqLoadURL("https://mundhahs.dev")};
+  LoadURL load2{testQec, pqLoadURL("https://mundhahs.dev")};
   EXPECT_THAT(load1.getCacheKey(),
               testing::Not(testing::Eq(load2.getCacheKey())));
 }
 
 TEST_F(LoadURLTest, clone) {
-  LoadURL loadUrl{testQec, "https://mundhahs.dev"};
+  LoadURL loadUrl{testQec, pqLoadURL("https://mundhahs.dev")};
   auto clone = loadUrl.clone();
   ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
   EXPECT_THAT(*clone, IsDeepCopy(loadUrl));

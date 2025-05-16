@@ -10,6 +10,7 @@
 #include <string>
 
 #include "engine/Operation.h"
+#include "parser/ParsedQuery.h"
 #include "util/http/HttpClient.h"
 
 class LoadURL final : public Operation {
@@ -25,9 +26,8 @@ class LoadURL final : public Operation {
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
  private:
-  // TODO: use a proper type
-  // The URL from where to load the data.
-  std::string url_;
+  // The generate LOAD URL clause.
+  parsedQuery::LoadURL loadURLClause_;
 
   // The function used to obtain the result from the remote endpoint.
   GetResultFunction getResultFunction_;
@@ -40,10 +40,10 @@ class LoadURL final : public Operation {
   uint32_t cacheBreaker_ = counter_++;
 
  public:
-  LoadURL(QueryExecutionContext* qec, const std::string& url,
+  LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
           GetResultFunction getResultFunction = sendHttpOrHttpsRequest)
       : Operation(qec),
-        url_(url),
+        loadURLClause_(loadURLClause),
         getResultFunction_(std::move(getResultFunction)){};
 
   ~LoadURL() override = default;
