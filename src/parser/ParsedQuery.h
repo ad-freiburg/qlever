@@ -83,9 +83,6 @@ class ParsedQuery {
 
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
-  // The number of additional internal variables that were added by the
-  // implementation of ORDER BY as BIND+ORDER BY.
-  int64_t numInternalVariables_ = 0;
   vector<VariableOrderKey> _orderBy;
   IsInternalSort _isInternalSort = IsInternalSort::False;
   vector<Variable> _groupByVariables;
@@ -186,13 +183,17 @@ class ParsedQuery {
   // Generates an internal BIND that binds the given expression. The BIND is
   // added to the query as a child. The variable that the expression is bound to
   // is returned.
-  Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
+  Variable addInternalBind(
+      sparqlExpression::SparqlExpressionPimpl expression,
+      const std::function<Variable()>& internalVariableGenerator);
 
   // Add an internal AS clause to the SELECT clause that computes the given
   // expression. This is needed by the `addSolutionModifiers` function to
   // implement aggregating expressions in the ORDER BY and HAVING clauses of
   // queries with a GROUP BY
-  Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
+  Variable addInternalAlias(
+      sparqlExpression::SparqlExpressionPimpl expression,
+      const std::function<Variable()>& internalVariableGenerator);
 
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
@@ -213,38 +214,36 @@ class ParsedQuery {
 
   // Add the `groupKeys` (either variables or expressions) to the query and
   // check whether all the variables are visible inside the query body.
-  void addGroupByClause(std::vector<GroupKey> groupKeys);
+  void addGroupByClause(
+      std::vector<GroupKey> groupKeys,
+      const std::function<Variable()>& internalVariableGenerator);
 
   // Add the `havingClause` to the query. The argument `isGroupBy` denotes
   // whether the query performs a GROUP BY. If it is set to false, then an
   // exception is thrown (HAVING without GROUP BY is not allowed). The function
   // also throws if one of the variables that is used in the `havingClause` is
   // neither grouped nor aggregate by the expression it is contained in.
-  void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy);
+  void addHavingClause(
+      std::vector<SparqlFilter> havingClause, bool isGroupBy,
+      const std::function<Variable()>& internalVariableGenerator);
 
   // Add the `orderClause` to the query. Throw an exception if the `orderClause`
   // is not valid. This might happen if it uses variables that are not visible
   // or (in case of a GROUP BY) not grouped or aggregated.
-  void addOrderByClause(OrderClause orderClause, bool isGroupBy,
-                        std::string_view noteForImplicitGroupBy);
+  void addOrderByClause(
+      OrderClause orderClause, bool isGroupBy,
+      std::string_view noteForImplicitGroupBy,
+      const std::function<Variable()>& internalVariableGenerator);
 
  public:
-  // Return the next internal variable. Used e.g. by `addInternalBind` and
-  // `addInternalAlias`
-  Variable getNewInternalVariable();
-
-  // Turn a blank node `_:someBlankNode` into an internal variable
-  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
-  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
-  // like variables.
-  static Variable blankNodeToInternalVariable(std::string_view blankNode);
-
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
   // an `InvalidQueryException` if the modifiers are invalid. This might happen
   // if one of the modifiers uses a variable that is either not visible in the
   // query before it is used, or if it uses a variable that is not properly
   // grouped or aggregated in the presence of a GROUP BY clause.
-  void addSolutionModifiers(SolutionModifiers modifiers);
+  void addSolutionModifiers(
+      SolutionModifiers modifiers,
+      const std::function<Variable()>& internalVariableGenerator);
 
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
