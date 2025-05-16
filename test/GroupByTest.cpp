@@ -2068,10 +2068,12 @@ TEST(GroupBy, knownEmptyResult) {
       qec, IdTable{1, qec->getAllocator()},
       std::vector<std::optional<Variable>>{Variable{"?a"}});
 
+  // Explicit group by should propagate knownEmptyResult() from child operation.
   {
     GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
     EXPECT_TRUE(groupBy.knownEmptyResult());
   }
+  // Implicit group by always returns a result
   {
     GroupBy groupBy{qec, {}, {}, subtree};
     EXPECT_FALSE(groupBy.knownEmptyResult());
