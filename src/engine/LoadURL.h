@@ -39,12 +39,21 @@ class LoadURL final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
+  Id defaultGraph_;
+
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
           GetResultFunction getResultFunction = sendHttpOrHttpsRequest)
       : Operation(qec),
         loadURLClause_(loadURLClause),
-        getResultFunction_(std::move(getResultFunction)){};
+        getResultFunction_(std::move(getResultFunction)) {
+    auto defaultGraph =
+        TripleComponent(
+            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI))
+            .toValueId(qec->getIndex().getVocab());
+    AD_CORRECTNESS_CHECK(defaultGraph);
+    defaultGraph_ = defaultGraph.value();
+  };
 
   ~LoadURL() override = default;
 

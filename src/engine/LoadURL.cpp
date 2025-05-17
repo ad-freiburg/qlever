@@ -22,7 +22,7 @@ string LoadURL::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-size_t LoadURL::getResultWidth() const { return 3; }
+size_t LoadURL::getResultWidth() const { return 4; }
 
 // _____________________________________________________________________________
 size_t LoadURL::getCostEstimate() {
@@ -117,6 +117,7 @@ Result LoadURL::computeResult(bool) {
                              .toValueId(getIndex().getVocab(), lv);
     result(row_idx, 2) =
         std::move(triple.object_).toValueId(getIndex().getVocab(), lv);
+    result(row_idx, 3) = defaultGraph_;
     row_idx++;
     checkCancellation();
   }
@@ -129,6 +130,7 @@ VariableToColumnMap LoadURL::computeVariableToColumnMap() const {
   map[Variable("?s")] = makeAlwaysDefinedColumn(0);
   map[Variable("?p")] = makeAlwaysDefinedColumn(1);
   map[Variable("?o")] = makeAlwaysDefinedColumn(2);
+  map[Variable("?g")] = makeAlwaysDefinedColumn(3);
   return map;
 }
 

@@ -98,17 +98,19 @@ TEST_F(LoadURLTest, basicMethods) {
   EXPECT_THAT(loadURL.getDescriptor(),
               testing::Eq("LOAD URL https://mundhahs.dev:443/"));
   EXPECT_THAT(loadURL.getCacheKey(), testing::StartsWith("LOAD URL"));
-  EXPECT_THAT(loadURL.getResultWidth(), testing::Eq(3));
+  EXPECT_THAT(loadURL.getResultWidth(), testing::Eq(4));
   EXPECT_THAT(loadURL.getMultiplicity(0), testing::Eq(1));
   EXPECT_THAT(loadURL.getMultiplicity(1), testing::Eq(1));
   EXPECT_THAT(loadURL.getMultiplicity(2), testing::Eq(1));
+  EXPECT_THAT(loadURL.getMultiplicity(3), testing::Eq(1));
   EXPECT_THAT(loadURL.getSizeEstimate(), testing::Eq(100'000));
   EXPECT_THAT(loadURL.getCostEstimate(), testing::Eq(1'000'000));
   EXPECT_THAT(loadURL.computeVariableToColumnMap(),
               testing::UnorderedElementsAreArray(VariableToColumnMap{
                   {Variable("?s"), makeAlwaysDefinedColumn(0)},
                   {Variable("?p"), makeAlwaysDefinedColumn(1)},
-                  {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
+                  {Variable("?o"), makeAlwaysDefinedColumn(2)},
+                  {Variable("?g"), makeAlwaysDefinedColumn(3)}}));
   EXPECT_THAT(loadURL.knownEmptyResult(), testing::IsFalse());
   EXPECT_THAT(loadURL.getChildren(), testing::IsEmpty());
 }
@@ -151,7 +153,7 @@ TEST_F(LoadURLTest, computeResult) {
   }
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
-             std::vector<std::array<TripleComponent, 3>> expectedIdTable,
+             std::vector<std::array<TripleComponent, 4>> expectedIdTable,
              ad_utility::source_location loc =
                  ad_utility::source_location::current()) {
         auto g = generateLocationTrace(loc);
@@ -191,21 +193,22 @@ TEST_F(LoadURLTest, computeResult) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto Literal =
       ad_utility::triple_component::Literal::fromStringRepresentation;
+  auto DEFAULT_GRAPH = Iri(DEFAULT_GRAPH_IRI);
   expectLoad("<x> <b> <c>", "text/turtle",
-             {{Iri("<x>"), Iri("<b>"), Iri("<c>")}});
+             {{Iri("<x>"), Iri("<b>"), Iri("<c>"), DEFAULT_GRAPH}});
   expectLoad("<x> <b> <c> ; <d> <y>", "text/turtle",
-             {{Iri("<x>"), Iri("<b>"), Iri("<c>")},
-              {Iri("<x>"), Iri("<d>"), Iri("<y>")}});
+             {{Iri("<x>"), Iri("<b>"), Iri("<c>"), DEFAULT_GRAPH},
+              {Iri("<x>"), Iri("<d>"), Iri("<y>"), DEFAULT_GRAPH}});
   expectLoad("<x> <b> <c> , <y>", "text/turtle",
-             {{Iri("<x>"), Iri("<b>"), Iri("<c>")},
-              {Iri("<x>"), Iri("<b>"), Iri("<y>")}});
+             {{Iri("<x>"), Iri("<b>"), Iri("<c>"), DEFAULT_GRAPH},
+              {Iri("<x>"), Iri("<b>"), Iri("<y>"), DEFAULT_GRAPH}});
   expectLoad("<x> <b> <c> , \"foo\"@en", "text/turtle",
-             {{Iri("<x>"), Iri("<b>"), Iri("<c>")},
-              {Iri("<x>"), Iri("<b>"), Literal("\"foo\"@en")}});
-  expectLoad(
-      "@prefix foo: <http://mundhahs.dev/rdf/> . foo:bar <is-a> <x>",
-      "text/turtle",
-      {{Iri("<http://mundhahs.dev/rdf/bar>"), Iri("<is-a>"), Iri("<x>")}});
+             {{Iri("<x>"), Iri("<b>"), Iri("<c>"), DEFAULT_GRAPH},
+              {Iri("<x>"), Iri("<b>"), Literal("\"foo\"@en"), DEFAULT_GRAPH}});
+  expectLoad("@prefix foo: <http://mundhahs.dev/rdf/> . foo:bar <is-a> <x>",
+             "text/turtle",
+             {{Iri("<http://mundhahs.dev/rdf/bar>"), Iri("<is-a>"), Iri("<x>"),
+               DEFAULT_GRAPH}});
 }
 
 TEST_F(LoadURLTest, getCacheKey) {
