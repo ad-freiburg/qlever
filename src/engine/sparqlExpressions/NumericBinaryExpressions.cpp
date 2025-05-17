@@ -228,7 +228,7 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     // scans can be made about which values can be ultimately discarded. Thus,
     // if more than two <PrefilterExpression, Variable> pairs are added, it is
     // not appropriate to prefilter for `OR`.
-    if (binOp == OR) {
+    if constexpr (binOp == OR) {
       if (resPairs.size() > 1) {
         return {};
       }
