@@ -48,7 +48,6 @@ class LoadURL final : public Operation {
 
   ~LoadURL() override = default;
 
-  // TODO: huh
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   std::string getCacheKeyImpl() const override;
