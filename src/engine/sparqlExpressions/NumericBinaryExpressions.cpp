@@ -221,6 +221,18 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
       }
       ++itRight;
     }
+    // Multiple <PrefilterExpression, Variable> pairs effectively represent a
+    // meta-AND prefilter over multiple `IndexScan` operations. As explained
+    // above, we can only appropriately prefilter `OR` in the context of a
+    // single Variable, since no definite assumptions given two independent
+    // scans can be made about which values can be ultimately discarded. Thus,
+    // if more than two <PrefilterExpression, Variable> pairs are added, it is
+    // not appropriate to prefilter for `OR`.
+    if (binOp == OR) {
+      if (resPairs.size() > 1) {
+        return {};
+      }
+    }
   }
   if constexpr (binOp == AND) {
     ql::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
