@@ -26,7 +26,7 @@ class LoadURL final : public Operation {
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
  private:
-  // The generate LOAD URL clause.
+  // The generated LOAD URL clause.
   parsedQuery::LoadURL loadURLClause_;
 
   // The function used to obtain the result from the remote endpoint.
@@ -39,21 +39,12 @@ class LoadURL final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
-  Id defaultGraph_;
-
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
           GetResultFunction getResultFunction = sendHttpOrHttpsRequest)
       : Operation(qec),
         loadURLClause_(loadURLClause),
-        getResultFunction_(std::move(getResultFunction)) {
-    auto defaultGraph =
-        TripleComponent(
-            ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI))
-            .toValueId(qec->getIndex().getVocab());
-    AD_CORRECTNESS_CHECK(defaultGraph);
-    defaultGraph_ = defaultGraph.value();
-  };
+        getResultFunction_(std::move(getResultFunction)){};
 
   ~LoadURL() override = default;
 

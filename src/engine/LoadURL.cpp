@@ -6,14 +6,17 @@
 
 #include "engine/LoadURL.h"
 
+#include "global/RuntimeParameters.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
 string LoadURL::getCacheKeyImpl() const {
-  // TODO<qup42> Allow some kind of caching: controlled by a runtime
-  // parameter or based on HTTP headers like ETag or Last-Modified.
-  return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(), " ",
-                      loadURLClause_.silent_ ? "SILENT " : "", cacheBreaker_);
+  // TODO<qup42> do caching based on ETag, Last-Modified or similar
+  if (RuntimeParameters().get<"cache-load-results">()) {
+    return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(),
+                        loadURLClause_.silent_ ? " SILENT" : "");
+  }
+  return absl::StrCat("LOAD URL ", cacheBreaker_);
 }
 
 // _____________________________________________________________________________
@@ -22,7 +25,7 @@ string LoadURL::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-size_t LoadURL::getResultWidth() const { return 4; }
+size_t LoadURL::getResultWidth() const { return 3; }
 
 // _____________________________________________________________________________
 size_t LoadURL::getCostEstimate() {
@@ -60,8 +63,7 @@ vector<ColumnIndex> LoadURL::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Result LoadURL::computeResult(bool) {
-  // TODO<qup42> implement lazy loading; this requires some modifications to the
-  // parse
+  // TODO<qup42> implement lazy loading; requires modifications to the parser
   LOG(INFO) << "Loading RDF dataset from " << loadURLClause_.url_.asString()
             << std::endl;
   HttpOrHttpsResponse response =
@@ -117,7 +119,6 @@ Result LoadURL::computeResult(bool) {
                              .toValueId(getIndex().getVocab(), lv);
     result(row_idx, 2) =
         std::move(triple.object_).toValueId(getIndex().getVocab(), lv);
-    result(row_idx, 3) = defaultGraph_;
     row_idx++;
     checkCancellation();
   }
@@ -130,7 +131,6 @@ VariableToColumnMap LoadURL::computeVariableToColumnMap() const {
   map[Variable("?s")] = makeAlwaysDefinedColumn(0);
   map[Variable("?p")] = makeAlwaysDefinedColumn(1);
   map[Variable("?o")] = makeAlwaysDefinedColumn(2);
-  map[Variable("?g")] = makeAlwaysDefinedColumn(3);
   return map;
 }
 

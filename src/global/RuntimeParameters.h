@@ -69,6 +69,9 @@ inline auto& RuntimeParameters() {
         // which has the downside that the sibling optimization where VALUES are
         // dynamically pushed into `SERVICE` is no longer used.
         Bool<"cache-service-results">{false},
+        // Whether the results of a `LOAD URL` operation should be cached. The
+        // caching currently assumes the content of all URLs to be fixed.
+        Bool<"cache-load-results">{false},
     };
   }();
   return params;
