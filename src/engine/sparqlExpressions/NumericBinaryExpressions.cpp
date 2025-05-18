@@ -208,6 +208,16 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
       resPairs.emplace_back(std::make_unique<BinaryPrefilterExpr>(
                                 std::move(exprLeft), std::move(exprRight)),
                             varLeft);
+      // Multiple <PrefilterExpression, Variable> pairs effectively represent a
+      // meta-AND prefilter over multiple `IndexScan` operations. As explained
+      // above, we can only appropriately prefilter `OR` in the context of a
+      // single Variable, since no definite assumptions given two independent
+      // scans can be made about which values can be ultimately discarded. Thus,
+      // if more than two <PrefilterExpression, Variable> pairs are added, it is
+      // not appropriate to prefilter for `OR`.
+      if constexpr (binOp == OR) {
+        return resPairs;
+      }
       ++itLeft;
       ++itRight;
     } else if (varLeft < varRight) {
@@ -220,18 +230,6 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
         resPairs.emplace_back(std::move(*itRight));
       }
       ++itRight;
-    }
-    // Multiple <PrefilterExpression, Variable> pairs effectively represent a
-    // meta-AND prefilter over multiple `IndexScan` operations. As explained
-    // above, we can only appropriately prefilter `OR` in the context of a
-    // single Variable, since no definite assumptions given two independent
-    // scans can be made about which values can be ultimately discarded. Thus,
-    // if more than two <PrefilterExpression, Variable> pairs are added, it is
-    // not appropriate to prefilter for `OR`.
-    if constexpr (binOp == OR) {
-      if (resPairs.size() > 1) {
-        return {};
-      }
     }
   }
   if constexpr (binOp == AND) {

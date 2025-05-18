@@ -331,6 +331,31 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(
       andSprqlExpr(geSprql(varX, IntId(10)), neqSprql(varY, varX)),
       pr(ge(IntId(10)), varX));
+  // (?x >= 10 AND ?y >= 10) OR (?x <= 0 AND ?y <= 0)
+  // We can assume that ?x >= 10 OR ?x <= 0 must be satisfied.
+  evalAndEqualityCheck(
+      orSprqlExpr(
+          andSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10))),
+          andSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))),
+      pr(orExpr(ge(IntId(10)), le(IntId(0))), varX));
+  // !(?x >= 10 OR ?y >= 10) OR !(?x <= 0 OR ?y <= 0)
+  // We can assume that !(?x >= 10) OR !(?x <= 0) must be satsified.
+  evalAndEqualityCheck(
+      orSprqlExpr(notSprqlExpr(orSprqlExpr(geSprql(varX, IntId(10)),
+                                           geSprql(varY, IntId(10)))),
+                  notSprqlExpr(orSprqlExpr(leSprql(varX, IntId(0)),
+                                           leSprql(varY, IntId(0))))),
+      pr(orExpr(notExpr(ge(IntId(10))), notExpr(le(IntId(0)))), varX));
+  // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
+  // We can assume that !!(?x >= 10) OR !!(?x <= 0) must be satisifed.
+  evalAndEqualityCheck(
+      orSprqlExpr(notSprqlExpr(notSprqlExpr(andSprqlExpr(
+                      geSprql(varX, IntId(10)), geSprql(varY, IntId(10))))),
+                  notSprqlExpr(notSprqlExpr(andSprqlExpr(
+                      leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))))),
+      pr(orExpr(notExpr(notExpr(ge(IntId(10)))),
+                notExpr(notExpr(le(IntId(0))))),
+         varX));
 }
 
 //______________________________________________________________________________
@@ -435,22 +460,6 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
       notSprqlExpr(notSprqlExpr(
           andSprqlExpr(eqSprql(varZ, BoolId(true)),
                        eqSprql(Variable{"?country"}, VocabId(20))))))));
-  // (?x >= 10 AND ?y >= 10) OR (?x <= 0 AND ?y <= 0)
-  evalAndEqualityCheck(orSprqlExpr(
-      andSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10))),
-      andSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))));
-  // !(?x >= 10 OR ?y >= 10) OR !(?x <= 0 OR ?y <= 0)
-  evalAndEqualityCheck(orSprqlExpr(
-      notSprqlExpr(
-          orSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10)))),
-      notSprqlExpr(
-          orSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0))))));
-  // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
-  evalAndEqualityCheck(orSprqlExpr(
-      notSprqlExpr(notSprqlExpr(
-          andSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10))))),
-      notSprqlExpr(notSprqlExpr(
-          andSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))))));
 }
 
 // Test PrefilterExpression creation for SparqlExpression STRSTARTS
