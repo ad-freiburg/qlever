@@ -887,6 +887,8 @@ TEST(SparqlExpression, strIriDtTagged) {
                  IdOrLiteralOrIriVec{U});
   checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
                  IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{U});
   checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
                  IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
   checkStrIriTag(IdOrLiteralOrIriVec{U},
@@ -894,6 +896,9 @@ TEST(SparqlExpression, strIriDtTagged) {
                      "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
                  IdOrLiteralOrIriVec{
                      iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{lit("chat", "@en")},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
 }
 
 // _____________________________________________________________________________________
@@ -915,11 +920,17 @@ TEST(SparqlExpression, strLangTagged) {
               IdOrLiteralOrIriVec{lit("@")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
               IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{U});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{lit("d")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{U});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{
+                  lit("123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
               IdOrLiteralOrIriVec{lit("en")});
 }
 

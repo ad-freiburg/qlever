@@ -587,7 +587,7 @@ using LangMatches =
     [](std::optional<ad_utility::triple_component::Literal> literal,
        std::optional<std::string> langTag) -> IdOrLiteralOrIri {
   if (!literal.has_value() || !langTag.has_value() ||
-      literal.value().hasLanguageTag() || literal.value().hasDatatype()) {
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else if (!ad_utility::strIsLangTag(langTag.value())) {
     return Id::makeUndefined();
@@ -605,7 +605,7 @@ using StrLangTagged =
     [](std::optional<ad_utility::triple_component::Literal> literal,
        OptIri inputIri) -> IdOrLiteralOrIri {
   if (!literal.has_value() || !inputIri.has_value() ||
-      literal.value().hasDatatype() || literal.value().hasLanguageTag()) {
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else {
     literal.value().addDatatype(inputIri.value());

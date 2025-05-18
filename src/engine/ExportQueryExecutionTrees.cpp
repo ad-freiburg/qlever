@@ -407,10 +407,8 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
     }
     return std::nullopt;
   }
-
-  if (word.hasDatatype() || word.hasLanguageTag()) {
-    word.getLiteral().removeDatatypeOrLanguageTag();
-  }
+  // removeDatatypeOrLanguageTag handles words without datatypes or languagtags
+  word.getLiteral().removeDatatypeOrLanguageTag();
   return std::move(word.getLiteral());
 }
 
