@@ -236,10 +236,9 @@ TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   // Only add ?a to see if ?b remains hidden.
   query.selectClause().addVisibleVariable(Variable{"?a"});
 
-  auto existsExpression =
-      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query));
-
-  sparqlExpression::SparqlExpressionPimpl pimpl{existsExpression, "dummy"};
+  sparqlExpression::SparqlExpressionPimpl pimpl{
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query)),
+      "dummy"};
 
   auto tree = ExistsJoin::addExistsJoinsToSubtree(
       pimpl, std::move(subtree), qec,
@@ -251,4 +250,40 @@ TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   // Even though both variables match, only one of them should be joined.
   EXPECT_THAT(existsJoin.joinColumns_,
               ::testing::ElementsAre(std::array<ColumnIndex, 2>{0, 0}));
+}
+
+// _____________________________________________________________________________
+TEST(Exists, cacheKeyDiffersForDifferentJoinColumns) {
+  auto* qec = getQec();
+
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+
+  ParsedQuery query;
+  query._rootGraphPattern._graphPatterns.push_back(
+      parsedQuery::BasicGraphPattern{
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, "<something>",
+                        TripleComponent{Variable{"?b"}}}}});
+
+  query.selectClause().addVisibleVariable(Variable{"?a"});
+
+  sparqlExpression::SparqlExpressionPimpl pimpl1{
+      std::make_shared<sparqlExpression::ExistsExpression>(query), "dummy"};
+
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+
+  auto tree1 =
+      ExistsJoin::addExistsJoinsToSubtree(pimpl1, subtree, qec, handle);
+
+  query.selectClause().addVisibleVariable(Variable{"?b"});
+
+  sparqlExpression::SparqlExpressionPimpl pimpl2{
+      std::make_shared<sparqlExpression::ExistsExpression>(std::move(query)),
+      "dummy"};
+
+  auto tree2 = ExistsJoin::addExistsJoinsToSubtree(pimpl2, std::move(subtree),
+                                                   qec, std::move(handle));
+
+  EXPECT_NE(tree1->getCacheKey(), tree2->getCacheKey());
 }

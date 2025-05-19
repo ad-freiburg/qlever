@@ -28,7 +28,13 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string ExistsJoin::getCacheKeyImpl() const {
   return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
-                      " right: ", right_->getCacheKey());
+                      " right: ", right_->getCacheKey(), " join columns: [",
+                      absl::StrJoin(joinColumns_, " ",
+                                    [](std::string* out, const auto& array) {
+                                      absl::StrAppend(out, "(", array[0], ",",
+                                                      array[1], ")");
+                                    }),
+                      "]");
 }
 
 // _____________________________________________________________________________
