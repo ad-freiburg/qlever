@@ -431,7 +431,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
   }
 
-  // Store the QueryExecutionTree in case of errors.
+  // Store the QueryExecutionTree outside the lambda, s.t. we have access in
+  // case of errors to create an informative error message that includes the
+  // runtime information.
   std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
@@ -523,19 +525,18 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
     if (response.has_value()) {
-      co_return co_await send(std::move(response.value()));
+      return send(std::move(response.value()));
     }
 
     // At this point, if there is a "?" in the query string, it means that there
     // are URL parameters which QLever does not know or did not process.
     if (request.target().find("?") != std::string::npos) {
-      throw std::runtime_error(
-          "Request with URL parameters, but none of them could be processed");
+      return send(createBadRequestResponse("Unknown query parameters",
+                                           std::move(request)));
     }
     // No path matched up until this point, so return 404 to indicate the client
     // made an error and the server will not serve anything else.
-    co_return co_await send(
-        createNotFoundResponse("Unknown path", std::move(request)));
+    return send(createNotFoundResponse("Unknown path", std::move(request)));
   };
 
   co_return co_await processOperation(
