@@ -53,9 +53,10 @@ namespace detail {
 // Internal helper functions that calls `lambda.template operator()<I,
 // J,...)(args)` where `I, J, ...` are the elements in the `array`. Requires
 // that each element in the `array` is `<= maxValue`.
-template <int maxValue, size_t NumValues, std::integral Int>
-auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
-                           auto&&... args) {
+template <int maxValue, size_t NumValues, std::integral Int, typename F,
+          typename... Args>
+auto callLambdaForIntArray(std::array<Int, NumValues> array, F&& lambda,
+                           Args&&... args) {
   AD_CONTRACT_CHECK(
       ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
@@ -109,8 +110,8 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
 }
 
 // Overload for a single int.
-template <int maxValue, std::integral Int>
-auto callLambdaForIntArray(Int i, auto&& lambda, auto&&... args) {
+template <int maxValue, std::integral Int, typename F, typename... Args>
+auto callLambdaForIntArray(Int i, F&& lambda, Args&&... args) {
   return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda),
                                          AD_FWD(args)...);
 }
@@ -126,9 +127,9 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) {
 // where `INT<N>` is `std::integral_constant<int, N>` and `f` is
 // `mapToZeroIfTooLarge`.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          size_t NumIntegers, std::integral Int>
-decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor,
-                             auto&&... args) {
+          size_t NumIntegers, std::integral Int, typename F, typename... Args>
+decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, F&& functor,
+                             Args&&... args) {
   static_assert(NumIntegers > 0);
   // TODO<joka921, C++23> Use `std::bind_back`
   auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
@@ -144,8 +145,8 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor,
 
 // Overload for a single integer.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-          std::integral Int>
-decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
+          std::integral Int, typename F, typename... Args>
+decltype(auto) callFixedSize(Int i, F&& functor, Args&&... args) {
   return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor),
                                  AD_FWD(args)...);
 }

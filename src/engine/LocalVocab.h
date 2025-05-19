@@ -12,11 +12,11 @@
 #include <cstdlib>
 #include <memory>
 #include <ranges>
-#include <span>
 #include <string>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
@@ -165,7 +165,7 @@ class LocalVocab {
 
   // Create a new local vocab with empty set and other sets that are the union
   // of all sets (primary and other) of the given local vocabs.
-  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
+  static LocalVocab merge(ql::span<const LocalVocab*> vocabs);
 
   // Return all the words from all the word sets as a vector. This is useful
   // for testing.

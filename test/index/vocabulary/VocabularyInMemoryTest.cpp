@@ -17,7 +17,8 @@ auto createVocabulary(const std::vector<std::string>& words) {
   auto filename = "vocabInMemoryCreation.tmp";
   {
     Vocab v;
-    auto writer = v.makeDiskWriter(filename);
+    auto writerPtr = v.makeDiskWriterPtr(filename);
+    auto& writer = *writerPtr;
     for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
       auto idx = writer(word);
       EXPECT_EQ(idx, static_cast<uint64_t>(i));

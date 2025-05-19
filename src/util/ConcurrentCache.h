@@ -63,7 +63,8 @@ constexpr std::string_view toString(CacheStatus status) {
 
 // Given a `cache` and a `key` determine the corresponding `CacheStatus`.
 // Note: `computed` in this case means "not contained in the cache".
-CacheStatus getCacheStatus(const auto& cache, const auto& key) {
+template <typename Cache, typename Key>
+CacheStatus getCacheStatus(const Cache& cache, const Key& key) {
   if (cache.containsPinned(key)) {
     return CacheStatus::cachedPinned;
   } else if (cache.containsNonPinned(key)) {

@@ -312,7 +312,8 @@ std::vector<IdTable> convertToVector(
 }
 
 // match the contents of a `vector<IdTable>` to the given `tables`.
-auto matchesIdTables(const auto&... tables) {
+template <typename... Tables>
+auto matchesIdTables(const Tables&... tables) {
   return ElementsAre(matchesIdTable(tables)...);
 }
 
