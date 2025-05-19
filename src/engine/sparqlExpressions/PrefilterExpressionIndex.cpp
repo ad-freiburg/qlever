@@ -550,6 +550,10 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
       LVE::fromStringRepresentation("<"), localVocab);
 
+  // The `vocab.prefixRanges` returns the correct bounds only for preindexed
+  // vocab entries, there might be local vocab entries in `[lowerVocabIndex-1,
+  // lowerVocabIndex]` which still match the prefix, similar for
+  // `upperVocabIndex`, so we will adjust the bounds in the following.
   if (isNegated_) {
     const auto& upperIdAdjusted =
         upperVocabIndex.get() == 0

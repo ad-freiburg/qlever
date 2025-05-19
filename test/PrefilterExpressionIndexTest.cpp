@@ -28,9 +28,9 @@ constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 
 //______________________________________________________________________________
 // make `Literal`
-const auto L = [](const std::string& content) {
-  return TripleComponent::Literal::fromStringRepresentation(
-      absl::StrCat("\"", content, "\""));
+const auto L = [](std::string_view content) {
+  return TripleComponent::Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(content));
 };
 
 //______________________________________________________________________________
