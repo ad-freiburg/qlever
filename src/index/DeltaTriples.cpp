@@ -220,9 +220,7 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 
 // _____________________________________________________________________________
 template <typename ReturnType>
-std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
-                   std::tuple<ReturnType, DeltaTriplesModifyTimings>>
-DeltaTriplesManager::modify(
+DeltaTriplesManager::WithTimings<ReturnType> DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
     bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
@@ -258,21 +256,22 @@ DeltaTriplesManager::modify(
         } else {
           ReturnType returnValue = function(deltaTriples);
           auto timings = writeAndUpdateSnapshot();
-          return std::make_tuple(returnValue, timings);
+          return std::make_tuple(std::move(returnValue), std::move(timings));
         }
       });
 }
+
+using Timings = DeltaTriplesModifyTimings;
+template <typename ReturnType>
+using F = const std::function<ReturnType(DeltaTriples&)>&;
+template <typename ReturnType>
+using Return = std::tuple<ReturnType, Timings>;
 // Explicit instantiations
-template DeltaTriplesModifyTimings DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
-template std::tuple<UpdateMetadata, DeltaTriplesModifyTimings>
-DeltaTriplesManager::modify<UpdateMetadata>(
-    const std::function<UpdateMetadata(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
-template std::tuple<DeltaTriplesCount, DeltaTriplesModifyTimings>
-DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
+template Timings DeltaTriplesManager::modify<void>(F<void>, bool);
+template Return<UpdateMetadata> DeltaTriplesManager::modify<UpdateMetadata>(
+    F<UpdateMetadata>, bool);
+template Return<DeltaTriplesCount>
+DeltaTriplesManager::modify<DeltaTriplesCount>(F<DeltaTriplesCount>, bool);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

@@ -252,16 +252,22 @@ class DeltaTriplesManager {
   explicit DeltaTriplesManager(const IndexImpl& index);
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
 
+  // The return type of `modify`. If the inner function returns `void`, then
+  // only the timings are returned. Else a tuple of the inner return value and
+  // the timings are returned.
+  template <typename ReturnType>
+  using WithTimings =
+      std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
+                         std::tuple<ReturnType, DeltaTriplesModifyTimings>>;
   // Modify the underlying `DeltaTriples` by applying `function` and then update
   // the current snapshot. Concurrent calls to `modify` and `clear` will be
   // serialized, and each call to `getCurrentSnapshot` will either return the
   // snapshot before or after a modification, but never one of an ongoing
   // modification.
   template <typename ReturnType>
-  std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
-                     std::tuple<ReturnType, DeltaTriplesModifyTimings>>
-  modify(const std::function<ReturnType(DeltaTriples&)>& function,
-         bool writeToDiskAfterRequest = true);
+  WithTimings<ReturnType> modify(
+      const std::function<ReturnType(DeltaTriples&)>& function,
+      bool writeToDiskAfterRequest = true);
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 
