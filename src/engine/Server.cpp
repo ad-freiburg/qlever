@@ -476,6 +476,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       LOG(INFO) << "Requested media type of result is \""
                 << ad_utility::toString(mediaType) << "\"" << std::endl;
 
+      // Update the `PlannedQuery` with the export limit when
+      // `application/qlever-results+json` and ensure that the offset is not
+      // applied twice when exporting the query.
       adjustParsedQueryLimitOffset(plannedQuery.value(), mediaType, parameters);
 
       co_return co_await processQuery(mediaType, plannedQuery.value(),
@@ -789,9 +792,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
         const RequestT& request, ResponseT&& send) {
   // This actually processes the query and sends the result in the requested
   // format.
-  co_await sendStreamableResponse(request, send, mediaType, plannedQuery,
-                                  plannedQuery.queryExecutionTree_,
-                                  requestTimer, cancellationHandle);
+  co_await sendStreamableResponse(
+      request, AD_FWD(send), mediaType, plannedQuery,
+      plannedQuery.queryExecutionTree_, requestTimer, cancellationHandle);
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
@@ -1076,7 +1079,7 @@ bool Server::checkAccessToken(
 void Server::adjustParsedQueryLimitOffset(
     PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
     const ad_utility::url_parser::ParamValueMap& parameters) {
-  // Read the export limit from the send` parameter (historical name). This
+  // Read the export limit from the `send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
   // It should only have an effect for the QLever JSON export.
   auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
@@ -1091,7 +1094,7 @@ void Server::adjustParsedQueryLimitOffset(
   // result (it is already applied by the root operation in the query
   // execution tree). Note that we don't need this for the limit because
   // applying a fixed limit is idempotent.
-  auto& qet = plannedQuery.queryExecutionTree_;
+  const auto& qet = plannedQuery.queryExecutionTree_;
   AD_CORRECTNESS_CHECK(limitOffset._offset >=
                        qet.getRootOperation()->getLimit()._offset);
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
