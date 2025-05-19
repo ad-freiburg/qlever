@@ -1488,3 +1488,17 @@ TEST(ParserTest, multipleUpdatesAreForbidden) {
           "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
       testing::HasSubstr("Multiple Updates in one request are not supported."));
 }
+
+// _____________________________________________________________________________
+TEST(ParserTest, variablesInMinusAreHidden) {
+  EXPECT_THAT(
+      SparqlParser::parseQuery(
+          "SELECT * { VALUES ?a { 1 } MINUS { VALUES (?a ?b) { ( 2 2 ) } } }"),
+      m::SelectQuery(
+          m::VariablesSelect({"?a"}, false, false),
+          m::GraphPattern(
+              m::InlineData({Variable{"?a"}}, {{TripleComponent{1}}}),
+              m::Minus(m::GraphPattern(m::InlineData(
+                  {Variable{"?a"}, Variable{"?b"}},
+                  {{TripleComponent{2}, TripleComponent{2}}}))))));
+}
