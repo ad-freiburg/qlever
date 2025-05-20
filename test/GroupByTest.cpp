@@ -2061,6 +2061,25 @@ TEST(GroupBy, Descriptor) {
   EXPECT_EQ(groupBy2.getDescriptor(), "GroupBy (implicit)");
 }
 
+// _____________________________________________________________________________
+TEST(GroupBy, knownEmptyResult) {
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?a"}});
+
+  // Explicit group by should propagate knownEmptyResult() from child operation.
+  {
+    GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
+    EXPECT_TRUE(groupBy.knownEmptyResult());
+  }
+  // Implicit group by always returns a result
+  {
+    GroupBy groupBy{qec, {}, {}, subtree};
+    EXPECT_FALSE(groupBy.knownEmptyResult());
+  }
+}
+
 namespace {
 class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
  protected:

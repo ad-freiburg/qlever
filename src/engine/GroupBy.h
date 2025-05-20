@@ -66,7 +66,8 @@ class GroupBy : public Operation {
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
+    // Implicit group by always returns a single row.
+    return _subtree->knownEmptyResult() && !_groupByVariables.empty();
   }
 
   virtual float getMultiplicity(size_t col) override;
