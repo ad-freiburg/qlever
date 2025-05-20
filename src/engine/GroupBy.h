@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_GROUPBYWRAPPER_H
-#define QLEVER_SRC_ENGINE_GROUPBYWRAPPER_H
+#ifndef QLEVER_SRC_ENGINE_GROUPBY_H
+#define QLEVER_SRC_ENGINE_GROUPBY_H
 
 #include <memory>
 #include <optional>
@@ -62,4 +62,4 @@ class GroupBy : public Operation {
   std::unique_ptr<Impl> _impl;
 };
 
-#endif
+#endif  // QLEVER_SRC_ENGINE_GROUPBY_H
