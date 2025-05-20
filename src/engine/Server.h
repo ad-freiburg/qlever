@@ -44,6 +44,7 @@ CPP_concept QueryOrUpdate =
 class Server {
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
+  FRIEND_TEST(ServerTest, adjustParsedQueryLimitOffset);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -144,7 +145,8 @@ class Server {
       Awaitable<void> processOperation(
           ad_utility::url_parser::sparqlOperation::Operation operation,
           VisitorT visitor, const ad_utility::Timer& requestTimer,
-          const RequestT& request, ResponseT& send);
+          const RequestT& request, ResponseT& send,
+          const std::optional<PlannedQuery>& plannedQuery);
   // Do the actual execution of a query.
   CPP_template_2(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -153,7 +155,7 @@ class Server {
           ParsedQuery&& query, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit);
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static json createResponseMetadataForUpdate(
@@ -171,7 +173,7 @@ class Server {
           const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-          TimeLimit timeLimit);
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
@@ -191,6 +193,10 @@ class Server {
                         ad_utility::websocket::MessageSender& messageSender,
                         const ad_utility::url_parser::ParamValueMap& params,
                         TimeLimit timeLimit);
+  // Sets the export limit (`send` parameter) and offset on the ParsedQuery;
+  static void adjustParsedQueryLimitOffset(
+      PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
+      const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Plan a parsed query.
   PlannedQuery planQuery(ParsedQuery&& operation,
