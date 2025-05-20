@@ -989,7 +989,11 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // reason.
     auto [begin, end] = std::equal_range(
         last.subrange().begin(), last.subrange().end(), currentEl, lessThan_);
-    last.setSubrange(begin, end);
+    if (begin == end) {
+      result.pop_back();
+    } else {
+      last.setSubrange(begin, end);
+    }
     return result;
   }
 
@@ -1188,15 +1192,23 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     auto equalToCurrentElRight =
         getEqualToCurrentEl(currentBlocksRight, currentEl);
 
-    auto getNextBlocks = [this, &currentEl, &blockStatus](Blocks& target,
-                                                          Side& side) {
-      // Explicit this to avoid false positive warning in clang.
-      this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
-      bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
+    // Remove all elements at the beginning of `blocks` that are equal to
+    // `currentEl`. This always has to be called for blocks that have been
+    // completely processed.
+    auto removeEqual = [this, &currentEl](auto& blocks) {
+      if (!blocks.empty()) {
+        // Explicit this to avoid false positive warning in clang.
+        this->removeEqualToCurrentEl(blocks, currentEl);
+      }
+    };
+    auto getNextBlocks = [this, &currentEl, &blockStatus, &removeEqual](
+                             Blocks& target, Side& side) {
+      removeEqual(side.currentBlocks_);
+      bool allBlocksWereFilled = this->fillEqualToCurrentEl(side, currentEl);
       if (side.currentBlocks_.empty()) {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
-      target = getEqualToCurrentEl(side.currentBlocks_, currentEl);
+      target = this->getEqualToCurrentEl(side.currentBlocks_, currentEl);
       if (allBlocksWereFilled) {
         blockStatus = BlockStatus::allFilled;
       }
@@ -1204,15 +1216,27 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     // We are only guaranteed to have all relevant blocks from one side, so we
     // also need to pass through the remaining blocks from the other side.
-    while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
+    while (true) {
       joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
                           equalToCurrentElRight);
-      addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
+      bool allFilled = blockStatus == BlockStatus::allFilled;
+      bool emptyInput =
+          equalToCurrentElLeft.empty() || equalToCurrentElRight.empty();
+      if (!emptyInput) {
+        // TODO<RobinTF> The optional join handling seems to be strange in the
+        // `addAll` function. If it is required in the case of no matching right
+        // blocks, then it might be broken for many consecutive empty blocks. If
+        // it is not required, then it doesn't have to be part of this logic.
+        addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
+      }
+      if (allFilled || emptyInput) {
+        AD_CORRECTNESS_CHECK(allFilled);
+        // Before returning we have to remove the equal elements in all cases.
+        removeEqual(currentBlocksLeft);
+        removeEqual(currentBlocksRight);
+        return;
+      }
       switch (blockStatus) {
-        case BlockStatus::allFilled:
-          removeEqualToCurrentEl(currentBlocksLeft, currentEl);
-          removeEqualToCurrentEl(currentBlocksRight, currentEl);
-          return;
         case BlockStatus::rightMissing:
           getNextBlocks(equalToCurrentElRight, rightSide_);
           continue;
@@ -1222,19 +1246,6 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
         default:
           AD_FAIL();
       }
-    }
-    // Handle the case where status `leftMissing`/`rightMissing` turned into
-    // `allFilled` because the current element does not exist in the next block
-    // and therefore the loop ends without clearing equivalent elements on the
-    // respective other side.
-    AD_CORRECTNESS_CHECK(blockStatus == BlockStatus::allFilled);
-    joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
-                        equalToCurrentElRight);
-    if (!currentBlocksLeft.empty()) {
-      removeEqualToCurrentEl(currentBlocksLeft, currentEl);
-    }
-    if (!currentBlocksRight.empty()) {
-      removeEqualToCurrentEl(currentBlocksRight, currentEl);
     }
   }
 
