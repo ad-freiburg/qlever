@@ -8,6 +8,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/GroupBy.h"
+#include "engine/GroupByWrapper.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -44,12 +45,12 @@ class LazyGroupByTest : public ::testing::Test {
               qec_, IdTable{2, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
               std::vector{std::optional{xVar_}, std::optional{yVar_}}));
 
-  std::vector<GroupBy::Aggregate> aggregates_{
+  std::vector<GroupByImpl::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
   LocalVocab localVocab_{};
   LazyGroupBy lazyGroupBy_{
       localVocab_,
-      GroupBy::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
+      GroupByImpl::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
           ->aggregateAliases_,
       ua, 1};
 
@@ -148,11 +149,12 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
       qec, std::make_shared<ValuesForTesting>(
                qec, IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
                std::vector{std::optional{variable}}));
-  std::vector<GroupBy::Aggregate> aggregates{{std::move(sparqlExpression), 0}};
+  std::vector<GroupByImpl::Aggregate> aggregates{
+      {std::move(sparqlExpression), 0}};
   LocalVocab localVocab{};
   LazyGroupBy lazyGroupBy{
       localVocab,
-      GroupBy::computeUnsequentialProcessingMetadata(aggregates, {variable})
+      GroupByImpl::computeUnsequentialProcessingMetadata(aggregates, {variable})
           ->aggregateAliases_,
       qec->getAllocator(), 1};
   using namespace ::testing;

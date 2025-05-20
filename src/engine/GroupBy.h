@@ -28,7 +28,7 @@
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
-class GroupBy : public Operation {
+class GroupByImpl : public Operation {
  public:
   using GroupBlock = std::vector<std::pair<size_t, Id>>;
 
@@ -51,11 +51,11 @@ class GroupBy : public Operation {
     size_t _outCol;
   };
 
-  GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-          std::vector<Alias> aliases,
-          std::shared_ptr<QueryExecutionTree> subtree);
+  GroupByImpl(QueryExecutionContext* qec, vector<Variable> groupByVariables,
+              std::vector<Alias> aliases,
+              std::shared_ptr<QueryExecutionTree> subtree);
 
- protected:
+ public:
   virtual string getCacheKeyImpl() const override;
 
  public:
@@ -72,11 +72,9 @@ class GroupBy : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
- private:
-  uint64_t getSizeEstimateBeforeLimit() override;
-
  public:
-  virtual size_t getCostEstimate() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
+  size_t getCostEstimate() override;
 
   /**
    * @return The columns on which the input data should be sorted or an empty
@@ -96,15 +94,16 @@ class GroupBy : public Operation {
 
   struct HashMapAliasInformation;
 
- private:
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  Result computeResult(bool requestLaziness) override;
+
+ private:
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
       LocalVocab& localVocab, const IdTable& idTable) const;
-
-  Result computeResult(bool requestLaziness) override;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -581,7 +580,7 @@ class GroupBy : public Operation {
   // GROUP BY. This is used by some of the optimizations above.
   bool isVariableBoundInSubtree(const Variable& variable) const;
 
- private:
+ public:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // TODO<joka921> implement optimization when *additional* Variables are
@@ -598,7 +597,7 @@ class GroupBy : public Operation {
 namespace groupBy::detail {
 template <typename A>
 concept VectorOfAggregationData =
-    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
+    ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H

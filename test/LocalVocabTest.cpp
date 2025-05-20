@@ -13,7 +13,7 @@
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
 #include "engine/Filter.h"
-#include "engine/GroupBy.h"
+#include "engine/GroupByWrapper.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"

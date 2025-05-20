@@ -11,7 +11,7 @@
 #include "../test/engine/ValuesForTesting.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/IndexTestHelpers.h"
-#include "engine/GroupBy.h"
+#include "engine/GroupByWrapper.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"

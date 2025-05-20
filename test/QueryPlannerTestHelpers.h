@@ -19,7 +19,7 @@
 #include "engine/Distinct.h"
 #include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
-#include "engine/GroupBy.h"
+#include "engine/GroupByWrapper.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"
