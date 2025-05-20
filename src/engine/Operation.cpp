@@ -168,6 +168,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
+    AD_CORRECTNESS_CHECK(result.idTable().empty() || !knownEmptyResult(),
+                         "Operation returned non-empty result, but "
+                         "knownEmptyResult() returned true");
   } else {
     auto& rti = runtimeInfo();
     rti.status_ = RuntimeInformation::lazilyMaterialized;
@@ -175,10 +178,13 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
-            const Result::IdTableVocabPair& pair,
-            std::chrono::microseconds duration) mutable {
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{},
+         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
+                                   std::chrono::microseconds duration) mutable {
           const IdTable& idTable = pair.idTable_;
+          AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
+                               "Operation returned non-empty result, but "
+                               "knownEmptyResult() returned true");
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
