@@ -53,37 +53,27 @@ CPP_template(typename R,
 
   const size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
-  Row rowLower = row;
-  const size_t upperBound = 1UL << row.size();  // 2^3
+  // Row rowLower = row;
+  const size_t upperBound = 1UL << row.size();
 
-  std::vector<Row> permutations;
-  for (size_t i = 0; i < upperBound - 1; ++i) {
+  auto getIthMask = [row = Row{row}, numJoinColumns](size_t i) {
+    auto rowLower = row;
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
                         ? row[j]
                         : ValueId::makeUndefined();
     }
-    permutations.push_back(rowLower);
-  }
-
-  using VW =
-      decltype(ad_utility::OwningView{std::move(permutations)} |
-               ql::views::transform([begin, end](const Row& row) {
-                 return ql::ranges::equal_range(
-                     begin, end, row, ql::ranges::lexicographical_compare);
-               }));
-  using All = ql::views::all_t<VW>;
-  static_assert(ql::ranges::input_range<All>);
-  static_assert(ql::ranges::view<All>);
-  static_assert(ql::ranges::input_range<ql::ranges::range_reference_t<All>>);
-
-  return ql::views::join(
-      ad_utility::OwningView{std::move(permutations)} |
-      ql::views::transform([begin, end](const Row& row) {
-        auto rng = ql::ranges::equal_range(begin, end, row,
-                                           ql::ranges::lexicographical_compare);
-        return ad_utility::IteratorRange{rng.begin(), rng.end()};
-      }));
+    return rowLower;
+  };
+  auto permutations = ql::views::iota(size_t{0}, upperBound - 1) |
+                      ql::views::transform(getIthMask);
+  return ad_utility::OwningView{std::move(permutations)} |
+         ql::views::transform([begin, end](const Row& row) {
+           auto rng = ql::ranges::equal_range(
+               begin, end, row, ql::ranges::lexicographical_compare);
+           return ad_utility::IteratorRange{rng.begin(), rng.end()};
+         }) |
+         ql::views::join;
 }
 
 // This function has the additional precondition, that the `row` contains
@@ -114,35 +104,31 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 
   // If every entry in the row is UNDEF, then it is the smallest possible
   // row, and there can be no smaller row.
-  std::vector<Row> permutations;
-  if (numLastUndefined != 0) {
-    Row rowLower = row;
-
-    const size_t upperBound = 1u << numDefinedColumns;
-    for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
-         ++permutationCounter) {
-      for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
-        rowLower[colIdx] =
-            (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
-                ? row[colIdx]
-                : ValueId::makeUndefined();
-      }
-      permutations.push_back(rowLower);
+  auto getIthMask = [&row, numDefinedColumns](size_t permutationCounter) {
+    Row rowLower{row};
+    for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
+      rowLower[colIdx] =
+          (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
+              ? row[colIdx]
+              : ValueId::makeUndefined();
     }
-  }
+    return rowLower;
+  };
+  const size_t upperBound = 1u << numDefinedColumns;
+  auto permutations =
+      ql::views::iota(size_t(0),
+                      numLastUndefined == 0 ? size_t{0} : upperBound - 1) |
+      ql::views::transform(getIthMask);
 
   return ad_utility::OwningView{std::move(permutations)} |
          ql::views::transform([begin, end, &resultMightBeUnsorted,
-                               numDefinedColumns](const Row& row) {
+                               numDefinedColumns](Row&& row) {
            auto begOfUndef = std::lower_bound(
                begin, end, row, ql::ranges::lexicographical_compare);
-           // TODO<joka921> There are very many copies here...
-           Row modified = row;
-           modified[numDefinedColumns - 1] =
+           row[numDefinedColumns - 1] =
                Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
            auto endOfUndef = std::lower_bound(
-               begin, end, modified, ql::ranges::lexicographical_compare);
-
+               begin, end, row, ql::ranges::lexicographical_compare);
            resultMightBeUnsorted = true;
            return ad_utility::IteratorRange{begOfUndef, endOfUndef};
          }) |
