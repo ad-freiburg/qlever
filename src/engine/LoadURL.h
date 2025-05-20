@@ -73,7 +73,10 @@ class LoadURL final : public Operation {
   vector<ColumnIndex> resultSortedOn() const override;
 
  private:
+  // Error handling around `computeResultImpl`.
   Result computeResult(bool requestLaziness) override;
+  // Actually compute the result for `computeResult()`.
+  Result computeResultImpl(bool requestLaziness);
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -84,6 +87,7 @@ class LoadURL final : public Operation {
       std::string_view last100 = ""sv) const;
 
   FRIEND_TEST(LoadURLTest, basicMethods);
+  FRIEND_TEST(LoadURLTest, computeResult);
 };
 
 #endif  // QLEVER_LOADURL_H

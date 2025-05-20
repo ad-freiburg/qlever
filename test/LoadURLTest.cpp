@@ -74,51 +74,19 @@ TEST_F(LoadURLTest, basicMethods) {
 }
 
 TEST_F(LoadURLTest, computeResult) {
-  {
-    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
-                    getResultFunctionFactory(
-                        "<x> <b> <c>", boost::beast::http::status::not_found)};
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("RDF dataset responded with HTTP status code: 404"));
-  }
-  {
-    LoadURL loadURL{
-        testQec, pqLoadURL("https://mundhahs.dev"),
-        getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
-                                 "foo/bar")};
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("Unknown `Content-Type` \"foo/bar\""));
-  }
-  {
-    LoadURL loadURL{
-        testQec, pqLoadURL("https://mundhahs.dev"),
-        getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
-                                 "text/plain")};
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr(
-            "Unsupported value for `Content-Type` \"text/plain\""));
-  }
-  {
-    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
-                    getResultFunctionFactory(
-                        "<x> <b> <c>", boost::beast::http::status::ok, "")};
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("QLever requires the `Content-Type` header to be "
-                           "set for LoadURL."));
-  }
-  {
-    LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
-                    getResultFunctionFactory("this is not turtle",
-                                             boost::beast::http::status::ok,
-                                             "text/turtle")};
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("Parse error at byte position 0"));
-  }
+  auto expectThrowOnlyIfNotSilent =
+      [this](parsedQuery::LoadURL pq, sendRequestType sendFunc,
+             const testing::Matcher<string>& expectedError,
+             ad_utility::source_location loc =
+                 ad_utility::source_location::current()) {
+        auto g = generateLocationTrace(loc);
+        LoadURL load{testQec, pq, sendFunc};
+
+        AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
+                                     expectedError);
+        load.loadURLClause_.silent_ = true;
+        EXPECT_NO_THROW(load.computeResultOnlyForTesting());
+      };
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
@@ -158,6 +126,34 @@ TEST_F(LoadURLTest, computeResult) {
         EXPECT_EQ(idTable, makeIdTableFromVector(idVector));
         EXPECT_THAT(idTable, testing::Eq(std::ref(expectedId)));
       };
+  expectThrowOnlyIfNotSilent(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory("<x> <b> <c>",
+                               boost::beast::http::status::not_found),
+      testing::HasSubstr("RDF dataset responded with HTTP status code: 404"));
+  expectThrowOnlyIfNotSilent(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
+                               "foo/bar"),
+      testing::HasSubstr("Unknown `Content-Type` \"foo/bar\""));
+  expectThrowOnlyIfNotSilent(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
+                               "text/plain"),
+      testing::HasSubstr(
+          "Unsupported value for `Content-Type` \"text/plain\""));
+  expectThrowOnlyIfNotSilent(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
+                               ""),
+      testing::HasSubstr("QLever requires the `Content-Type` header to be "
+                         "set for LoadURL."));
+  expectThrowOnlyIfNotSilent(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory("this is not turtle",
+                               boost::beast::http::status::ok, "text/turtle"),
+      testing::HasSubstr("Parse error at byte position 0"));
+
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto Literal =
       ad_utility::triple_component::Literal::fromStringRepresentation;

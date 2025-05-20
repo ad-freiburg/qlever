@@ -62,7 +62,30 @@ std::unique_ptr<Operation> LoadURL::cloneImpl() const {
 vector<ColumnIndex> LoadURL::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-Result LoadURL::computeResult(bool) {
+Result LoadURL::computeResult(bool requestLaziness) {
+  try {
+    return computeResultImpl(requestLaziness);
+  } catch (const ad_utility::CancellationException&) {
+    throw;
+  } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+    throw;
+  } catch (const std::exception&) {
+    // If the `SILENT` keyword is set, catch the error and return a neutral
+    // Element.
+    if (loadURLClause_.silent_) {
+      IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+      idTable.emplace_back();
+      for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
+        idTable(0, colIdx) = Id::makeUndefined();
+      }
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    }
+    throw;
+  }
+}
+
+// _____________________________________________________________________________
+Result LoadURL::computeResultImpl(bool) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
   LOG(INFO) << "Loading RDF dataset from " << loadURLClause_.url_.asString()
             << std::endl;
