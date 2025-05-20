@@ -158,8 +158,8 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<ColumnIndex>& sortColumns) {
   const auto& sortedOn = qet->resultSortedOn();
-  std::span relevantSortedCols{sortedOn.begin(),
-                               std::min(sortedOn.size(), sortColumns.size())};
+  ql::span relevantSortedCols{sortedOn.begin(),
+                              std::min(sortedOn.size(), sortColumns.size())};
   bool isSorted = ql::ranges::all_of(
       sortColumns, [relevantSortedCols](ColumnIndex distinctCol) {
         return ad_utility::contains(relevantSortedCols, distinctCol);

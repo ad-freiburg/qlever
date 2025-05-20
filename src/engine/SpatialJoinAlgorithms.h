@@ -212,6 +212,10 @@ class SpatialJoinAlgorithms {
                                         sj::Sweeper& sweeper,
                                         size_t numThreads) const;
 
+  // Calls the `cancellationWrapper` which throws if the query has been
+  // cancelled.
+  void throwIfCancelled() const;
+
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;

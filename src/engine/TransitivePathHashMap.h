@@ -8,10 +8,9 @@
 
 #include <memory>
 
-#include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorWithLimit.h"
 
 /**
  * @class HashMapWrapper
@@ -40,6 +39,17 @@ struct HashMapWrapper {
       return emptySet_;
     }
     return iterator->second;
+  }
+
+  // Retrieve pointer to equal id from `map_`, or nullptr if not present.
+  // This is used to get `Id`s that do do not depend on a specific `LocalVocab`,
+  // but instead are backed by the index.
+  const Id* getEquivalentId(Id node) const {
+    auto iterator = map_.find(node);
+    if (iterator == map_.end()) {
+      return nullptr;
+    }
+    return &iterator->first;
   }
 };
 

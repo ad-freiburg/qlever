@@ -329,7 +329,7 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
 }
 
 // _____________________________________________________________________________
-std::optional<std::span<const CompressedBlockMetadata>>
+std::optional<ql::span<const CompressedBlockMetadata>>
 IndexScan::getBlockMetadata() const {
   auto metadata = getMetadataForScan();
   if (metadata.has_value()) {
@@ -356,7 +356,7 @@ IndexScan::getBlockMetadataOptionallyPrefiltered() const {
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
-    std::span<const CompressedBlockMetadata> blocks) const {
+    ql::span<const CompressedBlockMetadata> blocks) const {
   AD_CORRECTNESS_CHECK(prefilter_.has_value() && getLimit().isUnconstrained());
   // Apply the prefilter on given blocks.
   auto& [prefilterExpr, columnIndex] = prefilter_.value();
@@ -443,7 +443,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
-    std::span<const Id> joinColumn) const {
+    ql::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());

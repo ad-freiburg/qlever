@@ -5,6 +5,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstring>
@@ -1077,7 +1078,8 @@ void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
 
 // __________________________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
+template <typename Batch>
+void RdfParallelParser<T>::parseBatch(size_t parsePosition, Batch batch) {
   try {
     RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
@@ -1100,8 +1102,9 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
 
 // _______________________________________________________________________
 template <typename T>
+template <typename Batch>
 void RdfParallelParser<T>::feedBatchesToParser(
-    auto remainingBatchFromInitialization) {
+    Batch remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
   auto cleanup =
@@ -1333,7 +1336,7 @@ RdfMultifileParser::RdfMultifileParser(
     for (const auto& file : files) {
       numActiveParsers_++;
       bool active =
-          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
+          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.

@@ -65,8 +65,8 @@ inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
 /// Returns a matcher that checks that a given `QueryExecutionTree`'s
 /// `rootOperation` can by dynamically cast to `OperationType`, and that
 /// `matcher` matches the result of this cast.
-template <typename OperationType>
-QetMatcher RootOperation(auto matcher) {
+template <typename OperationType, typename M>
+QetMatcher RootOperation(M matcher) {
   return RootOperationBase(WhenDynamicCastTo<const OperationType&>(matcher));
 }
 

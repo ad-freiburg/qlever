@@ -93,8 +93,8 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
-                                             std::span<const Id> inputColumn,
+void CartesianProductJoin::writeResultColumn(ql::span<Id> targetColumn,
+                                             ql::span<const Id> inputColumn,
                                              size_t groupSize,
                                              size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
