@@ -26,8 +26,7 @@ class AllocationExceedsLimitException : public std::exception {
                                   MemorySize freeMemory)
       : _message{absl::StrCat("Tried to allocate ", requestedMemory.asString(),
                               ", but only ", freeMemory.asString(),
-                              " were available. Clear the cache or allow more "
-                              "memory for QLever during startup")} {};
+                              " were available.")} {};
 
   const char* what() const noexcept override { return _message.c_str(); }
 
@@ -177,7 +176,7 @@ class AllocatorWithLimit {
   CPP_template(typename U)(requires(!std::same_as<U, T>))
       AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_{other.getMemoryLeft()},
-        clearOnAllocation_(other.clearOnAllocation()){};
+        clearOnAllocation_(other.clearOnAllocation()) {}
 
   // Defaulted copy operations.
   AllocatorWithLimit(const AllocatorWithLimit&) = default;
