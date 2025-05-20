@@ -24,7 +24,7 @@
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/Filter.h"
-#include "engine/GroupByWrapper.h"
+#include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
