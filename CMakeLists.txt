@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
-cmake_policy(SET CMP0167 NEW)
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -171,7 +173,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
