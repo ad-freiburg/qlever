@@ -24,9 +24,9 @@ class GroupBy : public Operation {
           std::vector<Alias> aliases,
           std::shared_ptr<QueryExecutionTree> subtree);
 
-  ~GroupBy();
-  GroupBy(GroupBy&&);
-  GroupBy& operator=(GroupBy&&);
+  ~GroupBy() override;
+  GroupBy(GroupBy&&) noexcept;
+  GroupBy& operator=(GroupBy&&) noexcept;
 
   // Internal constructor used for the implementation of `clone`.
   GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);
