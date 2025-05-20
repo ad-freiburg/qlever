@@ -96,30 +96,30 @@ class Date {
   static constexpr int minYear = -9999;
   static constexpr int maxYear = 9999;
   static constexpr uint8_t numBitsYear =
-      std::bit_width(unsigned{maxYear - minYear});
+      absl::bit_width(unsigned{maxYear - minYear});
 
   // The special month value `0` is used to encode "no month was specified" (i.e
   // "This is a `xsd:gYear`).
   static constexpr int minMonth = 0;
   static constexpr unsigned maxMonth = 12;
-  static constexpr uint8_t numBitsMonth = std::bit_width(maxMonth);
+  static constexpr uint8_t numBitsMonth = absl::bit_width(maxMonth);
 
   // The special day value `0` is used to encode "no day was specified" (i.e
   // "This is a `xsd:gYearMonth`).
   static constexpr int minDay = 0;
   static constexpr unsigned maxDay = 31;
-  static constexpr uint8_t numBitsDay = std::bit_width(maxDay);
+  static constexpr uint8_t numBitsDay = absl::bit_width(maxDay);
 
   // The special hour value `-1` is used to encode "no hour was specified" (i.e
   // "This is a `xsd:Date`).
   static constexpr int minHour = -1;
   static constexpr unsigned maxHour = 23;
   static constexpr uint8_t numBitsHour =
-      std::bit_width(unsigned{maxHour - minHour});
+      absl::bit_width(unsigned{maxHour - minHour});
 
   static constexpr int minMinute = 0;
   static constexpr unsigned maxMinute = 59;
-  static constexpr uint8_t numBitsMinute = std::bit_width(maxMinute);
+  static constexpr uint8_t numBitsMinute = absl::bit_width(maxMinute);
 
   // Seconds are imported and exported as double, but internally stored as fixed
   // point decimals with millisecond precision.
@@ -127,7 +127,7 @@ class Date {
   static constexpr double maxSecond = 60.0;
   static constexpr double secondMultiplier = 1024.0;
   static constexpr uint8_t numBitsSecond =
-      std::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
+      absl::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
 
   // The time zone is an hour in -23..23. It is shifted to the positive range
   // 0..22 (similar to the years). There are two additional "special" time
@@ -138,7 +138,7 @@ class Date {
   static constexpr int maxTimeZoneActually = 25;
   static constexpr int minTimeZone = -23;
   static constexpr int maxTimeZone = 23;
-  static constexpr uint8_t numBitsTimeZone = std::bit_width(
+  static constexpr uint8_t numBitsTimeZone = absl::bit_width(
       static_cast<unsigned>(maxTimeZoneActually - minTimeZoneActually));
 
   // The number of bits that are not needed for the encoding of the Date value.
@@ -191,14 +191,14 @@ class Date {
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.
   [[nodiscard]] constexpr uint64_t toBits() const {
-    return std::bit_cast<uint64_t>(*this);
+    return absl::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
   /// representation.
   static constexpr Date fromBits(uint64_t bytes) {
-    return std::bit_cast<Date>(bytes);
+    return absl::bit_cast<Date>(bytes);
   }
 
   /// Equality comparison is performed directly on the underlying

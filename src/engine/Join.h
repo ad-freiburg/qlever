@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
+#include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
@@ -36,8 +37,6 @@ class Join : public Operation {
        ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
-
-  static constexpr size_t CHUNK_SIZE = 100'000;
 
   virtual string getDescriptor() const override;
 
@@ -85,21 +84,6 @@ class Join : public Operation {
    * a proper switch.
    **/
   void join(const IdTable& a, const IdTable& b, IdTable* result) const;
-
- private:
-  // Part of the implementation of `createResult`. This function is called when
-  // the result should be yielded lazily.
-  // Action is a lambda that itself runs the join operation in a blocking
-  // manner. It is passed a special function that is supposed to be the callback
-  // being passed to the `AddCombinedRowToIdTable` so that the partial results
-  // can be yielded during execution. This is achieved by spawning a separate
-  // thread.
-  CPP_template(typename ActionT)(
-      requires ad_utility::InvocableWithExactReturnType<
-          ActionT, Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
-      runLazyJoinAndConvertToGenerator(ActionT action,
-                                       OptionalPermutation permutation) const;
 
  public:
   // Helper function to compute the result of a join operation and conditionally

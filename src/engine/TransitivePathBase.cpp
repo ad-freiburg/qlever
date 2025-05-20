@@ -239,7 +239,14 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 // _____________________________________________________________________________
 std::string TransitivePathBase::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << " minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
+  os << "TRANSITIVE PATH ";
+  if (lhs_.isVariable() && lhs_.value_ == rhs_.value_) {
+    // Use a different cache key if the same variable is used left and right,
+    // because that changes the behaviour of this operation and variable names
+    // are not found in the children's cache keys.
+    os << "symmetric ";
+  }
+  os << "minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
   os << "Left side:\n";
   os << lhs_.getCacheKey();

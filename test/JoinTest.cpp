@@ -20,6 +20,7 @@
 #include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/JoinHelpers.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Values.h"
@@ -34,6 +35,8 @@
 
 using ad_utility::testing::makeAllocator;
 namespace {
+
+using qlever::joinHelpers::CHUNK_SIZE;
 
 using Vars = std::vector<std::optional<Variable>>;
 auto iri = [](std::string_view s) {
@@ -209,13 +212,6 @@ std::vector<JoinTestCase> createJoinTestSet() {
 
   return myTestSet;
 }
-
-IdTable createIdTableOfSizeWithValue(size_t size, Id value) {
-  IdTable idTable{1, ad_utility::testing::makeAllocator()};
-  idTable.resize(size);
-  ql::ranges::fill(idTable.getColumn(0), value);
-  return idTable;
-}
 }  // namespace
 
 TEST(JoinTest, joinTest) {
@@ -235,7 +231,7 @@ namespace {
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
-    std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -674,9 +670,16 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
 
   leftTables.push_back(makeIdTableFromVector({{U}}));
   leftTables.push_back(makeIdTableFromVector({{I(2)}}));
-  rightTables.push_back(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
+  rightTables.push_back(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)));
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
   performJoin(std::move(leftTables), std::move(rightTables), expected7, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  auto expected8 = createIdTableOfSizeWithValue(2, I(2));
+  performJoin(std::move(leftTables), std::move(rightTables), expected8, false);
 }
 
 // _____________________________________________________________________________
@@ -752,8 +755,8 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
 
   rightTables.push_back(makeIdTableFromVector({{U}}));
   rightTables.push_back(makeIdTableFromVector({{I(2)}}));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
-  performJoin(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)),
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
+  performJoin(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)),
               std::move(rightTables), expected7, false);
 }
 
