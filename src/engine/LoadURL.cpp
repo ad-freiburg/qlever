@@ -71,7 +71,7 @@ Result LoadURL::computeResult(bool) {
                          boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
-    this->throwErrorWithContext(sv, readResponseHead(std::move(response)));
+    this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
   };
 
   if (response.status_ != boost::beast::http::status::ok) {
@@ -141,21 +141,4 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
       ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
-}
-
-// _____________________________________________________________________________
-std::string LoadURL::readResponseHead(HttpOrHttpsResponse response,
-                                      size_t contextLength) {
-  std::string ctx;
-  ctx.reserve(contextLength);
-  for (const auto& bytes : std::move(response.body_)) {
-    // only copy until the ctx has reached contextLength
-    size_t bytesToCopy = std::min(bytes.size(), contextLength - ctx.size());
-    ctx += std::string_view(reinterpret_cast<const char*>(bytes.data()),
-                            bytesToCopy);
-    if (ctx.size() == contextLength) {
-      break;
-    }
-  }
-  return ctx;
 }

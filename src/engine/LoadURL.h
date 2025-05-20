@@ -77,14 +77,11 @@ class LoadURL final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // TODO: deduplicate these two with `Service`
   // Throws an error message, providing the first 100 bytes of the result as
   // context.
   [[noreturn]] void throwErrorWithContext(
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
-  std::string readResponseHead(HttpOrHttpsResponse response,
-                               size_t contextLength = 100);
 
   FRIEND_TEST(LoadURLTest, basicMethods);
 };

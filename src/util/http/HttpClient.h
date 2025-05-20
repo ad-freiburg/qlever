@@ -29,6 +29,22 @@ struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
   cppcoro::generator<ql::span<std::byte>> body_;
+
+  // Return the first `length` bytes of the response body as a string.
+  std::string readResponseHead(size_t length) && {
+    std::string ctx;
+    ctx.reserve(length);
+    for (const auto& bytes : std::move(body_)) {
+      // only copy until the ctx has reached length
+      size_t bytesToCopy = std::min(bytes.size(), length - ctx.size());
+      ctx += std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                              bytesToCopy);
+      if (ctx.size() == length) {
+        break;
+      }
+    }
+    return ctx;
+  }
 };
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
