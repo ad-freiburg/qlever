@@ -85,6 +85,12 @@ using HttpClient = HttpClientImpl<boost::beast::tcp_stream>;
 using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
 
+using sendRequestType = std::function<HttpOrHttpsResponse(
+    const ad_utility::httpUtils::Url&,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb&, std::string_view, std::string_view,
+    std::string_view)>;
+
 // Global convenience function for sending a request (default: GET) to the given
 // URL and obtaining the result as a `cppcoro::generator<ql::span<std::byte>>`.
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The

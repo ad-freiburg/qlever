@@ -29,22 +29,22 @@ size_t LoadURL::getResultWidth() const { return 3; }
 
 // _____________________________________________________________________________
 size_t LoadURL::getCostEstimate() {
-  // TODO: For now, we don't have any information about the cost at query
-  // planning time, so we just return ten times the estimated size.
+  // This Operation will always be the only operation in a query tree, so we
+  // don't really need estimates.
   return 10 * getSizeEstimateBeforeLimit();
 }
 
 // _____________________________________________________________________________
 uint64_t LoadURL::getSizeEstimateBeforeLimit() {
-  // TODO: For now, we don't have any information about the result size at
-  // query planning time, so we just return `100'000`.
+  // This Operation will always be the only operation in a query tree, so we
+  // don't really need estimates.
   return 100'000;
 }
 
 // _____________________________________________________________________________
 float LoadURL::getMultiplicity(size_t) {
-  // TODO: For now, we don't have any information about the multiplicities at
-  // query planning time, so we just return `1` for each column.
+  // This Operation will always be the only operation in a query tree, so we
+  // don't really need estimates.
   return 1;
 }
 
@@ -71,16 +71,7 @@ Result LoadURL::computeResult(bool) {
                          boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
-    std::string ctx;
-    ctx.reserve(100);
-    for (const auto& bytes : std::move(response.body_)) {
-      ctx += std::string(reinterpret_cast<const char*>(bytes.data()),
-                         bytes.size());
-      if (ctx.size() >= 100) {
-        break;
-      }
-    }
-    this->throwErrorWithContext(sv, std::string_view(ctx).substr(0, 100));
+    this->throwErrorWithContext(sv, readResponseHead(std::move(response)));
   };
 
   if (response.status_ != boost::beast::http::status::ok) {
@@ -89,17 +80,23 @@ Result LoadURL::computeResult(bool) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
+  if (response.contentType_.empty()) {
+    throwErrorWithContext(
+        "QLever requires the `Content-Type` header to be set for LoadURL.");
+  }
+  // If the `Content-Type` is not one of the media types known to QLever, then
+  // std::nullopt is returned by `toMediaType`.
   std::optional<ad_utility::MediaType> mediaType =
       ad_utility::toMediaType(response.contentType_);
   if (!mediaType) {
     throwErrorWithContext(
-        "QLever requires the endpoint of a LoadURL to return the mediatype.");
+        absl::StrCat("Unknown `Content-Type` \"", response.contentType_, "\""));
   }
   if (!ad_utility::contains(SUPPORTED_MEDIATYPES, mediaType.value())) {
-    throwErrorWithContext(
-        absl::StrCat("Unsupported media type \"", toString(mediaType.value()),
-                     "\". Supported media types are \"text/turtle\" and "
-                     "\"application/n-triples\"."));
+    throwErrorWithContext(absl::StrCat(
+        "Unsupported value for `Content-Type` \"", toString(mediaType.value()),
+        "\". Supported are \"text/turtle\" and "
+        "\"application/n-triples\"."));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   auto parser = Re2Parser();
@@ -144,4 +141,21 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
       ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
+}
+
+// _____________________________________________________________________________
+std::string LoadURL::readResponseHead(HttpOrHttpsResponse response,
+                                      size_t contextLength) {
+  std::string ctx;
+  ctx.reserve(contextLength);
+  for (const auto& bytes : std::move(response.body_)) {
+    // only copy until the ctx has reached contextLength
+    size_t bytesToCopy = std::min(bytes.size(), contextLength - ctx.size());
+    ctx += std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                            bytesToCopy);
+    if (ctx.size() == contextLength) {
+      break;
+    }
+  }
+  return ctx;
 }

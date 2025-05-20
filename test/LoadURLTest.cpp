@@ -9,6 +9,7 @@
 
 #include "engine/LoadURL.h"
 #include "util/GTestHelpers.h"
+#include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -29,65 +30,23 @@ class LoadURLTest : public ::testing::Test {
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
 
-  // Factory for generating mocks of the `sendHttpOrHttpsRequest` function that
-  // is used by default by a `Service` operation (see the constructor in
-  // `Service.h`). Each mock does the following:
-  //
-  // 1. It tests that the request method is POST, the content-type header is
-  //    `application/sparql-query`, and the accept header is
-  //    `text/tab-separated-values` (our `Service` always does this).
-  //
-  // 2. It tests that the host and port are as expected.
-  //
-  // 3. It tests that the post data is as expected.
-  //
-  // 4. It returns the specified JSON.
-  //
-  // NOTE: In a previous version of this test, we set up an actual test server.
-  // The code can be found in the history of this PR.
+  // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
+  // predefined response for testing.
   static auto constexpr getResultFunctionFactory =
       [](std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "text/turtle",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current())
-      -> LoadURL::GetResultFunction {
-    return [=](const ad_utility::httpUtils::Url&,
-               ad_utility::SharedCancellationHandle,
-               const boost::beast::http::verb& method,
-               std::string_view postData, std::string_view contentTypeHeader,
-               std::string_view acceptHeader) {
-      auto g = generateLocationTrace(loc);
-      EXPECT_THAT(method, testing::Eq(boost::beast::http::verb::get));
-      EXPECT_THAT(contentTypeHeader, testing::Eq(""));
-      EXPECT_THAT(acceptHeader, testing::Eq(""));
-      EXPECT_THAT(postData, testing::Eq(""));
-
-      if (mockException) {
-        std::rethrow_exception(mockException);
-      }
-
-      auto randomlySlice =
-          [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
-        // Randomly slice the string to make tests more robust.
-        std::mt19937 rng{std::random_device{}()};
-
-        const std::string resultStr = result;
-        std::uniform_int_distribution<size_t> distribution{
-            0, resultStr.length() / 2};
-
-        for (size_t start = 0; start < resultStr.length();) {
-          size_t size = distribution(rng);
-          std::string resultCopy{resultStr.substr(start, size)};
-          co_yield ql::as_writable_bytes(ql::span{resultCopy});
-          start += size;
-        }
-      };
-      return HttpOrHttpsResponse{.status_ = status,
-                                 .contentType_ = contentType,
-                                 .body_ = randomlySlice(predefinedResult)};
+             ad_utility::source_location::current()) -> sendRequestType {
+    RequestMatchers matchers{
+        .method_ = testing::Eq(boost::beast::http::verb::get),
+        .postData_ = testing::Eq(""),
+        .contentType_ = testing::Eq(""),
+        .accept_ = testing::Eq(""),
     };
+    return ::getResultFunctionFactory(predefinedResult, contentType, status,
+                                      matchers, mockException, loc);
   };
 };
 
@@ -127,10 +86,20 @@ TEST_F(LoadURLTest, computeResult) {
     LoadURL loadURL{
         testQec, pqLoadURL("https://mundhahs.dev"),
         getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
+                                 "foo/bar")};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        loadURL.computeResultOnlyForTesting(),
+        testing::HasSubstr("Unknown `Content-Type` \"foo/bar\""));
+  }
+  {
+    LoadURL loadURL{
+        testQec, pqLoadURL("https://mundhahs.dev"),
+        getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                  "text/plain")};
     AD_EXPECT_THROW_WITH_MESSAGE(
         loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("Unsupported media type \"text/plain\"."));
+        testing::HasSubstr(
+            "Unsupported value for `Content-Type` \"text/plain\""));
   }
   {
     LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
@@ -138,8 +107,8 @@ TEST_F(LoadURLTest, computeResult) {
                         "<x> <b> <c>", boost::beast::http::status::ok, "")};
     AD_EXPECT_THROW_WITH_MESSAGE(
         loadURL.computeResultOnlyForTesting(),
-        testing::HasSubstr("QLever requires the endpoint of a LoadURL to "
-                           "return the mediatype."));
+        testing::HasSubstr("QLever requires the `Content-Type` header to be "
+                           "set for LoadURL."));
   }
   {
     LoadURL loadURL{testQec, pqLoadURL("https://mundhahs.dev"),
