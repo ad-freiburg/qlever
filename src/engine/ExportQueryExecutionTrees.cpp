@@ -407,7 +407,8 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
     }
     return std::nullopt;
   }
-  // removeDatatypeOrLanguageTag handles words without datatypes or languagtags
+  // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
+  // neither a datatype nor a language tag, hence we don't need an `if` here.
   word.getLiteral().removeDatatypeOrLanguageTag();
   return std::move(word.getLiteral());
 }
