@@ -7,6 +7,8 @@
 #include "./PrefilterExpressionTestHelpers.h"
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -245,4 +247,46 @@ TEST(Filter, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(filter, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), filter.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Filter,
+     verifySetPrefilterExpressionVariablePairForIndirectIndexScanChild) {
+  using namespace makeFilterExpression;
+  using namespace makeSparqlExpression;
+  using namespace ad_utility::testing;
+  auto I = ad_utility::testing::IntId;
+  auto VocabId = ad_utility::testing::VocabId;
+  std::string kg = "<a> <p> 22.5 .";
+  QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+
+  auto filterSubtree = ad_utility::makeExecutionTree<Join>(
+      qec,
+      ad_utility::makeExecutionTree<Sort>(
+          qec,
+          ad_utility::makeExecutionTree<IndexScan>(
+              qec, Permutation::Enum::POS,
+              SparqlTriple{Variable{"?person"}, "<p>", Variable{"?x"}}),
+          std::vector<ColumnIndex>(1)),
+      ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::PSO,
+          SparqlTriple{Variable{"?person"}, "<p>", Variable{"?num"}}),
+      1, 0);
+
+  Filter filter1{qec,
+                 filterSubtree,
+                 {notSprqlExpr(ltSprql(Variable{"?x"}, I(5))), "!?x < 5"}};
+  EXPECT_THAT(filter1.getCacheKey(),
+              ::testing::HasSubstr("Added PrefiterExpression"));
+  Filter filter2{qec,
+                 filterSubtree,
+                 {gtSprql(Variable{"?person"}, VocabId(0)), "?person > <Bob>"}};
+  EXPECT_THAT(filter2.getCacheKey(),
+              ::testing::HasSubstr("Added PrefiterExpression"));
+  Filter filter3{
+      qec,
+      filterSubtree,
+      {gtSprql(Variable{"?athlete"}, VocabId(0)), "?athlete > \"Bob\""}};
+  EXPECT_THAT(filter3.getCacheKey(),
+              ::testing::Not(::testing::HasSubstr("Added PrefiterExpression")));
 }

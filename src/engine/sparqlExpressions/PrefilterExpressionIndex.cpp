@@ -983,6 +983,17 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 }
 
 //______________________________________________________________________________
+std::vector<PrefilterExprVariablePair> makePrefilterExpressionVecCopy(
+    const std::vector<PrefilterExprVariablePair>& prefilterExprVariableVec) {
+  std::vector<PrefilterExprVariablePair> copy;
+  ql::ranges::for_each(prefilterExprVariableVec,
+                       [&copy](const PrefilterExprVariablePair& pair) {
+                         copy.emplace_back(pair.first->clone(), pair.second);
+                       });
+  return copy;
+}
+
+//______________________________________________________________________________
 #define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
   template std::vector<PrefilterExprVariablePair>                    \
   makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \

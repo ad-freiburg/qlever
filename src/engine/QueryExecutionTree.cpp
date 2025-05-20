@@ -120,7 +120,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
     return std::nullopt;
   } else {
     return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
-        prefilterPairs);
+        std::move(prefilterPairs));
   }
 }
 
