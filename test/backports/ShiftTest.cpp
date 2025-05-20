@@ -97,11 +97,23 @@ TYPED_TEST(ShiftTest, ShiftRightNormal) {
   auto& data_ = this->data_;
   const auto result = ql::shift_right(data_.begin(), data_.end(), 3);
   EXPECT_EQ(result, std::next(data_.begin(), 3));
-  const std::vector<int> expected_data{1, 2, 3, 1, 2, 3, 4, 5};
   // The first three elements are moved out, so they can have any value.
   // They are used as a temporary buffer when shifting forward ranges right.
   auto x = ::testing::_;
   EXPECT_THAT(data_, ::testing::ElementsAre(x, x, x, 1, 2, 3, 4, 5));
+}
+
+// Shift right by more than half of the size of the input. This covers a special
+// optimization branch in the `shif_right` for `forward_iterators` that are not
+// bidirectional.
+TYPED_TEST(ShiftTest, ShiftRightLarge) {
+  auto& data_ = this->data_;
+  const auto result = ql::shift_right(data_.begin(), data_.end(), 6);
+  EXPECT_EQ(result, std::next(data_.begin(), 6));
+  // The first three elements are moved out, so they can have any value.
+  // They are used as a temporary buffer when shifting forward ranges right.
+  auto x = ::testing::_;
+  EXPECT_THAT(data_, ::testing::ElementsAre(x, x, x, x, x, x, 1, 2));
 }
 
 // Given an input and a shift value of zero,
