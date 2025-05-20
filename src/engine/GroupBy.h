@@ -18,9 +18,6 @@
 // functions. Forward declaration of the impl class
 class GroupByImpl;
 class GroupBy : public Operation {
- private:
-  class Impl;
-
  public:
   // Constructors.
   GroupBy(QueryExecutionContext* qec, std::vector<Variable> groupByVariables,
@@ -32,7 +29,7 @@ class GroupBy : public Operation {
   GroupBy& operator=(GroupBy&&);
 
   // Internal constructor used for the implementation of `clone`.
-  GroupBy(QueryExecutionContext* qec, Impl&& impl);
+  GroupBy(QueryExecutionContext* qec, std::unique_ptr<GroupByImpl>&& impl);
 
   // Virtual functions inherited from the `Operation` base class.
   std::string getDescriptor() const override;
@@ -59,7 +56,7 @@ class GroupBy : public Operation {
   GroupByImpl& getImpl();
 
  private:
-  std::unique_ptr<Impl> _impl;
+  std::unique_ptr<GroupByImpl> _impl;
 };
 
 #endif  // QLEVER_SRC_ENGINE_GROUPBY_H
