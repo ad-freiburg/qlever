@@ -1065,7 +1065,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
-  basic._triples.push_back(SparqlTriple(
+  basic._triples.emplace_back(
       left,
       std::visit(
           ad_utility::OverloadCallOperator{
@@ -1076,7 +1076,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
                 return PropertyPath::fromIri(iri.toStringRepresentation());
               }},
           varOrIri),
-      right));
+      right);
   p._graphPatterns.emplace_back(std::move(basic));
 
   return p;

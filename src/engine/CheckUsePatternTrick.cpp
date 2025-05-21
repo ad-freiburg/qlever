@@ -59,8 +59,7 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            return (triple.s_ == variable ||
-                    triple.getPredicateVariable() == variable ||
+            return (triple.s_ == variable || triple.predicateIs(variable) ||
                     triple.o_ == variable);
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
@@ -225,7 +224,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     } else if (auto variable = triple.getPredicateVariable();
                triple.s_.isVariable() && variable.has_value() &&
                triple.o_.isVariable()) {
-      auto predicateVariable = variable.value();
+      const auto& predicateVariable = variable.value();
       // Check that the three variables are pairwise distinct.
       std::array variables{triple.s_.getVariable().name(),
                            triple.o_.getVariable().name(),

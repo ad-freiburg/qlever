@@ -98,7 +98,10 @@ class SparqlTriple
             triple.o_};
   }
 
-  // Helper function to easily retrieve a simple IRI.
+  // If the predicate of the triple is a simple IRI (neither a variable nor a
+  // complex property path), return it. Else return `nullopt`. Note: the
+  // lifetime of the return value is bound to the lifetime of the triple as the
+  // optional stores a `string_view`.
   std::optional<std::string_view> getSimplePredicate() const {
     if (!std::holds_alternative<PropertyPath>(p_)) {
       return std::nullopt;
@@ -108,11 +111,19 @@ class SparqlTriple
                         : std::nullopt;
   }
 
-  // Helper function to easily retrieve a variable
-  std::optional<Variable> getPredicateVariable() const {
+  // If the predicate of the triples is a variable, return it. Note:
+  // the lifetime of the return value is bound to the lifetime of the triple,
+  // as the optional stores a reference.
+  boost::optional<const Variable&> getPredicateVariable() const {
     return std::holds_alternative<Variable>(p_)
-               ? std::optional{std::get<Variable>(p_)}
-               : std::nullopt;
+               ? boost::optional<const Variable&>{std::get<Variable>(p_)}
+               : boost::none;
+  }
+
+  // Return true iff the predicate is a variable that is equal to the argument.
+  bool predicateIs(const Variable& variable) const {
+    auto ptr = std::get_if<Variable>(&p_);
+    return (ptr != nullptr && *ptr == variable);
   }
 };
 
