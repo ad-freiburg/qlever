@@ -158,6 +158,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
+  // `eraseTripleInAllPermutations` does not update the block metadata.
   ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
     auto handle = inverseMap.find(triple);
     if (handle != inverseMap.end()) {
@@ -165,6 +166,10 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
       inverseMap.erase(triple);
     }
   });
+  // After erasing the triples update the block metadate for all permutations.
+  for (auto permutation : Permutation::ALL) {
+    locatedTriples()[static_cast<int>(permutation)].updateAugmentedMetadata();
+  }
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
