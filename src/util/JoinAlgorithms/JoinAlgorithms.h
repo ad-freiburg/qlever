@@ -84,12 +84,17 @@ CPP_concept BinaryIteratorFunction =
  * with UNDEF values in the left input. TODO<joka921> The second of the
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
+ * The `CoverUndefRanges` parameter is used to disable coverage checks for
+ * undefined ranges. This is useful when the iterator pointing to undefined
+ * ranges is not within `Range1` and has already been processed by something
+ * else.
  */
 CPP_template(typename Range1, typename Range2, typename LessThan,
              typename CompatibleRowAction, typename FindSmallerUndefRangesLeft,
              typename FindSmallerUndefRangesRight,
              typename ElFromFirstNotFoundAction = decltype(noop),
-             typename CheckCancellation = decltype(noop))(
+             typename CheckCancellation = decltype(noop),
+             typename CoverUndefRanges = std::true_type)(
     requires ql::ranges::random_access_range<Range1> CPP_and
         ql::ranges::random_access_range<Range2>)
     [[nodiscard]] auto zipperJoinWithUndef(
@@ -98,7 +103,7 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
         const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
         const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
         ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
-        CheckCancellation checkCancellation = {}) {
+        CheckCancellation checkCancellation = {}, CoverUndefRanges = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -122,7 +127,8 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
   }
   auto cover = [&coveredFromLeft, begLeft = std::begin(left)](auto it) {
     if constexpr (hasNotFoundAction) {
-      coveredFromLeft[it - begLeft] = true;
+      AD_EXPENSIVE_CHECK(it >= begLeft);
+      coveredFromLeft.at(it - begLeft) = true;
     }
     (void)coveredFromLeft, (void)begLeft;
   };
@@ -150,7 +156,9 @@ CPP_template(typename Range1, typename Range2, typename LessThan,
                                                        outOfOrderFound)) {
         if (lessThan(*it, *itFromRight)) {
           compatibleRowAction(it, itFromRight);
-          cover(it);
+          if constexpr (CoverUndefRanges::value) {
+            cover(it);
+          }
         }
       }
     }
@@ -723,6 +731,9 @@ struct AlwaysFalse {
   }
 };
 
+// How many blocks we want to read at once when fetching new ones.
+static constexpr size_t FETCH_BLOCKS = 3;
+
 // The class that actually performs the zipper join for blocks without UNDEF.
 // See the public `zipperJoinForBlocksWithoutUndef` function below for details.
 // The general approach of the algorithm is described in the following. Several
@@ -822,12 +833,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // targetBuffer. Calling this function requires that all blocks that contain
   // elements `< currentEl` have already been consumed. Returns `true` if all
   // blocks that contain elements <= `currentEl` have been added, and `false` if
-  // the function returned because 3 blocks were added without fulfilling the
-  // condition.
+  // the function returned because `FETCH_BLOCKS` blocks were added without
+  // fulfilling the condition.
   bool fillEqualToCurrentEl(Side& side, const ProjectedEl& currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
-    for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
+    for (size_t numBlocksRead = 0; it != end && numBlocksRead < FETCH_BLOCKS;
          ++it, ++numBlocksRead) {
       if (ql::ranges::empty(*it)) {
         // We haven't read a block, so we have to adapt the counter.
@@ -1007,6 +1018,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
       }
     }
     // Reset back to original input
+    begL = fullBlockLeft.get().begin();
+    begR = fullBlockRight.get().begin();
     compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
     // No need for further iteration because we know we won't encounter any new
     // undefined values at this point.
@@ -1054,6 +1067,8 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     auto begL = fullBlockLeft.get().begin();
     auto begR = fullBlockRight.get().begin();
     auto addRowIndex = [&begL, &begR, this](auto itFromL, auto itFromR) {
+      AD_EXPENSIVE_CHECK(itFromL >= begL);
+      AD_EXPENSIVE_CHECK(itFromR >= begR);
       compatibleRowAction_.addRow(itFromL - begL, itFromR - begR);
     };
 
@@ -1074,13 +1089,17 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
     // If we have undefined values stored, we need to provide a generator that
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
+      // We pass `std::false_type`, to disable coverage checks for the undefined
+      // values that are stored in `side.undefBlocks_`, which we already have
+      // processed ourselves and don't lie within the passed subrange, which
+      // this function assumes otherwise.
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
           ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
           addRowIndex,
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
-          addNotFoundRowIndex);
+          addNotFoundRowIndex, noop, std::false_type{});
     } else {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
@@ -1203,6 +1222,19 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
         default:
           AD_FAIL();
       }
+    }
+    // Handle the case where status `leftMissing`/`rightMissing` turned into
+    // `allFilled` because the current element does not exist in the next block
+    // and therefore the loop ends without clearing equivalent elements on the
+    // respective other side.
+    AD_CORRECTNESS_CHECK(blockStatus == BlockStatus::allFilled);
+    joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
+                        equalToCurrentElRight);
+    if (!currentBlocksLeft.empty()) {
+      removeEqualToCurrentEl(currentBlocksLeft, currentEl);
+    }
+    if (!currentBlocksRight.empty()) {
+      removeEqualToCurrentEl(currentBlocksRight, currentEl);
     }
   }
 

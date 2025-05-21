@@ -431,9 +431,13 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
   }
 
+  // Store the QueryExecutionTree outside the lambda, s.t. we have access in
+  // case of errors to create an informative error message that includes the
+  // runtime information.
+  std::optional<PlannedQuery> plannedQuery;
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer,
+       &requestTimer, &plannedQuery,
        this](ParsedQuery parsedOperation, std::string operationName,
              std::function<bool(const ParsedQuery&)> expectedOperation,
              const std::string msg) -> Awaitable<void> {
@@ -455,17 +459,31 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           absl::StrCat(msg, ad_utility::truncateOperationString(
                                 parsedOperation._originalString)));
     }
+    plannedQuery =
+        co_await planQuery(parsedOperation.hasUpdateClause() ? updateThreadPool_
+                                                             : queryThreadPool_,
+                           std::move(parsedOperation), requestTimer,
+                           timeLimit.value(), qec, cancellationHandle);
     if (parsedOperation.hasUpdateClause()) {
-      co_return co_await processUpdate(
-          std::move(parsedOperation), requestTimer, cancellationHandle, qec,
-          std::move(request), send, timeLimit.value());
+      co_return co_await processUpdate(plannedQuery.value(), requestTimer,
+                                       cancellationHandle, std::move(request),
+                                       send);
     } else {
       AD_CORRECTNESS_CHECK(parsedOperation.hasSelectClause() ||
                            parsedOperation.hasAskClause() ||
                            parsedOperation.hasConstructClause());
-      co_return co_await processQuery(
-          parameters, std::move(parsedOperation), requestTimer,
-          cancellationHandle, qec, std::move(request), send, timeLimit.value());
+      MediaType mediaType = determineMediaType(parameters, request);
+      LOG(INFO) << "Requested media type of result is \""
+                << ad_utility::toString(mediaType) << "\"" << std::endl;
+
+      // Update the `PlannedQuery` with the export limit when
+      // `application/qlever-results+json` and ensure that the offset is not
+      // applied twice when exporting the query.
+      adjustParsedQueryLimitOffset(plannedQuery.value(), mediaType, parameters);
+
+      co_return co_await processQuery(mediaType, plannedQuery.value(),
+                                      requestTimer, cancellationHandle,
+                                      std::move(request), send);
     }
   };
   auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
@@ -510,26 +528,25 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
     if (response.has_value()) {
-      co_return co_await send(std::move(response.value()));
+      return send(std::move(response.value()));
     }
 
     // At this point, if there is a "?" in the query string, it means that there
     // are URL parameters which QLever does not know or did not process.
     if (request.target().find("?") != std::string::npos) {
-      throw std::runtime_error(
-          "Request with URL parameters, but none of them could be processed");
+      return send(createBadRequestResponse("Unknown query parameters",
+                                           std::move(request)));
     }
     // No path matched up until this point, so return 404 to indicate the client
     // made an error and the server will not serve anything else.
-    co_return co_await send(
-        createNotFoundResponse("Unknown path", std::move(request)));
+    return send(createNotFoundResponse("Unknown path", std::move(request)));
   };
 
   co_return co_await processOperation(
       std::move(parsedHttpRequest.operation_),
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
                                        visitNone},
-      requestTimer, request, send);
+      requestTimer, request, send, plannedQuery);
 }
 
 // ____________________________________________________________________________
@@ -769,45 +786,15 @@ CPP_template_2(typename RequestT)(
 CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
-        const ad_utility::url_parser::ParamValueMap& params,
-        ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+        ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+        const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit) {
-  AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
-
-  MediaType mediaType = determineMediaType(params, request);
-  LOG(INFO) << "Requested media type of result is \""
-            << ad_utility::toString(mediaType) << "\"" << std::endl;
-
-  PlannedQuery plannedQuery =
-      co_await planQuery(queryThreadPool_, std::move(query), requestTimer,
-                         timeLimit, qec, cancellationHandle);
-  auto qet = plannedQuery.queryExecutionTree_;
-
-  // Read the export limit from the send` parameter (historical name). This
-  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
-  // It should only have an effect for the QLever JSON export.
-  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
-  auto& exportLimit = limitOffset.exportLimit_;
-  auto sendParameter =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
-    exportLimit = std::stoul(sendParameter.value());
-  }
-
-  // Make sure that the offset is not applied again when exporting the result
-  // (it is already applied by the root operation in the query execution
-  // tree). Note that we don't need this for the limit because applying a
-  // fixed limit is idempotent.
-  AD_CORRECTNESS_CHECK(limitOffset._offset >=
-                       qet.getRootOperation()->getLimit()._offset);
-  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
-
+        const RequestT& request, ResponseT&& send) {
   // This actually processes the query and sends the result in the requested
   // format.
-  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
-                                  requestTimer, cancellationHandle);
+  co_await sendStreamableResponse(
+      request, AD_FWD(send), mediaType, plannedQuery,
+      plannedQuery.queryExecutionTree_, requestTimer, cancellationHandle);
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
@@ -824,7 +811,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   //
   // TODO<joka921> Also log an identifier of the query.
   LOG(DEBUG) << "Runtime Info:\n"
-             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+             << plannedQuery.queryExecutionTree_.getRootOperation()
+                    ->runtimeInfo()
+                    .toString()
+             << std::endl;
   co_return;
 }
 
@@ -922,14 +912,9 @@ json Server::processUpdateImpl(
 CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        ParsedQuery&& update, const ad_utility::Timer& requestTimer,
+        const PlannedQuery& plannedQuery, const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
-        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
-        TimeLimit timeLimit) {
-  AD_CORRECTNESS_CHECK(update.hasUpdateClause());
-  PlannedQuery plannedQuery =
-      co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
-                         timeLimit, qec, cancellationHandle);
+        const RequestT& request, ResponseT&& send) {
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &plannedQuery]() {
@@ -959,7 +944,8 @@ CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
     Awaitable<void> Server::processOperation(
         ad_utility::url_parser::sparqlOperation::Operation operation,
         VisitorT visitor, const ad_utility::Timer& requestTimer,
-        const RequestT& request, ResponseT& send) {
+        const RequestT& request, ResponseT& send,
+        const std::optional<PlannedQuery>& plannedQuery) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {
@@ -986,11 +972,6 @@ CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
   std::optional<ExceptionMetadata> metadata;
-  // Also store the QueryExecutionTree outside the try-catch block to gain
-  // access to the runtimeInformation in the case of an error.
-  // TODO: the storing of the PlannedQuery outside the try-catch block in case
-  // of an error has been broken for some time
-  std::optional<PlannedQuery> plannedQuery;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
   } catch (const ParseException& e) {
@@ -1092,4 +1073,29 @@ bool Server::checkAccessToken(
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
   }
+}
+
+// _____________________________________________________________________________
+void Server::adjustParsedQueryLimitOffset(
+    PlannedQuery& plannedQuery, const ad_utility::MediaType& mediaType,
+    const ad_utility::url_parser::ParamValueMap& parameters) {
+  // Read the export limit from the `send` parameter (historical name). This
+  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
+  // It should only have an effect for the QLever JSON export.
+  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
+  auto& exportLimit = limitOffset.exportLimit_;
+  auto sendParameter =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, "send");
+  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
+    exportLimit = std::stoul(sendParameter.value());
+  }
+
+  // Make sure that the offset is not applied again when exporting the
+  // result (it is already applied by the root operation in the query
+  // execution tree). Note that we don't need this for the limit because
+  // applying a fixed limit is idempotent.
+  const auto& qet = plannedQuery.queryExecutionTree_;
+  AD_CORRECTNESS_CHECK(limitOffset._offset >=
+                       qet.getRootOperation()->getLimit()._offset);
+  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 }
