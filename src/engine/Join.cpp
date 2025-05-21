@@ -475,40 +475,38 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
    * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
    *  of the tables
    */
-  auto performHashJoin = [&idTableToHashMap,
-                          &result]<bool leftIsLarger, typename LargerTableType,
-                                   typename SmallerTableType>(
-                             const LargerTableType& largerTable,
-                             const ColumnIndex largerTableJoinColumn,
-                             const SmallerTableType& smallerTable,
-                             const ColumnIndex smallerTableJoinColumn) {
-    // Put the smaller table into the hash table.
-    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+  auto performHashJoin = ad_utility::ApplyAsValueIdentity{
+      [&idTableToHashMap, &result](auto leftIsLarger, const auto& largerTable,
+                                   const ColumnIndex largerTableJoinColumn,
+                                   const auto& smallerTable,
+                                   const ColumnIndex smallerTableJoinColumn) {
+        // Put the smaller table into the hash table.
+        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
 
-    // Create cross product by going through the larger table.
-    for (size_t i = 0; i < largerTable.size(); i++) {
-      // Skip, if there is no matching entry for the join column.
-      auto entry = map.find(largerTable(i, largerTableJoinColumn));
-      if (entry == map.end()) {
-        continue;
-      }
+        // Create cross product by going through the larger table.
+        for (size_t i = 0; i < largerTable.size(); i++) {
+          // Skip, if there is no matching entry for the join column.
+          auto entry = map.find(largerTable(i, largerTableJoinColumn));
+          if (entry == map.end()) {
+            continue;
+          }
 
-      for (const auto& row : entry->second) {
-        // Based on which table was larger, the arguments of
-        // addCombinedRowToIdTable are different.
-        // However this information is known at compile time, so the other
-        // branch gets discarded at compile time, which makes this
-        // condition have constant runtime.
-        if constexpr (leftIsLarger) {
-          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
-                                  &result);
-        } else {
-          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
-                                  &result);
+          for (const auto& row : entry->second) {
+            // Based on which table was larger, the arguments of
+            // addCombinedRowToIdTable are different.
+            // However this information is known at compile time, so the other
+            // branch gets discarded at compile time, which makes this
+            // condition have constant runtime.
+            if constexpr (leftIsLarger) {
+              addCombinedRowToIdTable(largerTable[i], row,
+                                      smallerTableJoinColumn, &result);
+            } else {
+              addCombinedRowToIdTable(row, largerTable[i],
+                                      largerTableJoinColumn, &result);
+            }
+          }
         }
-      }
-    }
-  };
+      }};
 
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.

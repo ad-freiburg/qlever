@@ -13,6 +13,7 @@
 
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
@@ -1044,7 +1045,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  auto compute = [&]<MediaType format> {
+  auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
@@ -1061,7 +1062,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                        parsedQuery._limitOffset, qet.getResult(true),
                        std::move(cancellationHandle));
     }
-  };
+  }};
 
   using enum MediaType;
 
