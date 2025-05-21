@@ -218,8 +218,8 @@ class QueryExecutionTree {
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    getRootOperation()->setLimit(limitOffsetClause);
+  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->applyLimit(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
     cacheKey_ = getRootOperation()->getCacheKey();

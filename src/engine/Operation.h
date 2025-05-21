@@ -282,11 +282,13 @@ class Operation {
   // its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
+  // Hook subclasses can override to pass changes to the limit to their children
+  virtual void onLimitChanged(const LimitOffsetClause&) const {}
+
   // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    _limit = limitOffsetClause;
-  }
+  // this operation. It will not replace any previous limit, stacking on top
+  // instead.
+  void applyLimit(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.

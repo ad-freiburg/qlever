@@ -260,7 +260,9 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() && childTree->supportsLimit()) {
-      childTree->setLimit(limitIfPresent.value());
+      // NOTE: If computeResult is called more than once on the same instance of
+      // `CartesianProduct`
+      childTree->applyLimit(limitIfPresent.value());
     }
     auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child

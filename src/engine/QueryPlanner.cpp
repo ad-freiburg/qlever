@@ -203,8 +203,11 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->setLimit(pq._limitOffset);
+    // For subqueries the limit has already been applied, for the root query the
+    // exporter will apply LIMIT and OFFSET if `supportsLimit()` is not natively
+    // supported by the `Operation`.
+    if (plan._qet->getRootOperation()->supportsLimit() && !isSubquery) {
+      plan._qet->applyLimit(pq._limitOffset);
     }
   }
 
@@ -2936,7 +2939,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->setLimit(arg.get()._limitOffset);
+    plan._qet->applyLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }

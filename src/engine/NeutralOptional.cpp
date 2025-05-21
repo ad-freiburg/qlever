@@ -51,6 +51,12 @@ bool NeutralOptional::knownEmptyResult() { return false; }
 bool NeutralOptional::supportsLimit() const { return true; }
 
 // _____________________________________________________________________________
+void NeutralOptional::onLimitChanged(
+    const LimitOffsetClause& limitOffset) const {
+  tree_->applyLimit(limitOffset);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
   return std::make_unique<NeutralOptional>(getExecutionContext(),
                                            tree_->clone());
@@ -106,9 +112,6 @@ bool NeutralOptional::singleRowCroppedByLimit() const {
 
 // _____________________________________________________________________________
 Result NeutralOptional::computeResult(bool requestLaziness) {
-  const auto& limit = getLimit();
-  tree_->setLimit(limit);
-
   auto childResult = tree_->getResult(requestLaziness);
 
   IdTable singleRowTable{getResultWidth(), allocator()};
