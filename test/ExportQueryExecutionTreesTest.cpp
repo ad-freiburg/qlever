@@ -1759,7 +1759,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
   // 1. for literals all datatypes are removed, IRIs
   // are converted to literals
   // 2. only literals with no datatype or`xsd:string` are returned.
-  // In the last case the datype is removed.
+  // In the last case the datatype is removed.
   std::vector<
       std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
       testCases = {
