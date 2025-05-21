@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
@@ -29,6 +29,12 @@ template <typename RelExpr>
 auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<RelExpr>(referenceId);
+};
+
+// Make IsInExpression
+auto isInExpression = [](std::vector<IdOrLocalVocabEntry>&& referenceValues,
+                         bool isNegated = false) {
+  return std::make_unique<IsInExpression>(referenceValues, isNegated);
 };
 
 // Make IsDatatypeExpression
@@ -82,9 +88,10 @@ constexpr auto andExpr = logExpr<AndExpression>;
 constexpr auto orExpr = logExpr<OrExpression>;
 // NOT (`!`)
 constexpr auto notExpr = notPrefilterExpression;
+// `IN`, or `NOT IN` if the `isNegated` flag is set to true.
+constexpr auto inExpr = isInExpression;
 
 namespace filterHelper {
-
 //______________________________________________________________________________
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
@@ -94,7 +101,8 @@ const auto LVE = [](const std::string& litOrIri) -> LocalVocabEntry {
 };
 
 //______________________________________________________________________________
-// Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
+// Construct a `PAIR` with the given `PrefilterExpression` and `Variable`
+// value.
 auto pr =
     [](std::unique_ptr<prefilterExpressions::PrefilterExpression> expr,
        const Variable& var) -> sparqlExpression::PrefilterExprVariablePair {
@@ -202,6 +210,20 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
   }
 }
 
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeInSprqlExpression(
+    VariantArgs child, std::vector<ValueId>&& children) {
+  std::vector<std::unique_ptr<SparqlExpression>> childrenSprql;
+  childrenSprql.reserve(children.size());
+
+  ql::ranges::for_each(children, [&childrenSprql](auto& val) {
+    childrenSprql.push_back(std::visit(getExpr, VariantArgs(val)));
+  });
+
+  return std::make_unique<sparqlExpression::InExpression>(
+      std::visit(getExpr, std::move(child)), std::move(childrenSprql));
+}
+
 }  // namespace
 
 //______________________________________________________________________________
@@ -229,6 +251,8 @@ constexpr auto andSprqlExpr = &makeAndExpression;
 constexpr auto orSprqlExpr = &makeOrExpression;
 // NOT (`!`, `SparqlExpression`)
 constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
+// IN SparqlExpression
+constexpr auto inSprqlExpr = &makeInSprqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.

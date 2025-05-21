@@ -224,6 +224,35 @@ class IsDatatypeExpression : public PrefilterExpression {
 };
 
 //______________________________________________________________________________
+// The `PrefilterExpression` associated with the `RelationalExpressions` `IN`,
+// and implicitly `NOT IN`. `IsInExpression` provides prefilter support for
+// statements such as `FILTER("4.0"  IN (<http://example/iri>, "someStr", 4.0))`
+// or `FILTER("4.0" NOT IN (<http://example/iri>, 2, 4.0))`.
+class IsInExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+  // Represents the reference values used for equality-based prefiltering, since
+  // the applied `PrefilterExpression` over these referenceValues is
+  // semantically equivalent to: refVal1 || refVal2 || ... || refValN.
+  std::vector<IdOrLocalVocabEntry> referenceValues_;
+
+ public:
+  explicit IsInExpression(
+      const std::vector<IdOrLocalVocabEntry>& referenceValues,
+      bool isNegated = false)
+      : isNegated_(isNegated), referenceValues_(referenceValues) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange) const override;
+};
+
+//______________________________________________________________________________
 // For the actual comparison of the relevant ValueIds from the metadata triples,
 // we use the implementations from ValueIdComparators.
 //

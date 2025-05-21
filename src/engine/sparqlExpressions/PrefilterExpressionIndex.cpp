@@ -718,6 +718,58 @@ BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
   }
 };
 
+// SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsInExpression::logicalComplement() const {
+  return make<IsInExpression>(referenceValues_, true);
+};
+
+//______________________________________________________________________________
+bool IsInExpression::operator==(const PrefilterExpression& other) const {
+  const auto* otherIsIn = dynamic_cast<const IsInExpression*>(&other);
+  if (!otherIsIn) {
+    return false;
+  }
+
+  return isNegated_ == otherIsIn->isNegated_ &&
+         ql::ranges::equal(referenceValues_, otherIsIn->referenceValues_);
+};
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> IsInExpression::clone() const {
+  return make<IsInExpression>(*this);
+};
+
+//______________________________________________________________________________
+std::string IsInExpression::asString([[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter IsInExpression\nisNegated: ", isNegated_ ? "true" : "false",
+      "\nWith the following number of reference values: ",
+      referenceValues_.size());
+};
+
+//______________________________________________________________________________
+BlockMetadataRanges IsInExpression::evaluateImpl(
+    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
+  if (referenceValues_.empty()) {
+    return {};
+  }
+
+  // Construct PrefilterExpression: refVal1 || refVal2 || ... || refValN.
+  auto prefilterExpr = make<EqualExpression>(referenceValues_.front());
+  ql::ranges::for_each(
+      referenceValues_ | ql::ranges::views::drop(1),
+      [&prefilterExpr](const IdOrLocalVocabEntry& referenceValue) {
+        prefilterExpr = make<OrExpression>(
+            std::move(prefilterExpr), make<EqualExpression>(referenceValue));
+      });
+
+  if (isNegated_) {
+    prefilterExpr = prefilterExpr->logicalComplement();
+  }
+  return prefilterExpr->evaluateImpl(idRange, blockRange);
+};
+
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
 template <LogicalOperator Operation>
