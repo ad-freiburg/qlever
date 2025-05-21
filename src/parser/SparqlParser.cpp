@@ -8,7 +8,10 @@
 
 using AntlrParser = SparqlAutomaticParser;
 
+namespace {
 // _____________________________________________________________________________
+// Parses the given string as the given clause. If the datasets are not empty,
+// then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
 auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
                     std::string operation,
@@ -30,6 +33,7 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
   AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
+}  // namespace
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(

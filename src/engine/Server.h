@@ -95,7 +95,8 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
-  boost::asio::static_thread_pool updateThreadPool_{1};
+  static constexpr size_t UPDATE_THREAD_POOL_SIZE = 1;
+  boost::asio::static_thread_pool updateThreadPool_{UPDATE_THREAD_POOL_SIZE};
 
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};

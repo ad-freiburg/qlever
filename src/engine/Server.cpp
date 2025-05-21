@@ -474,6 +474,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
   };
   auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
+    // We need to copy the SPARQL, because `visitOperation` also needs it.
     auto parsedQuery =
         SparqlParser::parseQuery(query.query_, query.datasetClauses_);
     return visitOperation(
@@ -485,6 +486,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   auto visitUpdate = [&visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
+    // We need to copy the SPARQL, because `visitOperation` also needs it.
     auto parsedUpdates =
         SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
     return visitOperation(
@@ -929,6 +931,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
+  // Atomicity of the update is still given, because everything runs on
+  // `updateThreadPool_` which only has one thread.
+  static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,

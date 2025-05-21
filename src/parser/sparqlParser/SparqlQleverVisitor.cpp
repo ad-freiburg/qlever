@@ -284,9 +284,17 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  // The following fields are not reset:
+  // - prefixMap_ and baseIri_: prefixes carry over between chained updates
+  // - datasetsAreFixed_: set for the whole request which can contain multiple
+  // operations
+  // - activeDatasetClauses_: if `datasetsAreFixed_` is true
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
+  // When fixed datasets are given for a request (see SPARQL Protocol), these
+  // cannot be changed by a SPARQL operation but are also constant for chained
+  // updates.
   if (!datasetsAreFixed_) {
     activeDatasetClauses_ = {};
   }
