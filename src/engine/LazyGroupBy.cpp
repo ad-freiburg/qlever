@@ -9,7 +9,7 @@ using groupBy::detail::VectorOfAggregationData;
 // _____________________________________________________________________________
 LazyGroupBy::LazyGroupBy(
     LocalVocab& localVocab,
-    std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
+    std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases,
     const ad_utility::AllocatorWithLimit<Id>& allocator, size_t numGroupColumns)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
@@ -48,7 +48,7 @@ void LazyGroupBy::resetAggregationData() {
 void LazyGroupBy::commitRow(
     IdTable& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext,
-    const GroupBy::GroupBlock& currentGroupBlock) {
+    const GroupByImpl::GroupBlock& currentGroupBlock) {
   resultTable.emplace_back();
   size_t colIdx = 0;
   for (const auto& [_, value] : currentGroupBlock) {
@@ -60,8 +60,8 @@ void LazyGroupBy::commitRow(
   evaluationContext._endIndex = resultTable.size();
 
   for (auto& alias : aggregateAliases_) {
-    GroupBy::evaluateAlias(alias, &resultTable, evaluationContext,
-                           aggregationData_, &localVocab_, allocator_);
+    GroupByImpl::evaluateAlias(alias, &resultTable, evaluationContext,
+                               aggregationData_, &localVocab_, allocator_);
   }
   resetAggregationData();
 }
@@ -76,8 +76,8 @@ void LazyGroupBy::processBlock(
 
   for (const auto& aggregateInfo : allAggregateInfoView()) {
     sparqlExpression::ExpressionResult expressionResult =
-        GroupBy::evaluateChildExpressionOfAggregateFunction(aggregateInfo,
-                                                            evaluationContext);
+        GroupByImpl::evaluateChildExpressionOfAggregateFunction(
+            aggregateInfo, evaluationContext);
 
     visitAggregate(
         CPP_template_lambda(blockSize, &evaluationContext)(
@@ -99,7 +99,7 @@ void LazyGroupBy::processBlock(
 template <typename Visitor, typename... Args>
 void LazyGroupBy::visitAggregate(
     const Visitor& visitor,
-    const GroupBy::HashMapAggregateInformation& aggregateInfo,
+    const GroupByImpl::HashMapAggregateInformation& aggregateInfo,
     Args&&... additionalVariants) {
   std::visit(visitor,
              aggregationData_.getAggregationDataVariant(

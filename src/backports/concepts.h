@@ -10,6 +10,8 @@
 #include "backports/cppTemplate2.h"
 #ifndef QLEVER_CPP_17
 #include <concepts>
+#else
+#include <range/v3/all.hpp>
 #endif
 
 // Define the following macros:
@@ -108,6 +110,11 @@ namespace ql::concepts {
 
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
+using ::ranges::bidirectional_iterator;
+using ::ranges::contiguous_iterator;
+using ::ranges::forward_iterator;
+using ::ranges::input_iterator;
+using ::ranges::random_access_iterator;
 #else
 using namespace std;
 #endif
