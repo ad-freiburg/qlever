@@ -203,6 +203,12 @@ std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
 }
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
+    VariantArgs childVal) {
+  return makeStrExpression(std::visit(getExpr, std::move(childVal)));
+}
+
+//______________________________________________________________________________
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
@@ -253,6 +259,8 @@ constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 // Create SparqlExpression `REGEX`.
 constexpr auto regexSparql = &makePrefixRegexExpression;
+// Create SparqlExpression `STR`
+constexpr auto strSprql = &makeStrSparqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`

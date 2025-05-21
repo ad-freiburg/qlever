@@ -484,8 +484,13 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        pr(notExpr(prefixRegex(L("\"de\""))), varX));
   evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
                        pr(prefixRegex(L("\"prefix\"")), varX));
+  evalAndEqualityCheck(strStartsSprql(strSprql(varX), L("\"Bob\"")),
+                       pr(prefixRegex(L("\"Bob\"")), varX));
+  evalAndEqualityCheck(regexSparql(strSprql(varX), L("\"^Bob\"")),
+                       pr(prefixRegex(L("\"Bob\"")), varX));
   evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
                        pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
+  evalAndEqualityCheck(strStartsSprql(strSprql(L("\"\"")), L("\"Bob\"")));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));

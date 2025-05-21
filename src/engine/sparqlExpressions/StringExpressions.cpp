@@ -267,20 +267,29 @@ CPP_template(typename NaryOperation)(
       [[maybe_unused]] bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 2);
     std::vector<PrefilterExprVariablePair> prefilterVec;
-    const SparqlExpression* child0 = this->getChildAtIndex(0).value();
-    const SparqlExpression* child1 = this->getChildAtIndex(1).value();
-    auto varExpr = child0->getVariableOrNullopt();
-    if (!varExpr.has_value()) {
+
+    auto retrieveVariable =
+        [](const SparqlExpression* child) -> std::optional<Variable> {
+      if (child->isStrExpression()) {
+        return child->children()[0]->getVariableOrNullopt();
+      }
+      return child->getVariableOrNullopt();
+    };
+
+    const auto& children = this->children();
+    auto var = retrieveVariable(children[0].get());
+    if (!var.has_value()) {
       return prefilterVec;
     }
-    auto prefixStr = getLiteralFromLiteralExpression(child1);
+    auto prefixStr = getLiteralFromLiteralExpression(children[1].get());
     if (!prefixStr.has_value()) {
       return prefilterVec;
     }
+
     prefilterVec.emplace_back(
         std::make_unique<prefilterExpressions::PrefixRegexExpression>(
             prefixStr.value()),
-        varExpr.value());
+        var.value());
     return prefilterVec;
   }
 };
