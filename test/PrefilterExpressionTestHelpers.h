@@ -211,6 +211,12 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
 }
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
+    VariantArgs childVal) {
+  return makeStrExpression(std::visit(getExpr, std::move(childVal)));
+}
+
+//______________________________________________________________________________
 std::unique_ptr<SparqlExpression> makeInSprqlExpression(
     VariantArgs child, std::vector<ValueId>&& children) {
   std::vector<std::unique_ptr<SparqlExpression>> childrenSprql;
@@ -257,6 +263,8 @@ constexpr auto inSprqlExpr = &makeInSprqlExpression;
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
+// Create SparqlExpression `STR`
+constexpr auto strSprql = &makeStrSparqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`

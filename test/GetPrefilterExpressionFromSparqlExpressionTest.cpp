@@ -515,7 +515,12 @@ TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
   evalAndEqualityCheck(
       notSprqlExpr(inSprqlExpr(varX, {IntId(0), VocabId(10)})),
       pr(notExpr(inExpr({IntId(0), VocabId(10)}, true)), varX));
+  evalAndEqualityCheck(
+      notSprqlExpr(inSprqlExpr(strSprql(varX), {IntId(0), VocabId(10)})),
+      pr(notExpr(inExpr({IntId(0), VocabId(10)}, true)), varX));
   evalAndEqualityCheck(inSprqlExpr(L("\"Bob\""), {IntId(5), DoubleId(10)}));
+  evalAndEqualityCheck(
+      inSprqlExpr(strSprql(L("\"Bob\"")), {IntId(5), DoubleId(10)}));
 }
 
 //______________________________________________________________________________

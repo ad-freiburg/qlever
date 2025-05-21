@@ -521,7 +521,15 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
 std::vector<PrefilterExprVariablePair>
 InExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
-  auto var = children_.front().get()->getVariableOrNullopt();
+  auto retrieveVariable =
+      [](const SparqlExpression* child) -> std::optional<Variable> {
+    if (child->isStrExpression()) {
+      return child->children()[0]->getVariableOrNullopt();
+    }
+    return child->getVariableOrNullopt();
+  };
+
+  auto var = retrieveVariable(children_.front().get());
   if (!var.has_value()) {
     return {};
   }
