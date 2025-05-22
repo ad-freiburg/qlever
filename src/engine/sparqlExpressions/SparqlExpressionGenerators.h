@@ -50,30 +50,31 @@ inline ql::span<const ValueId> getIdsFromVariable(
 /// `SparqlExpressionValueGetters` with an already bound `EvaluationContext`.
 CPP_template(typename T, typename Transformation = std::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
-        ranges::invocable<
-            Transformation,
-            T>) auto resultGeneratorImpl(T constant, size_t numItems,
-                                         Transformation transformation = {}) {
+        ranges::invocable<Transformation,
+                          T>) auto resultGenerator(T constant, size_t numItems,
+                                                   Transformation
+                                                       transformation = {}) {
   return ::ranges::repeat_n_view(transformation(constant), numItems);
 }
 
 CPP_template(typename T, typename Transformation = std::identity)(
     requires ql::ranges::input_range<
-        T>) auto resultGeneratorImpl(T&& vector, size_t numItems,
-                                     Transformation transformation = {}) {
+        T>) auto resultGenerator(T&& vector, size_t numItems,
+                                 Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return ad_utility::allView(AD_FWD(vector)) |
          ql::views::transform(std::move(transformation));
 }
 
 template <typename Transformation = std::identity>
-inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
-                                size_t targetSize,
-                                Transformation transformation = {}) {
+inline auto resultGenerator(const ad_utility::SetOfIntervals& set,
+                            size_t targetSize,
+                            Transformation transformation = {}) {
   struct Bounds {
     size_t num_;
     bool value_;
   };
+  // TODO<joka921> could use inlined vector.
   std::vector<Bounds> bounds;
   bounds.reserve(set._intervals.size() * 2 + 1);
   size_t last = 0;
@@ -97,22 +98,6 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
                transformation(Id::makeFromBool(bound.value_)), bound.num_);
          }) |
          ::ranges::views::join;
-}
-
-CPP_template(typename S, typename Transformation = std::identity)(
-    requires SingleExpressionResult<
-        S>) inline auto resultGenerator(S&& input, size_t targetSize,
-                                        Transformation transformation = {}) {
-  auto gen =
-      resultGeneratorImpl(AD_FWD(input), targetSize, std::move(transformation));
-  // Without type erasure, compiling the `sparqlExpressions` module takes a lot
-  // of time and memory. Therefore, we require opt-in here.
-#ifdef QLEVER_OPTIMIZED_EXPRESSIONS
-  return gen;
-#else
-  return ad_utility::InputRangeTypeErased<
-      ql::ranges::range_value_t<decltype(gen)>>(std::move(gen));
-#endif
 }
 
 /// Return a generator that yields `numItems` many items for the various
