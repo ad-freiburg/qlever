@@ -15,6 +15,7 @@
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/SuppressWarnings.h"
 
 namespace ad_utility {
 
@@ -305,7 +306,6 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   bool beginWasCalled_ = false;
 
   class Sentinel;
-
   class Iterator {
    public:
     using iterator_category = std::input_iterator_tag;
@@ -326,9 +326,16 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
     void operator++(int) { ++current_; }
 
+    // For GCC-11 the following explicit friend declaration of the
+    // equality (which is defined in the `Sentinel` class below is
+    // required (the much simpler `friend class Sentinel` doesn't work),
+    // but emits a warning which we suppress.
+    DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND
+    friend bool operator==(const Iterator& it, const Sentinel& s);
+    friend bool operator!=(const Iterator& it, const Sentinel& s);
+    ENABLE_WARNINGS_GCC_TEMPLATE_FRIEND
    private:
     std::ranges::iterator_t<V> current_;
-    friend class Sentinel;
   };
 
   class Sentinel {
