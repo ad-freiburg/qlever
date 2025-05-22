@@ -110,14 +110,11 @@ namespace ql::concepts {
 
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
-using ::ranges::assignable_from;
 using ::ranges::bidirectional_iterator;
 using ::ranges::contiguous_iterator;
-using ::ranges::convertible_to;
 using ::ranges::forward_iterator;
 using ::ranges::input_iterator;
 using ::ranges::random_access_iterator;
-using ::ranges::semiregular;
 #else
 using namespace std;
 #endif
