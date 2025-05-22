@@ -33,7 +33,7 @@
 #ifdef __GNUC__
 #define DISABLE_WARNINGS_GCC_TEMPLATE_FRIEND \
   _Pragma("GCC diagnostic push")             \
-      _Pragma("GCC diagnostic ignored \"-Wno-non-template-friend\"")
+      _Pragma("GCC diagnostic ignored \"-Wnon-template-friend\"")
 
 #define ENABLE_WARNINGS_GCC_TEMPLATE_FRIEND _Pragma("GCC diagnostic pop")
 #endif
