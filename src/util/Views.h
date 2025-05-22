@@ -366,8 +366,8 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
   Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
 };
 
-CPP_template(typename Range)() requires ql::ranges::input_range<Range>
-ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
+CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
+    ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
