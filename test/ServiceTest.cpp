@@ -61,13 +61,13 @@ class ServiceTest : public ::testing::Test {
          std::string contentType = "application/sparql-results+json",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> sendRequestType {
+             ad_utility::source_location::current()) -> SendRequestType {
     // Check that the request parameters are as expected.
     //
     // NOTE: Method, Content-Type and Accept are hard-coded in
     // `Service::computeResult`, but the host and port of the endpoint are
     // derived from the IRI, so url and post data are non-trivial.
-    RequestMatchers matchers{
+    httpClientTestHelpers::RequestMatchers matchers{
         .url_ = testing::Eq(expectedUrl),
         .method_ = testing::Eq(boost::beast::http::verb::post),
         // Check that the whitespace-normalized POST data is the expected query.
@@ -84,8 +84,8 @@ class ServiceTest : public ::testing::Test {
             testing::Eq(expectedSparqlQuery)),
         .contentType_ = testing::Eq("application/sparql-query"),
         .accept_ = testing::Eq("application/sparql-results+json")};
-    return ::getResultFunctionFactory(predefinedResult, contentType, status,
-                                      matchers, mockException, loc);
+    return httpClientTestHelpers::getResultFunctionFactory(
+        predefinedResult, contentType, status, matchers, mockException, loc);
   };
 
   // The following method generates a JSON result from variables and rows for

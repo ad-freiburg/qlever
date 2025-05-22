@@ -13,6 +13,8 @@
 #include "parser/ParsedQuery.h"
 #include "util/http/HttpClient.h"
 
+// This class implements the SPARQL UPDATE `LOAD` operation. It reads a turtle
+// document from a remote URL via HTTP and converts it to an `IdTable`.
 class LoadURL final : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
@@ -50,6 +52,8 @@ class LoadURL final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
+  bool canResultBeCached() const;
+
   std::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;
@@ -85,9 +89,6 @@ class LoadURL final : public Operation {
   [[noreturn]] void throwErrorWithContext(
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
-
-  FRIEND_TEST(LoadURLTest, basicMethods);
-  FRIEND_TEST(LoadURLTest, computeResult);
 };
 
 #endif  // QLEVER_LOADURL_H

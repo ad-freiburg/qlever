@@ -15,6 +15,8 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+namespace {
+
 auto pqLoadURL = [](std::string url, bool silent = false) {
   return parsedQuery::LoadURL{ad_utility::httpUtils::Url{url}, silent};
 };
@@ -38,15 +40,15 @@ class LoadURLTest : public ::testing::Test {
          std::string contentType = "text/turtle",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current()) -> sendRequestType {
-    RequestMatchers matchers{
+             ad_utility::source_location::current()) -> SendRequestType {
+    httpClientTestHelpers::RequestMatchers matchers{
         .method_ = testing::Eq(boost::beast::http::verb::get),
         .postData_ = testing::Eq(""),
         .contentType_ = testing::Eq(""),
         .accept_ = testing::Eq(""),
     };
-    return ::getResultFunctionFactory(predefinedResult, contentType, status,
-                                      matchers, mockException, loc);
+    return httpClientTestHelpers::getResultFunctionFactory(
+        predefinedResult, contentType, status, matchers, mockException, loc);
   };
 };
 
@@ -64,18 +66,13 @@ TEST_F(LoadURLTest, basicMethods) {
   EXPECT_THAT(loadURL.getMultiplicity(2), testing::Eq(1));
   EXPECT_THAT(loadURL.getSizeEstimate(), testing::Eq(100'000));
   EXPECT_THAT(loadURL.getCostEstimate(), testing::Eq(1'000'000));
-  EXPECT_THAT(loadURL.computeVariableToColumnMap(),
-              testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {Variable("?s"), makeAlwaysDefinedColumn(0)},
-                  {Variable("?p"), makeAlwaysDefinedColumn(1)},
-                  {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
   EXPECT_THAT(loadURL.knownEmptyResult(), testing::IsFalse());
   EXPECT_THAT(loadURL.getChildren(), testing::IsEmpty());
 }
 
 TEST_F(LoadURLTest, computeResult) {
   auto expectThrowOnlyIfNotSilent =
-      [this](parsedQuery::LoadURL pq, sendRequestType sendFunc,
+      [this](parsedQuery::LoadURL pq, SendRequestType sendFunc,
              const testing::Matcher<string>& expectedError,
              ad_utility::source_location loc =
                  ad_utility::source_location::current()) {
@@ -84,9 +81,25 @@ TEST_F(LoadURLTest, computeResult) {
 
         AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
                                      expectedError);
-        load.loadURLClause_.silent_ = true;
-        EXPECT_NO_THROW(load.computeResultOnlyForTesting());
+        pq.silent_ = true;
+        LoadURL silentLoad{testQec, pq, sendFunc};
+        EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
       };
+  auto expectThrowAlways = [this](parsedQuery::LoadURL pq,
+                                  SendRequestType sendFunc,
+                                  const testing::Matcher<string>& expectedError,
+                                  ad_utility::source_location loc =
+                                      ad_utility::source_location::current()) {
+    auto g = generateLocationTrace(loc);
+    LoadURL load{testQec, pq, sendFunc};
+
+    AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
+                                 expectedError);
+    pq.silent_ = true;
+    LoadURL silentLoad{testQec, pq, sendFunc};
+    AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
+                                 expectedError);
+  };
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,
@@ -147,12 +160,27 @@ TEST_F(LoadURLTest, computeResult) {
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                ""),
       testing::HasSubstr("QLever requires the `Content-Type` header to be "
-                         "set for LoadURL."));
+                         "set for the HTTP response."));
   expectThrowOnlyIfNotSilent(
       pqLoadURL("https://mundhahs.dev"),
       getResultFunctionFactory("this is not turtle",
                                boost::beast::http::status::ok, "text/turtle"),
       testing::HasSubstr("Parse error at byte position 0"));
+  expectThrowAlways(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory(
+          "<x> <y> <z>", boost::beast::http::status::ok, "text/turtle",
+          std::make_exception_ptr(ad_utility::CancellationException(
+              ad_utility::CancellationState::TIMEOUT))),
+      testing::HasSubstr("Operation timed out."));
+  expectThrowAlways(
+      pqLoadURL("https://mundhahs.dev"),
+      getResultFunctionFactory(
+          "<x> <y> <z>", boost::beast::http::status::ok, "text/turtle",
+          std::make_exception_ptr(
+              ad_utility::detail::AllocationExceedsLimitException(10_GB,
+                                                                  5_GB))),
+      testing::HasSubstr("Tried to allocate"));
 
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto Literal =
@@ -204,8 +232,24 @@ TEST_F(LoadURLTest, getCacheKey) {
 
 TEST_F(LoadURLTest, clone) {
   LoadURL loadUrl{testQec, pqLoadURL("https://mundhahs.dev")};
-  auto clone = loadUrl.clone();
-  ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
-  EXPECT_THAT(*clone, IsDeepCopy(loadUrl));
-  EXPECT_THAT(clone->getDescriptor(), testing::Eq(loadUrl.getDescriptor()));
+  // When the results are not cached, cloning should create a decoupled object.
+  // The cache breaker will be different.
+  {
+    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
+    auto clone = loadUrl.clone();
+    ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
+    EXPECT_THAT(clone->getDescriptor(), testing::Eq(loadUrl.getDescriptor()));
+    EXPECT_THAT(clone->getCacheKey(),
+                testing::Not(testing::Eq(loadUrl.getCacheKey())));
+  }
+  // When the results are cached, we get decoupled object that is the same.
+  {
+    auto cleanup = setRuntimeParameterForTest<"cache-load-results">(true);
+    auto clone = loadUrl.clone();
+    ASSERT_THAT(clone, testing::Not(testing::Eq(nullptr)));
+    EXPECT_THAT(clone->getDescriptor(), testing::Eq(loadUrl.getDescriptor()));
+    EXPECT_THAT(*clone, IsDeepCopy(loadUrl));
+  }
 }
+
+}  // namespace

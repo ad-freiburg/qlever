@@ -53,9 +53,7 @@ bool LoadURL::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> LoadURL::cloneImpl() const {
-  auto load = std::make_unique<LoadURL>(_executionContext, loadURLClause_);
-  load->cacheBreaker_ = cacheBreaker_;
-  return load;
+  return std::make_unique<LoadURL>(_executionContext, loadURLClause_);
 }
 
 // _____________________________________________________________________________
@@ -74,10 +72,8 @@ Result LoadURL::computeResult(bool requestLaziness) {
     // Element.
     if (loadURLClause_.silent_) {
       IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-      idTable.emplace_back();
-      for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
-        idTable(0, colIdx) = Id::makeUndefined();
-      }
+      Id u = Id::makeUndefined();
+      idTable.push_back(std::array{u, u, u});
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     }
     throw;
@@ -85,7 +81,7 @@ Result LoadURL::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-Result LoadURL::computeResultImpl(bool) {
+Result LoadURL::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
   LOG(INFO) << "Loading RDF dataset from " << loadURLClause_.url_.asString()
             << std::endl;
@@ -105,21 +101,27 @@ Result LoadURL::computeResultImpl(bool) {
   }
   if (response.contentType_.empty()) {
     throwErrorWithContext(
-        "QLever requires the `Content-Type` header to be set for LoadURL.");
+        "QLever requires the `Content-Type` header to be set for the HTTP "
+        "response.");
   }
   // If the `Content-Type` is not one of the media types known to QLever, then
   // std::nullopt is returned by `toMediaType`.
   std::optional<ad_utility::MediaType> mediaType =
       ad_utility::toMediaType(response.contentType_);
+  auto supportedMediatypes = ad_utility::lazyStrJoin(
+      ql::views::transform(
+          SUPPORTED_MEDIATYPES,
+          [](const ad_utility::MediaType& mt) { return toString(mt); }),
+      ", ");
   if (!mediaType) {
-    throwErrorWithContext(
-        absl::StrCat("Unknown `Content-Type` \"", response.contentType_, "\""));
+    throwErrorWithContext(absl::StrCat("Unknown `Content-Type` \"",
+                                       response.contentType_,
+                                       "\". Supported: ", supportedMediatypes));
   }
   if (!ad_utility::contains(SUPPORTED_MEDIATYPES, mediaType.value())) {
     throwErrorWithContext(absl::StrCat(
         "Unsupported value for `Content-Type` \"", toString(mediaType.value()),
-        "\". Supported are \"text/turtle\" and "
-        "\"application/n-triples\"."));
+        "\". Supported: ", supportedMediatypes));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   auto parser = Re2Parser();
@@ -130,16 +132,14 @@ Result LoadURL::computeResultImpl(bool) {
   parser.setInputStream(body);
   LocalVocab lv;
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  size_t row_idx = 0;
+  auto toId = [this, &lv](TripleComponent&& tc) {
+    return std::move(tc).toValueId(getIndex().getVocab(), lv);
+  };
   for (auto& triple : parser.parseAndReturnAllTriples()) {
-    result.emplace_back();
-    result(row_idx, 0) =
-        std::move(triple.subject_).toValueId(getIndex().getVocab(), lv);
-    result(row_idx, 1) = std::move(TripleComponent(triple.predicate_))
-                             .toValueId(getIndex().getVocab(), lv);
-    result(row_idx, 2) =
-        std::move(triple.object_).toValueId(getIndex().getVocab(), lv);
-    row_idx++;
+    result.push_back(
+        std::array{toId(std::move(triple.subject_)),
+                   toId(TripleComponent(std::move(triple.predicate_))),
+                   toId(std::move(triple.object_))});
     checkCancellation();
   }
   return Result{std::move(result), resultSortedOn(), std::move(lv)};
@@ -165,3 +165,6 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }
+
+// _____________________________________________________________________________
+bool LoadURL::canResultBeCached() const { return false; }
