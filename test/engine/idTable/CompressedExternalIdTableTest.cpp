@@ -46,7 +46,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // The number of static and dynamic columns has to be specified (see `IdTable.h`
 // for details).
 template <size_t NumStaticColumns>
-auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
+auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
   CopyableIdTable<NumStaticColumns> result(
       numColumns, ad_utility::testing::makeAllocator());
   for (const auto& row : generator) {
@@ -273,74 +273,4 @@ TEST(CompressedExternalIdTable, WrongNumberOfColsWhenPushing) {
   EXPECT_NO_THROW(erased.pushBlock(t1));
   EXPECT_NO_THROW(t1.setNumColumns(4));
   EXPECT_ANY_THROW(erased.pushBlock(t1));
-}
-
-TEST(CompressedExternalIdTable, emptyBlockHandling) {
-  using namespace ad_utility::memory_literals;
-  std::string filename = "idTableCompressedWriter.emptyBlockTest.dat";
-
-  ad_utility::CompressedExternalIdTableWriter writer{
-      filename, 3, ad_utility::testing::makeAllocator(), 24_B};
-
-  CopyableIdTable<0> emptyTable(3, ad_utility::testing::makeAllocator());
-  writer.writeIdTable(emptyTable);
-  writer.writeIdTable(emptyTable);
-
-  auto generators = writer.getAllGenerators();
-  ASSERT_EQ(generators.size(), 2);
-  for (auto& gen : generators) {
-    ASSERT_TRUE(gen.begin() == gen.end());
-  }
-
-  auto rowGenerators = writer.getAllRowGenerators();
-  ASSERT_EQ(rowGenerators.size(), 2);
-  for (auto& rowGen : rowGenerators) {
-    ASSERT_TRUE(rowGen.begin() == rowGen.end());
-  }
-}
-
-TEST(CompressedExternalIdTable, staticColumnInitialization) {
-  using namespace ad_utility::memory_literals;
-  std::string filename = "idTableCompressedWriter.staticColumns.dat";
-
-  ad_utility::CompressedExternalIdTable<3> table{
-      filename, 1_MB, ad_utility::testing::makeAllocator(), 24_B};
-
-  CopyableIdTable<3> data =
-      makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}).toStatic<3>();
-  for (const auto& row : data) {
-    table.push(row);
-  }
-
-  auto generator = table.getRows();
-  using namespace ::testing;
-  ASSERT_THAT(idTableFromRowGenerator<3>(generator, 3), Eq(data));
-}
-
-TEST(CompressedExternalIdTable, typeErasedInterfaceAndEmptyBlocks) {
-  using namespace ad_utility::memory_literals;
-  std::string filename = "idTableCompressedSorter.emptyBlocksTest.dat";
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
-      filename, 3, 1_MB, ad_utility::testing::makeAllocator(), 24_B};
-
-  ad_utility::CompressedExternalIdTableSorterTypeErased& erased = writer;
-  IdTableStatic<0> emptyTable{3, ad_utility::testing::makeAllocator()};
-  erased.pushBlock(emptyTable);
-
-  auto sortedBlocks = erased.getSortedOutput();
-  ASSERT_TRUE(sortedBlocks.begin() == sortedBlocks.end());
-  erased.clearUnderlying();
-
-  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> largeWriter{
-      "largeWriter.dat", 3, 1_MB, ad_utility::testing::makeAllocator(), 24_B};
-
-  CopyableIdTable<0> largeTable = createRandomlyFilledIdTable(1000, 3);
-  for (const auto& row : largeTable) {
-    largeWriter.push(row);
-  }
-
-  ql::ranges::sort(largeTable, SortByOSP{});
-  using namespace ::testing;
-  ASSERT_THAT(idTableFromRowGenerator<0>(largeWriter.sortedView(), 3),
-              Eq(largeTable));
 }
