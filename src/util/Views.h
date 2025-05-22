@@ -11,6 +11,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/iterator.h"
 #include "backports/span.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
@@ -255,9 +256,12 @@ CPP_template(typename UnderlyingRange)(
     return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
   }
 
-  // TODO<joka921> move_sentinel is C++20, reimplement it.
   constexpr auto end() {
-    return std::move_sentinel(ql::ranges::end(underlyingRange_));
+    if constexpr (false || ql::ranges::common_range<UnderlyingRange>) {
+      return std::move_iterator(ql::ranges::end(underlyingRange_));
+    } else {
+      return ql::move_sentinel(ql::ranges::end(underlyingRange_));
+    }
   }
 
   // Const iterators. Note that these will yield `const &&`, which at first
@@ -272,7 +276,11 @@ CPP_template(typename UnderlyingRange)(
   CPP_auto_member constexpr auto CPP_fun(end)()(
       const  //
       requires(ql::ranges::range<const UnderlyingRange>)) {
-    return std::move_sentinel(ql::ranges::end(underlyingRange_));
+    if constexpr (false || ql::ranges::common_range<const UnderlyingRange>) {
+      return std::move_iterator(ql::ranges::end(underlyingRange_));
+    } else {
+      return ql::move_sentinel(ql::ranges::end(underlyingRange_));
+    }
   }
 
   // Size function. Note: The member functions `empty` and `data` are present
