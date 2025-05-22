@@ -207,8 +207,167 @@ constexpr auto allView(Range&& range) {
         AD_FWD(range)};
   }
 }
+
 template <typename Range>
 using all_t = decltype(allView(std::declval<Range>()));
+
+// A drop-in replacement for `std::views::as_rvalue` from C++23.
+// It yields the same elements as the underlying range, but casts them to
+// rvalue references via `std::move`. It is implemented via
+// `std::make_move_iterator`.
+CPP_template(typename UnderlyingRange)(
+    requires ql::ranges::view<UnderlyingRange>) class RvalueView
+    : public ql::ranges::view_interface<RvalueView<UnderlyingRange>> {
+ private:
+  UnderlyingRange underlyingRange_;
+
+ public:
+  // Default constructor, needed for the `std::ranges::view` concept.
+  RvalueView() = default;
+
+  // Construct from the underlying view.
+  constexpr explicit RvalueView(UnderlyingRange underlyingRange) noexcept(
+      std::is_nothrow_move_constructible_v<UnderlyingRange>)
+      : underlyingRange_(std::move(underlyingRange)) {}
+
+  // Rvalue-views can be copied (or moved) exactly if the underlying range can
+  // be copied (or moved).
+  RvalueView(const RvalueView&) = default;
+  RvalueView& operator=(const RvalueView&) = default;
+  RvalueView(RvalueView&&) = default;
+  RvalueView& operator=(RvalueView&&) = default;
+
+  // Get access to the underlying range.
+  constexpr UnderlyingRange& base() & noexcept { return underlyingRange_; }
+  constexpr const UnderlyingRange& base() const& noexcept {
+    return underlyingRange_;
+  }
+  constexpr UnderlyingRange&& base() && noexcept {
+    return std::move(underlyingRange_);
+  }
+  constexpr const UnderlyingRange&& base() const&& noexcept {
+    return std::move(underlyingRange_);
+  }
+
+  // Begin and end functions implemented using `make_move_iterator`.
+  constexpr auto begin() {
+    return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
+  }
+
+  // TODO<joka921> move_sentinel is C++20, reimplement it.
+  constexpr auto end() {
+    return std::move_sentinel(ql::ranges::end(underlyingRange_));
+  }
+
+  // Const iterators. Note that these will yield `const &&`, which at first
+  // glance seems pointless, but makes the interface more consistent and
+  // generic.
+  CPP_auto_member constexpr auto CPP_fun(begin)()(
+      const  //
+      requires(ql::ranges::range<const UnderlyingRange>)) {
+    return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
+  }
+
+  CPP_auto_member constexpr auto CPP_fun(end)()(
+      const  //
+      requires(ql::ranges::range<const UnderlyingRange>)) {
+    return std::move_sentinel(ql::ranges::end(underlyingRange_));
+  }
+
+  // Size function. Note: The member functions `empty` and `data` are present
+  // via the inheritance from `view_interface` iff they are supported by the
+  // `UnderlyingRange`.
+  CPP_member constexpr auto size()
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
+    return ql::ranges::size(underlyingRange_);
+  }
+
+  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
+    return ql::ranges::size(underlyingRange_);
+  }
+};
+// Deduction guide for `RvalueView`.
+template <typename Range>
+RvalueView(Range&&) -> RvalueView<all_t<Range>>;
+
+// A view that takes another view, but reduces its range category down to
+// `input_range`. In particular, calling `begin` multiple times is disallowed
+// and will throw. A possible application is using this wrapper on the result of
+// a `filter_view` where the values are modified in a way that they don't
+// fulfill the predicate anymore. This is technically undefined behavior, but
+// works in practice if the filter_view is treated as an `input_range`
+CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
+                             ql::ranges::input_range<V>) class ForceInputView
+    : public ql::ranges::view_interface<ForceInputView<V>> {
+ private:
+  V base_;
+  bool beginWasCalled_ = false;
+
+  class Sentinel;
+
+  class Iterator {
+   public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = ql::ranges::range_value_t<V>;
+    using difference_type = ql::ranges::range_difference_t<V>;
+    using reference = ql::ranges::range_reference_t<V>;
+
+    Iterator() = default;
+    explicit Iterator(ql::ranges::iterator_t<V> current)
+        : current_(std::move(current)) {}
+
+    decltype(auto) operator*() const { return *current_; }
+
+    Iterator& operator++() {
+      ++current_;
+      return *this;
+    }
+
+    void operator++(int) { ++current_; }
+
+   private:
+    std::ranges::iterator_t<V> current_;
+    friend class Sentinel;
+  };
+
+  class Sentinel {
+   public:
+    Sentinel() = default;
+    explicit Sentinel(ql::ranges::sentinel_t<V> end) : end_(std::move(end)) {}
+
+   private:
+    std::ranges::sentinel_t<V> end_;
+    friend class Iterator;
+
+    friend bool operator==(const Iterator& it, const Sentinel& s) {
+      return it.current_ == s.end_;
+    }
+
+    friend bool operator!=(const Iterator& it, const Sentinel& s) {
+      return !(it == s);
+    }
+  };
+
+ public:
+  ForceInputView() = default;
+  // Input ranges can be moved (if supported by the underlying view)
+  // but not copied.
+  ForceInputView(ForceInputView&&) = default;
+  ForceInputView& operator=(ForceInputView&&) = default;
+
+  explicit ForceInputView(V base) : base_(std::move(base)) {}
+
+  Iterator begin() {
+    AD_CONTRACT_CHECK(!std::exchange(beginWasCalled_, true),
+                      "Begin was called multiple times on an `input_range`");
+    return Iterator{std::ranges::begin(base_)};
+  }
+  Sentinel end() { return Sentinel{std::ranges::end(base_)}; }
+};
+
+CPP_template(typename Range)() requires ql::ranges::input_range<Range>
+ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -374,17 +533,43 @@ CPP_template(typename Range, typename ElementType)(
 }
 }  // namespace ad_utility
 
-// Enabling of "borrowed" ranges for `OwningView`.
-#ifdef QLEVER_CPP_17
-template <typename T>
-inline constexpr bool ::ranges::enable_borrowed_range<
-    ad_utility::OwningView<T>> = enable_borrowed_range<T>;
-
-#else
+// Enabling of "borrowed" ranges for `OwningView` and `RvalueView`.
+// Both are borrowed ranges iff their underlying ranges are borrowed.
+#ifndef QLEVER_CPP_17
 template <typename T>
 inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::RvalueView<T>> =
+        std::ranges::enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::ForceInputView<T>> =
+        std::ranges::enable_borrowed_range<T>;
 #endif
+template <typename T>
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::OwningView<T>> = enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::RvalueView<T>> = enable_borrowed_range<T>;
+template <typename T>
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::ForceInputView<T>> = enable_borrowed_range<T>;
+
+// Explicitly make `OwningView` and `RvalueView` fulfill the `view` concept from
+// `range-v3`. Note: this is also done seemingly redundantly via the inheritance
+// from `ql::ranges::view_interface`, but by explicitly enabling this, we can
+// also use these views in combination with views from `range-v3` in C++20 mode,
+// where `ql::ranges` is `std::ranges`.
+template <typename T>
+inline constexpr bool ::ranges::enable_view<ad_utility::OwningView<T>> = true;
+template <typename T>
+inline constexpr bool ::ranges::enable_view<ad_utility::RvalueView<T>> = true;
+template <typename T>
+inline constexpr bool ::ranges::enable_view<ad_utility::ForceInputView<T>> =
+    true;
 
 #endif  // QLEVER_SRC_UTIL_VIEWS_H
