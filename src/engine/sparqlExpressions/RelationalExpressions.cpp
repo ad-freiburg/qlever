@@ -37,6 +37,7 @@ CPP_template(typename S)(requires SingleExpressionResult<S>) auto idGenerator(
     return makeValueId(el, context);
   };
   if constexpr (isConstantResult<S>) {
+    // Note: `std::views::repeat` is C++23, so we resort to `range-v3`.
     return ::ranges::views::repeat_n(makeId(input), targetSize);
   } else if constexpr (isVectorResult<S>) {
     AD_CONTRACT_CHECK(targetSize == input.size());

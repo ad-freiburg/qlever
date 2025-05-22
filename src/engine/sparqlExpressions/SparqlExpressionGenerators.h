@@ -8,6 +8,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
 
+#include <absl/container/inlined_vector.h>
 #include <absl/functional/bind_front.h>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -74,8 +75,7 @@ inline auto resultGenerator(const ad_utility::SetOfIntervals& set,
     size_t num_;
     bool value_;
   };
-  // TODO<joka921> could use inlined vector.
-  std::vector<Bounds> bounds;
+  absl::InlinedVector<Bounds, 10> bounds;
   bounds.reserve(set._intervals.size() * 2 + 1);
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
@@ -136,13 +136,15 @@ inline auto valueGetterGenerator =
 /// generator.
 inline auto applyFunction =
     [](auto&& function, [[maybe_unused]] size_t numItems, auto... generators) {
+      // We need to use `range-v3`, because std::ranges doesn't have `zip` in
+      // the versions we use, and `range-v3` and `std::ranges` currently cannot
+      // be mixed.
       return ::ranges::views::zip(ad_utility::RvalueView{
-                 ad_utility::OwningView{std::move(generators)}}...)
-             // TODO<joka921> currently not moving the function.
-             | ::ranges::views::transform(
-                   [&f = function](auto&& tuple) -> decltype(auto) {
-                     return std::apply(f, AD_MOVE(tuple));
-                   });
+                 ad_utility::OwningView{std::move(generators)}}...) |
+             ::ranges::views::transform(
+                 [&f = function](auto&& tuple) -> decltype(auto) {
+                   return std::apply(f, AD_MOVE(tuple));
+                 });
     };
 
 /// Return a generator that returns the `numElements` many results of the
