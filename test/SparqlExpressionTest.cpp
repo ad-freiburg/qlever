@@ -262,18 +262,19 @@ auto testBinaryExpressionCommutative =
 // the `source_location`. TODO<joka921> Rewrite all the tests to use this
 // facility.
 template <auto makeFunction>
-auto testNaryExpressionVec =
-    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        Exp expected, std::tuple<Ops...> ops,
-        source_location l = source_location::current()) {
-      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+struct TestNaryExpressionVec {
+  template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
+  void operator()(Exp expected, std::tuple<Ops...> ops,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
-      std::apply(
-          [&](auto&... args) {
-            testNaryExpression(makeFunction, expected, args...);
-          },
-          ops);
-    };
+    std::apply(
+        [&](auto&... args) {
+          testNaryExpression(makeFunction, expected, args...);
+        },
+        ops);
+  }
+};
 
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
@@ -582,7 +583,7 @@ TEST(SparqlExpression, dateOperators) {
 namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testNaryExpressionVec<&makeIriOrUriExpression>;
+auto checkIriOrUri = TestNaryExpressionVec<&makeIriOrUriExpression>{};
 auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
@@ -1324,8 +1325,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, ifAndCoalesce) {
-  auto checkIf = testNaryExpressionVec<&makeIfExpression>;
-  auto checkCoalesce = testNaryExpressionVec<makeCoalesceExpressionVariadic>;
+  auto checkIf = TestNaryExpressionVec<&makeIfExpression>{};
+  auto checkCoalesce = TestNaryExpressionVec<makeCoalesceExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
@@ -1367,7 +1368,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, concatExpression) {
-  auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
+  auto checkConcat = TestNaryExpressionVec<makeConcatExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
 
@@ -1483,8 +1484,8 @@ TEST(SparqlExpression, ReplaceExpression) {
     return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
                                  nullptr);
   };
-  auto checkReplace = testNaryExpressionVec<makeReplaceExpressionThreeArgs>;
-  auto checkReplaceWithFlags = testNaryExpressionVec<&makeReplaceExpression>;
+  auto checkReplace = TestNaryExpressionVec<makeReplaceExpressionThreeArgs>{};
+  auto checkReplaceWithFlags = TestNaryExpressionVec<&makeReplaceExpression>{};
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),

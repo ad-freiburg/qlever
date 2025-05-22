@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   build:
+
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
@@ -21,12 +22,22 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 16, 17, 18]
+        compiler-version: [8, 11, 12, 13, 15, 16, 17, 18]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
+        isPr:
+          - ${{github.event_name == 'pull_request'}}  # some checks are only run in the master.
+        skipIfPr: [false]
         exclude:
+          - compiler: gcc
+            compiler-version: 8
+          - compiler: gcc
+            compiler-version: 12
+            isPr: true
+          - compiler: gcc
+            compiler-version: 15
           - compiler: gcc
             compiler-version: 16
           - compiler: gcc
@@ -34,16 +45,45 @@ jobs:
           - compiler: gcc
             compiler-version: 18
           - compiler: clang
+            compiler-version: 8
+          - compiler: clang
             compiler-version: 11
           - compiler: clang
             compiler-version: 12
           - compiler: clang
             compiler-version: 13
+          - compiler: clang
+            compiler-version: 15
+          - compiler: clang
+            compiler-version: 16
+            isPr: true
+          - compiler: clang
+            compiler-version: 17
+            isPr: true
         include:
+          - compiler: gcc
+            compiler-version: 8
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+            build-type: Debug
+            skipIfPr: false
+            expensive-tests: false
+            continue-on-error: true
+            use-keep-going: true
+            use-ignore-errors: true
           - compiler: gcc
             compiler-version: 11
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
             build-type: Release
+# TODO<joka921> Figure out a way to enable this build only for master pushes and not for the PR.
+#          - compiler: clang
+#            compiler-version: 15
+#            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
+#            build-type: Debug
+#            skipIfPr: true
+#            expensive-tests: false
+#            continue-on-error: true
+#            use-keep-going: true
+#            use-ignore-errors: true
           - compiler: clang
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
@@ -54,17 +94,22 @@ jobs:
             ubsan-flags: " -fsanitize=undefined"
             build-type: RelWithDebInfo
             expensive-tests: false
+            skipIfPr: false
           - compiler: clang
             compiler-version: 17
             build-type: Debug
             expensive-tests: false
             ubsan-flags: " -fsanitize=thread -O1 -g"
             additional-cmake-options: "-D_NO_TIMING_TESTS=ON"
+            skipIfPr: false
 
     runs-on: ubuntu-22.04
 
 
     steps:
+      - name: Skip early if conditions are not met
+        if: (github.event_name == 'pull_request' && matrix.skipIfPr)
+        run: exit 0;
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
@@ -80,7 +125,7 @@ jobs:
         run: |
           sudo sysctl vm.mmap_rnd_bits
           sudo sysctl vm.mmap_rnd_bits=28
-        
+
 
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
@@ -89,23 +134,45 @@ jobs:
 
       - name: Build
         # Build your program with the given configuration
-        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
+
+        run: |
+          KEEP_GOING=""
+          if [[ "${{ matrix.use-keep-going }}" == "true" ]]; then
+            KEEP_GOING="-k"
+          fi
+          IGNORE_ERRORS=""
+          if [[ "${{ matrix.use-ignore-errors }}" == "true" ]]; then
+          IGNORE_ERRORS="-i"
+          fi
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- $IGNORE_ERRORS $KEEP_GOING -j $(nproc)
+
+      - name: Test only whitelisted
+        id: whitelisted_tests
+        working-directory: ${{github.workspace}}/build/test
+        if: (matrix.compiler == 'clang' && matrix.compiler-version == 15) || (matrix.compiler == 'gcc' && matrix.compiler-version == 8)
+        # Execute tests defined by the CMake configuration.
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} --tests-from-file ${{github.workspace}}/whitelisted-tests.txt
 
       - name: Test
+        id: complete_tests
         working-directory: ${{github.workspace}}/build/test
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        continue-on-error: ${{ steps.whitelisted_tests.outcome != 'skipped' }}
         run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
 
       - name: Running and printing the benchmark examples.
         run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
+        if: steps.complete_tests.outcome == 'success'
 
       # Run the E2E test only once, but for GCC add the text index separately.
       # Note that the dispatch by the compiler is arbitrary, we just want
       # to have both cases tested.
       - name: E2E with index in one go
-        if: (matrix.compiler == 'clang')
+        if: (matrix.compiler == 'clang') && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh
+      
       - name: E2E with separate text index build
-        if: (matrix.compiler != 'clang')
+        if: (matrix.compiler != 'clang')  && (steps.complete_tests.outcome == 'success')
         run: ${{github.workspace}}/e2e/e2e.sh -t
