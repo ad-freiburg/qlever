@@ -108,20 +108,16 @@ Result LoadURL::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // std::nullopt is returned by `toMediaType`.
   std::optional<ad_utility::MediaType> mediaType =
       ad_utility::toMediaType(response.contentType_);
-  auto supportedMediatypes = ad_utility::lazyStrJoin(
+  static const auto supportedMediatypes = ad_utility::lazyStrJoin(
       ql::views::transform(
           SUPPORTED_MEDIATYPES,
           [](const ad_utility::MediaType& mt) { return toString(mt); }),
       ", ");
-  if (!mediaType) {
-    throwErrorWithContext(absl::StrCat("Unknown `Content-Type` \"",
-                                       response.contentType_,
-                                       "\". Supported: ", supportedMediatypes));
-  }
-  if (!ad_utility::contains(SUPPORTED_MEDIATYPES, mediaType.value())) {
+  if (!mediaType ||
+      !ad_utility::contains(SUPPORTED_MEDIATYPES, mediaType.value())) {
     throwErrorWithContext(absl::StrCat(
-        "Unsupported value for `Content-Type` \"", toString(mediaType.value()),
-        "\". Supported: ", supportedMediatypes));
+        "Unsupported `Content-Type` of response: \"", response.contentType_,
+        "\". Supported `Content-Type`s are ", supportedMediatypes));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   auto parser = Re2Parser();

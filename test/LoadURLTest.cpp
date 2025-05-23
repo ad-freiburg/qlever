@@ -64,6 +64,11 @@ TEST_F(LoadURLTest, basicMethods) {
   EXPECT_THAT(loadURL.getMultiplicity(0), testing::Eq(1));
   EXPECT_THAT(loadURL.getMultiplicity(1), testing::Eq(1));
   EXPECT_THAT(loadURL.getMultiplicity(2), testing::Eq(1));
+  EXPECT_THAT(loadURL.getExternallyVisibleVariableColumns(),
+              testing::UnorderedElementsAreArray(VariableToColumnMap{
+                  {Variable("?s"), makeAlwaysDefinedColumn(0)},
+                  {Variable("?p"), makeAlwaysDefinedColumn(1)},
+                  {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
   EXPECT_THAT(loadURL.getSizeEstimate(), testing::Eq(100'000));
   EXPECT_THAT(loadURL.getCostEstimate(), testing::Eq(1'000'000));
   EXPECT_THAT(loadURL.knownEmptyResult(), testing::IsFalse());
@@ -148,13 +153,14 @@ TEST_F(LoadURLTest, computeResult) {
       pqLoadURL("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                "foo/bar"),
-      testing::HasSubstr("Unknown `Content-Type` \"foo/bar\""));
+      testing::HasSubstr(
+          "Unsupported `Content-Type` of response: \"foo/bar\""));
   expectThrowOnlyIfNotSilent(
       pqLoadURL("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,
                                "text/plain"),
       testing::HasSubstr(
-          "Unsupported value for `Content-Type` \"text/plain\""));
+          "Unsupported `Content-Type` of response: \"text/plain\""));
   expectThrowOnlyIfNotSilent(
       pqLoadURL("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,

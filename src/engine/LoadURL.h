@@ -17,13 +17,6 @@
 // document from a remote URL via HTTP and converts it to an `IdTable`.
 class LoadURL final : public Operation {
  public:
-  // The type of the function used to obtain the results, see below.
-  using GetResultFunction = std::function<HttpOrHttpsResponse(
-      const ad_utility::httpUtils::Url&,
-      ad_utility::SharedCancellationHandle handle,
-      const boost::beast::http::verb&, std::string_view, std::string_view,
-      std::string_view)>;
-
   const std::vector<ad_utility::MediaType> SUPPORTED_MEDIATYPES{
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
@@ -32,7 +25,7 @@ class LoadURL final : public Operation {
   parsedQuery::LoadURL loadURLClause_;
 
   // The function used to obtain the result from the remote endpoint.
-  GetResultFunction getResultFunction_;
+  SendRequestType getResultFunction_;
 
   // Counter to generate fresh ids for each instance of the class.
   static inline std::atomic_uint32_t counter_ = 0;
@@ -43,7 +36,7 @@ class LoadURL final : public Operation {
 
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest)
+          SendRequestType getResultFunction = sendHttpOrHttpsRequest)
       : Operation(qec),
         loadURLClause_(loadURLClause),
         getResultFunction_(std::move(getResultFunction)){};
@@ -52,7 +45,7 @@ class LoadURL final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  bool canResultBeCached() const;
+  bool canResultBeCached() const override;
 
   std::string getCacheKeyImpl() const override;
 
