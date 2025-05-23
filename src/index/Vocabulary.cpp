@@ -100,7 +100,7 @@ template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
     std::string_view word) const {
   // Never externalize the internal IRIs as they are sometimes added before or
-  // after the externalization happens and we thus get inconsistent behavior
+  // after the externalization happens, and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
   if (word.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
     return false;

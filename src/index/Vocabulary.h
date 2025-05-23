@@ -57,7 +57,9 @@ inline std::ostream& operator<<(std::ostream& stream,
 }
 
 // A vocabulary. Wraps a vector of strings and provides additional methods for
-// retrieval.
+// retrieval. It is templated on the type of the underlying vocabulary
+// implementation, which can be any of the implementations in the
+// `index/vocabulary` directory
 template <typename UnderlyingVocabulary, typename ComparatorType,
           typename IndexT>
 class Vocabulary {

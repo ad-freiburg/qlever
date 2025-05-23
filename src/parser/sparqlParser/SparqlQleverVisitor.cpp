@@ -249,8 +249,9 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
+template <typename List>
 PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
-                                       auto objectList) {
+                                       List objectList) {
   PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
@@ -260,7 +261,8 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
+template <typename Context>
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(Context* ctx) {
   return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
@@ -360,10 +362,10 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+  auto toPredicate = [](const auto& item) -> VarOrPath {
     using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
-      return PropertyPath::fromVariable(item);
+      return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(item.toSparql());
     } else {
@@ -374,7 +376,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
   };
   for (const auto& triple : triples) {
     auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto predicate = std::visit(toPredicate, triple.at(1));
     auto object = std::visit(toTripleComponent, triple.at(2));
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
@@ -889,32 +891,19 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto varToPropertyPath = [](const Variable& var) {
-    return PropertyPath::fromVariable(var);
-  };
-  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
-  auto visitVarOrPath =
-      [&varToPropertyPath, &propertyPathIdentity](
-          const ad_utility::sparql_types::VarOrPath& varOrPath) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{varToPropertyPath,
-                                             propertyPathIdentity},
-            varOrPath);
-      };
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
   auto convertAndRegisterTriple =
-      [&visitVarOrPath, &registerIfVariable](
+      [&registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {triple.subject_.toTripleComponent(),
-            visitVarOrPath(triple.predicate_),
+    return {triple.subject_.toTripleComponent(), triple.predicate_,
             triple.object_.toTripleComponent()};
   };
 
@@ -1471,8 +1460,9 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::warnOrThrowIfUnboundVariables(
-    auto* ctx, const SparqlExpressionPimpl& expression,
+    Context* ctx, const SparqlExpressionPimpl& expression,
     std::string_view clauseName) {
   for (const auto& var : expression.containedVariables()) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
@@ -1636,6 +1626,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+template <typename Context>
 void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
     // <entity>` is contained in the query, then the variable
@@ -1643,7 +1634,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     // Similarly, if a triple `?var ql:contains-word "words"` is contained in
     // the query, then the variable `ql_matchingword_var` is implicitly created
     // and visible in the query body.
-    auto* ctx, const TripleWithPropertyPath& triple) {
+    Context* ctx, const TripleWithPropertyPath& triple) {
   const auto& [subject, predicate, object] = triple;
 
   auto* var = std::get_if<Variable>(&subject);

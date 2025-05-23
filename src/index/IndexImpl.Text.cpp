@@ -446,7 +446,8 @@ static cppcoro::generator<std::string> fourLetterPrefixes() {
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-static bool areFourLetterPrefixesSorted(auto comparator) {
+template <typename T>
+static bool areFourLetterPrefixesSorted(T comparator) {
   std::string first;
   for (auto second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {
@@ -616,7 +617,8 @@ IdTable IndexImpl::readContextListHelper(
       textIndexFile_, wordIndexToId);
 
   // Helper lambdas to read scoreList
-  auto scoreToId = []<typename T>(T score) {
+  auto scoreToId = [](auto score) {
+    using T = decltype(score);
     if constexpr (std::is_same_v<T, uint16_t>) {
       return Id::makeFromInt(static_cast<uint64_t>(score));
     } else {

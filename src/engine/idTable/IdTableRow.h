@@ -180,7 +180,8 @@ class RowReferenceImpl {
                                                         size_t i) {
       return (*self.table_)(self.row_, i);
     }
-    static const T& operatorBracketImpl(const auto& self, size_t i) {
+    template <typename Self>
+    static const T& operatorBracketImpl(const Self& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
@@ -200,7 +201,8 @@ class RowReferenceImpl {
     // Define iterators.
     template <typename RowT>
     struct IteratorHelper {
-      decltype(auto) operator()(auto&& row, size_t colIdx) const {
+      template <typename T>
+      decltype(auto) operator()(T&& row, size_t colIdx) const {
         return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
                                                                 colIdx);
       }
@@ -294,7 +296,8 @@ class RowReferenceImpl {
    protected:
     // Internal implementation of the assignment from a `Row` as well as a
     // `RowReference`. This assignment actually writes to the underlying table.
-    static This& assignmentImpl(auto&& self, const auto& other) {
+    template <typename T1, typename T2>
+    static This& assignmentImpl(T1&& self, const T2& other) {
       if constexpr (numStaticColumns == 0) {
         AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
       }

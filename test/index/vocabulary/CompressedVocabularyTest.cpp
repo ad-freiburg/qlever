@@ -25,7 +25,8 @@ struct DummyDecoder {
     return result;
   }
   // This class has no state, but it still needs to be serialized.
-  friend std::true_type allowTrivialSerialization(DummyDecoder, auto);
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(DummyDecoder, T);
 };
 
 // A wrapper for the stateless dummy compression.
@@ -88,9 +89,9 @@ using Compressors =
                      PrefixCompressionWrapper, DummyCompressionWrapper>;
 
 // _________________________________________________________________________
-CPP_template(typename Compressor)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        Compressor>) struct CompressedVocabularyF : public testing::Test {
+template <typename Compressor>
+struct CompressedVocabularyF : public testing::Test {
+  static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static constexpr auto createCompressedVocabulary(
