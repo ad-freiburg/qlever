@@ -731,6 +731,9 @@ struct AlwaysFalse {
   }
 };
 
+// How many blocks we want to read at once when fetching new ones.
+static constexpr size_t FETCH_BLOCKS = 3;
+
 // The class that actually performs the zipper join for blocks without UNDEF.
 // See the public `zipperJoinForBlocksWithoutUndef` function below for details.
 // The general approach of the algorithm is described in the following. Several
@@ -830,12 +833,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
   // targetBuffer. Calling this function requires that all blocks that contain
   // elements `< currentEl` have already been consumed. Returns `true` if all
   // blocks that contain elements <= `currentEl` have been added, and `false` if
-  // the function returned because 3 blocks were added without fulfilling the
-  // condition.
+  // the function returned because `FETCH_BLOCKS` blocks were added without
+  // fulfilling the condition.
   bool fillEqualToCurrentEl(Side& side, const ProjectedEl& currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
-    for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
+    for (size_t numBlocksRead = 0; it != end && numBlocksRead < FETCH_BLOCKS;
          ++it, ++numBlocksRead) {
       if (ql::ranges::empty(*it)) {
         // We haven't read a block, so we have to adapt the counter.
@@ -1219,6 +1222,19 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
         default:
           AD_FAIL();
       }
+    }
+    // Handle the case where status `leftMissing`/`rightMissing` turned into
+    // `allFilled` because the current element does not exist in the next block
+    // and therefore the loop ends without clearing equivalent elements on the
+    // respective other side.
+    AD_CORRECTNESS_CHECK(blockStatus == BlockStatus::allFilled);
+    joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
+                        equalToCurrentElRight);
+    if (!currentBlocksLeft.empty()) {
+      removeEqualToCurrentEl(currentBlocksLeft, currentEl);
+    }
+    if (!currentBlocksRight.empty()) {
+      removeEqualToCurrentEl(currentBlocksRight, currentEl);
     }
   }
 

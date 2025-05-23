@@ -1,9 +1,12 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
 #define QLEVER_SRC_UTIL_JOINALGORITHMS_FINDUNDEFRANGES_H
+
+#include <algorithm>
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
@@ -40,32 +43,37 @@ CPP_template(typename R,
              typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithoutUndef(
         const R& row, It begin, It end,
-        [[maybe_unused]] bool& resultMightBeUnsorted)
-        -> cppcoro::generator<It> {
+        [[maybe_unused]] bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
   assert((ql::ranges::all_of(row,
                              [](Id id) { return id != Id::makeUndefined(); })));
-  size_t numJoinColumns = row.size();
-  // TODO<joka921> This can be done without copying.
-  Row rowLower = row;
 
-  size_t upperBound = 1UL << row.size();
-  for (size_t i = 0; i < upperBound - 1; ++i) {
+  const size_t numJoinColumns = row.size();
+  // TODO<joka921> This can be done without copying.
+  // Row rowLower = row;
+  const size_t upperBound = 1UL << row.size();
+
+  auto getIthMask = [row = Row{row}, numJoinColumns](size_t i) {
+    auto rowLower = row;
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
                         ? row[j]
                         : ValueId::makeUndefined();
     }
-
-    auto [begOfUndef, endOfUndef] = std::equal_range(
-        begin, end, rowLower, ql::ranges::lexicographical_compare);
-    for (auto it = begOfUndef; it != endOfUndef; ++it) {
-      co_yield it;
-    }
-  }
+    return rowLower;
+  };
+  auto permutations = ql::views::iota(size_t{0}, upperBound - 1) |
+                      ql::views::transform(getIthMask);
+  return ad_utility::OwningView{std::move(permutations)} |
+         ql::views::transform([begin, end](const Row& row) {
+           auto rng = ql::ranges::equal_range(
+               begin, end, row, ql::ranges::lexicographical_compare);
+           return ad_utility::IteratorRange{rng.begin(), rng.end()};
+         }) |
+         ql::views::join;
 }
 
 // This function has the additional precondition, that the `row` contains
@@ -79,7 +87,7 @@ CPP_template(typename R,
 CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
         const auto& row, const size_t numLastUndefined, It begin, It end,
-        bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
+        bool& resultMightBeUnsorted) {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -96,40 +104,42 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
 
   // If every entry in the row is UNDEF, then it is the smallest possible
   // row, and there can be no smaller row.
-  if (numLastUndefined == 0) {
-    co_return;
-  }
-  Row rowLower = row;
-
-  size_t upperBound = 1u << numDefinedColumns;
-  for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
-       ++permutationCounter) {
+  auto getIthMask = [&row, numDefinedColumns](size_t permutationCounter) {
+    Row rowLower{row};
     for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
       rowLower[colIdx] =
           (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
               ? row[colIdx]
               : ValueId::makeUndefined();
     }
+    return rowLower;
+  };
+  const size_t upperBound = 1u << numDefinedColumns;
+  auto permutations =
+      ql::views::iota(size_t(0),
+                      numLastUndefined == 0 ? size_t{0} : upperBound - 1) |
+      ql::views::transform(getIthMask);
 
-    auto begOfUndef = std::lower_bound(begin, end, rowLower,
-                                       ql::ranges::lexicographical_compare);
-    rowLower[numDefinedColumns - 1] =
-        Id::fromBits(rowLower[numDefinedColumns - 1].getBits() + 1);
-    auto endOfUndef = std::lower_bound(begin, end, rowLower,
-                                       ql::ranges::lexicographical_compare);
-    for (; begOfUndef != endOfUndef; ++begOfUndef) {
-      resultMightBeUnsorted = true;
-      co_yield begOfUndef;
-    }
-  }
+  return ad_utility::OwningView{std::move(permutations)} |
+         ql::views::transform([begin, end, &resultMightBeUnsorted,
+                               numDefinedColumns](Row&& row) {
+           auto begOfUndef = std::lower_bound(
+               begin, end, row, ql::ranges::lexicographical_compare);
+           row[numDefinedColumns - 1] =
+               Id::fromBits(row[numDefinedColumns - 1].getBits() + 1);
+           auto endOfUndef = std::lower_bound(
+               begin, end, row, ql::ranges::lexicographical_compare);
+           resultMightBeUnsorted = true;
+           return ad_utility::IteratorRange{begOfUndef, endOfUndef};
+         }) |
+         ql::views::join;
 }
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
 CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
-                                         bool& resultMightBeUnsorted)
-        -> cppcoro::generator<It> {
+                                         bool& resultMightBeUnsorted) {
   assert(row.size() == (*begin).size());
   assert(
       ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
@@ -140,7 +150,8 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
   end = std::lower_bound(begin, end, row, ql::ranges::lexicographical_compare);
 
   const size_t numJoinColumns = row.size();
-  auto isCompatible = [&](const auto& otherRow) {
+  auto isCompatible = [numJoinColumns, &row](const auto& otherIt) {
+    const auto& otherRow = *otherIt;
     for (size_t k = 0u; k < numJoinColumns; ++k) {
       Id a = row[k];
       Id b = otherRow[k];
@@ -155,13 +166,15 @@ CPP_template(typename It)(requires std::random_access_iterator<It>)  //
     return true;
   };
 
-  for (auto it = begin; it != end; ++it) {
-    if (isCompatible(*it)) {
-      resultMightBeUnsorted = true;
-      co_yield it;
-    }
-  }
-  co_return;
+  return ad_utility::OwningView{ad_utility::IteratorRange(begin, end)} |
+         ql::views::filter(
+             [isCompatible, &resultMightBeUnsorted](const auto& otherRow) {
+               if (isCompatible(otherRow)) {
+                 resultMightBeUnsorted = true;
+                 return true;
+               }
+               return false;
+             });
 }
 
 // This function first checks in which positions the `row` has UNDEF values, and
@@ -174,7 +187,7 @@ struct FindSmallerUndefRanges {
   CPP_template(typename Row,
                typename It)(requires std::random_access_iterator<It>) auto
   operator()(const Row& row, It begin, It end,
-             bool& resultMightBeUnsorted) const -> cppcoro::generator<It> {
+             bool& resultMightBeUnsorted) const {
     size_t numLastUndefined = 0;
     assert(row.size() > 0);
     auto it = ql::ranges::rbegin(row);
@@ -188,16 +201,18 @@ struct FindSmallerUndefRanges {
 
     for (; it < rend; ++it) {
       if (*it == Id::makeUndefined()) {
-        return findSmallerUndefRangesArbitrary(row, begin, end,
-                                               resultMightBeUnsorted);
+        return ad_utility::InputRangeTypeErased{findSmallerUndefRangesArbitrary(
+            row, begin, end, resultMightBeUnsorted)};
       }
     }
     if (numLastUndefined == 0) {
-      return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                       resultMightBeUnsorted);
+      return ad_utility::InputRangeTypeErased{
+          findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
+                                                    resultMightBeUnsorted)};
     } else {
-      return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-          row, numLastUndefined, begin, end, resultMightBeUnsorted);
+      return ad_utility::InputRangeTypeErased{
+          findSmallerUndefRangesForRowsWithUndefInLastColumns(
+              row, numLastUndefined, begin, end, resultMightBeUnsorted)};
     }
   }
 };
