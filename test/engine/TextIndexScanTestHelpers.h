@@ -27,8 +27,8 @@ inline std::string getTextRecordFromResultTable(
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
   if (nofNonLiterals <= textRecordIdFromTable) {
     // Return when from Literals
-    return qec->getIndex().indexToString(
-        VocabIndex::make(textRecordIdFromTable - nofNonLiterals));
+    return std::string{qec->getIndex().indexToString(
+        VocabIndex::make(textRecordIdFromTable - nofNonLiterals))};
   } else {
     // Return when from DocsDB
     return qec->getIndex().getTextExcerpt(
@@ -46,8 +46,8 @@ inline const TextRecordIndex getTextRecordIdFromResultTable(
 inline std::string getEntityFromResultTable(const QueryExecutionContext* qec,
                                             const Result& result,
                                             const size_t& rowIndex) {
-  return qec->getIndex().indexToString(
-      result.idTable().getColumn(1)[rowIndex].getVocabIndex());
+  return std::string{qec->getIndex().indexToString(
+      result.idTable().getColumn(1)[rowIndex].getVocabIndex())};
 }
 
 // Only use on prefix search results
