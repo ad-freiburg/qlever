@@ -96,9 +96,10 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
 // `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
+template <typename Allocator>
 static IdTable getNewBlankNodes(
-    const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    std::span<Id> input) {
+    const Allocator& allocator,
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
@@ -183,7 +184,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
 
   // The `indexScan` might have added some delta triples with local vocab IDs,
   // so make sure to merge them into the `localVocab`.
-  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  localVocab.mergeWith(result->localVocab());
 
   return resultTable;
 }
@@ -222,7 +223,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 }
 
 // _____________________________________________________________________________
-ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab;
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //

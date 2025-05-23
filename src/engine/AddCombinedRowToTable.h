@@ -2,7 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
+#define QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H
 
 #include <array>
 #include <cstdint>
@@ -155,7 +156,7 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
     if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
       currentVocab = &table.getLocalVocab();
-      mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+      mergedVocab_.mergeWith(table.getLocalVocab());
     }
   }
 
@@ -183,7 +184,8 @@ class AddCombinedRowToIdTable {
   // inputs. The arguments to `inputLeft` and `inputRight` can either be
   // `IdTable` or `IdTableView<0>`, or any other type that has a
   // `asStaticView<0>` method that returns an `IdTableView<0>`.
-  void setInput(const auto& inputLeft, const auto& inputRight) {
+  template <typename L, typename R>
+  void setInput(const L& inputLeft, const R& inputRight) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
@@ -193,7 +195,8 @@ class AddCombinedRowToIdTable {
 
   // Only set the left input. After this it is only allowed to call
   // `addOptionalRow` and not `addRow` until `setInput` has been called again.
-  void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
+  template <typename L>
+  void setOnlyLeftInputForOptionalJoin(const L& inputLeft) {
     flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
@@ -303,38 +306,39 @@ class AddCombinedRowToIdTable {
     // Note: There is quite some code duplication between this lambda and the
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
-    auto writeNonJoinColumn = [&result, oldSize, this]<bool isColFromLeft>(
-                                  size_t colIdx, size_t resultColIdx) {
-      decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
-                                         : inputRight().getColumn(colIdx);
-      // TODO<joka921> Implement prefetching.
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+    auto writeNonJoinColumn = ad_utility::ApplyAsValueIdentity{
+        [&result, oldSize, this](auto isColFromLeft, size_t colIdx,
+                                 size_t resultColIdx) {
+          decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
+                                             : inputRight().getColumn(colIdx);
+          // TODO<joka921> Implement prefetching.
+          decltype(auto) resultCol = result.getColumn(resultColIdx);
+          size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
 
-      // Write the matching rows.
-      static constexpr size_t idx = isColFromLeft ? 0 : 1;
-      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = col[sourceIndices[idx]];
-        numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
-        resultCol[oldSize + targetIndex] = resultId;
-      }
-
-      // Write the optional rows. For the right input those are always
-      // undefined.
-      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = [&col, sourceIndex = sourceIndex]() {
-          if constexpr (isColFromLeft) {
-            return col[sourceIndex];
-          } else {
-            (void)col;
-            (void)sourceIndex;
-            return Id::makeUndefined();
+          // Write the matching rows.
+          static constexpr size_t idx = isColFromLeft ? 0 : 1;
+          for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+            auto resultId = col[sourceIndices[idx]];
+            numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
+            resultCol[oldSize + targetIndex] = resultId;
           }
-        }();
-        resultCol[oldSize + targetIndex] = id;
-        numUndef += static_cast<size_t>(id.isUndefined());
-      }
-    };
+
+          // Write the optional rows. For the right input those are always
+          // undefined.
+          for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+            Id id = [&col, isColFromLeft, sourceIndex = sourceIndex]() {
+              if constexpr (isColFromLeft) {
+                return col[sourceIndex];
+              } else {
+                (void)col;
+                (void)sourceIndex;
+                return Id::makeUndefined();
+              }
+            }();
+            resultCol[oldSize + targetIndex] = id;
+            numUndef += static_cast<size_t>(id.isUndefined());
+          }
+        }};
 
     size_t nextResultColIdx = 0;
     // First write all the join columns.
@@ -387,3 +391,5 @@ class AddCombinedRowToIdTable {
   }
 };
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_ENGINE_ADDCOMBINEDROWTOTABLE_H

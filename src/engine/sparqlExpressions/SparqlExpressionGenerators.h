@@ -1,9 +1,14 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 // Several templated helper functions that are used for the Expression module
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H
+
+#include <absl/functional/bind_front.h>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -12,7 +17,7 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context,
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
@@ -23,7 +28,7 @@ inline std::span<const ValueId> getIdsFromVariable(
 
   const size_t columnIndex = it->second.columnIndex_;
 
-  std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+  ql::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 
   AD_CONTRACT_CHECK(beginIndex <= endIndex &&
                     endIndex <= completeColumn.size());
@@ -33,7 +38,7 @@ inline std::span<const ValueId> getIdsFromVariable(
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::span<const ValueId> getIdsFromVariable(
+inline ql::span<const ValueId> getIdsFromVariable(
     const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
@@ -122,11 +127,11 @@ inline auto valueGetterGenerator =
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
-inline auto applyFunction = []<typename Function, typename... Generators>(
-                                Function&& function, size_t numItems,
-                                Generators... generators)
+inline auto applyFunction = [](auto&& function, size_t numItems,
+                               auto... generators)
     -> cppcoro::generator<std::invoke_result_t<
-        Function, ql::ranges::range_value_t<Generators>...>> {
+        decltype(function),
+        ql::ranges::range_value_t<decltype(generators)>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 
@@ -155,12 +160,12 @@ CPP_template(typename Operation, typename... Operands)(requires(
 
   // Function that takes a single operand and a single value getter and computes
   // the corresponding generator.
-  auto getValue = std::bind_front(valueGetterGenerator, numElements, context);
+  auto getValue = absl::bind_front(valueGetterGenerator, numElements, context);
 
   // Function that takes all the generators as a parameter pack and computes the
   // generator for the operation result;
   auto getResultFromGenerators =
-      std::bind_front(applyFunction, Function{}, numElements);
+      absl::bind_front(applyFunction, Function{}, numElements);
 
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual
@@ -197,3 +202,5 @@ inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value,
 }
 
 }  // namespace sparqlExpression::detail
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSIONGENERATORS_H

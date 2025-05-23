@@ -6,6 +6,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/IndexImpl.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -101,10 +102,11 @@ auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
 // Note: This function can't be declared in the anonymous namespace, because it
 // has to be a `friend` of the `CompressedRelationWriter` class. We therefore
 // give it a rather long name.
+template <typename T>
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
 compressedRelationTestWriteCompressedRelations(
-    auto inputs, std::string filename, ad_utility::MemorySize blocksize) {
+    T inputs, std::string filename, ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(ql::ranges::is_sorted(
@@ -271,7 +273,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
   auto locatedTriples = LocatedTriplesPerBlock{};
   auto loc = LocatedTriple::locateTriplesInPermutation(
-      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+      locatedTriplesInput, blocksOriginal, {0, 1, 2, 3}, true, handle);
   locatedTriples.add(loc);
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();
@@ -818,6 +820,52 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   // only want graph `3`, so the block can't be skipped.
   metadata.graphInfo_.reset();
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
+}
+
+TEST(CompressedRelationReader, getResultSizeImpl) {
+  auto index = ad_utility::testing::makeTestIndex("getResultSizeImpl", "");
+  DeltaTriplesManager& deltaTriplesManager = index.deltaTriplesManager();
+  deltaTriplesManager.modify<void>([](DeltaTriples& dt) {
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    dt.insertTriples(handle, {IdTriple{{V(0), V(1), V(2), V(3)}},
+                              IdTriple{{V(0), V(4), V(5), V(3)}}});
+  });
+  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
+  auto& impl = index.getImpl();
+  auto expectResultSizes = [&impl, &locatedTriplesSnapshot](
+                               Permutation::Enum p,
+                               const ScanSpecification& scanSpec, size_t lower,
+                               size_t upper, size_t exact,
+                               ad_utility::source_location sourceLocation =
+                                   ad_utility::source_location::current()) {
+    auto loc = generateLocationTrace(sourceLocation);
+    auto& perm = impl.getPermutation(p);
+    auto& reader = perm.reader();
+    auto& augmentedBlocks =
+        perm.getAugmentedMetadataForPermutation(locatedTriplesSnapshot);
+    auto& ltpb = locatedTriplesSnapshot.getLocatedTriplesForPermutation(
+        perm.permutation());
+    auto [actual_lower, actual_upper] =
+        reader.getSizeEstimateForScan(scanSpec, augmentedBlocks, ltpb);
+    EXPECT_THAT(actual_lower, testing::Eq(lower));
+    EXPECT_THAT(actual_upper, testing::Eq(upper));
+    auto actual_exact =
+        reader.getResultSizeOfScan(scanSpec, augmentedBlocks, ltpb);
+    EXPECT_THAT(actual_exact, testing::Eq(exact));
+  };
+  // The Scans request all triples of the one and only block.
+  for (auto perm : Permutation::ALL) {
+    expectResultSizes(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2,
+                      2);
+  }
+  expectResultSizes(Permutation::SPO, {V(0), std::nullopt, std::nullopt}, 0, 2,
+                    2);
+  // Not all triples of the block are requested. The size estimate is truncated
+  // by a factor which is a RuntimeParameter.
+  expectResultSizes(Permutation::PSO, {V(1), std::nullopt, std::nullopt}, 0, 1,
+                    1);
+  expectResultSizes(Permutation::PSO, {V(1), V(5), std::nullopt}, 0, 1, 0);
 }
 
 // Test the correct setting of the metadata for the contained graphs.

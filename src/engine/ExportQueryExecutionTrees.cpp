@@ -13,8 +13,11 @@
 
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -350,10 +353,70 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-ad_utility::triple_component::LiteralOrIri
-ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteralForEncodedValue(
+    Id id, bool onlyReturnLiteralsWithXsdString) {
+  if (onlyReturnLiteralsWithXsdString) {
+    return std::nullopt;
+  }
+  auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
+  if (!optionalStringAndType) {
+    return std::nullopt;
+  }
+
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(
+      optionalStringAndType->first);
+}
+
+// _____________________________________________________________________________
+bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
+    const LiteralOrIri& word) {
+  AD_CORRECTNESS_CHECK(word.isLiteral());
+  return !word.hasDatatype() ||
+         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
+}
+
+// _____________________________________________________________________________
+std::string ExportQueryExecutionTrees::replaceAnglesByQuotes(
+    std::string iriString) {
+  AD_CORRECTNESS_CHECK(iriString.starts_with('<'));
+  AD_CORRECTNESS_CHECK(iriString.ends_with('>'));
+  iriString[0] = '"';
+  iriString[iriString.size() - 1] = '"';
+  return iriString;
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::handleIriOrLiteral(
+    LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
+  if (word.isIri()) {
+    if (onlyReturnLiteralsWithXsdString) {
+      return std::nullopt;
+    }
+    return ad_utility::triple_component::Literal::fromStringRepresentation(
+        replaceAnglesByQuotes(
+            std::move(word.getIri().toStringRepresentation())));
+  }
+  AD_CORRECTNESS_CHECK(word.isLiteral());
+  if (onlyReturnLiteralsWithXsdString) {
+    if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      if (word.hasDatatype()) {
+        word.getLiteral().removeDatatypeOrLanguageTag();
+      }
+      return std::move(word.getLiteral());
+    }
+    return std::nullopt;
+  }
+  // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
+  // neither a datatype nor a language tag, hence we don't need an `if` here.
+  word.getLiteral().removeDatatypeOrLanguageTag();
+  return std::move(word.getLiteral());
+}
+
+// _____________________________________________________________________________
+LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -364,7 +427,21 @@ ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     default:
       AD_FAIL();
   }
-};
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> ExportQueryExecutionTrees::blankNodeIriToString(
+    const ad_utility::triple_component::Iri& iri) {
+  const auto& representation = iri.toStringRepresentation();
+  if (representation.starts_with(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX)) {
+    std::string_view view = representation;
+    view.remove_prefix(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX.size());
+    view.remove_suffix(1);
+    AD_CORRECTNESS_CHECK(view.starts_with("_:"));
+    return std::string{view};
+  }
+  return std::nullopt;
+}
 
 // _____________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
@@ -381,12 +458,16 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
   }
 
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
       -> std::optional<std::pair<std::string, const char*>> {
     if constexpr (onlyReturnLiterals) {
       if (!word.isLiteral()) {
         return std::nullopt;
+      }
+    }
+    if (word.isIri()) {
+      if (auto blankNodeString = blankNodeIriToString(word.getIri())) {
+        return std::pair{std::move(blankNodeString.value()), nullptr};
       }
     }
     if constexpr (removeQuotesAndAngleBrackets) {
@@ -414,6 +495,95 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
+                                       const LocalVocab& localVocab,
+                                       bool onlyReturnLiteralsWithXsdString) {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+
+  switch (datatype) {
+    case WordVocabIndex:
+      return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
+    case VocabIndex:
+    case LocalVocabIndex:
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab),
+          onlyReturnLiteralsWithXsdString);
+    case TextRecordIndex:
+      return getLiteralOrNullopt(getLiteralOrIriFromTextRecordIndex(index, id));
+    default:
+      return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::getLiteralOrNullopt(
+    std::optional<LiteralOrIri> litOrIri) {
+  if (litOrIri.has_value() && litOrIri.value().isLiteral()) {
+    return std::move(litOrIri.value().getLiteral());
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
+  auto idLiteralAndType = idToStringAndTypeForEncodedValue(id);
+  if (idLiteralAndType.has_value()) {
+    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        idLiteralAndType.value().first);
+    lit.addDatatype(
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            idLiteralAndType.value().second));
+    return LiteralOrIri{lit};
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromWordVocabIndex(const Index& index,
+                                                             Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()))};
+};
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::getLiteralOrIriFromTextRecordIndex(
+    const Index& index, Id id) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.getTextExcerpt(id.getTextRecordIndex()))};
+};
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
+                                            const LocalVocab& localVocab,
+                                            bool skipEncodedValues) {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case WordVocabIndex:
+      return getLiteralOrIriFromWordVocabIndex(index, id);
+    case VocabIndex:
+    case LocalVocabIndex:
+      return getLiteralOrIriFromVocabIndex(index, id, localVocab);
+    case TextRecordIndex:
+      return getLiteralOrIriFromTextRecordIndex(index, id);
+    default:
+      if (skipEncodedValues) {
+        return std::nullopt;
+      }
+      return idToLiteralOrIriForEncodedValue(id);
+  }
+}
+
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
@@ -604,8 +774,10 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 }
 
 // Convert a single ID to an XML binding of the given `variable`.
+template <typename IndexType, typename LocalVocabType>
 static std::string idToXMLBinding(std::string_view variable, Id id,
-                                  const auto& index, const auto& localVocab) {
+                                  const IndexType& index,
+                                  const LocalVocabType& localVocab) {
   using namespace std::string_view_literals;
   using namespace std::string_literals;
   const auto& optionalValue =
@@ -875,7 +1047,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  auto compute = [&]<MediaType format> {
+  auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
@@ -892,7 +1064,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                        parsedQuery._limitOffset, qet.getResult(true),
                        std::move(cancellationHandle));
     }
-  };
+  }};
 
   using enum MediaType;
 

@@ -2,8 +2,11 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
 
 #include <charconv>
 #include <cstdlib>
@@ -47,6 +50,11 @@ SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeDistWithUnitExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
+    std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 
@@ -135,6 +143,19 @@ SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
+namespace detail {
+template <auto function>
+struct VariadicExpressionFactory {
+  template <typename... Exps>
+  auto operator()(std::unique_ptr<Exps>... children) const {
+    CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
+    std::vector<SparqlExpression::Ptr> vec;
+    (..., (vec.push_back(std::move(children))));
+    return std::invoke(function, std::move(vec));
+  }
+};
+}  // namespace detail
+
 // For a `function` that takes `std::vector<SparqlExpression::Ptr>` (size only
 // known at runtime), create a lambda that takes the `Ptr`s directly as a
 // variable number of arguments (as a variadic template, number of arguments
@@ -146,13 +167,8 @@ CPP_template(auto function)(
     requires std::is_invocable_r_v<
         SparqlExpression::Ptr, decltype(function),
         std::vector<
-            SparqlExpression::Ptr>>) constexpr auto variadicExpressionFactory =
-    []<typename... Exps>(std::unique_ptr<Exps>... children) {
-      CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
-      std::vector<SparqlExpression::Ptr> vec;
-      (..., (vec.push_back(std::move(children))));
-      return std::invoke(function, std::move(vec));
-    };
+            SparqlExpression::Ptr> >) constexpr auto variadicExpressionFactory =
+    detail::VariadicExpressionFactory<function>{};
 
 SparqlExpression::Ptr makeCoalesceExpression(
     std::vector<SparqlExpression::Ptr> children);
@@ -168,3 +184,5 @@ constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H

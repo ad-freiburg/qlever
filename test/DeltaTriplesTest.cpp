@@ -4,17 +4,18 @@
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
+#include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
 
 #include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
-#include "absl/strings/str_split.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 
 using namespace deltaTriplesTestHelpers;
 
@@ -266,14 +267,14 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   auto triples =
       makeIdTriples(vocab, localVocabOutside, {"<A> <notInVocab> <B>"});
   AD_CORRECTNESS_CHECK(triples.size() == 1);
-  triples[0].ids_[2] =
+  triples[0].ids()[2] =
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(999'888'777));
-  triples[0].ids_[3] = triples[0].ids_[2];
-  auto [s1, p1, o1, g1] = triples[0].ids_;
+  triples[0].ids()[3] = triples[0].ids()[2];
+  auto [s1, p1, o1, g1] = triples[0].ids();
 
   // Rewrite the IDs in the triple.
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
-  auto [s2, p2, o2, g2] = triples[0].ids_;
+  auto [s2, p2, o2, g2] = triples[0].ids();
 
   // The subject <A> is part of the global vocabulary, so it remains unchanged.
   EXPECT_EQ(s2.getBits(), s1.getBits());
@@ -315,7 +316,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // stores the corresponding values.
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
   ASSERT_EQ(triples.size(), 1);
-  auto [s3, p3, o3, g3] = triples[0].ids_;
+  auto [s3, p3, o3, g3] = triples[0].ids();
   EXPECT_EQ(s3.getBits(), s2.getBits());
   EXPECT_EQ(p3.getBits(), p2.getBits());
   EXPECT_EQ(o3.getBits(), o2.getBits());
@@ -324,9 +325,9 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // If we use a local blank node that is already part of the global vocabulary,
   // nothing gets rewritten either.
   auto blank0 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
-  triples[0].ids_[0] = blank0;
+  triples[0].ids()[0] = blank0;
   deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
-  auto s4 = triples[0].ids_[0];
+  auto s4 = triples[0].ids()[0];
   EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
 
@@ -431,4 +432,170 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, restoreFromNonExistingFile) {
+  DeltaTriples deltaTriples{testQec->getIndex()};
+  deltaTriples.setPersists("filethatdoesnotexist");
+  EXPECT_NO_THROW(deltaTriples.readFromDisk());
+  EXPECT_EQ(deltaTriples.numDeleted(), 0);
+  EXPECT_EQ(deltaTriples.numInserted(), 0);
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
+  DeltaTriples deltaTriples{testQec->getIndex()};
+  auto tmpFile =
+      std::filesystem::temp_directory_path() / "testEmptyDeltaTriples";
+  // Make sure no artifacts from previous crashed runs exists.
+  std::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  deltaTriples.setPersists(tmpFile);
+  // Write "empty" file
+  EXPECT_NO_THROW(deltaTriples.writeToDisk());
+
+  // Check if file contents match
+  std::array<char, 47> expectedContent{
+      // Magic bytes
+      'Q',
+      'L',
+      'E',
+      'V',
+      'E',
+      'R',
+      '.',
+      'U',
+      'P',
+      'D',
+      'A',
+      'T',
+      'E',
+      // Version
+      0,
+      0,
+      // LocalVocab size
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // Amount of continuous triple ranges (currently 2, insert + delete)
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // Amount of ids for deleted triples (currently #triples * 4)
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // Amount of ids for inserted triples (currently #triples * 4)
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+  };
+
+  std::array<char, 47> actualContent{};
+
+  std::ifstream tmpFileStream{tmpFile, std::ios::binary};
+  tmpFileStream.read(actualContent.data(), actualContent.size());
+  EXPECT_TRUE(tmpFileStream.good());
+  EXPECT_EQ(tmpFileStream.peek(), std::char_traits<char>::eof());
+  tmpFileStream.close();
+
+  ASSERT_EQ(expectedContent, actualContent);
+
+  // Check if restoring from empty file works
+  EXPECT_NO_THROW(deltaTriples.readFromDisk());
+  EXPECT_EQ(deltaTriples.numDeleted(), 0);
+  EXPECT_EQ(deltaTriples.numInserted(), 0);
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, storeAndRestoreData) {
+  using namespace ::testing;
+  using ad_utility::triple_component::LiteralOrIri;
+  auto tmpFile = std::filesystem::temp_directory_path() / "testDeltaTriples";
+  // Make sure no file like this exists
+  std::filesystem::remove(tmpFile);
+  absl::Cleanup cleanup{[&tmpFile]() { std::filesystem::remove(tmpFile); }};
+  {
+    DeltaTriples deltaTriples{testQec->getIndex()};
+    deltaTriples.setPersists(tmpFile);
+    deltaTriples.readFromDisk();
+
+    auto cancellationHandle =
+        std::make_shared<ad_utility::CancellationHandle<>>();
+    LocalVocabEntry entry1{LiteralOrIri::fromStringRepresentation("<test>")};
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+                     Id::makeFromBool(true)}}});
+    LocalVocabEntry entry2{LiteralOrIri::fromStringRepresentation("<other>")};
+    deltaTriples.deleteTriples(
+        cancellationHandle,
+        {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+                     Id::makeFromBool(false)}}});
+
+    deltaTriples.writeToDisk();
+  }
+  {
+    DeltaTriples deltaTriples{testQec->getIndex()};
+    deltaTriples.setPersists(tmpFile);
+    deltaTriples.readFromDisk();
+
+    EXPECT_EQ(deltaTriples.numDeleted(), 1);
+    EXPECT_EQ(deltaTriples.numInserted(), 1);
+
+    EXPECT_THAT(deltaTriples.localVocab().getAllWordsForTesting(),
+                ::testing::UnorderedElementsAre(
+                    AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                ::testing::Eq("<test>")),
+                    AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
+                                ::testing::Eq("<other>"))));
+
+    std::vector<IdTriple<>> insertedTriples;
+    ql::ranges::copy(deltaTriples.triplesInserted_ | ql::views::keys,
+                     std::back_inserter(insertedTriples));
+    EXPECT_THAT(
+        insertedTriples,
+        ::testing::ElementsAre(::testing::Eq(IdTriple<>{
+            {Id::makeFromInt(1),
+             Id::makeFromLocalVocabIndex(
+                 deltaTriples.localVocab()
+                     .getIndexOrNullopt(LocalVocabEntry{
+                         LiteralOrIri::fromStringRepresentation("<test>")})
+                     .value()),
+             Id::makeFromBool(true)}})));
+    std::vector<IdTriple<>> deletedTriples;
+    ql::ranges::copy(deltaTriples.triplesDeleted_ | ql::views::keys,
+                     std::back_inserter(deletedTriples));
+    EXPECT_THAT(
+        deletedTriples,
+        ::testing::ElementsAre(::testing::Eq(IdTriple<>{
+            {Id::makeFromInt(2),
+             Id::makeFromLocalVocabIndex(
+                 deltaTriples.localVocab()
+                     .getIndexOrNullopt(LocalVocabEntry{
+                         LiteralOrIri::fromStringRepresentation("<other>")})
+                     .value()),
+             Id::makeFromBool(false)}})));
+  }
 }

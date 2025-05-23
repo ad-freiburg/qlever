@@ -3,7 +3,8 @@
 // Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
+#define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
 #include <concepts>
 #include <cstdint>
@@ -285,3 +286,5 @@ class TripleComponent {
     }
   }
 };
+
+#endif  // QLEVER_SRC_PARSER_TRIPLECOMPONENT_H

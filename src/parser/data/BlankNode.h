@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_DATA_BLANKNODE_H
+#define QLEVER_SRC_PARSER_DATA_BLANKNODE_H
 
 #include <string>
 
@@ -33,3 +34,5 @@ class BlankNode {
 
   bool operator==(const BlankNode& other) const = default;
 };
+
+#endif  // QLEVER_SRC_PARSER_DATA_BLANKNODE_H

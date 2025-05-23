@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_UNION_H
+#define QLEVER_SRC_ENGINE_UNION_H
 
 #include <array>
 #include <memory>
@@ -93,7 +95,7 @@ class Union : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -123,3 +125,5 @@ class Union : public Operation {
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_UNION_H

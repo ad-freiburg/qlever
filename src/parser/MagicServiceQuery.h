@@ -3,8 +3,10 @@
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_PARSER_MAGICSERVICEQUERY_H
+#define QLEVER_SRC_PARSER_MAGICSERVICEQUERY_H
 
+#include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
 class SparqlTriple;
 
@@ -75,3 +77,5 @@ struct MagicServiceQuery {
 };
 
 }  // namespace parsedQuery
+
+#endif  // QLEVER_SRC_PARSER_MAGICSERVICEQUERY_H

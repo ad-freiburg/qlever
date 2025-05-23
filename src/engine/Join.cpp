@@ -3,6 +3,8 @@
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Join.h"
 
@@ -14,6 +16,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
+#include "engine/JoinHelpers.h"
 #include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -23,75 +26,10 @@
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using namespace qlever::joinHelpers;
+
 using std::endl;
 using std::string;
-
-namespace {
-using OptionalPermutation = Join::OptionalPermutation;
-void applyPermutation(IdTable& idTable,
-                      const OptionalPermutation& permutation) {
-  if (permutation.has_value()) {
-    idTable.setColumnSubset(permutation.value());
-  }
-}
-
-using LazyInputView =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>;
-// Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
-// more efficient access in the join columns below and apply the given
-// permutation to each table.
-CPP_template(typename Input)(
-    requires ad_utility::SameAsAny<Input, Result::Generator,
-                                   Result::LazyResult>) LazyInputView
-    convertGenerator(Input gen, OptionalPermutation permutation = {}) {
-  for (auto& [table, localVocab] : gen) {
-    applyPermutation(table, permutation);
-    // Make sure to actually move the table into the wrapper so that the tables
-    // live as long as the wrapper.
-    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
-    co_yield t;
-  }
-}
-
-using MaterializedInputView =
-    std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
-// Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
-// then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
-// lazy join algorithms. Note: The `convertGenerator` function above
-// conceptually does exactly the same for lazy inputs.
-MaterializedInputView asSingleTableView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
-  return std::array{ad_utility::IdTableAndFirstCol{
-      result.idTable().asColumnSubsetView(permutation),
-      result.getCopyOfLocalVocab()}};
-}
-
-// Wrap a result either in an array with a single element or in a range wrapping
-// the lazy result generator. Note that the lifetime of the view is coupled to
-// the lifetime of the result.
-std::variant<LazyInputView, MaterializedInputView> resultToView(
-    const Result& result, const std::vector<ColumnIndex>& permutation) {
-  if (result.isFullyMaterialized()) {
-    return asSingleTableView(result, permutation);
-  }
-  return convertGenerator(std::move(result.idTables()), permutation);
-}
-
-using GeneratorWithDetails =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                       CompressedRelationReader::LazyScanMetadata>;
-// Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
-// efficient access in the join columns below.
-GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
-  gen.setDetailsPointer(&co_await cppcoro::getDetails);
-  for (auto& table : gen) {
-    // IndexScans don't have a local vocabulary, so we can just use an empty one
-    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
-    co_yield t;
-  }
-}
-}  // namespace
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
@@ -153,7 +91,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-ProtoResult Join::computeResult(bool requestLaziness) {
+Result Join::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
@@ -442,42 +380,11 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
+CPP_template_def(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>>)
-    Result::Generator Join::runLazyJoinAndConvertToGenerator(
-        ActionT runLazyJoin, OptionalPermutation permutation) const {
-  return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
-      [runLazyJoin = std::move(runLazyJoin),
-       permutation = std::move(permutation)](
-          std::function<void(Result::IdTableVocabPair)> callback) {
-        auto yieldValue = [&permutation,
-                           &callback](Result::IdTableVocabPair value) {
-          applyPermutation(value.idTable_, permutation);
-          callback(std::move(value));
-        };
-
-        // The lazy join implementation calls its callback for each but the last
-        // block. The last block (which also is the only block in case the
-        // result is to be fully materialized)
-        auto lastBlock = runLazyJoin(
-            [&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
-              if (idTable.size() < CHUNK_SIZE) {
-                return;
-              }
-              yieldValue({std::move(idTable), std::move(localVocab)});
-            });
-        yieldValue(std::move(lastBlock));
-      });
-}
-
-// _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
-    requires ad_utility::InvocableWithExactReturnType<
-        ActionT, Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>>)
-    ProtoResult Join::createResult(
+    Result Join::createResult(
         bool requestedLaziness, ActionT action,
         std::optional<std::vector<ColumnIndex>> permutation) const {
   if (requestedLaziness) {
@@ -492,9 +399,9 @@ CPP_template_2(typename ActionT)(
 }
 
 // ______________________________________________________________________________
-ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a,
-                           std::shared_ptr<const Result> b,
-                           bool requestLaziness) const {
+Result Join::lazyJoin(std::shared_ptr<const Result> a,
+                      std::shared_ptr<const Result> b,
+                      bool requestLaziness) const {
   // If both inputs are fully materialized, we can join them more
   // efficiently.
   AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
@@ -543,10 +450,10 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = []<typename Table>(const Table& table,
-                                             const ColumnIndex jc) {
+  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
+    using Table = std::decay_t<decltype(table)>;
     ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
@@ -568,40 +475,38 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
    * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
    *  of the tables
    */
-  auto performHashJoin = [&idTableToHashMap,
-                          &result]<bool leftIsLarger, typename LargerTableType,
-                                   typename SmallerTableType>(
-                             const LargerTableType& largerTable,
-                             const ColumnIndex largerTableJoinColumn,
-                             const SmallerTableType& smallerTable,
-                             const ColumnIndex smallerTableJoinColumn) {
-    // Put the smaller table into the hash table.
-    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+  auto performHashJoin = ad_utility::ApplyAsValueIdentity{
+      [&idTableToHashMap, &result](auto leftIsLarger, const auto& largerTable,
+                                   const ColumnIndex largerTableJoinColumn,
+                                   const auto& smallerTable,
+                                   const ColumnIndex smallerTableJoinColumn) {
+        // Put the smaller table into the hash table.
+        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
 
-    // Create cross product by going through the larger table.
-    for (size_t i = 0; i < largerTable.size(); i++) {
-      // Skip, if there is no matching entry for the join column.
-      auto entry = map.find(largerTable(i, largerTableJoinColumn));
-      if (entry == map.end()) {
-        continue;
-      }
+        // Create cross product by going through the larger table.
+        for (size_t i = 0; i < largerTable.size(); i++) {
+          // Skip, if there is no matching entry for the join column.
+          auto entry = map.find(largerTable(i, largerTableJoinColumn));
+          if (entry == map.end()) {
+            continue;
+          }
 
-      for (const auto& row : entry->second) {
-        // Based on which table was larger, the arguments of
-        // addCombinedRowToIdTable are different.
-        // However this information is known at compile time, so the other
-        // branch gets discarded at compile time, which makes this
-        // condition have constant runtime.
-        if constexpr (leftIsLarger) {
-          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
-                                  &result);
-        } else {
-          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
-                                  &result);
+          for (const auto& row : entry->second) {
+            // Based on which table was larger, the arguments of
+            // addCombinedRowToIdTable are different.
+            // However this information is known at compile time, so the other
+            // branch gets discarded at compile time, which makes this
+            // condition have constant runtime.
+            if constexpr (leftIsLarger) {
+              addCombinedRowToIdTable(largerTable[i], row,
+                                      smallerTableJoinColumn, &result);
+            } else {
+              addCombinedRowToIdTable(row, largerTable[i],
+                                      largerTableJoinColumn, &result);
+            }
+          }
         }
-      }
-    }
-  };
+      }};
 
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
@@ -653,7 +558,7 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
+Result Join::computeResultForTwoIndexScans(bool requestLaziness) const {
   return createResult(
       requestLaziness,
       [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
@@ -683,10 +588,6 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
         rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
 
-        AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
-                             rightBlocks.details().numElementsRead_);
-        AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
-                             leftBlocks.details().numElementsRead_);
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
                                         std::move(localVocab)};
@@ -695,7 +596,7 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
 
 // ______________________________________________________________________________________________________
 template <bool idTableIsRightInput>
-ProtoResult Join::computeResultForIndexScanAndIdTable(
+Result Join::computeResultForIndexScanAndIdTable(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK((idTableIsRightInput ? _leftJoinCol : _rightJoinCol) ==
@@ -774,7 +675,7 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
 }
 
 // ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForIndexScanAndLazyOperation(
+Result Join::computeResultForIndexScanAndLazyOperation(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     std::shared_ptr<IndexScan> scan) const {
   AD_CORRECTNESS_CHECK(_rightJoinCol == 0);
@@ -808,7 +709,7 @@ ProtoResult Join::computeResultForIndexScanAndLazyOperation(
       std::move(resultPermutation));
 }
 // _____________________________________________________________________________
-ProtoResult Join::computeResultForTwoMaterializedInputs(
+Result Join::computeResultForTwoMaterializedInputs(
     std::shared_ptr<const Result> leftRes,
     std::shared_ptr<const Result> rightRes) const {
   IdTable idTable{getResultWidth(), allocator()};
@@ -820,7 +721,7 @@ ProtoResult Join::computeResultForTwoMaterializedInputs(
 }
 
 // _____________________________________________________________________________
-ProtoResult Join::createEmptyResult() const {
+Result Join::createEmptyResult() const {
   return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
           LocalVocab{}};
 }

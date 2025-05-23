@@ -391,8 +391,8 @@ TEST(LocalVocab, propagation) {
   Values valuesPatternTrick(
       testQec,
       {{Variable{"?x"}, Variable{"?y"}},
-       {{TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}},
-        {TripleComponent{iri("<xN1>")}, TripleComponent{NO_PATTERN}}}});
+       {{TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}},
+        {TripleComponent{iri("<xN1>")}, TripleComponent{Pattern::NoPattern}}}});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(valuesPatternTrick), 0, Variable{"?y"}, Variable{"?count"});
   checkLocalVocab(countAvailablePredictes, {"<xN1>"});
@@ -420,7 +420,7 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
-  mergeCandidate.mergeWith(std::span{&clone, 1});
+  mergeCandidate.mergeWith(clone);
 
   EXPECT_EQ(mergeCandidate.size(), 1);
   EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
@@ -438,17 +438,88 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();
-  clone2.mergeWith(std::span{&original, 1});
-  original.mergeWith(std::span{&clone1, 1});
+  clone2.mergeWith(original);
+  original.mergeWith(clone1);
 
-  // Implementation detail, merging does add to the "other word set" but does
-  // not deduplicate with the primary word set.
-  EXPECT_EQ(original.size(), 2);
+  // Make sure we deduplicate `otherWordSets_` with the primary word set.
+  EXPECT_EQ(original.size(), 1);
   EXPECT_THAT(original.getAllWordsForTesting(),
-              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
-                                   LiteralOrIri::literalWithoutQuotes("test")));
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 
   EXPECT_EQ(clone2.size(), 1);
   EXPECT_THAT(clone2.getAllWordsForTesting(),
               UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+
+  LocalVocab clone3 = original.clone();
+  EXPECT_EQ(clone3.size(), 1);
+  EXPECT_THAT(clone3.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
+  using ad_utility::triple_component::LiteralOrIri;
+  auto literal = LiteralOrIri::literalWithoutQuotes("test");
+  auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
+  {
+    LocalVocab original;
+    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    (void)original.clone();
+    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::nullopt);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
+        ad_utility::Exception);
+    EXPECT_EQ(original.size(), 1);
+  }
+  {
+    LocalVocab original;
+    LocalVocab other;
+    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    other.mergeWith(original);
+    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::nullopt);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
+        ad_utility::Exception);
+    EXPECT_EQ(original.size(), 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
+  using ad_utility::triple_component::LiteralOrIri;
+  auto literal = LiteralOrIri::literalWithoutQuotes("test");
+  auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
+  std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;
+  LocalVocabIndex encodedTest;
+  LocalVocabIndex encodedOther;
+  {
+    LocalVocab original;
+    encodedTest =
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    extender = original.getLifetimeExtender();
+
+    EXPECT_EQ(original.getIndexOrNullopt(LocalVocabEntry{literal}),
+              std::optional{encodedTest});
+
+    EXPECT_EQ(original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+              encodedTest);
+    EXPECT_EQ(original.size(), 1);
+
+    encodedOther =
+        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral});
+    EXPECT_EQ(original.size(), 2);
+  }
+  // The `extender` keeps the `LocalVocabIndex`es valid even though the
+  // corresponding `LocalVocab` has already been destroyed.
+  (void)extender;
+  EXPECT_EQ(*encodedTest, literal);
+  EXPECT_EQ(*encodedOther, otherLiteral);
 }

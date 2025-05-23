@@ -4,7 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_CONSTANTS_H
+#define QLEVER_SRC_GLOBAL_CONSTANTS_H
 
 #include <chrono>
 #include <stdexcept>
@@ -19,7 +20,6 @@ using namespace ad_utility::memory_literals;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
-constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
@@ -47,7 +47,8 @@ constexpr std::string_view makeQleverInternalIriConst() {
   return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
                                      suffixes..., ">">();
 }
-inline std::string makeQleverInternalIri(const auto&... suffixes) {
+template <typename... T>
+inline std::string makeQleverInternalIri(const T&... suffixes) {
   return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
                       suffixes..., ">");
 }
@@ -72,6 +73,9 @@ constexpr inline std::string_view DEFAULT_GRAPH_IRI =
     makeQleverInternalIriConst<"default-graph">();
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
     makeQleverInternalIriConst<"internal-graph">();
+constexpr inline std::string_view QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX =
+    ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
+                                "blank-node/">();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
@@ -142,6 +146,8 @@ constexpr inline char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
+constexpr inline char XSD_ANYURI_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#anyURI";
 constexpr inline char RDF_PREFIX[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 constexpr inline char RDF_LANGTAG_STRING[] =
@@ -149,6 +155,15 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
+constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
+constexpr inline std::string_view UNIT_METER_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "M">();
+constexpr inline std::string_view UNIT_KILOMETER_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "KiloM">();
+constexpr inline std::string_view UNIT_MILE_IRI =
+    ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
@@ -260,3 +275,5 @@ constexpr inline double COORDINATE_LNG_MAX = 180.0;
 // Operation string is echoed. This operation string is truncated to ensure
 // performance.
 constexpr inline size_t MAX_LENGTH_OPERATION_ECHO = 5000;
+
+#endif  // QLEVER_SRC_GLOBAL_CONSTANTS_H

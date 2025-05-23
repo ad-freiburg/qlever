@@ -3,18 +3,22 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_RESULT_H
+#define QLEVER_SRC_ENGINE_RESULT_H
 
 #include <ranges>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/InputRangeUtils.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -40,6 +44,11 @@ class Result {
   // explicit conversion from the `Generator` above.
   using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
 
+  // A commonly used LoopControl type for CachingContinuableTransformInputRange
+  // generators
+  using IdTableLoopControl =
+      ad_utility::loopControl::LoopControl<IdTableVocabPair>;
+
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
@@ -48,8 +57,10 @@ class Result {
         std::make_unique<std::atomic_bool>(false);
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
-    explicit GenContainer(Generator generator)
-        : generator_{Generator{std::move(generator)}} {}
+    CPP_template(typename Range)(
+        requires std::is_constructible_v<
+            LazyResult, Range>) explicit GenContainer(Range range)
+        : generator_{LazyResult{std::move(range)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
@@ -96,10 +107,6 @@ class Result {
         : localVocab_{
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
-
-  // Check if sort order promised by `sortedBy` is kept within `idTable`.
-  static void assertSortOrderIsRespected(
-      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -259,6 +266,4 @@ class Result {
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
 
-// Class alias to conceptually differentiate between Results that produce
-// values and Results meant to be consumed.
-using ProtoResult = Result;
+#endif  // QLEVER_SRC_ENGINE_RESULT_H

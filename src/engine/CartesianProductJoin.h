@@ -2,7 +2,9 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -81,14 +83,14 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ProtoResult computeResult(bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(std::span<Id> targetColumn,
-                         std::span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(ql::span<Id> targetColumn,
+                         ql::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
@@ -126,3 +128,5 @@ class CartesianProductJoin : public Operation {
       std::vector<std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H

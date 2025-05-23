@@ -1,14 +1,17 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_VIEWS_H
+#define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
-#include <span>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -102,7 +105,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
  public:
   OwningView() = default;
 
-  constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
+  constexpr OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
       : underlyingRange_(std::move(underlyingRange)) {}
 
@@ -199,9 +202,13 @@ constexpr auto allView(Range&& range) {
   } else if constexpr (detail::can_ref_view<Range>) {
     return ql::ranges::ref_view{AD_FWD(range)};
   } else {
-    return ad_utility::OwningView{AD_FWD(range)};
+    // return std::ranges::owning_view{AD_FWD(range)};
+    return ad_utility::OwningView<std::remove_reference_t<Range>>{
+        AD_FWD(range)};
   }
 }
+template <typename Range>
+using all_t = decltype(allView(std::declval<Range>()));
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -347,14 +354,14 @@ CPP_template(typename Range, typename Transformation)(
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<std::span<ElementType>> reChunkAtSeparator(
-        Range generator, ElementType separator) {
+    generator<ql::span<ElementType>> reChunkAtSeparator(Range generator,
+                                                        ElementType separator) {
   std::vector<ElementType> buffer;
   for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
        generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
-        co_yield std::span{buffer.data(), buffer.size()};
+        co_yield ql::span{buffer.data(), buffer.size()};
         buffer.clear();
       } else {
         buffer.push_back(c);
@@ -362,10 +369,9 @@ CPP_template(typename Range, typename ElementType)(
     }
   }
   if (!buffer.empty()) {
-    co_yield std::span{buffer.data(), buffer.size()};
+    co_yield ql::span{buffer.data(), buffer.size()};
   }
 }
-
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.
@@ -380,3 +386,5 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
 #endif
+
+#endif  // QLEVER_SRC_UTIL_VIEWS_H

@@ -2,14 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_PATHSEARCH_H
+#define QLEVER_SRC_ENGINE_PATHSEARCH_H
 
 #include <memory>
 #include <optional>
-#include <span>
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
@@ -255,7 +256,7 @@ class PathSearch : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
+  std::pair<ql::span<const Id>, ql::span<const Id>> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
@@ -271,7 +272,7 @@ class PathSearch : public Operation {
    * @return A vector of all paths.
    */
   pathSearch::PathsLimited allPaths(
-      std::span<const Id> sources, std::span<const Id> targets,
+      ql::span<const Id> sources, ql::span<const Id> targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
       std::optional<uint64_t> numPathsPerTarget) const;
 
@@ -285,3 +286,5 @@ class PathSearch : public Operation {
   void pathsToResultTable(IdTable& tableDyn, pathSearch::PathsLimited& paths,
                           const pathSearch::BinSearchWrapper& binSearch) const;
 };
+
+#endif  // QLEVER_SRC_ENGINE_PATHSEARCH_H

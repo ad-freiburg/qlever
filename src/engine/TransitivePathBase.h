@@ -3,7 +3,10 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+
+#include <absl/hash/hash.h>
 
 #include <functional>
 #include <memory>
@@ -19,12 +22,12 @@ struct TransitivePathSide {
   std::optional<TreeAndCol> treeAndCol_;
   // Column of the sub table where the Ids of this side are located
   size_t subCol_;
-  std::variant<Id, Variable> value_;
+  TripleComponent value_;
   // The column in the output table where this side Ids are written to.
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value_); }
+  bool isVariable() const { return value_.isVariable(); }
 
   bool isBoundVariable() const { return treeAndCol_.has_value(); }
 
@@ -33,7 +36,7 @@ struct TransitivePathSide {
   std::string getCacheKey() const {
     std::ostringstream os;
     if (!isVariable()) {
-      os << "Id: " << std::get<Id>(value_);
+      os << "Value " << value_;
     }
 
     os << ", subColumn: " << subCol_ << "to " << outputCol_;
@@ -69,14 +72,10 @@ struct TransitivePathSide {
 
 // We deliberately use the `std::` variants of a hash set and hash map because
 // `absl`s types are not exception safe.
-struct HashId {
-  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
-};
-
-using Set = std::unordered_set<Id, HashId, std::equal_to<Id>,
+using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
 using Map = std::unordered_map<
-    Id, Set, HashId, std::equal_to<Id>,
+    Id, Set, absl::Hash<Id>, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
 // Helper struct, that allows a generator to yield a a node and all its
@@ -122,7 +121,11 @@ class TransitivePathBase : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
-  bool emptyPathBound_ = false;
+  // Indicate that the variable is only bound because the path is empty, not
+  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // full scan of all subjects and objects in the knowledge graph, but can be
+  // re-bound to something cheaper later if the query permits it.
+  bool boundVariableIsForEmptyPath_ = false;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
@@ -218,9 +221,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
-                   size_t outputRow, size_t skipCol) const;
+  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
+                          size_t inputRow, size_t outputRow, size_t skipCol);
 
   // A small helper function: Insert the `value` to the set at `map[key]`.
   // As the sets all have an allocator with memory limit, this construction is a
@@ -246,6 +249,18 @@ class TransitivePathBase : public Operation {
                                           size_t startSideCol,
                                           size_t targetSideCol, bool yieldOnce,
                                           size_t skipCol = 0) const;
+
+  // Return an execution tree, that "joins" the given `tripleComponent` with all
+  // of the subjects or objects in the knowledge graph, so if the graph does not
+  // contain this value it is filtered out.
+  static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      const TripleComponent& tripleComponent);
+
+  // Return an execution tree that represents one side of an empty path. This is
+  // used as a starting point for evaluating the empty path.
+  static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
+      QueryExecutionContext* qec, Graphs activeGraphs);
 
  public:
   size_t getCostEstimate() override;
@@ -308,8 +323,10 @@ class TransitivePathBase : public Operation {
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
   // which has to store both ways to sort the subtree until it knows which side
   // becomes bound.
-  virtual std::span<const std::shared_ptr<QueryExecutionTree>>
+  virtual ql::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H

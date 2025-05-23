@@ -1,8 +1,11 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_GLOBAL_VALUEID_H
+#define QLEVER_SRC_GLOBAL_VALUEID_H
 
 #include <absl/strings/str_cat.h>
 
@@ -88,7 +91,7 @@ class ValueId {
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
   static constexpr double minPositiveDouble =
-      std::bit_cast<double>(1ull << numDatatypeBits);
+      absl::bit_cast<double>(1ull << numDatatypeBits);
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -230,13 +233,13 @@ class ValueId {
   /// precision of the mantissa of an IEEE double precision floating point
   /// number from 53 to 49 significant bits.
   static ValueId makeFromDouble(double d) {
-    auto shifted = std::bit_cast<T>(d) >> numDatatypeBits;
+    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   /// Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   /// Double` then the result is unspecified.
   [[nodiscard]] double getDouble() const noexcept {
-    return std::bit_cast<double>(_bits << numDatatypeBits);
+    return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   /// Create a `ValueId` for a signed integer value. Integers in the range
@@ -310,11 +313,11 @@ class ValueId {
 
   // Store or load a `Date` object.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
-    return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
+    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
   DateYearOrDuration getDate() const noexcept {
-    return std::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -345,7 +348,19 @@ class ValueId {
   /// and `ad_utility::HashMap`
   template <typename H>
   friend H AbslHashValue(H h, const ValueId& id) {
-    return H::combine(std::move(h), id._bits);
+    // Adding 0/1 to the hash is required to ensure that for two unequal
+    // elements the hash expansions of neither is a suffix of the other.This is
+    // a property that absl requires for hashes. The hash expansion is the list
+    // of simpler values actually being hashed (here: bits or hash expansion of
+    // the LocalVocabEntry).
+    if (id.getDatatype() != Datatype::LocalVocabIndex) {
+      return H::combine(std::move(h), id._bits, 0);
+    }
+    auto [lower, upper] = id.getLocalVocabIndex()->positionInVocab();
+    if (upper != lower) {
+      return H::combine(std::move(h), makeFromVocabIndex(lower)._bits, 0);
+    }
+    return H::combine(std::move(h), *id.getLocalVocabIndex(), 1);
   }
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
@@ -398,7 +413,8 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr]<typename T>(T&& value) {
+    auto visitor = [&ostr](auto&& value) {
+      using T = decltype(value);
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         // already handled above
         AD_FAIL();
@@ -450,3 +466,5 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
+
+#endif  // QLEVER_SRC_GLOBAL_VALUEID_H

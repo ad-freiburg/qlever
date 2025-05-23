@@ -34,7 +34,14 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << s_ << ", p: " << p_ << ", o: " << o_ << "}";
+  os << "{s: " << s_ << ", p: "
+     << std::visit(ad_utility::OverloadCallOperator{
+                       [](const Variable& var) { return var.name(); },
+                       [](const PropertyPath& propertyPath) {
+                         return propertyPath.asString();
+                       }},
+                   p_)
+     << ", o: " << o_ << "}";
   return std::move(os).str();
 }
 
@@ -252,7 +259,7 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
+bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                                                   const std::string& langTag) {
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
@@ -266,30 +273,44 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
   using BasicPattern = parsedQuery::BasicGraphPattern;
   namespace ad = ad_utility;
   namespace stdv = ql::views;
+  bool variableFoundInTriple = false;
   for (BasicPattern* basicPattern :
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple.o_ == variable &&
-          (triple.p_.operation_ == PropertyPath::Operation::IRI &&
-           !isVariable(triple.p_)) &&
-          !triple.p_.iri_.starts_with(
+      auto predicate = triple.getSimplePredicate();
+      if (triple.o_ == variable && predicate.has_value() &&
+          !predicate.value().starts_with(
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
+      }
+      // TODO<RobinTF> There might be more cases where the variable is matched
+      // against a pattern.
+      if (triple.s_ == variable || triple.o_ == variable ||
+          triple.predicateIs(variable)) {
+        // If at some point we find a triple using the variable, we know that it
+        // is safe to join it with an index scan to filter out non-matching
+        // language tags.
+        variableFoundInTriple = true;
       }
     }
   }
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_.iri_ = ad_utility::convertToLanguageTaggedPredicate(
-        triplePtr->p_.iri_, langTag);
+    AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
+    auto& predicate = std::get<PropertyPath>(triplePtr->p_);
+    predicate.iri_ =
+        ad_utility::convertToLanguageTaggedPredicate(predicate.iri_, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
   // case a triple `?variable ql:langtag "language"` is added at the end of
   // the graph pattern.
   if (matchingTriples.empty()) {
+    if (!variableFoundInTriple) {
+      return false;
+    }
     LOG(DEBUG) << "language filter variable " + variable.name() +
                       " did not appear as object in any suitable "
                       "triple. "
@@ -313,6 +334,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                         langEntity);
     t.push_back(std::move(triple));
   }
+  return true;
 }
 
 // ____________________________________________________________________________

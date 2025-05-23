@@ -1,7 +1,9 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
+#define QLEVER_SRC_PARSER_PROPERTYPATH_H
 
 #include <cstdint>
 #include <initializer_list>
@@ -33,14 +35,9 @@ class PropertyPath {
                std::initializer_list<PropertyPath> children);
 
   static PropertyPath fromIri(std::string iri) {
+    AD_CONTRACT_CHECK(!iri.starts_with("?"));
     PropertyPath p(Operation::IRI);
     p.iri_ = std::move(iri);
-    return p;
-  }
-
-  static PropertyPath fromVariable(const Variable& var) {
-    PropertyPath p(Operation::IRI);
-    p.iri_ = var.name();
     return p;
   }
 
@@ -123,3 +120,5 @@ class PropertyPath {
    */
   bool canBeNull_ = false;
 };
+
+#endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

@@ -6,10 +6,10 @@
 
 #include "VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 
 namespace {
 
@@ -25,7 +25,8 @@ struct DummyDecoder {
     return result;
   }
   // This class has no state, but it still needs to be serialized.
-  friend std::true_type allowTrivialSerialization(DummyDecoder, auto);
+  template <typename T>
+  friend std::true_type allowTrivialSerialization(DummyDecoder, T);
 };
 
 // A wrapper for the stateless dummy compression.
@@ -58,11 +59,14 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
                                        "31",    "0",     "al"};
 
   CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
-  auto writer = v.makeDiskWriter("vocabtmp.txt");
-  for (const auto& word : words) {
-    writer(word);
+  auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
+  auto& writer = *writerPtr;
+  for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
+    ASSERT_EQ(writer(word), static_cast<uint64_t>(i));
   }
   writer.finish();
+  writer.readableName() = "blabb";
+  EXPECT_EQ(writer.readableName(), "blabb");
 
   VocabularyInMemory simple;
   simple.open("vocabtmp.txt.words");
@@ -85,9 +89,9 @@ using Compressors =
                      PrefixCompressionWrapper, DummyCompressionWrapper>;
 
 // _________________________________________________________________________
-CPP_template(typename Compressor)(
-    requires ad_utility::vocabulary::CompressionWrapper<
-        Compressor>) struct CompressedVocabularyF : public testing::Test {
+template <typename Compressor>
+struct CompressedVocabularyF : public testing::Test {
+  static_assert(ad_utility::vocabulary::CompressionWrapper<Compressor>);
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static constexpr auto createCompressedVocabulary(
@@ -95,7 +99,8 @@ CPP_template(typename Compressor)(
     return [filename](const std::vector<std::string>& words) {
       // We deliberately set the blocksize to a very small number.
       CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
-      auto writer = vocab.makeDiskWriter(filename);
+      auto writerPtr = vocab.makeDiskWriterPtr(filename);
+      auto& writer = *writerPtr;
       for (const auto& word : words) {
         writer(word);
       }

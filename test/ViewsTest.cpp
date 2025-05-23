@@ -1,6 +1,8 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -8,11 +10,13 @@
 #include <string>
 #include <vector>
 
-#include "../src/util/Random.h"
-#include "../src/util/Views.h"
+#include "util/InputRangeUtils.h"
+#include "util/Random.h"
+#include "util/Views.h"
 
 TEST(Views, BufferedAsyncView) {
-  auto testWithVector = []<typename T>(const T& inputVector) {
+  auto testWithVector = [](const auto& inputVector) {
+    using T = std::decay_t<decltype(inputVector)>;
     auto view = ad_utility::bufferedAsyncView(inputVector, 100);
     T result;
     result.reserve(inputVector.size());
@@ -194,7 +198,7 @@ TEST(Views, inPlaceTransform) {
 
 // __________________________________________________________________________
 
-std::string_view toView(std::span<char> span) {
+std::string_view toView(ql::span<char> span) {
   return {span.data(), span.size()};
 }
 

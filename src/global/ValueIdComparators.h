@@ -1,13 +1,15 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_VALUEIDCOMPARATORS_H
 #define QLEVER_VALUEIDCOMPARATORS_H
 
 #include <utility>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
@@ -143,17 +145,20 @@ class RangeFilter {
   // Let X be the set of numbers x for which x _comparison _value is true. The
   // given range for `addEqualRange` are numbers that are equal to `_value` (not
   // necessarily all of them). The function adds them if they are a subset of X.
-  void addEqual(auto begin, auto end) {
+  template <typename T>
+  void addEqual(T begin, T end) {
     addImpl<Comparison::LE, Comparison::EQ, Comparison::GE>(begin, end);
   };
 
   // Analogous to `addEqual`.
-  void addSmaller(auto begin, auto end) {
+  template <typename T>
+  void addSmaller(T begin, T end) {
     addImpl<Comparison::LT, Comparison::LE, Comparison::NE>(begin, end);
   }
 
   // Analogous to `addEqual`.
-  void addGreater(auto begin, auto end) {
+  template <typename T>
+  void addGreater(T begin, T end) {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
   }
 
@@ -193,7 +198,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) -> bool {
-    auto bits = std::bit_cast<uint64_t>(id.getDouble());
+    auto bits = absl::bit_cast<uint64_t>(id.getDouble());
     return bits & ad_utility::bitMaskForHigherBits(1);
   };
 
@@ -349,30 +354,30 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
-inline auto simplifyRanges =
-    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input,
-                          bool removeEmptyRanges = true) {
-      if (removeEmptyRanges) {
-        // Eliminate empty ranges
-        std::erase_if(input, [](const auto& p) { return p.first == p.second; });
-      }
-      std::sort(input.begin(), input.end());
-      if (input.empty()) {
-        return input;
-      }
-      // Merge directly adjacent ranges.
-      // TODO<joka921, C++20> use `ql::ranges`
-      decltype(input) result;
-      result.push_back(input.front());
-      for (auto it = input.begin() + 1; it != input.end(); ++it) {
-        if (it->first == result.back().second) {
-          result.back().second = it->second;
-        } else {
-          result.push_back(*it);
-        }
-      }
-      return result;
-    };
+template <typename RandomIt>
+auto simplifyRanges(std::vector<std::pair<RandomIt, RandomIt>> input,
+                    bool removeEmptyRanges = true) {
+  if (removeEmptyRanges) {
+    // Eliminate empty ranges
+    std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+  }
+  std::sort(input.begin(), input.end());
+  if (input.empty()) {
+    return input;
+  }
+  // Merge directly adjacent ranges.
+  // TODO<joka921, C++20> use `ql::ranges`
+  decltype(input) result;
+  result.push_back(input.front());
+  for (auto it = input.begin() + 1; it != input.end(); ++it) {
+    if (it->first == result.back().second) {
+      result.back().second = it->second;
+    } else {
+      result.push_back(*it);
+    }
+  }
+  return result;
+};
 
 }  // namespace detail
 
@@ -483,8 +488,9 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 
 // This function is part of the implementation of `compareIds` (see below).
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
-              ComparisonForIncompatibleTypes::AlwaysUndef>
-ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
+              ComparisonForIncompatibleTypes::AlwaysUndef,
+          typename Comparator>
+ComparisonResult compareIdsImpl(ValueId a, ValueId b, Comparator comparator) {
   Datatype typeA = a.getDatatype();
   Datatype typeB = b.getDatatype();
   using enum ComparisonResult;
@@ -511,8 +517,10 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     return fromBool(std::invoke(comparator, a.getBits(), b.getBits()));
   }
 
-  auto visitor = [comparator, &a, &b]<typename A, typename B>(
-                     const A& aValue, const B& bValue) -> ComparisonResult {
+  auto visitor = [comparator, &a, &b](const auto& aValue,
+                                      const auto& bValue) -> ComparisonResult {
+    using A = std::decay_t<decltype(aValue)>;
+    using B = std::decay_t<decltype(bValue)>;
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {

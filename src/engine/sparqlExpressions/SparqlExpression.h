@@ -2,12 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H
 
 #include <memory>
-#include <span>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "parser/data/Variable.h"
@@ -85,6 +86,9 @@ class SparqlExpression {
   // is correct for most of the expressions.
   virtual bool containsLangExpression() const;
 
+  // Helper to identify if this is represents a `YEAR` expression.
+  virtual bool isYearExpression() const;
+
   // ___________________________________________________________________________
   using LangFilterData = SparqlExpressionPimpl::LangFilterData;
   virtual std::optional<LangFilterData> getLanguageFilterExpression() const;
@@ -132,20 +136,22 @@ class SparqlExpression {
   // implementation.
   virtual void getExistsExpressions(
       std::vector<const SparqlExpression*>& result) const final;
+  virtual void getExistsExpressions(
+      std::vector<SparqlExpression*>& result) final;
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 
   // Returns all the children of this expression. Typically only used for
   // testing
-  virtual std::span<const SparqlExpression::Ptr> childrenForTesting()
+  virtual ql::span<const SparqlExpression::Ptr> childrenForTesting()
       const final;
 
   virtual std::vector<SparqlExpression::Ptr> moveChildrenOut() && final;
 
   // Get the direct child expressions.
-  virtual std::span<SparqlExpression::Ptr> children() final;
-  virtual std::span<const SparqlExpression::Ptr> children() const final;
+  virtual ql::span<SparqlExpression::Ptr> children() final;
+  virtual ql::span<const SparqlExpression::Ptr> children() const final;
 
   // Return true if this expression or any of its ancestors in the expression
   // tree is an aggregate. For an example usage see the `LiteralExpression`
@@ -153,12 +159,12 @@ class SparqlExpression {
   bool isInsideAggregate() const;
 
  private:
-  virtual std::span<SparqlExpression::Ptr> childrenImpl() = 0;
+  virtual ql::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child
   // expressions.
-  virtual std::span<const Variable> getContainedVariablesNonRecursive() const;
+  virtual ql::span<const Variable> getContainedVariablesNonRecursive() const;
 
  protected:
   // After calling this function, `isInsideAlias()` (see below) returns true for
@@ -167,3 +173,5 @@ class SparqlExpression {
   virtual void setIsInsideAggregate() final;
 };
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SPARQLEXPRESSION_H

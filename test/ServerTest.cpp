@@ -14,6 +14,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
+#include "util/json.h"
 
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -102,6 +103,23 @@ TEST(ServerTest, getQueryId) {
   auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
 }
 
+TEST(ServerTest, composeStatsJson) {
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  json expectedJson{{"git-hash-index", "git short hash not set"},
+                    {"git-hash-server", "git short hash not set"},
+                    {"name-index", ""},
+                    {"name-text-index", ""},
+                    {"num-entity-occurrences", 0},
+                    {"num-permutations", 2},
+                    {"num-predicates-internal", 0},
+                    {"num-predicates-normal", 0},
+                    {"num-text-records", 0},
+                    {"num-triples-internal", 0},
+                    {"num-triples-normal", 0},
+                    {"num-word-occurrences", 0}};
+  EXPECT_THAT(server.composeStatsJson(), testing::Eq(expectedJson));
+}
+
 TEST(ServerTest, createMessageSender) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
   auto reqWithExplicitQueryId = makeGetRequest("/");
@@ -185,4 +203,66 @@ TEST(ServerTest, createResponseMetadata) {
                   "SPARQL 1.1 Update for QLever is experimental."}));
   EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
+}
+
+TEST(ServerTest, adjustParsedQueryLimitOffset) {
+  using enum ad_utility::MediaType;
+  auto makePlannedQuery = [](std::string operation) -> Server::PlannedQuery {
+    ParsedQuery parsed = SparqlParser::parseQuery(std::move(operation));
+    QueryExecutionTree qet =
+        QueryPlanner{ad_utility::testing::getQec(),
+                     std::make_shared<ad_utility::CancellationHandle<>>()}
+            .createExecutionTree(parsed);
+    return {std::move(parsed), std::move(qet)};
+  };
+  auto expectExportLimit =
+      [&makePlannedQuery](
+          ad_utility::MediaType mediaType, std::optional<uint64_t> limit,
+          std::string operation =
+              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
+          const ad_utility::url_parser::ParamValueMap& parameters = {{"send",
+                                                                      {"12"}}},
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(l);
+        auto pq = makePlannedQuery(std::move(operation));
+        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
+        EXPECT_THAT(pq.parsedQuery_._limitOffset.exportLimit_,
+                    testing::Eq(limit));
+      };
+
+  std::string complexQuery{
+      "SELECT * WHERE { ?a ?b ?c . FILTER(LANG(?a) = 'en') . "
+      "BIND(RAND() as ?r) . } OFFSET 5"};
+  // The export limit is only set for media type `qleverJson`.
+  expectExportLimit(qleverJson, 12);
+  expectExportLimit(qleverJson, 13, "SELECT * WHERE { <a> <b> ?c }",
+                    {{"send", {"13"}}});
+  expectExportLimit(qleverJson, 13, complexQuery, {{"send", {"13"}}});
+  expectExportLimit(csv, std::nullopt);
+  expectExportLimit(csv, std::nullopt, complexQuery);
+  expectExportLimit(tsv, std::nullopt);
+
+  auto expectOffset =
+      [&makePlannedQuery](
+          ad_utility::MediaType mediaType, uint64_t parsedQueryOffset,
+          uint64_t rootOperationOffset,
+          std::string operation =
+              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
+          const ad_utility::url_parser::ParamValueMap& parameters = {},
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(l);
+        auto pq = makePlannedQuery(std::move(operation));
+        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
+        EXPECT_THAT(pq.parsedQuery_._limitOffset._offset,
+                    testing::Eq(parsedQueryOffset));
+        EXPECT_THAT(
+            pq.queryExecutionTree_.getRootOperation()->getLimit()._offset,
+            testing::Eq(rootOperationOffset));
+      };
+
+  // The Offset must not be applied twice.
+  expectOffset(qleverJson, 0, 15);
+  expectOffset(qleverJson, 5, 0, complexQuery);
 }

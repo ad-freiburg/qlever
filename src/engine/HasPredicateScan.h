@@ -1,7 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
+#define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
 
 #include <memory>
 #include <string>
@@ -94,24 +96,28 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(IdTable* resultTable, Id objectId, auto& hasPattern,
-                           const CompactVectorOfStrings<Id>& patterns);
+  template <typename HasPattern>
+  void computeFreeS(IdTable* resultTable, Id objectId, HasPattern& hasPattern,
+                    const CompactVectorOfStrings<Id>& patterns);
 
   void computeFreeO(IdTable* resultTable, Id subjectAsId,
                     const CompactVectorOfStrings<Id>& patterns) const;
 
-  static void computeFullScan(IdTable* resultTable, auto& hasPattern,
-                              const CompactVectorOfStrings<Id>& patterns,
-                              size_t resultSize);
+  template <typename HasPattern>
+  void computeFullScan(IdTable* resultTable, HasPattern& hasPattern,
+                       const CompactVectorOfStrings<Id>& patterns,
+                       size_t resultSize);
 
   template <int WIDTH>
-  ProtoResult computeSubqueryS(IdTable* result,
-                               const CompactVectorOfStrings<Id>& patterns);
+  Result computeSubqueryS(IdTable* result,
+                          const CompactVectorOfStrings<Id>& patterns);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
+
+#endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H

@@ -2,8 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (July of 2023,
 // schlegea@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
+#define QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H
 
 #include <absl/strings/str_cat.h>
 
@@ -461,8 +464,10 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
   `magicImpl`.
   */
   return detail::magicImplForDivAndMul(
-      *this, c,
-      []<typename DivisionType>(const DivisionType& a, const DivisionType& b) {
+      *this, c, [](const auto& a, const auto& b) {
+        static_assert(std::is_same_v<decltype(a), decltype(b)>,
+                      "Arguments shall be of the same type");
+        using DivisionType = std::decay_t<decltype(a)>;
         if constexpr (std::is_floating_point_v<DivisionType>) {
           return a / b;
         } else {
@@ -527,3 +532,5 @@ consteval MemorySize operator""_TB(unsigned long long int terabytes) {
 }
 }  // namespace memory_literals
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_MEMORYSIZE_MEMORYSIZE_H

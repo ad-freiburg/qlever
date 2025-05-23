@@ -1,4 +1,4 @@
-// Copyright 2015 - 2022, University of Freiburg,
+// Copyright 2015 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
 //          Johannes Kalmbach <johannes.kalmbach@gmail.com>
@@ -10,16 +10,14 @@
 
 #include <charconv>
 #include <ranges>
-#include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/Conversions.h"
+#include "util/MmapVector.h"
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
@@ -85,7 +83,8 @@ void IndexImpl::processEntityCaseDuringInvertedListProcessing(
 // _____________________________________________________________________________
 void IndexImpl::processWordCaseDuringInvertedListProcessing(
     const WordsFileLine& line,
-    ad_utility::HashMap<WordIndex, Score>& wordsInContext) const {
+    ad_utility::HashMap<WordIndex, Score>& wordsInContext,
+    ScoreData& scoreData) const {
   // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
   WordVocabIndex vid;
   bool ret = textVocab_.getId(line.word_, &vid);
@@ -95,12 +94,16 @@ void IndexImpl::processWordCaseDuringInvertedListProcessing(
                << "not found in textVocab. Terminating\n";
     AD_FAIL();
   }
-  wordsInContext[wid] += line.score_;
+  if (scoreData.getScoringMetric() == TextScoringMetric::EXPLICIT) {
+    wordsInContext[wid] += line.score_;
+  } else {
+    wordsInContext[wid] = scoreData.getScore(wid, line.contextId_);
+  }
 }
 
 // _____________________________________________________________________________
 void IndexImpl::logEntityNotFound(const string& word,
-                                  size_t& entityNotFoundErrorMsgCount) const {
+                                  size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "Entity from text not in KB: " << word << '\n';
     if (++entityNotFoundErrorMsgCount == 20) {
@@ -113,18 +116,26 @@ void IndexImpl::logEntityNotFound(const string& word,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::addTextFromContextFile(const string& contextFile,
-                                       bool addWordsFromLiterals) {
+void IndexImpl::buildTextIndexFile(
+    const std::optional<std::pair<string, string>>& wordsAndDocsFile,
+    bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
+    std::pair<float, float> bAndKForBM25) {
+  AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
-  // Either read words from given file or consider each literal as text record
-  // or both (but at least one of them, otherwise this function is not called).
-  if (!contextFile.empty()) {
-    LOG(INFO) << "Reading words from \"" << contextFile << "\"" << std::endl;
+  bool addFromWordAndDocsFile = wordsAndDocsFile.has_value();
+  const auto& [wordsFile, docsFile] =
+      !addFromWordAndDocsFile ? std::pair{"", ""} : wordsAndDocsFile.value();
+  // Either read words from given files or consider each literal as text record
+  // or both (but at least one of them, otherwise this function is not called)
+  if (addFromWordAndDocsFile) {
+    AD_CORRECTNESS_CHECK(!(wordsFile.empty() || docsFile.empty()));
+    LOG(INFO) << "Reading words from wordsfile \"" << wordsFile << "\""
+              << " and from docsFile \"" << docsFile << "\"" << std::endl;
   }
   if (addWordsFromLiterals) {
-    LOG(INFO) << (contextFile.empty() ? "C" : "Additionally c")
+    LOG(INFO) << (!addFromWordAndDocsFile ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
@@ -138,24 +149,27 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
+  {
+    auto [b, k] = bAndKForBM25;
+    storeTextScoringParamsInConfiguration(textScoringMetric, b, k);
+  }
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
-  // Build the text vocabulary (first scan over the text records).
-  LOG(INFO) << "Building text vocabulary ..." << std::endl;
-  size_t nofLines =
-      processWordsForVocabulary(contextFile, addWordsFromLiterals);
+  scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
+                bAndKParamForTextScoring_};
 
+  // Build the text vocabulary (first scan over the text records).
+  processWordsForVocabulary(wordsFile, addWordsFromLiterals);
+  // Calculate the score data for the words
+  scoreData_.calculateScoreData(docsFile, addWordsFromLiterals, textVocab_,
+                                vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
-  TextVec v;
-  v.reserve(nofLines);
-  processWordsForInvertedLists(contextFile, addWordsFromLiterals, v);
-  LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
-  stxxl::sort(begin(v), end(v), SortText(),
-              memoryLimitIndexBuilding().getBytes() / 3);
-  LOG(DEBUG) << "Sort done" << std::endl;
-  createTextIndex(indexFilename, v);
+  TextVec vec{indexFilename + ".text-vec-sorter.tmp",
+              memoryLimitIndexBuilding() / 3, allocator_};
+  processWordsForInvertedLists(wordsFile, addWordsFromLiterals, vec);
+  createTextIndex(indexFilename, vec);
   openTextFileHandle();
 }
 
@@ -163,10 +177,10 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
 void IndexImpl::buildDocsDB(const string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
-  std::ofstream ofs(onDiskBase_ + ".text.docsDB", std::ios_base::out);
+  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
   // To avoid excessive use of RAM,
-  // we write the offsets to and stxxl:vector first;
-  stxxl::vector<off_t> offsets;
+  // we write the offsets to and `ad_utility::MmapVector` first;
+  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
   string line;
@@ -175,7 +189,9 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     std::string_view lineView = line;
     size_t tab = lineView.find('\t');
     uint64_t contextId = 0;
+    // Get contextId from line
     std::from_chars(lineView.data(), lineView.data() + tab, contextId);
+    // Set lineView to the docText
     lineView = lineView.substr(tab + 1);
     ofs << lineView;
     while (currentContextId < contextId) {
@@ -187,15 +203,8 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     currentOffset += static_cast<off_t>(lineView.size());
   }
   offsets.push_back(currentOffset);
-
-  ofs.close();
-  // Now append the tmp file to the docsDB file.
-  ad_utility::File out(onDiskBase_ + ".text.docsDB", "a");
-  for (size_t i = 0; i < offsets.size(); ++i) {
-    off_t cur = offsets[i];
-    out.write(&cur, sizeof(cur));
-  }
-  out.close();
+  ofs.write(reinterpret_cast<const char*>(offsets.data()),
+            sizeof(off_t) * offsets.size());
   LOG(INFO) << "DocsDB done.\n";
 }
 
@@ -218,7 +227,6 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
-
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
@@ -260,9 +268,8 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
 // _____________________________________________________________________________
 void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                                              bool addWordsFromLiterals,
-                                             IndexImpl::TextVec& vec) {
+                                             TextVec& vec) {
   LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
-  TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
@@ -276,7 +283,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line.contextId_ != currentContext) {
       ++nofContexts;
-      addContextToVector(writer, currentContext, wordsInContext,
+      addContextToVector(vec, currentContext, wordsInContext,
                          entitiesInContext);
       currentContext = line.contextId_;
       wordsInContext.clear();
@@ -288,7 +295,8 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
           line, entitiesInContext, nofLiterals, entityNotFoundErrorMsgCount);
     } else {
       ++nofWordPostings;
-      processWordCaseDuringInvertedListProcessing(line, wordsInContext);
+      processWordCaseDuringInvertedListProcessing(line, wordsInContext,
+                                                  scoreData_);
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {
@@ -298,7 +306,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   LOG(DEBUG) << "Number of total entity mentions: " << nofEntityPostings
              << std::endl;
   ++nofContexts;
-  addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
+  addContextToVector(vec, currentContext, wordsInContext, entitiesInContext);
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
@@ -307,22 +315,24 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
       nofNonLiteralsInTextIndex_;
   writeConfiguration();
 
-  writer.finish();
   LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;
 }
 
 // _____________________________________________________________________________
 void IndexImpl::addContextToVector(
-    IndexImpl::TextVec::bufwriter_type& writer, TextRecordIndex context,
+    TextVec& vec, TextRecordIndex context,
     const ad_utility::HashMap<WordIndex, Score>& words,
-    const ad_utility::HashMap<Id, Score>& entities) {
+    const ad_utility::HashMap<Id, Score>& entities) const {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<TextBlockIndex> touchedBlocks;
   for (auto it = words.begin(); it != words.end(); ++it) {
     TextBlockIndex blockId = getWordBlockId(it->first);
     touchedBlocks.insert(blockId);
-    writer << std::make_tuple(blockId, context, it->first, it->second, false);
+    vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(false),
+                        Id::makeFromInt(context.get()),
+                        Id::makeFromInt(it->first),
+                        Id::makeFromDouble(it->second)});
   }
 
   // All entities have to be written in the entity list part for each block.
@@ -333,15 +343,16 @@ void IndexImpl::addContextToVector(
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-      writer << std::make_tuple(
-          blockId, context, it->first.getVocabIndex().get(), it->second, true);
+      vec.push(std::array{Id::makeFromInt(blockId), Id::makeFromBool(true),
+                          Id::makeFromInt(context.get()),
+                          Id::makeFromInt(it->first.getVocabIndex().get()),
+                          Id::makeFromDouble(it->second)});
     }
   }
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createTextIndex(const string& filename,
-                                const IndexImpl::TextVec& vec) {
+void IndexImpl::createTextIndex(const string& filename, TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   currenttOffset_ = 0;
   // Detect block boundaries from the main key of the vec.
@@ -352,43 +363,47 @@ void IndexImpl::createTextIndex(const string& filename,
   WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
-  for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if (std::get<0>(*reader) != currentBlockIndex) {
+  for (const auto& value : vec.sortedView()) {
+    TextBlockIndex textBlockIndex = value[0].getInt();
+    bool flag = value[1].getBool();
+    TextRecordIndex textRecordIndex = TextRecordIndex::make(value[2].getInt());
+    WordOrEntityIndex wordOrEntityIndex = value[3].getInt();
+    Score score = value[4].getDouble();
+    if (textBlockIndex != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
-
+      bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, true, currenttOffset_);
+          out, classicPostings, true, currenttOffset_, scoreIsInt);
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, false, currenttOffset_);
+          out, entityPostings, false, currenttOffset_, scoreIsInt);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
       entityPostings.clear();
-      currentBlockIndex = std::get<0>(*reader);
-      currentMinWordIndex = std::get<2>(*reader);
-      currentMaxWordIndex = std::get<2>(*reader);
+      currentBlockIndex = textBlockIndex;
+      currentMinWordIndex = wordOrEntityIndex;
+      currentMaxWordIndex = wordOrEntityIndex;
     }
-    if (!std::get<4>(*reader)) {
-      classicPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
-                                   std::get<3>(*reader));
-      if (std::get<2>(*reader) < currentMinWordIndex) {
-        currentMinWordIndex = std::get<2>(*reader);
+    if (!flag) {
+      classicPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
+      if (wordOrEntityIndex < currentMinWordIndex) {
+        currentMinWordIndex = wordOrEntityIndex;
       }
-      if (std::get<2>(*reader) > currentMaxWordIndex) {
-        currentMaxWordIndex = std::get<2>(*reader);
+      if (wordOrEntityIndex > currentMaxWordIndex) {
+        currentMaxWordIndex = wordOrEntityIndex;
       }
 
     } else {
-      entityPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
-                                  std::get<3>(*reader));
+      entityPostings.emplace_back(textRecordIndex, wordOrEntityIndex, score);
     }
   }
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
+  bool scoreIsInt = textScoringMetric_ == TextScoringMetric::EXPLICIT;
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, true, currenttOffset_);
+      out, classicPostings, true, currenttOffset_, scoreIsInt);
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, false, currenttOffset_);
+      out, entityPostings, false, currenttOffset_, scoreIsInt);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();
@@ -431,7 +446,8 @@ static cppcoro::generator<std::string> fourLetterPrefixes() {
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-static bool areFourLetterPrefixesSorted(auto comparator) {
+template <typename T>
+static bool areFourLetterPrefixesSorted(T comparator) {
   std::string first;
   for (auto second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {
@@ -573,66 +589,71 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 }
 
 // _____________________________________________________________________________
-IdTable IndexImpl::readWordCl(
-    const TextBlockMetaData& tbmd,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+IdTable IndexImpl::readContextListHelper(
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const ContextListMetaData& contextList, bool isWordCl) const {
   IdTable idTable{3, allocator};
-  idTable.resize(tbmd._cl._nofElements);
+  idTable.resize(contextList._nofElements);
+  // Read ContextList
   textIndexReadWrite::readGapComprList<Id, uint64_t>(
-      idTable.getColumn(0).begin(), tbmd._cl._nofElements,
-      tbmd._cl._startContextlist,
-      static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
+      idTable.getColumn(0).begin(), contextList._nofElements,
+      contextList._startContextlist, contextList.getByteLengthContextList(),
       textIndexFile_, [](uint64_t id) {
         return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
       });
 
-  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
-      idTable.getColumn(1).begin(), tbmd._cl._nofElements,
-      tbmd._cl._startWordlist,
-      static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist),
-      textIndexFile_, [](WordIndex id) {
-        return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
-      });
+  // Helper lambda to read wordIndexList
+  auto wordIndexToId = [isWordCl](auto wordIndex) {
+    if (isWordCl) {
+      return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
+    }
+    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+  };
 
-  textIndexReadWrite::readFreqComprList<Id, Score>(
-      idTable.getColumn(2).begin(), tbmd._cl._nofElements,
-      tbmd._cl._startScorelist,
-      static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
-      textIndexFile_, &Id::makeFromInt);
+  // Read wordIndexList
+  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
+      idTable.getColumn(1).begin(), contextList._nofElements,
+      contextList._startWordlist, contextList.getByteLengthWordlist(),
+      textIndexFile_, wordIndexToId);
+
+  // Helper lambdas to read scoreList
+  auto scoreToId = [](auto score) {
+    using T = decltype(score);
+    if constexpr (std::is_same_v<T, uint16_t>) {
+      return Id::makeFromInt(static_cast<uint64_t>(score));
+    } else {
+      return Id::makeFromDouble(static_cast<double>(score));
+    }
+  };
+
+  // Read scoreList
+  if (textScoringMetric_ == TextScoringMetric::EXPLICIT) {
+    textIndexReadWrite::readFreqComprList<Id, uint16_t>(
+        idTable.getColumn(2).begin(), contextList._nofElements,
+        contextList._startScorelist, contextList.getByteLengthScorelist(),
+        textIndexFile_, scoreToId);
+  } else {
+    auto scores = textIndexReadWrite::readZstdComprList<Score>(
+        contextList._nofElements, contextList._startScorelist,
+        contextList.getByteLengthScorelist(), textIndexFile_);
+    ql::ranges::transform(scores.begin(), scores.end(),
+                          idTable.getColumn(2).begin(), scoreToId);
+  }
   return idTable;
+}
+
+// _____________________________________________________________________________
+IdTable IndexImpl::readWordCl(
+    const TextBlockMetaData& tbmd,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  return readContextListHelper(allocator, tbmd._cl, true);
 }
 
 // _____________________________________________________________________________
 IdTable IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  IdTable idTable{3, allocator};
-  idTable.resize(tbmd._entityCl._nofElements);
-  textIndexReadWrite::readGapComprList<Id, uint64_t>(
-      idTable.getColumn(0).begin(), tbmd._entityCl._nofElements,
-      tbmd._entityCl._startContextlist,
-      static_cast<size_t>(tbmd._entityCl._startWordlist -
-                          tbmd._entityCl._startContextlist),
-      textIndexFile_, [](uint64_t id) {
-        return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
-      });
-
-  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
-      idTable.getColumn(1).begin(), tbmd._entityCl._nofElements,
-      tbmd._entityCl._startWordlist,
-      static_cast<size_t>(tbmd._entityCl._startScorelist -
-                          tbmd._entityCl._startWordlist),
-      textIndexFile_, [](uint64_t from) {
-        return Id::makeFromVocabIndex(VocabIndex::make(from));
-      });
-
-  textIndexReadWrite::readFreqComprList<Id, Score>(
-      idTable.getColumn(2).begin(), tbmd._entityCl._nofElements,
-      tbmd._entityCl._startScorelist,
-      static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                          tbmd._entityCl._startScorelist),
-      textIndexFile_, &Id::makeFromInt);
-  return idTable;
+  return readContextListHelper(allocator, tbmd._entityCl, false);
 }
 
 // _____________________________________________________________________________
@@ -641,9 +662,9 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
-  idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
+    idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
     return idTable;
   }
   const auto& tbmd = optionalTbmd.value().tbmd_;
@@ -776,4 +797,26 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                          !(tbmd._firstWordId == idRange.first().get() &&
                            tbmd._lastWordId == idRange.last().get());
   return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::storeTextScoringParamsInConfiguration(
+    TextScoringMetric scoringMetric, float b, float k) {
+  configurationJson_["text-scoring-metric"] = scoringMetric;
+  textScoringMetric_ = scoringMetric;
+  auto bAndK = [b, k, this]() {
+    if (0 <= b && b <= 1 && 0 <= k) {
+      return std::pair{b, k};
+    } else {
+      if (textScoringMetric_ == TextScoringMetric::BM25) {
+        throw std::runtime_error{absl::StrCat(
+            "Invalid values given for BM25 score: `b=", b, "` and `k=", k,
+            "`, `b` must be in [0, 1] and `k` must be >= 0 ")};
+      }
+      return std::pair{0.75f, 1.75f};
+    }
+  }();
+  bAndKParamForTextScoring_ = bAndK;
+  configurationJson_["b-and-k-parameter-for-text-scoring"] = bAndK;
+  writeConfiguration();
 }

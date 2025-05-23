@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -24,17 +27,26 @@ add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
+option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-    else ()
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17.0.0")
+        # clang-16 doesn't support templated structs without explicit deduction guides, but those are required with
+        # libstdc++13 ranges in some cases.
+        MESSAGE(STATUS "range-v3 is used for clang-16 because of its incompatibility with libstdc++13")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
@@ -102,10 +114,20 @@ FetchContent_Declare(
 FetchContent_Declare(
         range-v3
         GIT_REPOSITORY https://github.com/joka921/range-v3
-        GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
+        GIT_TAG  b661537be421fee77df40bdffa8f221ead53bb8e  # branch fork-for-qlever
 )
 
-
+#################################
+# libspatialjoin
+################################
+FetchContent_Declare(
+        spatialjoin
+        GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
+        GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
+)
+# disable bzip2 and zlib support in spatialjoin, we don't need it
+add_definitions("-DSPATIALJOIN_NO_BZIP2=True")
+add_definitions("-DSPATIALJOIN_NO_ZLIB=True")
 
 ################################
 # Threading
@@ -159,7 +181,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -178,7 +200,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst nlohmann_json::nlohmann_json)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock fsst nlohmann_json::nlohmann_json)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -199,7 +221,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept
 # macros from `range-v3`.
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS})
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} )
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
 endif()
 
@@ -297,20 +320,6 @@ endif ()
 add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
-# STXXL
-################################
-# Disable GNU parallel as it prevents build on Ubuntu 14.04
-set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
-set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
-
-set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
-FetchContent_Declare(
-        stxxl
-        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 449a8fed095ffd5c10560714b446895e54c65486
-)
-
-################################
 # FSST
 ################################
 FetchContent_Declare(
@@ -340,11 +349,10 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3)
-# Disable some warnings in RE2, STXXL, and GTEST
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin)
+# Disable some warnings in RE2 and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
-target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif ()
@@ -424,6 +432,7 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/global)
 add_subdirectory(benchmark)
 
 enable_testing()

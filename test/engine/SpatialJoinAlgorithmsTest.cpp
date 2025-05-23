@@ -11,13 +11,10 @@
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "gtest/gtest.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -26,7 +23,8 @@ using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
 // Shortcut for SpatialJoin task parameters
-using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+using SJ =
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
 
 namespace computeResultTest {
 
@@ -259,7 +257,8 @@ class SpatialJoinParamTest
         ad_utility::triple_component::Iri::fromIriref(geometry)};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
-        SparqlTriple{subject, std::string{"<asWKT>"}, point1});
+        SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),
+                           point1});
     // ====================== build big input ================================
     auto bigChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
@@ -283,9 +282,7 @@ class SpatialJoinParamTest
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
 
-    ad_utility::MemorySize blocksizePermutations = 128_MB;
-    auto qec = ad_utility::testing::getQec(kg, true, true, false,
-                                           blocksizePermutations, false);
+    auto qec = buildQec(kg);
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
@@ -1539,8 +1536,7 @@ QueryExecutionContext* getAllGeometriesQEC() {
   addRow(kg, "5", multiLinestring);
   addRow(kg, "6", multiPolygon);
 
-  auto qec = ad_utility::testing::getQec(kg, true, true, false, 16_MB, false,
-                                         true, std::nullopt, 10_kB);
+  auto qec = buildQec(kg);
   return qec;
 }
 
@@ -1578,8 +1574,9 @@ TEST(SpatialJoin, trueAreaDistance) {
       TripleComponent object{Variable{objStr}};
       return ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
-          SparqlTriple{TripleComponent::Iri::fromIriref(subject), "<asWKT>",
-                       object});
+          SparqlTripleSimple{TripleComponent::Iri::fromIriref(subject),
+                             TripleComponent::Iri::fromIriref("<asWKT>"),
+                             object});
     };
     auto scan1 = makeIndexScan(nr1);
     auto scan2 = makeIndexScan(nr2);

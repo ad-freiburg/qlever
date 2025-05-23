@@ -1,4 +1,5 @@
-#pragma once
+#ifndef QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
+#define QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 
 #include <cstdlib>
 
@@ -321,7 +322,7 @@ inline std::string createMixedDataset() {
 }
 
 // a mixed dataset, which contains points and areas. One of them is the geometry
-// of germeny, where the distance from the midpoint to the borders can not be
+// of germany, where the distance from the midpoint to the borders can not be
 // ignored or approximated as zero
 inline std::string createTrueDistanceDataset() {
   std::string kg;
@@ -334,24 +335,38 @@ inline std::string createTrueDistanceDataset() {
   return kg;
 }
 
+// Build a `QueryExecutionContext` from the given turtle, but set some memory
+// defaults to higher values to make it possible to test large geometric
+// literals.
+inline auto buildQec(std::string turtleKg) {
+  ad_utility::testing::TestIndexConfig config{turtleKg};
+  config.blocksizePermutations = 16_MB;
+  config.parserBufferSize = 10_kB;
+  return ad_utility::testing::getQec(std::move(config));
+}
+
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  std::string kg = createSmallDataset(useAreas);
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10_kB);
-  return qec;
+  return buildQec(createSmallDataset(useAreas));
 }
 
 inline QueryExecutionContext* buildMixedAreaPointQEC(
     bool useTrueDistanceDataset = false) {
   std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
                                           : createMixedDataset();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec =
-      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10_kB);
-  return qec;
+  return buildQec(kg);
+}
+
+// Create `QueryExecutionContext` with a dataset that contains an additional
+// area without `<name>` predicate (so that our `libspatialjoin` test has two
+// sides of different size), as well as an object with an invalid geometry.
+inline QueryExecutionContext* buildNonSelfJoinDataset() {
+  std::string kg = createTrueDistanceDataset();
+  kg += absl::StrCat(
+      "<nodeAreaAdded> <hasGeometry> <geometryAreaAdded> .\n",
+      "<geometryAreaAdded> <asWKT> ", approximatedAreaGermany, " .\n",
+      "<invalidObjectAdded> <hasGeometry> <geometryInvalidAdded> .\n",
+      "<geometryInvalidAdded> <asWKT> 42 .\n");
+  return buildQec(kg);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
@@ -359,7 +374,9 @@ inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
   TripleComponent subject{Variable{triple.at(0)}};
   TripleComponent object{Variable{triple.at(2)}};
   return ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{
+          subject, TripleComponent::Iri::fromIriref(triple.at(1)), object});
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildJoin(
@@ -426,9 +443,12 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    std::vector<ColumnIndex>{},
                                    1,
                                    spatialJoin->getMaxDist(),
+                                   std::nullopt,
                                    std::nullopt};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }
 
 }  // namespace SpatialJoinTestHelpers
+
+#endif  // QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H

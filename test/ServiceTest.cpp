@@ -15,7 +15,6 @@
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
@@ -23,6 +22,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -58,13 +58,16 @@ class ServiceTest : public ::testing::Test {
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType = "application/sparql-results+json",
-         std::exception_ptr mockException =
-             nullptr) -> Service::GetResultFunction {
+         std::exception_ptr mockException = nullptr,
+         ad_utility::source_location loc =
+             ad_utility::source_location::current())
+      -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
                std::string_view acceptHeader) {
+      auto g = generateLocationTrace(loc);
       // Check that the request parameters are as expected.
       //
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
@@ -89,7 +92,7 @@ class ServiceTest : public ::testing::Test {
       }
 
       auto body =
-          [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
+          [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
         // Randomly slice the string to make tests more robust.
         std::mt19937 rng{std::random_device{}()};
 
@@ -100,7 +103,7 @@ class ServiceTest : public ::testing::Test {
         for (size_t start = 0; start < resultStr.length();) {
           size_t size = distribution(rng);
           std::string resultCopy{resultStr.substr(start, size)};
-          co_yield std::as_writable_bytes(std::span{resultCopy});
+          co_yield ql::as_writable_bytes(ql::span{resultCopy});
           start += size;
         }
       };
@@ -156,8 +159,7 @@ TEST_F(ServiceTest, basicMethods) {
   // Test the basic methods.
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
-  ASSERT_TRUE(
-      serviceOp.getCacheKey().starts_with("SERVICE <http://localhorst/api>"))
+  ASSERT_TRUE(serviceOp.getCacheKey().starts_with("SERVICE "))
       << serviceOp.getCacheKey();
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
@@ -198,18 +200,20 @@ TEST_F(ServiceTest, computeResult) {
     // query we expect.
     std::string_view expectedUrl = "http://localhorst:80/api";
     std::string_view expectedSparqlQuery =
-        "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
+        "PREFIX doof: <http://doof.org> SELECT ?x ?y { }";
 
     // Shorthand to run computeResult with the test parameters given above.
     auto runComputeResult =
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false) -> Result {
-      Service s{testQec,
-                silent ? parsedServiceClauseSilent : parsedServiceClause,
-                getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
-                                         result, status, contentType)};
+            bool silent = false,
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) -> Result {
+      Service s{
+          testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
+          getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                   status, contentType, nullptr, loc)};
       return s.computeResultOnlyForTesting();
     };
 
@@ -267,7 +271,10 @@ TEST_F(ServiceTest, computeResult) {
     auto expectThrowOrSilence =
         [&](const std::string& result, std::string_view errorMsg,
             boost::beast::http::status status = boost::beast::http::status::ok,
-            std::string contentType = "application/sparql-results+json") {
+            std::string contentType = "application/sparql-results+json",
+            ad_utility::source_location loc =
+                ad_utility::source_location::current()) {
+          auto g = generateLocationTrace(loc);
           AD_EXPECT_THROW_WITH_MESSAGE(
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
@@ -437,7 +444,7 @@ TEST_F(ServiceTest, computeResult) {
 
     std::string_view expectedSparqlQuery5 =
         "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
+        "{ VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y "
         ". ?y "
         "<is-a> ?z2 . }";
 
@@ -493,6 +500,54 @@ TEST_F(ServiceTest, computeResult) {
   }
 }
 
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultWrapSubqueriesWithSibling) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+
+  auto sibling = std::make_shared<Values>(
+      testQec,
+      (parsedQuery::SparqlValues){{Variable{"?a"}}, {{TC(iri("<a>"))}}});
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?a"}},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ SELECT ?obj WHERE { ?a ?b ?c } }",
+      false};
+
+  std::string_view expectedSparqlQuery =
+      " SELECT ?a { VALUES (?a) { (<a>) } . { SELECT ?obj WHERE { ?a ?b "
+      "?c } } }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({"a"}, {{"a"}}))};
+
+  serviceOperation.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
+// _____________________________________________________________________________
+TEST_F(ServiceTest, computeResultNoVariables) {
+  parsedQuery::Service parsedServiceClause{
+      {},
+      TripleComponent::Iri::fromIriref("<http://localhost/api>"),
+      "",
+      "{ <a> <b> <c> }",
+      false};
+
+  std::string_view expectedSparqlQuery = " SELECT * { <a> <b> <c> }";
+
+  Service serviceOperation{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory("http://localhost:80/api", expectedSparqlQuery,
+                               genJsonResult({}, {{}}))};
+
+  EXPECT_NO_THROW(serviceOperation.computeResultOnlyForTesting());
+}
+
 TEST_F(ServiceTest, getCacheKey) {
   // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{
@@ -502,42 +557,79 @@ TEST_F(ServiceTest, getCacheKey) {
       "{ }",
       false};
 
-  Service service(
+  Service service1{
       testQec, parsedServiceClause,
       getResultFunctionFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult(
               {"x", "y"},
-              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
 
-  auto baseCacheKey = service.getCacheKey();
+  Service service2{
+      testQec, parsedServiceClause,
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
 
-  // The cacheKey of the Service Operation has to depend on the cacheKey
-  // of the siblingTree, as it might alter the Service Query.
-  auto iri = ad_utility::testing::iri;
-  using TC = TripleComponent;
-  auto sibling = std::make_shared<Values>(
-      testQec, (parsedQuery::SparqlValues){
-                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
-                    {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}});
-  service.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+  // Identically constructed services should have have unique cache keys.
+  // Because a remote endpoint cannot be considered cached.
+  EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
+}
 
-  auto siblingCacheKey = service.getCacheKey();
-  EXPECT_NE(baseCacheKey, siblingCacheKey);
+// _____________________________________________________________________________
+TEST_F(ServiceTest, getCacheKeyWithCaching) {
+  using namespace ::testing;
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
+  {
+    parsedQuery::Service parsedServiceClause{
+        {Variable{"?x"}, Variable{"?y"}},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        false};
 
-  auto sibling2 = std::make_shared<Values>(
-      testQec, (parsedQuery::SparqlValues){
-                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}});
-  service.siblingInfo_.emplace(siblingInfoFromOp(sibling2));
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult(
+                {"x", "y"},
+                {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
 
-  EXPECT_NE(siblingCacheKey, service.getCacheKey());
+    EXPECT_THAT(service.getCacheKey(),
+                AllOf(StartsWith("SERVICE"), Not(HasSubstr("SILENT")),
+                      HasSubstr("<http://localhorst/api>"),
+                      HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
+  {
+    parsedQuery::Service parsedServiceClause{
+        {Variable{"?x"}, Variable{"?y"}},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        true};
 
-  // SILENT keyword
-  service.parsedServiceClause_.silent_ = true;
-  EXPECT_NE(baseCacheKey, service.getCacheKey());
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+            genJsonResult(
+                {"x", "y"},
+                {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
+
+    EXPECT_THAT(service.getCacheKey(),
+                AllOf(StartsWith("SERVICE"), HasSubstr("SILENT"),
+                      HasSubstr("<http://localhorst/api>"),
+                      HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
 }
 
 // Test that bindingToTripleComponent behaves as expected.
@@ -648,7 +740,8 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
 }
 
 // ____________________________________________________________________________
-TEST_F(ServiceTest, precomputeSiblingResult) {
+TEST_F(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching) {
+  auto cleanup = setRuntimeParameterForTest<"cache-service-results">(true);
   auto service = std::make_shared<Service>(
       testQec,
       parsedQuery::Service{
@@ -663,6 +756,29 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
           genJsonResult({"x", "y"}, {{"a", "b"}}),
           boost::beast::http::status::ok, "application/sparql-results+json"));
 
+  auto sibling = std::make_shared<AlwaysFailOperation>(testQec, Variable{"?x"});
+
+  EXPECT_NO_THROW(
+      Service::precomputeSiblingResult(sibling, service, true, false));
+  EXPECT_FALSE(service->siblingInfo_.has_value());
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResult) {
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+
   auto service2 = std::make_shared<Service>(*service);
 
   // Adaptation of the Values class, allowing to compute lazy Results.
@@ -672,13 +788,13 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                parsedQuery::SparqlValues parsedValues)
         : Values(qec, parsedValues) {}
 
-    ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
-      ProtoResult res = Values::computeResult(false);
+    Result computeResult([[maybe_unused]] bool requestLaziness) override {
+      Result res = Values::computeResult(false);
 
       if (!requestLaziness) {
-        return ProtoResult(Result::IdTableVocabPair(res.idTable().clone(),
-                                                    res.localVocab().clone()),
-                           res.sortedBy());
+        return Result(Result::IdTableVocabPair(res.idTable().clone(),
+                                               res.localVocab().clone()),
+                      res.sortedBy());
       }
 
       // yield each row individually

@@ -7,7 +7,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+#include "parser/Literal.h"
+#include "parser/NormalizedString.h"
 #include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 using namespace sparqlExpression::detail;
 
@@ -91,10 +94,40 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithStrFunction::operator()(const LiteralOrIri& s,
+                                              const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, false);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithoutStrFunction::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return ExportQueryExecutionTrees::handleIriOrLiteral(s, true);
+}
+
+// ____________________________________________________________________________
 std::optional<std::string> ReplacementStringGetter::operator()(
     Id id, const EvaluationContext* context) const {
   std::optional<std::string> originalString =
-      StringValueGetter::operator()(id, context);
+      LiteralFromIdGetter{}(id, context);
   if (!originalString.has_value()) {
     return originalString;
   }
@@ -164,7 +197,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 
 // _____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
-    ValueId id, const sparqlExpression::EvaluationContext* context) const {
+    ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
           context->_qec.getIndex(), id, context->_localVocab);
@@ -283,6 +316,39 @@ OptIri IriValueGetter::operator()(
   } else {
     return std::nullopt;
   }
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  // Use cache to remember fully parsed units for reoccurring ValueIds
+  return cache_.getOrCompute(
+      id, [&context](const ValueId& value) -> UnitOfMeasurement {
+        // Get string content of ValueId
+        auto str = ExportQueryExecutionTrees::idToLiteralOrIri(
+            context->_qec.getIndex(), value, context->_localVocab, true);
+        // Use LiteralOrIri overload for actual computation
+        if (str.has_value()) {
+          return UnitOfMeasurementValueGetter{}(str.value(), context);
+        }
+        return UnitOfMeasurement::UNKNOWN;
+      });
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
+    const LiteralOrIri& s,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
+  // of measurement. Because this is a rather obscure requirement, we support
+  // IRIs also.
+  if (s.isIri() ||
+      (s.isLiteral() && s.getLiteral().hasDatatype() &&
+       asStringViewUnsafe(s.getLiteral().getDatatype()) == XSD_ANYURI_TYPE)) {
+    return ad_utility::detail::iriToUnitOfMeasurement(
+        asStringViewUnsafe(s.getContent()));
+  }
+  return UnitOfMeasurement::UNKNOWN;
 }
 
 //______________________________________________________________________________

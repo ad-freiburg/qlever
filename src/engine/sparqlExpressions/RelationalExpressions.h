@@ -2,7 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
+#define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
@@ -52,7 +53,7 @@ class RelationalExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 // Implementation of the `IN` expression
@@ -84,7 +85,7 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 }  // namespace sparqlExpression::relational
@@ -106,3 +107,5 @@ using GreaterEqualExpression =
 
 using InExpression = relational::InExpression;
 }  // namespace sparqlExpression
+
+#endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H

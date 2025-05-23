@@ -93,8 +93,9 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
 // respective full scans as specified by `leftRows` and `rightRows`. For the
 // specification of the subset see above.
 void testLazyScanForJoinOfTwoScans(
-    const std::string& kgTurtle, const SparqlTriple& tripleLeft,
-    const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
+    const std::string& kgTurtle, const SparqlTripleSimple& tripleLeft,
+    const SparqlTripleSimple& tripleRight,
+    const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
     ad_utility::MemorySize blocksizePermutations = 16_B,
     source_location l = source_location::current()) {
@@ -103,7 +104,9 @@ void testLazyScanForJoinOfTwoScans(
   // blocks.
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
-    auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
+    TestIndexConfig config{kgTurtle};
+    config.blocksizePermutations = blocksizePermutations;
+    auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
     s1.setLimit(limit);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
@@ -123,8 +126,9 @@ void testLazyScanForJoinOfTwoScans(
 
 // Test that setting up the lazy partial scans between `tripleLeft` and
 // `tripleRight` on the given `kg` throws an exception.
-void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
-                        const SparqlTriple& tripleRight,
+void testLazyScanThrows(const std::string& kg,
+                        const SparqlTripleSimple& tripleLeft,
+                        const SparqlTripleSimple& tripleRight,
                         source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
@@ -137,7 +141,7 @@ void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
 // materialized join column result that is specified by the `columnEntries`
 // yields only the subsets specified by the `expectedRows`.
 void testLazyScanForJoinWithColumn(
-    const std::string& kg, const SparqlTriple& scanTriple,
+    const std::string& kg, const SparqlTripleSimple& scanTriple,
     std::vector<TripleComponent> columnEntries,
     const std::vector<IndexPair>& expectedRows,
     source_location l = source_location::current()) {
@@ -156,7 +160,7 @@ void testLazyScanForJoinWithColumn(
 // Test the same scenario as the previous function, but assumes that the
 // setting up of the lazy scan fails with an exception.
 void testLazyScanWithColumnThrows(
-    const std::string& kg, const SparqlTriple& scanTriple,
+    const std::string& kg, const SparqlTripleSimple& scanTriple,
     const std::vector<TripleComponent>& columnEntries,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -181,7 +185,7 @@ void testLazyScanWithColumnThrows(
 // pair was successfully set. For convenience we assert this for the IdTable
 // column on which the `PrefilterExpression` was applied.
 const auto testSetAndMakeScanWithPrefilterExpr =
-    [](const std::string& kg, const SparqlTriple& triple,
+    [](const std::string& kg, const SparqlTripleSimple& triple,
        const Permutation::Enum permutation, IndexScan::PrefilterVariablePair pr,
        const std::vector<ValueId>& expectedIdsOnFilterColumn,
        bool prefilterCanBeSet = true,
@@ -217,8 +221,8 @@ const auto testSetAndMakeScanWithPrefilterExpr =
 }  // namespace
 
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
-  SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
-  SparqlTriple xqz{Tc{Var{"?x"}}, "<q>", Tc{Var{"?z"}}};
+  SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
+  SparqlTripleSimple xqz{Tc{Var{"?x"}}, iri("<q>"), Tc{Var{"?z"}}};
   {
     // In the tests we have a blocksize of two triples per block, and a new
     // block is started for a new relation. That explains the spacing of the
@@ -252,7 +256,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<b> <x2> <x>. <b> <x2> <xb2> .";
     testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
-  SparqlTriple bpx{Tc{iri("<b>")}, "<p>", Tc{Var{"?x"}}};
+  SparqlTripleSimple bpx{Tc{iri("<b>")}, iri("<p>"), Tc{Var{"?x"}}};
   {
     std::string kg =
         "<a> <p> <a1>. <a> <p> <a2>. "
@@ -286,7 +290,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that appears in the kg but not as the subject of
     // the <p> predicate.
-    SparqlTriple xb2px{Tc{iri("<xb2>")}, "<p>", Tc{Var{"?x"}}};
+    SparqlTripleSimple xb2px{Tc{iri("<xb2>")}, iri("<p>"), Tc{Var{"?x"}}};
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
   {
@@ -297,21 +301,21 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<x5> <q> <xb>. <x9> <q> <xb2> ."
         "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that is not even in the knowledge graph.
-    SparqlTriple xb2px{Tc{iri("<notInKg>")}, "<p>", Tc{Var{"?x"}}};
+    SparqlTripleSimple xb2px{Tc{iri("<notInKg>")}, iri("<p>"), Tc{Var{"?x"}}};
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
 
   // Corner cases
   {
     std::string kg = "<a> <b> <c> .";
-    SparqlTriple xyz{Tc{Var{"?x"}}, "?y", Tc{Var{"?z"}}};
+    SparqlTripleSimple xyz{Tc{Var{"?x"}}, Var{"?y"}, Tc{Var{"?z"}}};
     testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xyz);
     testLazyScanThrows(kg, xqz, xyz);
 
     // The first variable must be matching (subject variable is ?a vs ?x)
-    SparqlTriple abc{Tc{Var{"?a"}}, "<b>", Tc{Var{"?c"}}};
+    SparqlTripleSimple abc{Tc{Var{"?a"}}, iri("<b>"), Tc{Var{"?c"}}};
     testLazyScanThrows(kg, abc, xqz);
 
     // If both scans have two variables, then the second variable must not
@@ -321,7 +325,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
 }
 
 TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
-  SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
+  SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
   // In the tests we have a blocksize of two triples per block, and a new
   // block is started for a new relation. That explains the spacing of the
   // following example knowledge graphs.
@@ -351,13 +355,13 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
   {
     std::vector<TripleComponent> column{iri("<a>"), iri("<q>"), iri("<xb>")};
     // <f> does not appear as a predicate, so the result is empty.
-    SparqlTriple efg{Tc{Var{"?e"}}, "<f>", Tc{Var{"?g"}}};
+    SparqlTripleSimple efg{Tc{Var{"?e"}}, iri("<f>"), Tc{Var{"?g"}}};
     testLazyScanForJoinWithColumn(kg, efg, column, {});
   }
 }
 
 TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
-  SparqlTriple bpy{Tc{iri("<b>")}, "<p>", Tc{Var{"?x"}}};
+  SparqlTripleSimple bpy{Tc{iri("<b>")}, iri("<p>"), Tc{Var{"?x"}}};
   std::string kg =
       "<a> <p> <s0>. <a> <p> <s7>. "
       "<a> <p> <s99> . <b> <p> <s0>. "
@@ -374,7 +378,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
 }
 
 TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
-  SparqlTriple threeVars{Tc{Var{"?x"}}, "?b", Tc{Var{"?y"}}};
+  SparqlTripleSimple threeVars{Tc{Var{"?x"}}, Var{"?b"}, Tc{Var{"?y"}}};
   std::string kg =
       "<a> <p> <A>. <a> <p> <A2>. "
       "<a> <p> <A3> . <b> <p> <B>. "
@@ -392,7 +396,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
     std::vector<TripleComponent> unsortedColumn{iri("<a>"), iri("<b>"),
                                                 iri("<a>")};
-    SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
+    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
     testLazyScanWithColumnThrows(kg, xpy, unsortedColumn);
   }
 }
@@ -400,7 +404,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
 TEST(IndexScan, additionalColumn) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
-  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?xpattern"});
   triple.additionalScanColumns_.emplace_back(
@@ -422,7 +426,7 @@ TEST(IndexScan, additionalColumn) {
   // <x> is the only subject, so it has pattern 0, <z> doesn't appear as a
   // subject, so it has no pattern.
   auto exp = makeIdTableFromVector(
-      {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
+      {{getId("<x>"), getId("<z>"), I(0), I(Pattern::NoPattern)}});
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
 
@@ -431,7 +435,7 @@ TEST(IndexScan, additionalColumn) {
 TEST(IndexScan, namedGraphs) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
-  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
   ad_utility::HashSet<TripleComponent> graphs{
       TripleComponent::Iri::fromIriref("<graph1>"),
       TripleComponent::Iri::fromIriref("<graph2>")};
@@ -513,10 +517,18 @@ TEST(IndexScan, getResultSizeOfScan) {
   }
 }
 
+namespace {
+// Return a `QueryExecutionContext` that is used in some of the tests below,
+auto getQecWithoutPatterns = []() {
+  TestIndexConfig config{"<x> <p> <s1>, <s2>. <x> <p2> <s1>."};
+  config.usePatterns = false;
+  return getQec(std::move(config));
+};
+}  // namespace
 // _____________________________________________________________________________
 TEST(IndexScan, computeResultCanBeConsumedLazily) {
   using V = Variable;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   auto getId = makeGetId(qec->getIndex());
   auto x = getId("<x>");
   auto p = getId("<p>");
@@ -526,7 +538,7 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
   SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -544,11 +556,11 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
   using V = Variable;
   using I = TripleComponent::Iri;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
   IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
 
-  ProtoResult result = scan.computeResultOnlyForTesting(true);
+  Result result = scan.computeResultOnlyForTesting(true);
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
@@ -563,7 +575,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using V = Variable;
   using I = TripleComponent::Iri;
   using enum Permutation::Enum;
-  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto qec = getQecWithoutPatterns();
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
   auto p2 = I::fromIriref("<p2>");
@@ -629,8 +641,8 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
   };
 
   {
-    SparqlTriple triple{Tc{Variable{"?b"}}, "<price_tag>",
-                        Tc{Variable{"?price"}}};
+    SparqlTripleSimple triple{Tc{Variable{"?b"}}, iri("<price_tag>"),
+                              Tc{Variable{"?price"}}};
     IndexScan scan{qec, Permutation::POS, triple};
     assertEstimatedAndExactSize(
         scan,
@@ -645,8 +657,8 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
   }
 
   {
-    SparqlTriple triple{I::fromIriref("<b>"), "<price_tag>",
-                        Variable{"?price"}};
+    SparqlTripleSimple triple{I::fromIriref("<b>"), iri("<price_tag>"),
+                              Variable{"?price"}};
     IndexScan scan{qec, Permutation::PSO, triple};
     assertEstimatedAndExactSize(
         scan, pr(le(DoubleId(21.99)), Variable{"?price"}), 3, 3);
@@ -664,7 +676,7 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   using namespace filterHelper;
   using V = Variable;
   auto qec = getQec("<x> <y> <z>.");
-  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  SparqlTripleSimple triple{V{"?x"}, iri("<y>"), V{"?z"}};
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
@@ -705,8 +717,8 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
       "<price_tag> 147 . <P7> <price_tag> 174 . <P8> <price_tag> 174 "
       ". <P9> <price_tag> 189 . <P10> <price_tag> 194 .";
-  SparqlTriple triple{Tc{Variable{"?x"}}, "<price_tag>",
-                      Tc{Variable{"?price"}}};
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
+                            Tc{Variable{"?price"}}};
 
   // For the following tests, the <PrefilterExpression, Variable> pair is set
   // and applied for the respective IndexScan.
@@ -807,7 +819,7 @@ class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
 
   // Create a common `IndexScan` instance.
   IndexScan makeScan() const {
-    SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
+    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<p>"), Tc{Var{"?y"}}};
     // We need to scan all the blocks that contain the `<p>` predicate.
     return IndexScan{qec_, Permutation::PSO, xpy};
   }
@@ -1066,7 +1078,7 @@ INSTANTIATE_TEST_SUITE_P(IndexScanWithLazyJoinSuite, IndexScanWithLazyJoin,
 TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
   auto* qec = getQec("<a> <p> <A>");
   // Match with something that does not match.
-  SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+  SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
   IndexScan scan{qec, Permutation::PSO, xpy};
 
   auto makeJoinSide = []() -> Result::Generator {
@@ -1086,7 +1098,7 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
 TEST(IndexScan, clone) {
   auto* qec = getQec();
   {
-    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
     IndexScan scan{qec, Permutation::PSO, xpy};
 
     auto clone = scan.clone();
@@ -1097,7 +1109,7 @@ TEST(IndexScan, clone) {
   }
   {
     using namespace makeFilterExpression;
-    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
     IndexScan scan{
         qec,
         Permutation::PSO,

@@ -2,13 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_SRC_UTIL_PROGRESSBAR_H
+#define QLEVER_SRC_UTIL_PROGRESSBAR_H
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
 #include <string>
 
+#include "util/Exception.h"
 #include "util/StringUtils.h"
 #include "util/Timer.h"
 
@@ -136,13 +138,19 @@ class ProgressBar {
   // Final progress string (should only be called once after the computation has
   // finished).
   std::string getFinalProgressString() {
-    AD_CONTRACT_CHECK(timer_.isRunning(),
+    AD_CONTRACT_CHECK(!finished_,
                       "`ProgressBar::getFinalProgressString()` should only be "
                       "called once after the computation has finished");
     timer_.stop();
     totalDuration_ = timer_.value();
+    finished_ = true;
     return getProgressString();
   }
+
+  // Get timer. This is useful for more advanced use cases, where parts of the
+  // processing should not be timed (for example, when it takes a long time
+  // before the first step is processed and we do not want to include that).
+  Timer& getTimer() { return timer_; }
 
  private:
   // The total number of units that have been processed so far.
@@ -159,6 +167,8 @@ class ProgressBar {
 
   // Timer that is started as soon as this progress bar is created.
   Timer timer_{Timer::Started};
+  // Finished yet or not.
+  bool finished_ = false;
   // Update the statistics when at least this many steps have been processed.
   size_t updateWhenThisManyStepsProcessed_ = statisticsBatchSize_;
 
@@ -173,3 +183,5 @@ class ProgressBar {
 };
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_SRC_UTIL_PROGRESSBAR_H

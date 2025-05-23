@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
 // Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
-#pragma once
+
+#ifndef QLEVER_SRC_ENGINE_ORDERBY_H
+#define QLEVER_SRC_ENGINE_ORDERBY_H
 
 #include <utility>
 #include <vector>
@@ -80,9 +82,11 @@ class OrderBy : public Operation {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();
   }
 };
+
+#endif  // QLEVER_SRC_ENGINE_ORDERBY_H
