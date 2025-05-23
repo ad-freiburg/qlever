@@ -401,14 +401,16 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      if (word.hasDatatype()) {
+        word.getLiteral().removeDatatypeOrLanguageTag();
+      }
       return std::move(word.getLiteral());
     }
     return std::nullopt;
   }
-
-  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
-    word.getLiteral().removeDatatypeOrLanguageTag();
-  }
+  // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
+  // neither a datatype nor a language tag, hence we don't need an `if` here.
+  word.getLiteral().removeDatatypeOrLanguageTag();
   return std::move(word.getLiteral());
 }
 
