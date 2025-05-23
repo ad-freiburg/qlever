@@ -50,17 +50,39 @@ void expectRtiHasDimensions(
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
-  NeutralElementOperation n{getQec()};
-  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
   LimitOffsetClause l;
-  l._limit = 20;
-  n.setLimit(l);
-  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
-  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+  {
+    NeutralElementOperation n{getQec()};
+    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
+    l._limit = 20;
+    n.applyLimit(l);
+    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
+    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+  }
 
-  l._offset = 34;
-  n.setLimit(l);
-  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+  {
+    NeutralElementOperation n{getQec()};
+    l._offset = 34;
+    n.applyLimit(l);
+    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+  }
+}
+
+// ________________________________________________
+TEST(OperationTest, limitAndOffsetAreStacked) {
+  NeutralElementOperation n{getQec()};
+
+  n.applyLimit({std::nullopt, 1});
+  EXPECT_EQ(n.getLimit(), LimitOffsetClause(std::nullopt, 1));
+
+  n.applyLimit({20, 2});
+  EXPECT_EQ(n.getLimit(), LimitOffsetClause(20, 3));
+
+  n.applyLimit({std::nullopt, 4});
+  EXPECT_EQ(n.getLimit(), LimitOffsetClause(20, 7));
+
+  n.applyLimit({10, 8});
+  EXPECT_EQ(n.getLimit(), LimitOffsetClause(10, 15));
 }
 
 // ________________________________________________
@@ -273,7 +295,7 @@ TEST(OperationTest, estimatesForCachedResults) {
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
   NeutralElementOperation operation{getQec()};
-  operation.setLimit({12, 3});
+  operation.applyLimit({12, 3});
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
@@ -523,7 +545,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
 
-  valuesForTesting.setLimit({._limit = 1, ._offset = 1});
+  valuesForTesting.applyLimit({._limit = 1, ._offset = 1});
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 

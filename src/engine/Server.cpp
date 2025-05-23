@@ -1093,9 +1093,10 @@ void Server::adjustParsedQueryLimitOffset(
   // Make sure that the offset is not applied again when exporting the
   // result (it is already applied by the root operation in the query
   // execution tree). Note that we don't need this for the limit because
-  // applying a fixed limit is idempotent.
+  // applying a fixed limit is idempotent. This only works because the query
+  // planner does the exact same `supportsLimit()` check.
   const auto& qet = plannedQuery.queryExecutionTree_;
-  AD_CORRECTNESS_CHECK(limitOffset._offset >=
-                       qet.getRootOperation()->getLimit()._offset);
-  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
+  if (qet.supportsLimit()) {
+    limitOffset._offset = 0;
+  }
 }

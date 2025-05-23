@@ -502,6 +502,18 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 }
 
 // __________________________________________________________________
+void Operation::applyLimit(const LimitOffsetClause& limitOffsetClause) {
+  _limit._offset += limitOffsetClause._offset;
+  if (limitOffsetClause._limit.has_value()) {
+    _limit._limit =
+        std::min(_limit.limitOrDefault(), limitOffsetClause._limit.value());
+  }
+  // We can safely ignore members that are not `_offset` and `_limit` since
+  // they are unused by subclasses of `Operation`.
+  onLimitChanged(limitOffsetClause);
+}
+
+// __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
   _rootRuntimeInfo = root;
