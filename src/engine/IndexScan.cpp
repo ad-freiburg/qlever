@@ -63,13 +63,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple, Graphs graphsToFilter,
-                     PrefilterIndexPair prefilter)
-    : IndexScan(qec, permutation, triple.getSimple(), std::move(graphsToFilter),
-                std::move(prefilter)) {}
-
-// _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const TripleComponent& s, const TripleComponent& p,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,

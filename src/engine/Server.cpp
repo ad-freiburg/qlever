@@ -180,7 +180,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     net::awaitable<std::optional<Server::TimeLimit>> Server::
         verifyUserSubmittedQueryTimeout(
@@ -278,7 +278,7 @@ auto Server::prepareOperation(
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::process(const RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
@@ -650,7 +650,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
 }
 
 // _____________________________________________
-CPP_template_2(typename RequestT)(
+CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::OwningQueryId Server::getQueryId(
         const RequestT& request, std::string_view query) {
@@ -668,7 +668,7 @@ CPP_template_2(typename RequestT)(
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::sendStreamableResponse(
         const RequestT& request, ResponseT& send, MediaType mediaType,
@@ -712,7 +712,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_2(typename RequestT)(
+CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     MediaType Server::determineMediaType(
         const ad_utility::url_parser::ParamValueMap& params,
@@ -751,7 +751,7 @@ CPP_template_2(typename RequestT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_2(typename RequestT)(
+CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     ad_utility::websocket::MessageSender Server::createMessageSender(
         const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
@@ -764,7 +764,7 @@ CPP_template_2(typename RequestT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_2(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processQuery(
         const ad_utility::url_parser::ParamValueMap& params,
@@ -917,7 +917,7 @@ json Server::processUpdateImpl(
 }
 
 // ____________________________________________________________________________
-CPP_template_2(typename RequestT, typename ResponseT)(
+CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
         std::vector<ParsedQuery>&& updates,
@@ -970,7 +970,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 }
 
 // ____________________________________________________________________________
-CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
+CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processOperation(
         ad_utility::url_parser::sparqlOperation::Operation operation,

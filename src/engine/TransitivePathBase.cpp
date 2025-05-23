@@ -101,13 +101,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
       qec,
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs))),
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs))));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});
@@ -132,13 +130,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
       qec,
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs)),
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs)));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});
@@ -165,9 +161,9 @@ TransitivePathBase::decideDirection() {
 Result::Generator TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     size_t skipCol, bool yieldOnce, size_t inputWidth) const {
-  return ad_utility::callFixedSize(
+  return ad_utility::callFixedSizeVi(
       std::array{inputWidth, getResultWidth()},
-      [&]<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>() {
+      [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
             std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
       });
@@ -178,7 +174,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         size_t startSideCol,
                                                         size_t targetSideCol,
                                                         bool yieldOnce) const {
-  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
+  return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
     return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
                                            targetSideCol, yieldOnce);
   });
