@@ -207,8 +207,8 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithVocab) {
                         testContext.litId3, testContext.litId4,
                         testContext.litId5, testContext.litId6,
                         testContext.iriId1, testContext.iriId2};
-  std::vector<strOpt> expected = {"",   "es",    "de-LATN-CH", "de-DE",
-                                  "de", "de-AT", std::nullopt, std::nullopt};
+  std::vector<strOpt> expected = {"",   "es",    "de-latn-ch", "de-de",
+                                  "de", "de-at", std::nullopt, std::nullopt};
   assertLangTagValueGetter(in, expected, langTagGetter, testContext);
 }
 
@@ -222,15 +222,15 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
                         testContext.locVocLit1, testContext.locVocLit2,
                         testContext.locVocLit3, testContext.locVocLit4};
   std::vector<strOpt> expected = {std::nullopt, std::nullopt, "",
-                                  "de-DE",      "de",         "de-AT"};
+                                  "de-de",      "de",         "de-at"};
   assertLangTagValueGetter(in, expected, langTagGetter, testContext);
 }
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
   testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
-      {litOrIri(""), litOrIri("es"), litOrIri("de-LATN-CH"), litOrIri("de-DE"),
-       litOrIri("de-DE"), litOrIri("de-AT"), litOrIri("de"), litOrIri("de-AT")},
+      {litOrIri(""), litOrIri("es"), litOrIri("de-latn-ch"), litOrIri("de-de"),
+       litOrIri("de-de"), litOrIri("de-at"), litOrIri("de"), litOrIri("de-at")},
       "?literals");
 }
 

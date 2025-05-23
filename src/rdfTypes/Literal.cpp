@@ -28,6 +28,11 @@ Literal::Literal(std::string content, size_t beginOfSuffix)
   AD_CORRECTNESS_CHECK(beginOfSuffix_ == content_.size() ||
                        content_[beginOfSuffix] == at ||
                        content_[beginOfSuffix] == hat);
+  if (beginOfSuffix_ < content_.size() && content_[beginOfSuffix_] == '@') {
+    size_t tagStart = beginOfSuffix_ + 1;
+    std::string lowercaseTag = utf8ToLower(content_.substr(tagStart));
+    content_.replace(tagStart, content_.size() - tagStart, lowercaseTag);
+  }
 }
 
 // __________________________________________
@@ -111,10 +116,11 @@ Literal Literal::literalWithNormalizedContent(
 // __________________________________________
 void Literal::addLanguageTag(std::string_view languageTag) {
   AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  std::string lowercaseTag = utf8ToLower(languageTag);
   if (languageTag.starts_with('@')) {
-    absl::StrAppend(&content_, languageTag);
+    absl::StrAppend(&content_, lowercaseTag);
   } else {
-    absl::StrAppend(&content_, "@"sv, languageTag);
+    absl::StrAppend(&content_, "@"sv, lowercaseTag);
   }
 }
 
