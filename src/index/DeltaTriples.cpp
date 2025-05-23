@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include "engine/ExecuteUpdate.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
@@ -219,7 +220,7 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 
 // _____________________________________________________________________________
 template <typename ReturnType>
-ReturnType DeltaTriplesManager::modify(
+DeltaTriplesManager::WithTimings<ReturnType> DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
     bool writeToDiskAfterRequest) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
@@ -237,33 +238,40 @@ ReturnType DeltaTriplesManager::modify(
         };
         auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples,
                                        writeToDiskAfterRequest]() {
+          ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+          DeltaTriplesModifyTimings timings;
           if (writeToDiskAfterRequest) {
-            // TODO<RobinTF> Find a good way to track the time it takes to write
-            // this and store it into the corresponding metadata object.
             deltaTriples.writeToDisk();
+            timings.diskWritebackTime_ = timer.msecs();
+            timer.start();
           }
           updateSnapshot();
+          timings.snapshotUpdateTime_ = timer.msecs();
+          return timings;
         };
 
         if constexpr (std::is_void_v<ReturnType>) {
           function(deltaTriples);
-          writeAndUpdateSnapshot();
+          return writeAndUpdateSnapshot();
         } else {
           ReturnType returnValue = function(deltaTriples);
-          writeAndUpdateSnapshot();
-          return returnValue;
+          auto timings = writeAndUpdateSnapshot();
+          return std::make_tuple(std::move(returnValue), std::move(timings));
         }
       });
 }
-// Explicit instantions
-template void DeltaTriplesManager::modify<void>(
-    std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
-template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
-    const std::function<nlohmann::json(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
-template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
-    const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest);
+
+using Timings = DeltaTriplesModifyTimings;
+template <typename ReturnType>
+using F = const std::function<ReturnType(DeltaTriples&)>&;
+template <typename ReturnType>
+using Return = std::tuple<ReturnType, Timings>;
+// Explicit instantiations
+template Timings DeltaTriplesManager::modify<void>(F<void>, bool);
+template Return<UpdateMetadata> DeltaTriplesManager::modify<UpdateMetadata>(
+    F<UpdateMetadata>, bool);
+template Return<DeltaTriplesCount>
+DeltaTriplesManager::modify<DeltaTriplesCount>(F<DeltaTriplesCount>, bool);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

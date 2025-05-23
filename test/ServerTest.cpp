@@ -177,13 +177,13 @@ TEST(ServerTest, createResponseMetadata) {
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
       deltaTriples, handle);
-  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+  updateMetadata.countBefore_ = countBefore;
+  updateMetadata.countAfter_ = deltaTriples.getCounts();
 
   // Assertions
   json metadata = Server::createResponseMetadataForUpdate(
-      requestTimer, index, deltaTriples, plannedQuery,
-      plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
-      countAfter);
+      requestTimer, index, deltaTriples.getSnapshot(), plannedQuery,
+      plannedQuery.queryExecutionTree_, updateMetadata, {});
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
