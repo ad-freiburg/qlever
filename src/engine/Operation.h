@@ -325,6 +325,18 @@ class Operation {
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
 
+  // Helper function to check hif the result of this operation is
+  // already sorted accordigngly.
+  virtual bool isSortedBy(const vector<ColumnIndex>& sortColumns) const final;
+
+  // Try to create a version of this operation that is sorted on the given
+  // `sortColumns`. The default implementation returns `std::nullopt`, assuming
+  // most operations can't efficiently produce a sorted result. Subclasses may
+  // override this function if they are able to provide more efficient
+  // implementations.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const;
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.

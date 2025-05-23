@@ -538,7 +538,9 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 1, 2, 3});
+    auto tree = unionOperation.makeSortedTree({0, 1, 2, 3});
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 1, 2, 3}));
     EXPECT_EQ(
@@ -554,7 +556,9 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto variant = unionOperation.createSortedVariant({0, 3, 1, 2});
+    auto tree = unionOperation.makeSortedTree({0, 3, 1, 2});
+    ASSERT_TRUE(tree.has_value());
+    auto variant = tree.value()->getRootOperation();
     EXPECT_EQ(variant->getResultSortedOn(),
               (std::vector<ColumnIndex>{0, 3, 1, 2}));
     EXPECT_EQ(
@@ -567,6 +571,10 @@ TEST(Union, createSortedVariantWorksProperly) {
     auto expected =
         makeIdTableFromVector({{1, 2, 4, U}, {1, U, U, 4}, {2, U, U, 8}});
     EXPECT_EQ(result->idTable(), expected);
+  }
+  {
+    qec->getQueryTreeCache().clearAll();
+    EXPECT_THROW(unionOperation.makeSortedTree({}), ad_utility::Exception);
   }
 }
 
