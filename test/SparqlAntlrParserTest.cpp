@@ -2454,40 +2454,15 @@ TEST(SparqlParser, Update) {
           AllOf(fooInsertMatcher,
                 m::pq::OriginalString(
                     "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
-}
-
-TEST(SparqlParser, QueryOrUpdate) {
-  auto expectQuery =
-      ExpectCompleteParse<&Parser::queryOrUpdate>{defaultPrefixMap};
-  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
-  // Empty queries (queries without any query or update operation) are
-  // forbidden.
-  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
-  expectQueryFails("", emptyMatcher);
-  expectQueryFails(" ", emptyMatcher);
-  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
-  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
-  // Hit all paths for coverage.
-  expectQuery(
-      "SELECT ?a WHERE { ?a <is-a> <b> }",
-      ElementsAre(AllOf(
-          m::SelectQuery(
-              m::Select({Var{"?a"}}),
-              m::GraphPattern(m::Triples({{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
-          m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
-          m::VisibleVariables({Var{"?a"}}))));
-  expectQuery(
-      "INSERT DATA { <a> <b> <c> }",
-      ElementsAre(AllOf(
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
-                  std::nullopt),
-              m::GraphPattern()),
-          m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
+  expectUpdate_("", testing::IsEmpty());
+  expectUpdate_(" ", testing::IsEmpty());
+  expectUpdate_("PREFIX ex: <http://example.org>", testing::IsEmpty());
+  expectUpdate_("INSERT DATA { <a> <b> <c> }; PREFIX ex: <http://example.org>",
+                testing::ElementsAre(insertMatcher));
+  expectUpdate_("### Some comment \n \n #someMoreComments", testing::IsEmpty());
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> };### Some comment \n \n #someMoreComments",
+      testing::ElementsAre(insertMatcher));
 }
 
 TEST(SparqlParser, GraphOrDefault) {

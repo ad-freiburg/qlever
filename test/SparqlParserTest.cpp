@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 
+#include <utility>
 #include <variant>
 
 #include "SparqlAntlrParserTestHelpers.h"
@@ -1456,13 +1457,14 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets));
   EXPECT_THAT(
-      SparqlParser::parseQuery("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
-                               "?z FILTER EXISTS {?a ?b ?c} }",
-                               {{{Iri("<h>"), false}}}),
-      m::UpdateClause(m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"),
-                                       std::monostate{}}},
-                                     {}, std::nullopt),
-                      filterGraphPattern, m::datasetClausesMatcher(datasets)));
+      SparqlParser::parseUpdate("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+                                "?z FILTER EXISTS {?a ?b ?c} }",
+                                {{{Iri("<h>"), false}}}),
+      testing::ElementsAre(m::UpdateClause(
+          m::GraphUpdate(
+              {{Var("?x"), Iri("<b>"), Iri("<c>"), std::monostate{}}}, {},
+              std::nullopt),
+          filterGraphPattern, m::datasetClausesMatcher(datasets))));
   EXPECT_THAT(
       SparqlParser::parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
@@ -1487,11 +1489,26 @@ TEST(ParserTest, parseWithDatasets) {
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
                                      filterGraphPattern)),
           datasets));
-}
-
-TEST(ParserTest, multipleUpdatesAreForbidden) {
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseQuery(
-          "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
-      testing::HasSubstr("Multiple Updates in one request are not supported."));
+  auto deleteWhereOp =
+      m::GraphUpdate({SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                  Var("?o"), std::monostate{}}},
+                     {}, std::nullopt);
+  auto deleteWherePattern =
+      m::GraphPattern(m::Triples({{Var("?s"), Var("?p"), Var("?o")}}));
+  auto insertDataOp =
+      m::GraphUpdate({},
+                     {SparqlTripleSimpleWithGraph{
+                         Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+                     std::nullopt);
+  EXPECT_THAT(SparqlParser::parseUpdate(
+                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+                  {DatasetClause{Iri("<foo>"), false},
+                   DatasetClause{Iri("<bar>"), true}}),
+              testing::ElementsAre(
+                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
+                                  m::datasetClausesMatcher({{Iri("<foo>")}},
+                                                           {{Iri("<bar>")}})),
+                  m::UpdateClause(insertDataOp, m::GraphPattern(),
+                                  m::datasetClausesMatcher({{Iri("<foo>")}},
+                                                           {{Iri("<bar>")}}))));
 }
