@@ -1494,7 +1494,7 @@ TEST(ParserTest, parseWithDatasets) {
                                                   Var("?o"), std::monostate{}}},
                      {}, std::nullopt);
   auto deleteWherePattern =
-      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}}));
+      m::GraphPattern(m::Triples({{Var("?s"), Var("?p"), Var("?o")}}));
   auto insertDataOp =
       m::GraphUpdate({},
                      {SparqlTripleSimpleWithGraph{

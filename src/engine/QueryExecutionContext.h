@@ -124,7 +124,7 @@ class QueryExecutionContext {
   // the context is currently running.
   //
   // This function is only needed for chained updates, which have to see the
-  // effect of previous updates but use the same execution context. As chained
+  // effect of previous updates but use the same execution context. Chained
   // updates are processed strictly sequentially, so this use case works.
   void updateLocatedTriplesSnapshot() {
     sharedLocatedTriplesSnapshot_ =
