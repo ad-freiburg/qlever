@@ -10,7 +10,7 @@ using AntlrParser = SparqlAutomaticParser;
 
 namespace {
 // _____________________________________________________________________________
-// Parses the given string as the given clause. If the datasets are not empty,
+// Parse the given string as the given clause. If the datasets are not empty,
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
 auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),

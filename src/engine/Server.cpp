@@ -474,7 +474,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     }
   };
   auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
-    // We need to copy the SPARQL, because `visitOperation` also needs it.
+    // We need to copy the query string because `visitOperation` below also
+    // needs it.
     auto parsedQuery =
         SparqlParser::parseQuery(query.query_, query.datasetClauses_);
     return visitOperation(
@@ -486,7 +487,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   auto visitUpdate = [&visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
-    // We need to copy the SPARQL, because `visitOperation` also needs it.
+    // We need to copy the update string because `visitOperation` below also
+    // needs it.
     auto parsedUpdates =
         SparqlParser::parseUpdate(update.update_, update.datasetClauses_);
     return visitOperation(
@@ -794,9 +796,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree_;
 
-  // Update the `PlannedQuery` with the export limit when
-  // `application/qlever-results+json` and ensure that the offset is not
-  // applied twice when exporting the query.
+  // Update the `PlannedQuery` with the export limit when the response
+  // content-type is `application/qlever-results+json` and ensure that the
+  // offset is not applied twice when exporting the query.
   adjustParsedQueryLimitOffset(plannedQuery.value(), mediaType, params);
 
   // This actually processes the query and sends the result in the
@@ -813,11 +815,6 @@ CPP_template_2(typename RequestT, typename ResponseT)(
             << std::endl;
 
   // Log that we are done with the query and how long it took.
-  //
-  // NOTE: We need to explicitly stop the `requestTimer` here because in
-  // the sending code above, it is done only in some cases and not in
-  // others (in particular, not for TSV and CSV because for those, the
-  // result does not contain timing information).
   //
   // TODO<joka921> Also log an identifier of the query.
   LOG(DEBUG) << "Runtime Info:\n"
@@ -931,8 +928,9 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
-  // Atomicity of the update is still given, because everything runs on
-  // `updateThreadPool_` which only has one thread.
+  // If multiple updates are part of a single request, those have to run
+  // atomically. This is ensured, because the updates below are run on the
+  // `updateThreadPool_`, which only has a single thread.
   static_assert(UPDATE_THREAD_POOL_SIZE == 1);
   auto coroutine = computeInNewThread(
       updateThreadPool_,

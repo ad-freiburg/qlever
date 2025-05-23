@@ -95,6 +95,7 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
+  // The update thread pool size has to be 1 for the updates to be atomic.
   static constexpr size_t UPDATE_THREAD_POOL_SIZE = 1;
   boost::asio::static_thread_pool updateThreadPool_{UPDATE_THREAD_POOL_SIZE};
 

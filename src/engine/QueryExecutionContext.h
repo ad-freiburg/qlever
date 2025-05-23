@@ -116,18 +116,16 @@ class QueryExecutionContext {
     return *sharedLocatedTriplesSnapshot_;
   }
 
-  // This function retrieves the latest LocatedTriplesSnapshot. The new
-  // snapshot will be used for evaluating queries after this call. If an update
-  // has happened after this context was initially created, then calling this
-  // function has the effect that state after the update will be used to
-  // evaluate queries.
+  // This function retrieves the most recent `LocatedTriplesSnapshot` and stores
+  // it in the `QueryExecutionContext`. The new snapshot will be used for
+  // evaluating queries after this call.
   //
   // NOTE: This is a dangerous function. It may only be called if no query with
   // the context is currently running.
   //
-  // It is only needed for chained updates, which have to see the effect of
-  // previous updates but use the same execution context. As chained updates are
-  // processed strictly sequentially, this is not a problem here.
+  // This function is only needed for chained updates, which have to see the
+  // effect of previous updates but use the same execution context. As chained
+  // updates are processed strictly sequentially, so this use case works.
   void updateLocatedTriplesSnapshot() {
     sharedLocatedTriplesSnapshot_ =
         _index.deltaTriplesManager().getCurrentSnapshot();
