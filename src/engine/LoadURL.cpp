@@ -10,6 +10,14 @@
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
+LoadURL::LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
+                 SendRequestType getResultFunction)
+    : Operation(qec),
+      loadURLClause_(loadURLClause),
+      getResultFunction_(std::move(getResultFunction)),
+      canResultBeCached_(RuntimeParameters().get<"cache-load-results">()) {}
+
+// _____________________________________________________________________________
 string LoadURL::getCacheKeyImpl() const {
   // TODO<qup42> do caching based on ETag, Last-Modified or similar
   if (RuntimeParameters().get<"cache-load-results">()) {
@@ -68,13 +76,13 @@ Result LoadURL::computeResult(bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // If the `SILENT` keyword is set, catch the error and return a neutral
-    // Element.
+    // If the `SILENT` keyword is set, catch the error and return the neutral
+    // element for this operation (an empty `IdTable`). The `IdTable` is used to
+    // interpolate a triple with variables. No update triples are generated
+    // because of the empty `IdTable` which leaves the state unchanged.
     if (loadURLClause_.silent_) {
-      IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-      Id u = Id::makeUndefined();
-      idTable.push_back(std::array{u, u, u});
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+              resultSortedOn(), LocalVocab{}};
     }
     throw;
   }
@@ -163,4 +171,8 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool LoadURL::canResultBeCached() const { return false; }
+bool LoadURL::canResultBeCached() const {
+  // This differs from the implementation in the base class only in a different
+  // default value set in the constructor.
+  return canResultBeCached_;
+}

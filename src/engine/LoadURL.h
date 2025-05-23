@@ -34,12 +34,13 @@ class LoadURL final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
+  // Backing value for `canResultBeCached()`. It is the value of the
+  // runtime parameter `cache-load-results` at time of construction.
+  bool canResultBeCached_ = false;
+
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
-          SendRequestType getResultFunction = sendHttpOrHttpsRequest)
-      : Operation(qec),
-        loadURLClause_(loadURLClause),
-        getResultFunction_(std::move(getResultFunction)){};
+          SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   ~LoadURL() override = default;
 
