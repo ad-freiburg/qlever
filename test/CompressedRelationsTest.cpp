@@ -51,10 +51,9 @@ auto getBlockMetadataRangesfromVec =
   offset = gen() % (remainingBlocksForSplit + 1);
   size_t split2 = split1 + minNumBlocksSplit + offset;
   // Add the three susbspans defined by the first and second splitting point.
-  ranges.emplace_back(BlockMetadataRange{begin, begin + split1});
-  ranges.emplace_back(BlockMetadataRange{begin + split1, begin + split2});
-  ranges.emplace_back(
-      BlockMetadataRange{begin + split2, blockMetadataSpan.end()});
+  ranges.push_back(BlockMetadataRange(begin, begin + split1));
+  ranges.push_back(BlockMetadataRange(begin + split1, begin + split2));
+  ranges.push_back(BlockMetadataRange(begin + split2, blockMetadataSpan.end()));
   return ranges;
 };
 
