@@ -143,9 +143,7 @@ struct StringValueGetter : Mixin<StringValueGetter> {
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
   std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
-    return std::string(asStringViewUnsafe(s.getContent()));
-  }
+                                   const EvaluationContext*) const;
 };
 
 // This class can be used as the `ValueGetter` argument of Expression

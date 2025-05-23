@@ -471,10 +471,21 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       }
     }
     if constexpr (removeQuotesAndAngleBrackets) {
+      // If we drop the metadata for the string, continue to return the
+      // datatype.
+      auto getDataTypePointer = [&word]() -> const char* {
+        if (word.isLiteral()) {
+          const auto& lit = word.getLiteral();
+          if (lit.hasDatatype()) {
+            return asStringViewUnsafe(lit.getDatatype()).data();
+          }
+        }
+        return nullptr;
+      };
       // TODO<joka921> Can we get rid of the string copying here?
       return std::pair{
           escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
-          nullptr};
+          getDataTypePointer()};
     }
     return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
   };

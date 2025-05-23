@@ -87,10 +87,29 @@ std::optional<std::string> StringValueGetter::operator()(
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
-    return std::move(optionalStringAndType.value().first);
+    auto& content = optionalStringAndType.value().first;
+    const char* datatype = optionalStringAndType.value().second;
+    if (datatype != nullptr && datatype == std::string_view{XSD_BOOLEAN_TYPE}) {
+      return content == "1" || content == "true" ? "true" : "false";
+    }
+    return std::move(content);
   } else {
     return std::nullopt;
   }
+}
+
+// _____________________________________________________________________________
+std::optional<string> StringValueGetter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  if (s.isLiteral()) {
+    const auto& lit = s.getLiteral();
+    if (lit.hasDatatype() &&
+        asStringViewUnsafe(lit.getDatatype()) == XSD_BOOLEAN_TYPE) {
+      std::string_view content = asStringViewUnsafe(lit.getContent());
+      return content == "1" || content == "true" ? "true" : "false";
+    }
+  }
+  return std::string(asStringViewUnsafe(s.getContent()));
 }
 
 // ____________________________________________________________________________
