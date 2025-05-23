@@ -46,7 +46,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // The number of static and dynamic columns has to be specified (see `IdTable.h`
 // for details).
 template <size_t NumStaticColumns>
-auto idTableFromRowGenerator = [](auto& generator, size_t numColumns) {
+auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
   CopyableIdTable<NumStaticColumns> result(
       numColumns, ad_utility::testing::makeAllocator());
   for (const auto& row : generator) {
@@ -235,7 +235,9 @@ TEST(CompressedExternalIdTable, exceptionsWhenWritingWhileIterating) {
 
   // Only creating and then destroying a generator again does not prevent
   // pushing.
-  { [[maybe_unused]] auto generator = writer.getRows(); }
+  {
+    [[maybe_unused]] auto generator = writer.getRows();
+  }
   ASSERT_NO_THROW(pushAll());
 
   auto generator = writer.getRows();
