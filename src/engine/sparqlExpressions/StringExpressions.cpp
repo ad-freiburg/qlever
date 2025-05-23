@@ -584,39 +584,37 @@ using LangMatches =
 
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
-    [](std::optional<std::string> input,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        std::optional<std::string> langTag) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !langTag.has_value()) {
+  if (!literal.has_value() || !langTag.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else if (!ad_utility::strIsLangTag(langTag.value())) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(input.value()),
-            std::move(langTag.value()));
-    return LiteralOrIri{lit};
+    literal.value().addLanguageTag(std::move(langTag.value()));
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
-using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
+using StrLangTagged =
+    LiteralExpressionImpl<2, decltype(strLangTag), StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
 [[maybe_unused]] inline auto strIriDtTag =
-    [](std::optional<std::string> inputStr,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        OptIri inputIri) -> IdOrLiteralOrIri {
-  if (!inputStr.has_value() || !inputIri.has_value()) {
+  if (!literal.has_value() || !inputIri.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
-    return LiteralOrIri{lit};
+    literal.value().addDatatype(inputIri.value());
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
 using StrIriTagged =
-    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+    LiteralExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
 
 // HASH
 template <auto HashFunc>

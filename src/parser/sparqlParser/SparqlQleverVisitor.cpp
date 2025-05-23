@@ -362,10 +362,10 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+  auto toPredicate = [](const auto& item) -> VarOrPath {
     using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
-      return PropertyPath::fromVariable(item);
+      return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(item.toSparql());
     } else {
@@ -376,7 +376,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
   };
   for (const auto& triple : triples) {
     auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto predicate = std::visit(toPredicate, triple.at(1));
     auto object = std::visit(toTripleComponent, triple.at(2));
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
@@ -891,32 +891,19 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto varToPropertyPath = [](const Variable& var) {
-    return PropertyPath::fromVariable(var);
-  };
-  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
-  auto visitVarOrPath =
-      [&varToPropertyPath, &propertyPathIdentity](
-          const ad_utility::sparql_types::VarOrPath& varOrPath) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{varToPropertyPath,
-                                             propertyPathIdentity},
-            varOrPath);
-      };
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
   auto convertAndRegisterTriple =
-      [&visitVarOrPath, &registerIfVariable](
+      [&registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {triple.subject_.toTripleComponent(),
-            visitVarOrPath(triple.predicate_),
+    return {triple.subject_.toTripleComponent(), triple.predicate_,
             triple.object_.toTripleComponent()};
   };
 

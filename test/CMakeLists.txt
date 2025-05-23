@@ -308,7 +308,7 @@ addLinkAndDiscoverTestSerial(LoadURLTest engine)
 
 addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
-addLinkAndDiscoverTest(CallFixedSizeTest)
+addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 
