@@ -265,3 +265,91 @@ TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());
 }
+
+// _____________________________________________________________________________
+TEST(Views, RvalueView) {
+  // A simple struct that knows if it has been moved from.
+  struct MoveTracker {
+    bool wasMoved_ = false;
+    MoveTracker() = default;
+    MoveTracker(const MoveTracker&) = default;
+    MoveTracker& operator=(const MoveTracker&) = default;
+    MoveTracker(MoveTracker&& rhs)
+        : wasMoved_{std::exchange(rhs.wasMoved_, true)} {}
+    MoveTracker operator=(MoveTracker&& rhs) {
+      wasMoved_ = std::exchange(rhs.wasMoved_, true);
+      return *this;
+    }
+  };
+
+  std::vector<MoveTracker> vec;
+  vec.resize(13);
+
+  std::vector<MoveTracker> target;
+  {
+    // Move the first 5 elements via an `RvalueView` + ql::ranges::copy.
+    auto view = ad_utility::RvalueView{vec};
+    static_assert(ql::ranges::random_access_range<decltype(view)>);
+    ASSERT_EQ(view.size(), 13);
+    ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
+    ASSERT_EQ(target.size(), 5);
+    for (size_t i = 0; i < vec.size(); ++i) {
+      ASSERT_EQ(i < 5, vec[i].wasMoved_);
+    }
+    for (auto& el : target) {
+      ASSERT_FALSE(el.wasMoved_);
+    }
+  }
+  target.clear();
+  vec.clear();
+  vec.resize(13);
+  {
+    // If the view is `const`, then even rvalues are not moved.
+    auto view = ad_utility::RvalueView{std::as_const(vec)};
+    static_assert(ql::ranges::random_access_range<decltype(view)>);
+    ASSERT_EQ(view.size(), 13);
+    ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
+    ASSERT_EQ(target.size(), 5);
+    for (size_t i = 0; i < vec.size(); ++i) {
+      ASSERT_FALSE(vec[i].wasMoved_);
+    }
+    for (auto& el : target) {
+      ASSERT_FALSE(el.wasMoved_);
+    }
+  }
+  target.clear();
+  vec.clear();
+  vec.resize(13);
+
+  {
+    // Move the vector into the view, test that everything still works as
+    // expected.
+    auto view = ad_utility::RvalueView{std::move(vec)};
+    static_assert(ql::ranges::random_access_range<decltype(view)>);
+    ASSERT_EQ(view.size(), 13);
+    ASSERT_TRUE(vec.empty());
+    ql::ranges::copy(std::move(view) | ql::views::take(5),
+                     std::back_inserter(target));
+    ASSERT_EQ(target.size(), 5);
+    for (auto& el : target) {
+      ASSERT_FALSE(el.wasMoved_);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Views, ForceInputView) {
+  using ad_utility::ForceInputView;
+  std::vector<int> vec{1, 2, 3};
+  auto view = ForceInputView{vec};
+  using V = decltype(view);
+  static_assert(ql::ranges::view<V>);
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+  std::vector<int> res;
+  ql::ranges::copy(view, std::back_inserter(res));
+  EXPECT_THAT(res, ::testing::ElementsAre(1, 2, 3));
+  // `begin` has already been called via the `ranges::copy` above, so additional
+  // iterations should throw.
+  EXPECT_ANY_THROW(view.begin());
+}
