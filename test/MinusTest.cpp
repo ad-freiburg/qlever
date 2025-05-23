@@ -9,6 +9,7 @@
 
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
 #include "engine/Minus.h"
 #include "engine/ValuesForTesting.h"
 #include "util/AllocatorTestHelpers.h"
@@ -122,4 +123,47 @@ TEST(Minus, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(minus, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), minus.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(Minus, columnOriginatesFromGraph) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = ad_utility::testing::getQec();
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto index = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Iri::fromIriref("<c>")});
+
+  Minus minus1{qec, values1, values1};
+  EXPECT_FALSE(minus1.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(minus1.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_THROW(minus1.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+
+  Minus minus2{qec, values1, values2};
+  EXPECT_FALSE(minus2.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(minus2.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_THROW(minus2.columnOriginatesFromGraph(Variable{"?c"}),
+               ad_utility::Exception);
+  EXPECT_THROW(minus2.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+
+  Minus minus3{qec, index, values1};
+  EXPECT_TRUE(minus3.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_THROW(minus3.columnOriginatesFromGraph(Variable{"?b"}),
+               ad_utility::Exception);
+  EXPECT_THROW(minus3.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
+
+  Minus minus4{qec, values1, index};
+  EXPECT_FALSE(minus4.columnOriginatesFromGraph(Variable{"?a"}));
+  EXPECT_FALSE(minus4.columnOriginatesFromGraph(Variable{"?b"}));
+  EXPECT_THROW(minus4.columnOriginatesFromGraph(Variable{"?notExisting"}),
+               ad_utility::Exception);
 }
