@@ -421,8 +421,17 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
     case Datatype::VocabIndex: {
-      auto entity = index.indexToString(id.getVocabIndex());
-      return LiteralOrIri::fromStringRepresentation(entity);
+      auto getEntity = [&index, id]() {
+        return index.indexToString(id.getVocabIndex());
+      };
+      // The type of entity might be `string_view` (If the vocabulary is stored
+      // uncompressed in RAM) or `string` (if it is on-disk, or compressed or
+      // both). The following code works and is efficient in all cases. In
+      // particular, the `std::string` constructor is compiled out because of
+      // RVO if `getEntity()` already returns a `string`.
+      static_assert(ad_utility::SameAsAny<decltype(getEntity()), std::string,
+                                          std::string_view>);
+      return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
     default:
       AD_FAIL();

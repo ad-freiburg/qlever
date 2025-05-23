@@ -54,6 +54,10 @@ class File {
     open(filename, mode);
   }
 
+  // Files are move-only types.
+  File(const File&) = delete;
+  File& operator=(const File&) = delete;
+
   File& operator=(File&& rhs) noexcept {
     if (isOpen()) {
       close();
