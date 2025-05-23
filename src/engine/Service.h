@@ -32,13 +32,6 @@
 //
 class Service : public Operation {
  public:
-  // The type of the function used to obtain the results, see below.
-  using GetResultFunction = std::function<HttpOrHttpsResponse(
-      const ad_utility::httpUtils::Url&,
-      ad_utility::SharedCancellationHandle handle,
-      const boost::beast::http::verb&, std::string_view, std::string_view,
-      std::string_view)>;
-
   // Information on a Sibling operation.
   struct SiblingInfo {
     std::shared_ptr<const Result> precomputedResult_;
@@ -51,7 +44,7 @@ class Service : public Operation {
   parsedQuery::Service parsedServiceClause_;
 
   // The function used to obtain the result from the remote endpoint.
-  GetResultFunction getResultFunction_;
+  SendRequestType getResultFunction_;
 
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
@@ -71,7 +64,7 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest);
+          SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;

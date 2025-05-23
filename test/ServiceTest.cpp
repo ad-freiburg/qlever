@@ -19,6 +19,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
+#include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -60,57 +61,31 @@ class ServiceTest : public ::testing::Test {
          std::string contentType = "application/sparql-results+json",
          std::exception_ptr mockException = nullptr,
          ad_utility::source_location loc =
-             ad_utility::source_location::current())
-      -> Service::GetResultFunction {
-    return [=](const ad_utility::httpUtils::Url& url,
-               ad_utility::SharedCancellationHandle,
-               const boost::beast::http::verb& method,
-               std::string_view postData, std::string_view contentTypeHeader,
-               std::string_view acceptHeader) {
-      auto g = generateLocationTrace(loc);
-      // Check that the request parameters are as expected.
-      //
-      // NOTE: The first three are hard-coded in `Service::computeResult`, but
-      // the host and port of the endpoint are derived from the IRI, so the last
-      // two checks are non-trivial.
-      EXPECT_EQ(method, boost::beast::http::verb::post);
-      EXPECT_EQ(contentTypeHeader, "application/sparql-query");
-      EXPECT_EQ(acceptHeader, "application/sparql-results+json");
-      EXPECT_EQ(url.asString(), expectedUrl);
-
-      // Check that the whitespace-normalized POST data is the expected query.
-      //
-      // NOTE: a SERVICE clause specifies only the body of a SPARQL query, from
-      // which `Service::computeResult` has to construct a full SPARQL query by
-      // adding `SELECT ... WHERE`, so this checks something non-trivial.
-      std::string whitespaceNormalizedPostData =
-          std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
-      EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-
-      if (mockException) {
-        std::rethrow_exception(mockException);
-      }
-
-      auto body =
-          [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
-        // Randomly slice the string to make tests more robust.
-        std::mt19937 rng{std::random_device{}()};
-
-        const std::string resultStr = result;
-        std::uniform_int_distribution<size_t> distribution{
-            0, resultStr.length() / 2};
-
-        for (size_t start = 0; start < resultStr.length();) {
-          size_t size = distribution(rng);
-          std::string resultCopy{resultStr.substr(start, size)};
-          co_yield ql::as_writable_bytes(ql::span{resultCopy});
-          start += size;
-        }
-      };
-      return (HttpOrHttpsResponse){.status_ = status,
-                                   .contentType_ = contentType,
-                                   .body_ = body(predefinedResult)};
-    };
+             ad_utility::source_location::current()) -> SendRequestType {
+    // Check that the request parameters are as expected.
+    //
+    // NOTE: Method, Content-Type and Accept are hard-coded in
+    // `Service::computeResult`, but the host and port of the endpoint are
+    // derived from the IRI, so url and post data are non-trivial.
+    httpClientTestHelpers::RequestMatchers matchers{
+        .url_ = testing::Eq(expectedUrl),
+        .method_ = testing::Eq(boost::beast::http::verb::post),
+        // Check that the whitespace-normalized POST data is the expected query.
+        //
+        // NOTE: a SERVICE clause specifies only the body of a SPARQL query,
+        // from which `Service::computeResult` has to construct a full SPARQL
+        // query by adding `SELECT ... WHERE`, so this checks something
+        // non-trivial.
+        .postData_ = testing::ResultOf(
+            [](std::string_view postData) {
+              return std::regex_replace(std::string{postData},
+                                        std::regex{"\\s+"}, " ");
+            },
+            testing::Eq(expectedSparqlQuery)),
+        .contentType_ = testing::Eq("application/sparql-query"),
+        .accept_ = testing::Eq("application/sparql-results+json")};
+    return httpClientTestHelpers::getResultFunctionFactory(
+        predefinedResult, contentType, status, matchers, mockException, loc);
   };
 
   // The following method generates a JSON result from variables and rows for
