@@ -150,6 +150,10 @@ class LocatedTriplesPerBlock {
   std::vector<LocatedTriples::iterator> add(
       ql::span<const LocatedTriple> locatedTriples);
 
+  // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
+  //
+  // NOTE: `updateAugmentedMetadata()` must be called to update the block
+  // metadata.
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 
   // Get the total number of `LocatedTriple`s (for all blocks).

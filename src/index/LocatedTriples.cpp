@@ -253,7 +253,6 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
   if (block.empty()) {
     map_.erase(blockIndex);
   }
-  updateAugmentedMetadata();
 }
 
 // ____________________________________________________________________________
