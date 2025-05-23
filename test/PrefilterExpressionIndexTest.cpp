@@ -977,7 +977,9 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   auto filteredBlocks = gt(IntId(0))->evaluate(blocks, 2);
   std::span<const CompressedBlockMetadata> blockSpan(filteredBlocks);
   BlockMetadataRanges blockRanges;
-  blockRanges.push_back(BlockMetadataRange(blockSpan.begin(), blockSpan.end()));
+  BlockMetadataRange range{blockSpan.data(),
+                           blockSpan.data() + blockSpan.size()};
+  blockRanges.push_back(range);
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, std::nullopt}, blockRanges));
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
@@ -985,7 +987,7 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
       blockRanges));
-  blockRanges.push_back(BlockMetadataRange(blockSpan.begin(), blockSpan.end()));
+  blockRanges.push_back(range);
   EXPECT_ANY_THROW(CompressedRelationReader::ScanSpecAndBlocks(
       ScanSpecification{VocabId10, DoubleId33, DoubleId33}, blockRanges));
 }
