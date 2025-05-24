@@ -266,7 +266,7 @@ TEST(Filter,
           qec,
           ad_utility::makeExecutionTree<IndexScan>(
               qec, Permutation::Enum::POS,
-              SparqlTripleSimples{Variable{"?person"}, "<p>", Variable{"?x"}}),
+              SparqlTripleSimple{Variable{"?person"}, "<p>", Variable{"?x"}}),
           std::vector<ColumnIndex>(1)),
       ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
