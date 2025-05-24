@@ -560,10 +560,10 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
             : Id::makeFromVocabIndex(upperVocabIndex.decremented());
     // Case `!STRSTARTS(?var, "prefix")` or `!REGEX(?var, "^prefix")`.
     // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
-    return OrExpression(make<LessThanExpression>(lowerIdVocab),
-                        make<AndExpression>(
-                            make<GreaterThanExpression>(upperIdAdjusted),
-                            make<LessThanExpression>(beginIdIri)))
+    return OrExpression(
+               make<LessThanExpression>(lowerIdVocab),
+               make<AndExpression>(make<GreaterThanExpression>(upperIdAdjusted),
+                                   make<LessThanExpression>(beginIdIri)))
         .evaluateImpl(vocab, idRange, blockRange);
   }
 
