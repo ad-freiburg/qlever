@@ -44,6 +44,11 @@ class Join : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      ql::span<const PrefilterVariablePair> prefilterVariablePairs)
+      const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     if (!_sizeEstimateComputed) {

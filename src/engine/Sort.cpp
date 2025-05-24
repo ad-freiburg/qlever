@@ -51,6 +51,20 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Sort::setPrefilterGetUpdatedQueryExecutionTree(
+    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
+  auto optNewSubtree =
+      subtree_->getRootOperation()->setPrefilterGetUpdatedQueryExecutionTree(
+          std::move(prefilterVariablePairs));
+  if (!optNewSubtree.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::makeExecutionTree<Sort>(
+      getExecutionContext(), optNewSubtree.value(), sortColumnIndices_);
+};
+
+// _____________________________________________________________________________
 Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
