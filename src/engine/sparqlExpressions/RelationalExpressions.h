@@ -78,6 +78,9 @@ class InExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override;
+
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
   Estimates getEstimatesForFilterExpression(
