@@ -470,16 +470,29 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        eqSprql(Variable{"?country"}, VocabId(20))))))));
 }
 
-// Test PrefilterExpression creation for SparqlExpression STRSTARTS
+// Test PrefixRegexExpression creation from STRSTARTS and REGEX.
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression,
-     getPrefilterExprForStrStartsExpr) {
+     testGetPrefixRegexExpressionFromSparqlExprssions) {
   const auto varX = Variable{"?x"};
   const auto varY = Variable{"?y"};
   evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
-                       pr(ge(LVE("\"de\"")), varX));
-  evalAndEqualityCheck(strStartsSprql(L("\"\""), varX),
-                       pr(le(LVE("\"\"")), varX));
+                       pr(prefixRegex(L("\"de\"")), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"\""), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"someRefStr\""), varX));
+  evalAndEqualityCheck(notSprqlExpr(strStartsSprql(varX, L("\"de\""))),
+                       pr(notExpr(prefixRegex(L("\"de\""))), varX));
+  evalAndEqualityCheck(regexSparql(varX, L("\"^prefix\"")),
+                       pr(prefixRegex(L("\"prefix\"")), varX));
+  // It is currently not possible to prefilter expressions involving STR(?var),
+  // since we not only have to match "Bob", but also "Bob"@en, "Bob"^^<iri>, and
+  // so on. The current prefilter expressions do not consider this matching
+  // logic.
+  evalAndEqualityCheck(strStartsSprql(strSprql(varX), L("\"Bob\"")));
+  evalAndEqualityCheck(regexSparql(strSprql(varX), L("\"^Bob\"")));
+  evalAndEqualityCheck(strStartsSprql(strSprql(L("\"\"")), L("\"Bob\"")));
+  evalAndEqualityCheck(notSprqlExpr(regexSparql(varX, L("\"^prefix\""))),
+                       pr(notExpr(prefixRegex(L("\"prefix\""))), varX));
   evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
   evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
@@ -611,4 +624,18 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
       ::testing::HasSubstr(
           "The vector must contain the <PrefilterExpression, Variable> "
           "pairs in sorted order w.r.t. Variable value."));
+}
+
+//______________________________________________________________________________
+// Test helper `getLiteralFromLiteralExpression` from LiteralExpression.h
+TEST(GetPrefilterExpressionFromSparqlExpression,
+     getLiteralFromStringLiteralExpression) {
+  using namespace sparqlExpression;
+  ASSERT_TRUE(
+      sparqlExpression::detail::getLiteralFromLiteralExpression(
+          std::make_unique<StringLiteralExpression>(L("\"hello\"")).get())
+          .has_value());
+  ASSERT_FALSE(sparqlExpression::detail::getLiteralFromLiteralExpression(
+                   std::make_unique<IriExpression>(I("<iri>")).get())
+                   .has_value());
 }

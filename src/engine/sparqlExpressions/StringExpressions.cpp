@@ -265,43 +265,24 @@ CPP_template(typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
-    const SparqlExpression* child0 = this->getChildAtIndex(0).value();
-    const SparqlExpression* child1 = this->getChildAtIndex(1).value();
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
 
-    const auto getPrefilterExprVariableVec =
-        [](const SparqlExpression* child0, const SparqlExpression* child1,
-           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
-      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
-      if (!varExpr) {
-        return {};
-      }
-
-      const auto& optReferenceValue =
-          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
-      if (optReferenceValue.has_value()) {
-        return prefilterExpressions::detail::makePrefilterExpressionVec<
-            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
-                                              varExpr->value(), startsWithVar);
-      }
-      return {};
-    };
-    // Remark: With the current implementation we only prefilter w.r.t. one
-    // bound.
-    // TODO: It is technically possible to pre-filter more precisely by
-    // introducing a second bound.
-    //
-    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
-    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
-    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
-    if (!resVec.empty()) {
-      return resVec;
+    auto var = children[0].get()->getVariableOrNullopt();
+    if (!var.has_value()) {
+      return prefilterVec;
     }
-    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
-    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
-    // Option 3:
-    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
-    return getPrefilterExprVariableVec(child1, child0, true);
+    auto prefixStr = getLiteralFromLiteralExpression(children[1].get());
+    if (!prefixStr.has_value()) {
+      return prefilterVec;
+    }
+
+    prefilterVec.emplace_back(
+        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+            prefixStr.value()),
+        var.value());
+    return prefilterVec;
   }
 };
 

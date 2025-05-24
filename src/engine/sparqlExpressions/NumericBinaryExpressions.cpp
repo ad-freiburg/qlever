@@ -322,13 +322,12 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
     auto leftChild =
-        this->getChildAtIndex(0).value()->getPrefilterExpressionForMetadata(
-            isNegated);
+        children[0].get()->getPrefilterExpressionForMetadata(isNegated);
     auto rightChild =
-        this->getChildAtIndex(1).value()->getPrefilterExpressionForMetadata(
-            isNegated);
+        children[1].get()->getPrefilterExpressionForMetadata(isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
   }

@@ -67,9 +67,8 @@ CPP_template(typename NaryOperation)(
     // {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>} (apply NotExpression) =>
     // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
     // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
-    auto child =
-        this->getChildAtIndex(0).value()->getPrefilterExpressionForMetadata(
-            !isNegated);
+    auto child = this->children()[0].get()->getPrefilterExpressionForMetadata(
+        !isNegated);
     ql::ranges::for_each(
         child | ql::views::keys,
         [](std::unique_ptr<p::PrefilterExpression>& expression) {
