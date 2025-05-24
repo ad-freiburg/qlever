@@ -175,19 +175,19 @@ Result Join::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Join::setPrefilterGetUpdatedQueryExecutionTree(
-    std::vector<PrefilterVariablePair> prefilterVariablePairs) const {
-  auto optNewSubtreeLeft = _left->setPrefilterGetUpdatedQueryExecutionTree(
-      prefilterExpressions::detail::makePrefilterExpressionVecCopy(
-          prefilterVariablePairs));
-  auto optNewSubtreeRight = _right->setPrefilterGetUpdatedQueryExecutionTree(
-      std::move(prefilterVariablePairs));
+    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
+  auto optNewSubtreeLeft =
+      _left->getRootOperation()->setPrefilterGetUpdatedQueryExecutionTree(
+          prefilterVariablePairs);
+  auto optNewSubtreeRight =
+      _right->getRootOperation()->setPrefilterGetUpdatedQueryExecutionTree(
+          prefilterVariablePairs);
   if (!optNewSubtreeLeft.has_value() && !optNewSubtreeRight.has_value()) {
     return std::nullopt;
   }
   return ad_utility::makeExecutionTree<Join>(
-      getExecutionContext(), optNewSubtreeLeft.value_or(_left->clone()),
-      optNewSubtreeRight.value_or(_right->clone()), _leftJoinCol,
-      _rightJoinCol);
+      getExecutionContext(), optNewSubtreeLeft.value_or(_left),
+      optNewSubtreeRight.value_or(_right), _leftJoinCol, _rightJoinCol);
 }
 
 // _____________________________________________________________________________

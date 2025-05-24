@@ -849,8 +849,8 @@ template class LogicalExpression<LogicalOperator::OR>;
 namespace detail {
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
-    const std::vector<PrefilterExprVariablePair>& vec) {
-  auto viewVariable = vec | ql::views::values;
+    ql::span<const PrefilterExprVariablePair> span) {
+  auto viewVariable = span | ql::views::values;
   if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, "
@@ -980,17 +980,6 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
                         variable);
   }
   return resVec;
-}
-
-//______________________________________________________________________________
-std::vector<PrefilterExprVariablePair> makePrefilterExpressionVecCopy(
-    const std::vector<PrefilterExprVariablePair>& prefilterExprVariableVec) {
-  std::vector<PrefilterExprVariablePair> copy;
-  ql::ranges::for_each(prefilterExprVariableVec,
-                       [&copy](const PrefilterExprVariablePair& pair) {
-                         copy.emplace_back(pair.first->clone(), pair.second);
-                       });
-  return copy;
 }
 
 //______________________________________________________________________________

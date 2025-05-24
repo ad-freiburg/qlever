@@ -78,7 +78,8 @@ class IndexScan final : public Operation {
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      std::vector<PrefilterVariablePair> prefilterVariablePairs) const override;
+      ql::span<const PrefilterVariablePair> prefilterVariablePairs)
+      const override;
 
   size_t numVariables() const { return numVariables_; }
 

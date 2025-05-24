@@ -115,12 +115,11 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
   std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
     return !varToColMap.contains(pair.second);
   });
-
   if (prefilterPairs.empty()) {
     return std::nullopt;
   } else {
     return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
-        std::move(prefilterPairs));
+        prefilterPairs);
   }
 }
 

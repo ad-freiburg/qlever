@@ -376,10 +376,10 @@ using PrefilterExprVariablePair =
 //______________________________________________________________________________
 // Helper function to perform a check regarding the following conditions.
 // (1) For each relevant Variable, the vector contains exactly one pair.
-// (2) The vector contains those pairs (`<PrefilterExpression, Variable>`) in
+// (2) The span contains those pairs (`<PrefilterExpression, Variable>`) in
 // sorted order w.r.t. the Variable value.
 void checkPropertiesForPrefilterConstruction(
-    const std::vector<PrefilterExprVariablePair>& vec);
+    ql::span<const PrefilterExprVariablePair> span);
 
 //______________________________________________________________________________
 // This function is public s.t. we can test the corner case by providing an
@@ -408,11 +408,6 @@ template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
     bool mirrored, bool prefilterDateByYear = false);
-
-//______________________________________________________________________________
-// Make a copy of the given <PrefilterExprVariablePair> vector.
-std::vector<PrefilterExprVariablePair> makePrefilterExpressionVecCopy(
-    const std::vector<PrefilterExprVariablePair>& prefilterExprVariableVec);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

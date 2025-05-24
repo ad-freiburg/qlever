@@ -45,7 +45,8 @@ class Join : public Operation {
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      std::vector<PrefilterVariablePair> prefilterVariablePairs) const override;
+      ql::span<const PrefilterVariablePair> prefilterVariablePairs)
+      const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
