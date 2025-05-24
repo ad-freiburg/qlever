@@ -209,28 +209,21 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     return makeIsBlankExpression(std::move(childExpr));
   }
 }
-
-//______________________________________________________________________________
-std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
-    VariantArgs childVal) {
-  return makeStrExpression(std::visit(getExpr, std::move(childVal)));
-}
-
-//______________________________________________________________________________
-std::unique_ptr<SparqlExpression> makeInSprqlExpression(
-    VariantArgs child, std::vector<ValueId>&& children) {
-  std::vector<std::unique_ptr<SparqlExpression>> childrenSprql;
-  childrenSprql.reserve(children.size());
-
-  ql::ranges::for_each(children, [&childrenSprql](auto& val) {
-    childrenSprql.push_back(std::visit(getExpr, VariantArgs(val)));
-  });
-
-  return std::make_unique<sparqlExpression::InExpression>(
-      std::visit(getExpr, std::move(child)), std::move(childrenSprql));
-}
-
 }  // namespace
+
+//______________________________________________________________________________
+template <typename... Args>
+requires(std::convertible_to<Args, VariantArgs> && ...)
+std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
+                                              Args&&... argList) {
+  std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
+  childrenSparql.reserve(sizeof...(argList));
+  (childrenSparql.push_back(
+       std::visit(getExpr, VariantArgs{std::forward<Args>(argList)})),
+   ...);
+  return std::make_unique<sparqlExpression::InExpression>(
+      std::visit(getExpr, std::move(first)), std::move(childrenSparql));
+}
 
 //______________________________________________________________________________
 // LESS THAN (`<`, `SparqlExpression`)
@@ -257,14 +250,10 @@ constexpr auto andSprqlExpr = &makeAndExpression;
 constexpr auto orSprqlExpr = &makeOrExpression;
 // NOT (`!`, `SparqlExpression`)
 constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
-// IN SparqlExpression
-constexpr auto inSprqlExpr = &makeInSprqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
-// Create SparqlExpression `STR`
-constexpr auto strSprql = &makeStrSparqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`

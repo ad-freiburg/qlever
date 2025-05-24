@@ -794,26 +794,37 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 // Test InExpression
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
+  auto date2001 = DateId(DateParser, "2000-01-01");
   // IN
   makeTest(inExpr({}), {});
   makeTest(inExpr({idDüsseldorf}), {b19});
   makeTest(inExpr({idAugsburg, idHamburg}), {b18, b19, b20, b21});
-  makeTest(inExpr({falseId, IntId(0), DoubleId(2.5), idStuttgart,
-                   DateId(DateParser, "2000-01-01")}),
+  makeTest(inExpr({falseId, IntId(0), DoubleId(2.5), idStuttgart, date2001}),
            {b2, b3, b4, b5, b6, b11, b27});
-  makeTest(inExpr({falseId, IntId(-10), DoubleId(-2.5), idHamburg,
-                   DateId(DateParser, "2000-01-01")}),
+  makeTest(inExpr({falseId, IntId(-10), DoubleId(-2.5), idHamburg, date2001}),
            {b2, b3, b9, b11, b15, b19, b20, b21, b27});
   makeTest(
       inExpr({IntId(-100), IntId(-40), IntId(-5), IntId(0), DoubleId(7.5)}),
       {b4, b5, b6, b11, b14, b15});
 
   // NOT IN (isNegated = true)
-  makeTest(inExpr({idHamburg}, true), {b18, b19, b21, b26});
+  makeTest(inExpr({}, true),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28});
+  makeTest(inExpr({idHamburg}, true),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
   makeTest(inExpr({idMünchen, idHamburg, idDüsseldorf}, true),
-           {b18, b19, b21, b26});
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
   makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4)}, true),
-           {b4, b6, b7, b8, b9, b11, b12, b13, b14, b15, b17, b18});
+           {b1,  b2,  b3,  b4,  b6,  b7,  b8,  b9,  b11, b12, b13,
+            b14, b15, b17, b18, b19, b20, b21, b26, b27, b28});
+  makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4), idHamburg,
+                   idDüsseldorf, date2001},
+                  true),
+           {b1, b2, b3, b4, b6, b7, b8, b9, b11, b12, b13, b14, b15, b17, b18,
+            b19, b21, b26, b28});
 }
 
 // Test Logical Expressions

@@ -510,17 +510,14 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
 //______________________________________________________________________________
 TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
   const auto varX = Variable{"?x"};
-  evalAndEqualityCheck(inSprqlExpr(varX, {IntId(0), VocabId(10)}),
+  evalAndEqualityCheck(inSprqlExpr(varX, IntId(0), VocabId(10)),
                        pr(inExpr({IntId(0), VocabId(10)}), varX));
   evalAndEqualityCheck(
-      notSprqlExpr(inSprqlExpr(varX, {IntId(0), VocabId(10)})),
+      notSprqlExpr(inSprqlExpr(varX, IntId(0), VocabId(10))),
       pr(notExpr(inExpr({IntId(0), VocabId(10)}, true)), varX));
-  evalAndEqualityCheck(
-      notSprqlExpr(inSprqlExpr(strSprql(varX), {IntId(0), VocabId(10)})),
-      pr(notExpr(inExpr({IntId(0), VocabId(10)}, true)), varX));
-  evalAndEqualityCheck(inSprqlExpr(L("\"Bob\""), {IntId(5), DoubleId(10)}));
-  evalAndEqualityCheck(
-      inSprqlExpr(strSprql(L("\"Bob\"")), {IntId(5), DoubleId(10)}));
+  evalAndEqualityCheck(inSprqlExpr(L("\"Bob\""), IntId(5), DoubleId(10)));
+  evalAndEqualityCheck(inSprqlExpr(varX, IntId(5), DoubleId(10), varX));
+  evalAndEqualityCheck(inSprqlExpr(varX, gtSprql(varX, IntId(10)), IntId(33)));
 }
 
 //______________________________________________________________________________

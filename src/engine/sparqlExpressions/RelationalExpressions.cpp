@@ -521,30 +521,22 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
 std::vector<PrefilterExprVariablePair>
 InExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
-  auto retrieveVariable =
-      [](const SparqlExpression* child) -> std::optional<Variable> {
-    if (child->isStrExpression()) {
-      return child->children()[0]->getVariableOrNullopt();
-    }
-    return child->getVariableOrNullopt();
-  };
-
-  auto var = retrieveVariable(children_.front().get());
+  auto var = children_.front().get()->getVariableOrNullopt();
   if (!var.has_value()) {
     return {};
   }
 
   std::vector<prefilterExpressions::IdOrLocalVocabEntry> referenceValues;
   referenceValues.reserve(children_.size());
-  ql::ranges::for_each(
-      children_ | ql::ranges::views::drop(1),
-      [&referenceValues](const SparqlExpression::Ptr& expr) {
-        auto optReferenceValue = sparqlExpression::detail::
-            getIdOrLocalVocabEntryFromLiteralExpression(expr.get());
-        if (optReferenceValue.has_value()) {
-          referenceValues.push_back(optReferenceValue.value());
-        }
-      });
+  for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
+    auto optReferenceValue =
+        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
+            expr.get());
+    if (!optReferenceValue.has_value()) {
+      return {};
+    }
+    referenceValues.push_back(optReferenceValue.value());
+  }
 
   std::vector<PrefilterExprVariablePair> resPrefilter;
   resPrefilter.emplace_back(
