@@ -31,8 +31,10 @@ CPP_template(typename NaryOperation)(
   bool containsLangExpression() const override { return true; }
 
   std::optional<Variable> variable() const {
-    const SparqlExpression* child = this->children()[0].get();
-    if (auto stringPtr = dynamic_cast<const VariableExpression*>(child)) {
+    auto children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 1);
+    if (auto stringPtr =
+            dynamic_cast<const VariableExpression*>(children[0].get())) {
       return stringPtr->value();
     } else {
       return std::nullopt;

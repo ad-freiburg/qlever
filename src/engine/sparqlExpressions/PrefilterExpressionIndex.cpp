@@ -551,9 +551,8 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
       LVE::fromStringRepresentation("<"), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
-  // vocab entries, there might be local vocab entries in `[lowerVocabIndex-1,
-  // lowerVocabIndex]` which still match the prefix, similar for
-  // `upperVocabIndex`, so we will adjust the bounds in the following.
+  // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,
+  // lowerVocabIndex]` which still match the prefix.
   if (isNegated_) {
     const auto& upperIdAdjusted =
         upperVocabIndex.get() == 0
@@ -563,27 +562,24 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     // Prefilter ?var >= Id(prev("prefix)) || ?var < Id("prefix).
     return OrExpression(make<LessThanExpression>(lowerIdVocab),
                         make<AndExpression>(
-                            make<GreaterEqualExpression>(upperIdAdjusted),
+                            make<GreaterThanExpression>(upperIdAdjusted),
                             make<LessThanExpression>(beginIdIri)))
         .evaluateImpl(vocab, idRange, blockRange);
   }
 
-  // Set adjusted lower reference.
-  const auto& lowerIdAdjusted =
-      lowerVocabIndex.get() == 0
-          ? lowerIdVocab
-          : Id::makeFromVocabIndex(lowerVocabIndex.decremented());
-
-  // Set adjusted upper reference.
-  const auto& upperIdAdjusted =
+  // Set expression associated with the lower reference.
+  auto lowerRefExpr = lowerVocabIndex.get() == 0
+                          ? make<GreaterEqualExpression>(lowerIdVocab)
+                          : make<GreaterThanExpression>(Id::makeFromVocabIndex(
+                                lowerVocabIndex.decremented()));
+  // Set expression associated with the upper reference.
+  auto upperRefExpr =
       upperVocabIndex.get() == vocab.size()
-          ? beginIdIri
-          : Id::makeFromVocabIndex(upperVocabIndex.incremented());
-
+          ? make<LessThanExpression>(beginIdIri)
+          : make<LessThanExpression>(Id::makeFromVocabIndex(upperVocabIndex));
   // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
-  // Prefilter ?var > Id("prefix) && ?var < Id(next("prefix)).
-  return AndExpression(make<GreaterEqualExpression>(lowerIdAdjusted),
-                       make<LessThanExpression>(upperIdAdjusted))
+  // Prefilter ?var > Id(prev("prefix)) && ?var < Id(next("prefix)).
+  return AndExpression(std::move(lowerRefExpr), std::move(upperRefExpr))
       .evaluateImpl(vocab, idRange, blockRange);
 };
 

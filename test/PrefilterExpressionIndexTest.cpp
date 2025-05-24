@@ -93,8 +93,8 @@ const Id GraphId = VocabId(0);
 // Turtle input for testing.
 static const inline std::string turtleInput =
     "<x0> <name> \"Be\" . "
-    "<x1> <name> \"Bern\" . "
     "<x2> <name> \"Berlin\" . "
+    "<x1> <name> \"Bern\" . "
     "<x3> <name> \"Düsseldorf\" . "
     "<x4> <name> \"H\" . "
     "<x5> <name> \"Ham\" . "
@@ -796,32 +796,28 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
   makeTestPrefixRegex(
       prefixRegex(L("Be"), false),
       {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
-  makeTestPrefixRegex(
-      prefixRegex(L("Ber"), false),
-      {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
-  makeTestPrefixRegex(prefixRegex(L("Düssel"), false),
-                      {b2RegexTest, b3RegexTest, b4RegexTest});
-  makeTestPrefixRegex(
-      prefixRegex(L("H"), false),
-      {b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex(L("Ber"), false),
+                      {b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest});
+  makeTestPrefixRegex(prefixRegex(L("Düssel"), false), {b3RegexTest});
+  makeTestPrefixRegex(prefixRegex(L("H"), false),
+                      {b4RegexTest, b5RegexTest, b6RegexTest, b7RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Ham"), false),
                       {b4RegexTest, b5RegexTest, b6RegexTest, b7RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Hambu"), false),
                       {b5RegexTest, b6RegexTest, b7RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Hamburg Alt"), false),
-                      {b5RegexTest, b6RegexTest, b7RegexTest});
+                      {b6RegexTest, b7RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Hamburg Altona"), false),
-                      {b5RegexTest, b6RegexTest, b7RegexTest});
-  makeTestPrefixRegex(prefixRegex(L("No Prefix"), false),
-                      {b7RegexTest, b8RegexTest, b9RegexTest});
+                      {b6RegexTest, b7RegexTest});
+  makeTestPrefixRegex(prefixRegex(L("No Prefix"), false), {});
   makeTestPrefixRegex(prefixRegex(L(""), false),
                       {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest,
                        b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
                        b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Stutt"), false),
-                      {b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+                      {b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Stuttgart"), false),
-                      {b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+                      {b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Stuttgart-Zuffen"), false),
                       {b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(prefixRegex(L("Wolfs"), false),
@@ -834,8 +830,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testPrefixRegexExpression) {
        b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(
       prefixRegex(L("Be"), true),
-      {bRegexTest, b2RegexTest, b3RegexTest, b4RegexTest, b5RegexTest,
-       b6RegexTest, b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
+      {bRegexTest, b3RegexTest, b4RegexTest, b5RegexTest, b6RegexTest,
+       b7RegexTest, b8RegexTest, b9RegexTest, b10RegexTest});
   makeTestPrefixRegex(
       prefixRegex(L("Ham"), true),
       {bRegexTest, b0RegexTest, b1RegexTest, b2RegexTest, b3RegexTest,

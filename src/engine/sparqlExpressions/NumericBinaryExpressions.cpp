@@ -322,8 +322,8 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
     const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
     auto leftChild =
         children[0].get()->getPrefilterExpressionForMetadata(isNegated);
     auto rightChild =

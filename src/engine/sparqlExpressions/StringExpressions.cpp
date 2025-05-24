@@ -265,19 +265,11 @@ CPP_template(typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
     std::vector<PrefilterExprVariablePair> prefilterVec;
-
-    auto retrieveVariable =
-        [](const SparqlExpression* child) -> std::optional<Variable> {
-      if (child->isStrExpression()) {
-        return child->children()[0]->getVariableOrNullopt();
-      }
-      return child->getVariableOrNullopt();
-    };
-
     const auto& children = this->children();
-    auto var = retrieveVariable(children[0].get());
+    AD_CORRECTNESS_CHECK(children.size() == 2);
+
+    auto var = children[0].get()->getVariableOrNullopt();
     if (!var.has_value()) {
       return prefilterVec;
     }
