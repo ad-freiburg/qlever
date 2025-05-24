@@ -266,11 +266,11 @@ TEST(Filter,
           qec,
           ad_utility::makeExecutionTree<IndexScan>(
               qec, Permutation::Enum::POS,
-              SparqlTriple{Variable{"?person"}, "<p>", Variable{"?x"}}),
+              SparqlTripleSimples{Variable{"?person"}, "<p>", Variable{"?x"}}),
           std::vector<ColumnIndex>(1)),
       ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
-          SparqlTriple{Variable{"?person"}, "<p>", Variable{"?num"}}),
+          SparqlTripleSimple{Variable{"?person"}, "<p>", Variable{"?num"}}),
       1, 0);
 
   Filter filter1{qec,
