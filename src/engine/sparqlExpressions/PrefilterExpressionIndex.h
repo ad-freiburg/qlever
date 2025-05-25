@@ -409,11 +409,6 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
     bool mirrored, bool prefilterDateByYear = false);
 
-//______________________________________________________________________________
-// Make a copy of the given <PrefilterExprVariablePair> vector.
-std::vector<PrefilterExprVariablePair> makePrefilterExpressionVecCopy(
-    const std::vector<PrefilterExprVariablePair>& prefilterExprVariableVec);
-
 }  // namespace detail
 }  // namespace prefilterExpressions
 

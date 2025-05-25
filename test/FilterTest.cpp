@@ -259,18 +259,18 @@ TEST(Filter,
   auto VocabId = ad_utility::testing::VocabId;
   std::string kg = "<a> <p> 22.5 .";
   QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+  SparqlTriple triple1{Variable{"?person"}, "<p>", Variable{"?x"}};
+  SparqlTriple triple2{Variable{"?person"}, "<p>", Variable{"?num"}};
 
   auto filterSubtree = ad_utility::makeExecutionTree<Join>(
       qec,
       ad_utility::makeExecutionTree<Sort>(
           qec,
-          ad_utility::makeExecutionTree<IndexScan>(
-              qec, Permutation::Enum::POS,
-              SparqlTriple{Variable{"?person"}, "<p>", Variable{"?x"}}),
+          ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS,
+                                                   triple1.getSimple()),
           std::vector<ColumnIndex>(1)),
-      ad_utility::makeExecutionTree<IndexScan>(
-          qec, Permutation::Enum::PSO,
-          SparqlTriple{Variable{"?person"}, "<p>", Variable{"?num"}}),
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::Enum::PSO,
+                                               triple2.getSimple()),
       1, 0);
 
   Filter filter1{qec,

@@ -53,9 +53,9 @@ std::string Sort::getDescriptor() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::setPrefilterGetUpdatedQueryExecutionTree(
-    std::vector<PrefilterVariablePair> prefilterVariablePairs) const {
+    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
   auto optNewSubtree = subtree_->setPrefilterGetUpdatedQueryExecutionTree(
-      std::move(prefilterVariablePairs));
+      prefilterVariablePairs);
   if (!optNewSubtree.has_value()) {
     return std::nullopt;
   }

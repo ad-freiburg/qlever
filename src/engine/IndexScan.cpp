@@ -160,7 +160,7 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
-    std::vector<PrefilterVariablePair> prefilterVariablePairs) const {
+    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
   auto optSortedVarColIdxPair =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!optSortedVarColIdxPair.has_value()) {

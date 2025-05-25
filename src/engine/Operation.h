@@ -157,7 +157,7 @@ class Operation {
   // `IndexScan` in their subtree.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] std::vector<PrefilterVariablePair> prefilterPairs)
+      [[maybe_unused]] ql::span<const PrefilterVariablePair> prefilterPairs)
       const {
     return std::nullopt;
   };
