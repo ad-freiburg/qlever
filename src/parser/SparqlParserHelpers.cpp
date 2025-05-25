@@ -55,23 +55,29 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     }
   };
 
-  for (const auto& match :
-       ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(view)) {
+  // We can only unescape Unicode sequences that are preceded by an even number
+  // of `\` plus the`\` of the sequence itself.
+  // Group 1: start with something that is not `\` or the start of the string
+  // Group 2: an even number of `\`
+  // Group 3: the Unicode escape sequence
+  for (const auto& match : ctre::search_all<
+           R"((^|[^\\])(\\\\)*(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4}))">(view)) {
     if (noEscapeSequenceFound) {
       output.reserve(input.size());
       noEscapeSequenceFound = false;
     }
+    auto escapeGroup = match.get<3>();
     auto inBetweenPart =
-        view.substr(lastPos, match.data() - (view.data() + lastPos));
+        view.substr(lastPos, escapeGroup.data() - (view.data() + lastPos));
 
     throwError(
         inBetweenPart.empty() || highSurrogate == 0,
         "A high surrogate must be directly followed by a low surrogate.");
 
     output += inBetweenPart;
-    lastPos = match.data() + match.size() - view.data();
+    lastPos = escapeGroup.data() + escapeGroup.size() - view.data();
 
-    auto hexValue = match.to_view();
+    auto hexValue = escapeGroup.to_view();
     hexValue.remove_prefix(std::string_view{"\\U"}.size());
 
     UChar32 codePoint;

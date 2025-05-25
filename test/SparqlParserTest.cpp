@@ -1495,3 +1495,15 @@ TEST(ParserTest, multipleUpdatesAreForbidden) {
           "INSERT DATA { <a> <b> <c> }; DELETE DATA { <d> <e> <f> }"),
       testing::HasSubstr("Multiple Updates in one request are not supported."));
 }
+
+namespace sparqlParserHelpers {
+
+TEST(ParserTest, unescapeUnicodeSequences) {
+  auto unescape =
+      sparqlParserHelpers::ParserAndVisitor::unescapeUnicodeSequences;
+  EXPECT_THAT(unescape(R"(\\u0026)"), testing::Eq(R"(\\u0026)"));
+  EXPECT_THAT(unescape(R"(\u0026)"), testing::Eq(R"(&)"));
+  EXPECT_THAT(unescape(R"(\\\u0026)"), testing::Eq(R"(\\&)"));
+}
+
+}  // namespace sparqlParserHelpers
