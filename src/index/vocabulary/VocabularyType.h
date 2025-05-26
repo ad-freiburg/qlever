@@ -77,7 +77,7 @@ class VocabularyType {
   Enum value() const { return value_; }
 
   // Return a list of all the enum values.
-  static constexpr const std::array<Enum, 4>& all() { return all_; }
+  static constexpr const std::array<Enum, numValues_>& all() { return all_; }
 
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const VocabularyType& vocabEnum) {
@@ -89,7 +89,10 @@ class VocabularyType {
     vocabEnum = VocabularyType::fromString(static_cast<std::string>(j));
   }
 
-  // Get a random value, useful for fuzz testing.
+  // Get a random value, useful for fuzz testing. In particular, each time an
+  // index is built for testing in `IndexTestHelpers.cpp` we assign it a random
+  // vocabulary type (repeating all these tests for all types exhaustively would
+  // be infeasible).
   static VocabularyType random() {
     ad_utility::FastRandomIntGenerator<size_t> r;
     return VocabularyType{static_cast<Enum>(r() % numValues_)};

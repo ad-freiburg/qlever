@@ -4,7 +4,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
-#include <engine/CallFixedSize.h>
+#include "engine/CallFixedSize.h"
 
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
