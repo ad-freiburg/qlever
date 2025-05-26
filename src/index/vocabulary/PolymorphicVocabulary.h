@@ -72,7 +72,7 @@ class PolymorphicVocabulary {
   // Return the total number of words in the vocabulary.
   size_t size() const;
 
-  // Return the `i`-the word, throw of `i` is out of bounds.
+  // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
