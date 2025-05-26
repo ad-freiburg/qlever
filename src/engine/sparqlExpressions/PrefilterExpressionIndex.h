@@ -243,10 +243,9 @@ class IsInExpression : public PrefilterExpression {
   std::vector<IdOrLocalVocabEntry> referenceValues_;
 
  public:
-  explicit IsInExpression(
-      const std::vector<IdOrLocalVocabEntry>& referenceValues,
-      bool isNegated = false)
-      : isNegated_(isNegated), referenceValues_(referenceValues) {}
+  explicit IsInExpression(std::vector<IdOrLocalVocabEntry> referenceValues,
+                          bool isNegated = false)
+      : isNegated_(isNegated), referenceValues_(std::move(referenceValues)) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;

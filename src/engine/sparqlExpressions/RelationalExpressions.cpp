@@ -518,10 +518,20 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
 }
 
 // _____________________________________________________________________________
+// Brief explanation why we ignore the argument `isNegated` here.
+// (1) In the case of `isNegated = false`, the correct `IsInExpression` is
+// constructed by default here, since its default parameter for `isNegated` is
+// false as well.
+// (2) `isNegated = true` implies that a parent node is a NOT expression (see
+// `UnaryNegateExpressionImpl` in NumericUnaryExpressions.cpp). In this case,
+// the `UnaryNegateExpressionImpl` will subsequently correctly negate the here
+// returned `IsInExpression` by implicitly calling `->logicalComplement()` on
+// it (see `NotExpression` in PrefilterExpressionIndex.h).
 std::vector<PrefilterExprVariablePair>
 InExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
-  auto var = children_.front().get()->getVariableOrNullopt();
+  AD_CORRECTNESS_CHECK(children_.size() >= 1);
+  auto var = children_.front()->getVariableOrNullopt();
   if (!var.has_value()) {
     return {};
   }

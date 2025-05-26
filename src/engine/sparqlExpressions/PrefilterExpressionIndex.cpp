@@ -752,14 +752,12 @@ BlockMetadataRanges IsInExpression::evaluateImpl(
 
   // Construct PrefilterExpression: refVal1 || refVal2 || ... || refValN.
   auto prefilterExpr = ::ranges::fold_left_first(
-      referenceValues_ | ::ranges::views::transform([]<typename T>(T&& refVal) {
-        return make<EqualExpression>(std::forward<T>(refVal));
+      referenceValues_ | ::ranges::views::transform([](auto&& refVal) {
+        return make<EqualExpression>(AD_FWD(refVal));
       }),
-      [this]<typename L, typename R>(L&& c1, R&& c2) {
-        return isNegated_ ? make<AndExpression>(std::forward<L>(c1),
-                                                std::forward<R>(c2))
-                          : make<OrExpression>(std::forward<L>(c1),
-                                               std::forward<R>(c2));
+      [this](auto&& c1, auto&& c2) {
+        return isNegated_ ? make<AndExpression>(AD_FWD(c1), AD_FWD(c2))
+                          : make<OrExpression>(AD_FWD(c1), AD_FWD(c2));
       });
 
   return prefilterExpr.value()->evaluateImpl(idRange, blockRange, isNegated_);
