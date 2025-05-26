@@ -644,15 +644,14 @@ class SparqlQleverVisitor {
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 
- public:
-  static SparqlTripleSimpleWithGraph makeAllTripleTemplatee(
-      const GraphRefAll& graph);
-
  private:
+  // Constructs a `ParsedQuery` that clears the given graph.
   ParsedQuery makeClear(const GraphRefAll& graph);
   ParsedQuery makeClear(const GraphOrDefault& graph);
-  ParsedQuery makeCopyAll(const GraphOrDefault& source,
-                          const GraphOrDefault& target);
+  // Constructs a `ParsedQuery` that adds all triples from the source graph to
+  // the target graph.
+  ParsedQuery makeAdd(const GraphOrDefault& source,
+                      const GraphOrDefault& target);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };

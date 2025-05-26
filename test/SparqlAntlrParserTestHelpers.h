@@ -946,17 +946,6 @@ inline auto Load = [](bool silent,
                      AD_FIELD(Load, target_, testing::Eq(target))));
 };
 
-inline auto SelectAllPattern =
-    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
-       std::optional<std::string>&& filter =
-           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
-  return GraphPattern(
-      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
-      Group(GraphPattern(Triples(
-                {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
-            std::move(graph)));
-};
-
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
        const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
@@ -1148,23 +1137,38 @@ inline auto ExistsFilter =
                                                  defaultGraphs, namedGraphs))));
 };
 
-// TODO: fix this duplicated parameter by merging the two iri classes and the
-// graph types
-inline auto Clear = [](const SparqlTripleSimpleWithGraph::Graph& templateGraph,
-                       const parsedQuery::GroupGraphPattern::GraphSpec& graph,
-                       std::optional<std::string>&& filter = std::nullopt) {
-  return UpdateClause(GraphUpdate({{{::Variable("?s")},
-                                    {::Variable("?p")},
-                                    {::Variable("?o")},
-                                    templateGraph}},
-                                  {}, std::nullopt),
-                      SelectAllPattern(graph, AD_FWD(filter)));
+// A helper matcher for a graph pattern that targets all triples in `graph`.
+inline auto SelectAllPattern =
+    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
+       std::optional<std::string>&& filter =
+           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
+  return GraphPattern(
+      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
+      Group(GraphPattern(Triples(
+                {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
+            std::move(graph)));
 };
 
-inline auto CopyAll = [](const TripleComponent::Iri& from,
-                         const TripleComponent::Iri& to) {
+// Matcher for a `ParsedQuery` with a clear of `graph`.
+inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
+                       std::optional<std::string>&& filter = std::nullopt) {
+  // The `GraphSpec` type is the same variant as
+  // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
   return UpdateClause(
-      GraphUpdate({}, {SparqlQleverVisitor::makeAllTripleTemplatee(to)},
+      GraphUpdate(
+          {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
+          {}, std::nullopt),
+      SelectAllPattern(graph, AD_FWD(filter)));
+};
+
+// Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
+inline auto AddAll = [](const TripleComponent::Iri& from,
+                        const TripleComponent::Iri& to) {
+  return UpdateClause(
+      GraphUpdate({},
+                  {SparqlTripleSimpleWithGraph(
+                      ::Variable("?s"), ::Variable("?p"), ::Variable("?o"),
+                      SparqlTripleSimpleWithGraph::Graph{to})},
                   std::nullopt),
       SelectAllPattern(from));
 };

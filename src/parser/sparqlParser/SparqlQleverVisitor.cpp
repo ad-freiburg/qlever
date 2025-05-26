@@ -589,6 +589,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
     std::string updateStringRepr = std::string{ad_utility::getUTF8Substring(
         ctx->getStart()->getInputStream()->toString(), updateStartPos,
         updateEndPos - updateStartPos + 1)};
+    // Many graph management operations are desugared into multiple updates. We
+    // set the string representation of the graph management operation for all
+    // the simple update operations.
     ql::ranges::for_each(thisUpdates, [updateStringRepr](ParsedQuery& update) {
       update._originalString = updateStringRepr;
     });
@@ -601,12 +604,11 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
-  using Updates = std::vector<ParsedQuery>;
   if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
       ctx->create() || ctx->copy() || ctx->move() || ctx->add()) {
-    return visitAlternative<Updates>(ctx->deleteWhere(), ctx->modify(),
-                                     ctx->clear(), ctx->drop(), ctx->create(),
-                                     ctx->copy(), ctx->move(), ctx->add());
+    return visitAlternative<std::vector<ParsedQuery>>(
+        ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
+        ctx->create(), ctx->copy(), ctx->move(), ctx->add());
   }
   AD_CORRECTNESS_CHECK(ctx->load() || ctx->insertData() || ctx->deleteData());
   parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
@@ -621,7 +623,7 @@ Load Visitor::visit(Parser::LoadContext* ctx) {
 }
 
 parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
-    const GraphRefAll& graph) {
+    const auto& graph) {
   using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
   return std::visit(
       ad_utility::OverloadCallOperator{
@@ -634,21 +636,6 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
                 DEFAULT_GRAPH_IRI);
           },
           [](const NAMED&) -> Graph { AD_FAIL(); }},
-      graph);
-}
-
-parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
-    const GraphOrDefault& graph) {
-  using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
-  return std::visit(
-      ad_utility::OverloadCallOperator{
-          [](const ad_utility::triple_component::Iri& iri) -> Graph {
-            return iri;
-          },
-          [](const DEFAULT&) -> Graph {
-            return ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
-          }},
       graph);
 }
 
@@ -660,7 +647,7 @@ GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
                                          transformGraphspec(graph)}};
 }
 
-SparqlTripleSimpleWithGraph::Graph transformGraph(GraphRefAll graph) {
+SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
   using Graph = SparqlTripleSimpleWithGraph::Graph;
   return std::visit(
       ad_utility::OverloadCallOperator{
@@ -674,28 +661,6 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(GraphRefAll graph) {
           },
           [](const NAMED&) -> Graph { AD_FAIL(); }},
       graph);
-}
-
-SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphOrDefault& graph) {
-  using Graph = SparqlTripleSimpleWithGraph::Graph;
-  return std::visit(
-      ad_utility::OverloadCallOperator{
-          [](const ad_utility::triple_component::Iri& iri) -> Graph {
-            return iri;
-          },
-          [](const DEFAULT&) -> Graph {
-            return ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
-          }},
-      graph);
-}
-
-SparqlTripleSimpleWithGraph Visitor::makeAllTripleTemplatee(
-    const GraphRefAll& graph) {
-  return {{Variable("?s")},
-          {Variable("?p")},
-          {Variable("?o")},
-          transformGraph(graph)};
 }
 
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
@@ -722,7 +687,7 @@ ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
 ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   if (std::holds_alternative<NAMED>(graph)) {
     parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-        makeAllTripleGraphPattern(ALL{}));
+        makeAllTripleGraphPattern(GraphRefAll{ALL{}}));
     auto e = SparqlExpressionPimpl{
         createExpression<sparqlExpression::NotEqualExpression>(
             std::make_unique<sparqlExpression::VariableExpression>(
@@ -732,7 +697,7 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
         absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
     parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
     parsedQuery_._clause = parsedQuery::UpdateClause{
-        GraphUpdate{{}, {makeAllTripleTemplatee(ALL{})}}};
+        GraphUpdate{{}, {makeAllTripleTemplate(GraphRefAll{ALL{}})}}};
     parsedQuery_.datasetClauses_ = activeDatasetClauses_;
     return parsedQuery_;
   }
@@ -740,13 +705,13 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplatee(graph)}}};
+      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
-ParsedQuery Visitor::makeCopyAll(const GraphOrDefault& source,
-                                 const GraphOrDefault& target) {
+ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
+                             const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(source));
   parsedQuery_._clause = parsedQuery::UpdateClause{
@@ -773,7 +738,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
     return {};
   }
 
-  return {makeCopyAll(from, to)};
+  return {makeAdd(from, to)};
 }
 
 // ____________________________________________________________________________________
@@ -790,7 +755,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
 
   updates.push_back(makeClear(to));
   resetStateForMultipleUpdates();
-  updates.push_back(makeCopyAll(from, to));
+  updates.push_back(makeAdd(from, to));
   resetStateForMultipleUpdates();
   updates.push_back(makeClear(from));
 
@@ -811,7 +776,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 
   updates.push_back(makeClear(to));
   resetStateForMultipleUpdates();
-  updates.push_back(makeCopyAll(from, to));
+  updates.push_back(makeAdd(from, to));
 
   return updates;
 }
