@@ -5,6 +5,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
 #include <cstring>
@@ -1261,17 +1262,18 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
     }
   };
-  auto makeRdfParserImpl = [&filename = file.filename_, &bufferSize,
-                            &graph]<int useParallel, int isTurtleInput>()
-      -> std::unique_ptr<RdfParserBase> {
-    using InnerParser =
-        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
-                           NQuadParser<TokenizerT>>;
-    using Parser =
-        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
-                           RdfStreamParser<InnerParser>>;
-    return std::make_unique<Parser>(filename, bufferSize, graph());
-  };
+  auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
+      [&filename = file.filename_, &bufferSize, &graph](
+          auto useParallel,
+          auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
+        using InnerParser =
+            std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                               NQuadParser<TokenizerT>>;
+        using Parser =
+            std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                               RdfStreamParser<InnerParser>>;
+        return std::make_unique<Parser>(filename, bufferSize, graph());
+      }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
   // integers. We use it here to create the correct combination of template
@@ -1335,7 +1337,7 @@ RdfMultifileParser::RdfMultifileParser(
     for (const auto& file : files) {
       numActiveParsers_++;
       bool active =
-          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
+          parsingQueue_.push(absl::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.

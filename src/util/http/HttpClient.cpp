@@ -138,7 +138,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
                         responseParser,
                     beast::flat_buffer buffer,
                     ad_utility::SharedCancellationHandle handle)
-      -> cppcoro::generator<std::span<std::byte>> {
+      -> cppcoro::generator<ql::span<std::byte>> {
     while (!responseParser->is_done()) {
       std::array<std::byte, 4096> staticBuffer;
       responseParser->get().body().data = staticBuffer.data();
@@ -150,8 +150,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
               handle, ad_utility::source_location::current()),
           client->ioContext_);
       size_t remainingBytes = responseParser->get().body().size;
-      co_yield std::span{staticBuffer}.first(staticBuffer.size() -
-                                             remainingBytes);
+      co_yield ql::span{staticBuffer}.first(staticBuffer.size() -
+                                            remainingBytes);
     }
   };
 

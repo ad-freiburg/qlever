@@ -1756,9 +1756,10 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
   // Test cases: Each tuple describes one test case.
   // The first element is the ID of the element to test.
   // The second element is a list of 2 configurations:
-  // 1. for literals all datatypes except for xsd:string are removed, IRIs
+  // 1. for literals all datatypes are removed, IRIs
   // are converted to literals
-  // 2. only literals with `xsd:string` or no datatype are returned
+  // 2. only literals with no datatype or`xsd:string` are returned.
+  // In the last case the datatype is removed.
   std::vector<
       std::tuple<Id, std::vector<std::tuple<bool, std::optional<std::string>>>>>
       testCases = {
@@ -1768,8 +1769,7 @@ TEST(ExportQueryExecutionTrees, idToLiteralFunctionality) {
 
           // Case: Literal with datatype `xsd:string`
           {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
-           {{false, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
-            {true, "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"}}},
+           {{false, "\"some\""}, {true, "\"some\""}}},
 
           // Case: Literal with unknown datatype
           {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),

@@ -66,13 +66,13 @@ class ExistsExpression : public SparqlExpression {
   bool isExistsExpression() const override { return true; }
 
   // Return all the variables that are used in this expression.
-  std::span<const Variable> getContainedVariablesNonRecursive() const override {
+  ql::span<const Variable> getContainedVariablesNonRecursive() const override {
     return argument_.selectClause().getSelectedVariables();
   }
 
   // Set the `SELECT` of the argument of this exists expression to all the
   // variables that are visible in the argument AND contained in variables.
-  void selectVariables(std::span<const Variable> variables) {
+  void selectVariables(ql::span<const Variable> variables) {
     std::vector<parsedQuery::SelectClause::VarOrAlias> intersection;
     const auto& visibleVariables = argument_.getVisibleVariables();
     for (const auto& var : variables) {
@@ -84,7 +84,7 @@ class ExistsExpression : public SparqlExpression {
   }
 
  private:
-  std::span<Ptr> childrenImpl() override { return {}; }
+  ql::span<Ptr> childrenImpl() override { return {}; }
 };
 }  // namespace sparqlExpression
 

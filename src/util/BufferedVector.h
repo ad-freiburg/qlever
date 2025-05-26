@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "MmapVector.h"
+#include "backports/shift.h"
 
 namespace ad_utility {
 
@@ -171,7 +172,7 @@ class BufferedVector {
     size_t numInserted = it2 - it1;
     size_t offset = target - begin();
     resize(size() + numInserted);
-    std::shift_right(begin() + offset, end(), numInserted);
+    ql::shift_right(begin() + offset, end(), numInserted);
     for (auto it = it1; it != it2; ++it) {
       (*this)[offset++] = *it;
     }
@@ -184,7 +185,7 @@ class BufferedVector {
   void erase(T* it1, T* it2) {
     AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 <= end());
     size_t numErased = it2 - it1;
-    std::shift_left(it1, end(), numErased);
+    ql::shift_left(it1, end(), numErased);
     resize(size() - numErased);
   }
 

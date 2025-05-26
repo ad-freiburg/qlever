@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "backports/span.h"
 #include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "engine/Union.h"
@@ -118,7 +119,7 @@ struct SortedUnionImpl
                   bool requestLaziness,
                   const std::vector<std::array<size_t, 2>>& columnOrigins,
                   const ad_utility::AllocatorWithLimit<Id>& allocator,
-                  std::span<const ColumnIndex, SPAN_SIZE> comparatorView,
+                  ql::span<const ColumnIndex, SPAN_SIZE> comparatorView,
                   Func applyPermutation)
       : data1_{std::move(data1)},
         data2_{std::move(data2)},
@@ -139,7 +140,7 @@ struct SortedUnionImpl
   // Always inline makes makes a huge difference on large datasets.
   template <typename T1, typename T2>
   AD_ALWAYS_INLINE bool isSmaller(const T1& row1, const T2& row2) const {
-    using StaticRange = std::span<const std::array<size_t, 2>, SPAN_SIZE>;
+    using StaticRange = ql::span<const std::array<size_t, 2>, SPAN_SIZE>;
     for (auto [index1, index2] : StaticRange{targetOrder_}) {
       if (index1 == Union::NO_COLUMN) {
         return true;
@@ -243,7 +244,7 @@ template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
 SortedUnionImpl(IterationData<Range1>, IterationData<Range2>, bool,
                 const std::vector<std::array<size_t, 2>>&,
                 const ad_utility::AllocatorWithLimit<Id>&,
-                std::span<const ColumnIndex, SPAN_SIZE>, Func)
+                ql::span<const ColumnIndex, SPAN_SIZE>, Func)
     -> SortedUnionImpl<SPAN_SIZE, Range1, Range2, Func>;
 }  // namespace sortedUnion
 

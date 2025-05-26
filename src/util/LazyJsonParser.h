@@ -8,6 +8,7 @@
 #include <optional>
 #include <variant>
 
+#include "backports/span.h"
 #include "util/Generator.h"
 #include "util/json.h"
 
@@ -39,7 +40,7 @@ class LazyJsonParser {
                          std::vector<std::string> arrayPath);
 
   // Convenient alternative for the function above using bytes.
-  static Generator parse(cppcoro::generator<std::span<std::byte>> partialJson,
+  static Generator parse(cppcoro::generator<ql::span<std::byte>> partialJson,
                          std::vector<std::string> arrayPath);
 
  private:

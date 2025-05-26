@@ -92,7 +92,7 @@ class ServiceTest : public ::testing::Test {
       }
 
       auto body =
-          [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
+          [](std::string result) -> cppcoro::generator<ql::span<std::byte>> {
         // Randomly slice the string to make tests more robust.
         std::mt19937 rng{std::random_device{}()};
 
@@ -103,7 +103,7 @@ class ServiceTest : public ::testing::Test {
         for (size_t start = 0; start < resultStr.length();) {
           size_t size = distribution(rng);
           std::string resultCopy{resultStr.substr(start, size)};
-          co_yield std::as_writable_bytes(std::span{resultCopy});
+          co_yield ql::as_writable_bytes(ql::span{resultCopy});
           start += size;
         }
       };

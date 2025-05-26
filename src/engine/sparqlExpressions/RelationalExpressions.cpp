@@ -288,7 +288,7 @@ string RelationalExpression<Comp>::getCacheKey(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
+ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
@@ -502,7 +502,7 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
 }
 
 // _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
+ql::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
   return children_;
 }
 

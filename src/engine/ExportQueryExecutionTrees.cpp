@@ -13,6 +13,7 @@
 
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
+#include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
@@ -400,14 +401,16 @@ ExportQueryExecutionTrees::handleIriOrLiteral(
   AD_CORRECTNESS_CHECK(word.isLiteral());
   if (onlyReturnLiteralsWithXsdString) {
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      if (word.hasDatatype()) {
+        word.getLiteral().removeDatatypeOrLanguageTag();
+      }
       return std::move(word.getLiteral());
     }
     return std::nullopt;
   }
-
-  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
-    word.getLiteral().removeDatatypeOrLanguageTag();
-  }
+  // Note: `removeDatatypeOrLanguageTag` also correctly works if the literal has
+  // neither a datatype nor a language tag, hence we don't need an `if` here.
+  word.getLiteral().removeDatatypeOrLanguageTag();
   return std::move(word.getLiteral());
 }
 
@@ -418,8 +421,17 @@ LiteralOrIri ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
     case Datatype::VocabIndex: {
-      auto entity = index.indexToString(id.getVocabIndex());
-      return LiteralOrIri::fromStringRepresentation(entity);
+      auto getEntity = [&index, id]() {
+        return index.indexToString(id.getVocabIndex());
+      };
+      // The type of entity might be `string_view` (If the vocabulary is stored
+      // uncompressed in RAM) or `string` (if it is on-disk, or compressed or
+      // both). The following code works and is efficient in all cases. In
+      // particular, the `std::string` constructor is compiled out because of
+      // RVO if `getEntity()` already returns a `string`.
+      static_assert(ad_utility::SameAsAny<decltype(getEntity()), std::string,
+                                          std::string_view>);
+      return LiteralOrIri::fromStringRepresentation(std::string(getEntity()));
     }
     default:
       AD_FAIL();
@@ -1044,7 +1056,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  auto compute = [&]<MediaType format> {
+  auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
@@ -1061,7 +1073,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                        parsedQuery._limitOffset, qet.getResult(true),
                        std::move(cancellationHandle));
     }
-  };
+  }};
 
   using enum MediaType;
 

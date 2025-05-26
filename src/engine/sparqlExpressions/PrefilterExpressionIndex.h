@@ -33,11 +33,11 @@ using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
 constexpr size_t maxInfoRecursion = 3;
 
 //______________________________________________________________________________
-// `std::span` containing `CompressedBlockMetadata` (defined in
+// `ql::span` containing `CompressedBlockMetadata` (defined in
 // CompressedRelation.h) values.
-using BlockMetadataSpan = std::span<const CompressedBlockMetadata>;
+using BlockMetadataSpan = ql::span<const CompressedBlockMetadata>;
 // Iterator with respect to a `CompressedBlockMetadata` value of
-// `std::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
+// `ql::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
 using BlockMetadataIt = BlockMetadataSpan::iterator;
 // Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
 using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
@@ -46,12 +46,12 @@ using BlockMetadataRanges = std::vector<BlockMetadataRange>;
 
 //______________________________________________________________________________
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
-// containerized `std::span<cont CompressedBlockMetadata>` objects. This
+// containerized `ql::span<cont CompressedBlockMetadata>` objects. This
 // (indexable) containerization procedure allows us to efficiently define
 // relevant ranges by indices/iterators, instead of returning the relevant
-// `CompressedBlockMetadata` values itself. `operator()(std::span<const
+// `CompressedBlockMetadata` values itself. `operator()(ql::span<const
 // CompressedBlockMetadata> randomAccessContainer,uint64_t i)` implements access
-// to the i-th `ValueId` regarding our containerized `std::span<const
+// to the i-th `ValueId` regarding our containerized `ql::span<const
 // CompressedBlockMetadata> inputSpan`. Each `CompressedBlockMetadata` value
 // holds exactly two bound `ValueId`s (one in `firstTriple_` and `lastTriple_`
 // respectively) over the specified column `evaluationColumn_`. This leads to an
@@ -73,22 +73,22 @@ struct AccessValueIdFromBlockMetadata {
 };
 
 // Specialized `Iterator` with `ValueId` access (retrieve `ValueId`s from
-// corresponding `CompressedBlockMetadata`) on containerized `std::span<const
+// corresponding `CompressedBlockMetadata`) on containerized `ql::span<const
 // CompressedBlockMetadata>` objects.
 using ValueIdIt = ad_utility::IteratorForAccessOperator<
-    std::span<const CompressedBlockMetadata>, AccessValueIdFromBlockMetadata,
+    ql::span<const CompressedBlockMetadata>, AccessValueIdFromBlockMetadata,
     ad_utility::IsConst::True>;
 
 //______________________________________________________________________________
 // `ValueIdSubrange` represents a (sub) range of relevant `ValueId`s over
-// the containerized `std::span<const CompressedBlockMetadata> input`:
+// the containerized `ql::span<const CompressedBlockMetadata> input`:
 using ValueIdSubrange = ql::ranges::subrange<ValueIdIt>;
 
 //______________________________________________________________________________
 // Required because `valueIdComparators::getRangesForId` directly returns pairs
 // of `ValueIdIt`s, and not sub ranges (`ValueIdSubrange`).
 // Remark: The pair defines a relevant range of `ValueId`s over containerized
-// `std::span<const CompressedBlockMetadata> input` by iterators.
+// `ql::span<const CompressedBlockMetadata> input` by iterators.
 using ValueIdItPair = std::pair<ValueIdIt, ValueIdIt>;
 
 //______________________________________________________________________________
@@ -149,7 +149,7 @@ class PrefilterExpression {
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
-  // column index `evaluationColumn` over the containerized `std::span<const
+  // column index `evaluationColumn` over the containerized `ql::span<const
   // CompressedBlockMetadata> input` (`BlockMetadataSpan`).
   virtual BlockMetadataRanges evaluateImpl(
       const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const = 0;
@@ -349,20 +349,20 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
 namespace mapping {
 // `This internal helper function is only exposed for unit tests!`
 // Map the complement of the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `std::span<const
+// `ValueId`s held by the containerized `ql::span<const
 // CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
 // ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
-// `CompressedBlockMetadata` values of `std::span<const
+// `CompressedBlockMetadata` values of `ql::span<const
 // CompressedBlockMetadata>` (`BlockMetadataSpan`).
 BlockMetadataRanges mapValueIdItRangesToBlockItRangesComplemented(
     const std::vector<ValueIdItPair>& relevantIdRanges,
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange);
 // `This internal helper function is only exposed for unit tests!`
 // Map the given `ValueIdItPair`s, which directly refer to the
-// `ValueId`s held by the containerized `std::span<const
+// `ValueId`s held by the containerized `ql::span<const
 // CompressedBlockMetadata>`, to their corresponding `BlockMetadataIt`s. The
 // ranges defined by those `BlockMetadataIt`s directly refer to the (relevant)
-// `CompressedBlockMetadata` values of `std::span<const
+// `CompressedBlockMetadata` values of `ql::span<const
 // CompressedBlockMetadata>` (`BlockMetadataSpan`).
 BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
     const std::vector<ValueIdItPair>& relevantIdRanges,
