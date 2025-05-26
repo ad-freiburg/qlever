@@ -109,19 +109,21 @@ size_t QueryExecutionTree::getSizeEstimate() {
 //_____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
-    ql::span<const Operation::PrefilterVariablePair> prefilterPairs) const {
+    const Operation::Prefilters& prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   const VariableToColumnMap& varToColMap = getVariableColumns();
-  std::vector<Operation::PrefilterVariablePair> filteredPairs;
-  filteredPairs.reserve(prefilterPairs.size());
 
-  ql::ranges::for_each(
-      prefilterPairs, [&filteredPairs, &varToColMap](const auto& pair) {
-        if (varToColMap.contains(pair.second)) {
-          filteredPairs.emplace_back(pair.first->clone(), pair.second);
-        }
-      });
+  auto filteredView = prefilterPairs | ql::views::filter([&](const auto* pair) {
+                        return varToColMap.contains(pair->second);
+                      });
+  if (ql::ranges::distance(filteredView) ==
+      static_cast<std::ptrdiff_t>(prefilterPairs.size())) {
+    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+        prefilterPairs);
+  }
 
+  Operation::Prefilters filteredPairs;
+  ql::ranges::copy(filteredView, std::back_inserter(filteredPairs));
   if (filteredPairs.empty()) {
     return std::nullopt;
   }

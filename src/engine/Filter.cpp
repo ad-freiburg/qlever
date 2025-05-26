@@ -50,8 +50,10 @@ string Filter::getDescriptor() const {
 
 //______________________________________________________________________________
 void Filter::setPrefilterExpressionForChildren() {
+  const auto& prefilterPairs = _expression.getPrefilterExpressionForMetadata();
   auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
-      _expression.getPrefilterExpressionForMetadata());
+      prefilterExpressions::detail::getPrefiltersExprPairsAsInlinedVec(
+          prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }

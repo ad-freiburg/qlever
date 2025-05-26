@@ -983,6 +983,17 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 }
 
 //______________________________________________________________________________
+Prefilters getPrefiltersExprPairsAsInlinedVec(
+    const std::vector<PrefilterExprVariablePair>& pairs) {
+  Prefilters prefilterPairs;
+  prefilterPairs.reserve(pairs.size());
+  ql::ranges::for_each(pairs, [&prefilterPairs](const auto& pair) {
+    prefilterPairs.push_back(&pair);
+  });
+  return prefilterPairs;
+};
+
+//______________________________________________________________________________
 #define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
   template std::vector<PrefilterExprVariablePair>                    \
   makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \

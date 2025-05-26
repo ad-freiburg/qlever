@@ -160,18 +160,20 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
-    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
+    const Prefilters& prefilterVariablePairs) const {
   auto optSortedVarColIdxPair =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!optSortedVarColIdxPair.has_value()) {
     return std::nullopt;
   }
   const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
-  auto it =
-      ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
+  auto it = ql::ranges::find(
+      prefilterVariablePairs, sortedVar,
+      [](const auto* pair) -> const Variable& { return pair->second; });
+
   if (it != prefilterVariablePairs.end()) {
     return makeCopyWithAddedPrefilters(
-        std::make_pair(it->first->clone(), colIdx));
+        std::make_pair((*it)->first->clone(), colIdx));
   }
   return std::nullopt;
 }

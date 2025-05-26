@@ -96,6 +96,7 @@ class Operation {
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+  using Prefilters = prefilterExpressions::detail::Prefilters;
 
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
@@ -157,8 +158,7 @@ class Operation {
   // `IndexScan` in their subtree.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      [[maybe_unused]] ql::span<const PrefilterVariablePair> prefilterPairs)
-      const {
+      [[maybe_unused]] const Prefilters& prefilterPairs) const {
     return std::nullopt;
   };
 

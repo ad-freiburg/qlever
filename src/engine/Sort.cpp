@@ -53,7 +53,7 @@ std::string Sort::getDescriptor() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Sort::setPrefilterGetUpdatedQueryExecutionTree(
-    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
+    const Prefilters& prefilterVariablePairs) const {
   auto optNewSubtree = subtree_->setPrefilterGetUpdatedQueryExecutionTree(
       prefilterVariablePairs);
   if (!optNewSubtree.has_value()) {

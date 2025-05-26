@@ -175,7 +175,7 @@ Result Join::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Join::setPrefilterGetUpdatedQueryExecutionTree(
-    ql::span<const PrefilterVariablePair> prefilterVariablePairs) const {
+    const Prefilters& prefilterVariablePairs) const {
   auto optNewSubtreeLeft =
       _left->setPrefilterGetUpdatedQueryExecutionTree(prefilterVariablePairs);
   auto optNewSubtreeRight =
