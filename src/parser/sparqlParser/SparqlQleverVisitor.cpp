@@ -642,6 +642,7 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
 }
 
 // ____________________________________________________________________________________
+// Make a `GraphPatternOperation` that matches all triples in the graph.
 GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
   GraphPattern inner;
   inner._graphPatterns.emplace_back(BasicGraphPattern{
@@ -651,6 +652,7 @@ GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
 }
 
 // ____________________________________________________________________________________
+// Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
   return {{Variable("?s")},
           {Variable("?p")},
@@ -675,6 +677,8 @@ ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
 
 ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   if (std::holds_alternative<NAMED>(graph)) {
+    // We select all graphs and then filter out the default graph, to get only
+    // the named graphs.
     parsedQuery_._rootGraphPattern._graphPatterns.push_back(
         makeAllTripleGraphPattern(GraphRefAll{ALL{}}));
     auto e = SparqlExpressionPimpl{
