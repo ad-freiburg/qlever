@@ -11,7 +11,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
   UpdateMetadata metadata{};
-  auto [toInsert, toDelete] =
+  auto [toInsert, toDelete, result] =
       computeGraphUpdateQuads(index, query, qet, cancellationHandle, metadata);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
@@ -121,8 +121,8 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 }
 
 // _____________________________________________________________________________
-std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
-          ExecuteUpdate::IdTriplesAndLocalVocab>
+std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
+           ExecuteUpdate::IdTriplesAndLocalVocab, std::shared_ptr<const Result>>
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
@@ -134,7 +134,9 @@ ExecuteUpdate::computeGraphUpdateQuads(
   }
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
   // Fully materialize the result for now. This makes it easier to execute the
-  // update.
+  // update. Return the result to keep it alive.
+  // TODO<qup42>: pass in the result and variable columns explicitly, this makes
+  // the lifetime less awkward
   auto result = qet.getResult(false);
 
   // Start the timer once the where clause has been evaluated.
@@ -184,7 +186,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
-      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
+      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)},
+      std::move(result)};
 }
 
 // _____________________________________________________________________________
