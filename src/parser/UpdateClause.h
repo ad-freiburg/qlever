@@ -18,39 +18,6 @@ struct Load {
   std::optional<GraphRef> target_;
 };
 
-struct Clear {
-  bool silent_;
-  GraphRefAll target_;
-};
-
-struct Drop {
-  bool silent_;
-  GraphRefAll target_;
-};
-
-struct Create {
-  bool silent_;
-  GraphRef target_;
-};
-
-struct Add {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
-struct Move {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
-struct Copy {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
 // A Graph Update is an Update operation that inserts or deletes some triples.
 // These triples can contain variables that are bound the result of the
 // ParsedQueries GraphPattern. All Updates except `LOAD` are realised with it.
