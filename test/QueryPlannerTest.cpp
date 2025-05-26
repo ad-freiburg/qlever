@@ -2587,13 +2587,14 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     auto qec = ad_utility::testing::getQec();
     TripleComponent subject{Variable{"?subject"}};
     TripleComponent object{Variable{"?object"}};
-    SparqlTriple triple{subject, distanceIRI, object};
     if (shouldThrow) {
-      ASSERT_ANY_THROW(
-          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
+      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
+                            SparqlTriple{subject, distanceIRI, object}})
+                           .toSpatialJoinConfiguration());
     } else {
       auto config =
-          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration();
+          parsedQuery::SpatialQuery{SparqlTriple{subject, distanceIRI, object}}
+              .toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);

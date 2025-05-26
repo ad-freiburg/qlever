@@ -69,7 +69,9 @@ class SparqlTriple
 
   // ___________________________________________________________________________
   SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(iri), std::move(o)} {}
+      : Base{std::move(s),
+             PropertyPath::fromIri(TripleComponent::Iri::fromIriref(iri)),
+             std::move(o)} {}
 
   // ___________________________________________________________________________
   [[nodiscard]] string asString() const;
@@ -79,10 +81,9 @@ class SparqlTriple
   SparqlTripleSimple getSimple() const {
     bool holdsVariable = std::holds_alternative<Variable>(p_);
     AD_CONTRACT_CHECK(holdsVariable || getSimplePredicate().has_value());
-    TripleComponent p = holdsVariable
-                            ? TripleComponent{std::get<Variable>(p_)}
-                            : TripleComponent(TripleComponent::Iri::fromIriref(
-                                  std::get<PropertyPath>(p_).getIri()));
+    TripleComponent p =
+        holdsVariable ? TripleComponent{std::get<Variable>(p_)}
+                      : TripleComponent(std::get<PropertyPath>(p_).getIri());
     return {s_, p, o_, additionalScanColumns_};
   }
 
@@ -93,9 +94,7 @@ class SparqlTriple
     if (triple.p_.isVariable()) {
       return {triple.s_, triple.p_.getVariable(), triple.o_};
     }
-    return {triple.s_,
-            PropertyPath::fromIri(triple.p_.getIri().toStringRepresentation()),
-            triple.o_};
+    return {triple.s_, PropertyPath::fromIri(triple.p_.getIri()), triple.o_};
   }
 
   // If the predicate of the triple is a simple IRI (neither a variable nor a
@@ -107,8 +106,10 @@ class SparqlTriple
       return std::nullopt;
     }
     const auto& path = std::get<PropertyPath>(p_);
-    return path.isIri() ? std::optional<std::string_view>{path.iri_}
-                        : std::nullopt;
+    return path.isIri()
+               ? std::optional<std::string_view>{path.getIri()
+                                                     .toStringRepresentation()}
+               : std::nullopt;
   }
 
   // If the predicate of the triples is a variable, return it. Note:

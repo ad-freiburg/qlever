@@ -301,24 +301,21 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromPropertyPath(const TripleComponent& left,
                                                  const PropertyPath& path,
                                                  const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromSequence(const TripleComponent& left,
-                                             const PropertyPath& path,
-                                             const TripleComponent& right);
-  ParsedQuery::GraphPattern seedFromAlternative(const TripleComponent& left,
-                                                const PropertyPath& path,
-                                                const TripleComponent& right);
+  ParsedQuery::GraphPattern seedFromSequence(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
+  ParsedQuery::GraphPattern seedFromAlternative(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
   ParsedQuery::GraphPattern seedFromTransitive(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right,
                                                size_t min, size_t max);
-  ParsedQuery::GraphPattern seedFromInverse(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
   // Create `GraphPattern` for property paths of the form `!(<a> | ^<b>)` or
   // `!<a>` and similar.
-  ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
-                                            const PropertyPath& path,
-                                            const TripleComponent& right);
+  ParsedQuery::GraphPattern seedFromNegated(
+      const TripleComponent& left, const std::vector<PropertyPath>& paths,
+      const TripleComponent& right);
   static ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
       const ad_utility::sparql_types::VarOrIri& varOrIri,

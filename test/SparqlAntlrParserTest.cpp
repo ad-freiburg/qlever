@@ -177,6 +177,11 @@ using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::StrEq;
+
+PropertyPath PathIri(std::string_view iri) {
+  return PropertyPath::fromIri(
+      ad_utility::triple_component::Iri::fromIriref(iri));
+}
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -761,14 +766,13 @@ TEST(SparqlParser, InlineData) {
 
 TEST(SparqlParser, propertyPaths) {
   auto expectPathOrVar = ExpectCompleteParse<&Parser::verbPathOrSimple>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
   auto Inverse = &PropertyPath::makeInverse;
   auto Negated = &PropertyPath::makeNegated;
-  auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
-  auto OneOrMore = &PropertyPath::makeOneOrMore;
-  auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
+  auto WithLength = &PropertyPath::makeWithLength;
+  size_t max = std::numeric_limits<size_t>::max();
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
@@ -814,36 +818,29 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
+  expectPathOrVar("a:a+", WithLength(Iri("<http://www.example.com/a>"), 1, max),
                   {{"a", "<http://www.example.com/>"}});
-  {
-    PropertyPath expected = ZeroOrOne({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
-  }
-  {
-    PropertyPath expected = ZeroOrMore({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
-  }
+  expectPathOrVar("a:a?", WithLength(Iri("<http://www.example.com/a>"), 0, 1),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a*", WithLength(Iri("<http://www.example.com/a>"), 0, max),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected = Alternative(
         {Sequence({
              Iri("<http://www.example.com/a/a>"),
-             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+             WithLength(Iri("<http://www.example.com/b/b>"), 0, max),
          }),
          Iri("<http://www.example.com/c/c>"),
-         OneOrMore(
-             {Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}),
+         WithLength(
+             Sequence({Iri("<http://www.example.com/a/a>"),
+                       Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
+             1, max),
          Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
          Negated(
              {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
               Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
               Inverse(Iri("<http://www.example.com/a/a>"))})});
-    expected.computeCanBeNull();
-    expected.canBeNull_ = false;
     expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
@@ -860,14 +857,14 @@ TEST(SparqlParser, propertyPathsWriteToStream) {
   };
   {
     auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>"))});
-    EXPECT_EQ("!(^(<a>))", toString(path));
+        {PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>")))});
+    EXPECT_EQ("!((^<a>))", toString(path));
   }
   {
     auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>")),
-         PropertyPath::fromIri("<b>")});
-    EXPECT_EQ("!(^(<a>)|<b>)", toString(path));
+        {PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>"))),
+         PropertyPath::fromIri(iri("<b>"))});
+    EXPECT_EQ("!((^<a>)|<b>)", toString(path));
   }
   {
     auto path = PropertyPath::makeNegated({});
@@ -878,7 +875,7 @@ TEST(SparqlParser, propertyPathsWriteToStream) {
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
       "<bar> ?foo ; <mehr> ?f",
@@ -892,7 +889,7 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto internal0 = m::InternalVariable("0");
   auto internal1 = m::InternalVariable("1");
   auto internal2 = m::InternalVariable("2");
-  auto bar = m::Predicate("<bar>");
+  auto bar = m::Predicate(iri("<bar>"));
   expectPropertyListPath(
       "?x [?y ?z; <bar> ?b, ?p, [?d ?e], [<bar> ?e]]; ?u ?v",
       Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
@@ -908,7 +905,6 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
 
 TEST(SparqlParser, triplesSameSubjectPath) {
   auto expectTriples = ExpectCompleteParse<&Parser::triplesSameSubjectPath>{};
-  auto PathIri = &PropertyPath::fromIri;
   expectTriples("?foo <bar> ?baz",
                 {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("?foo <bar> ?baz ; <mehr> ?t",
@@ -2539,9 +2535,8 @@ TEST(ParserTest, propertyPathInCollection) {
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
                 iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
                {Var{"?_QLever_internal_variable_1"},
-                PropertyPath::makeWithChildren(
-                    {PropertyPath::fromIri("<http://example.org/r>")},
-                    PropertyPath::Operation::INVERSE),
+                PropertyPath::makeInverse(
+                    PropertyPath::fromIri(iri("<http://example.org/r>"))),
                 lit("\"hello\"")},
                {Var{"?_QLever_internal_variable_3"},
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
@@ -2550,8 +2545,9 @@ TEST(ParserTest, propertyPathInCollection) {
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
                 Var{"?_QLever_internal_variable_2"}},
                {Var{"?_QLever_internal_variable_0"},
-                PropertyPath::makeModified(
-                    PropertyPath::fromIri("<http://example.org/p>"), "*"),
+                PropertyPath::makeWithLength(
+                    PropertyPath::fromIri(iri("<http://example.org/p>")), 0,
+                    std::numeric_limits<size_t>::max()),
                 123},
                {Var{"?s"}, Var{"?p"}, Var{"?_QLever_internal_variable_3"}}}))));
 }

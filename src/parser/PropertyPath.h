@@ -1,124 +1,123 @@
-// Copyright 2022, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   Copyright 2025, University of Freiburg,
+//   Chair of Algorithms and Data Structures.
+//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
 #define QLEVER_SRC_PARSER_PROPERTYPATH_H
 
 #include <cstdint>
-#include <initializer_list>
-#include <string>
+#include <functional>
+#include <variant>
 #include <vector>
 
-#include "data/Variable.h"
+#include "backports/concepts.h"
+#include "parser/Iri.h"
+#include "util/TypeTraits.h"
 
 class PropertyPath {
+ private:
+  struct BasicPath {
+    ad_utility::triple_component::Iri iri_;
+
+    bool operator==(const BasicPath&) const = default;
+  };
+
  public:
-  enum class Operation : std::uint8_t {
+  enum class Modifier : std::uint8_t {
     SEQUENCE,
     ALTERNATIVE,
     INVERSE,
-    IRI,
-    ZERO_OR_MORE,
-    ONE_OR_MORE,
-    ZERO_OR_ONE,
     NEGATED
   };
 
-  PropertyPath() : operation_(Operation::IRI) {}
-  explicit PropertyPath(Operation op) : operation_(op) {
-    if (op == Operation::ZERO_OR_MORE || op == Operation::ZERO_OR_ONE) {
-      canBeNull_ = true;
+ private:
+  struct ModifiedPath {
+    std::vector<PropertyPath> children_;
+    Modifier modifier_;
+
+    bool operator==(const ModifiedPath&) const = default;
+  };
+
+  class MinMaxPath {
+   public:
+    size_t min_;
+    size_t max_;
+    std::unique_ptr<PropertyPath> child_;
+
+    MinMaxPath(size_t min, size_t max, std::unique_ptr<PropertyPath> child)
+        : min_{min}, max_{max}, child_{std::move(child)} {}
+
+    MinMaxPath(MinMaxPath&&) = default;
+    MinMaxPath(const MinMaxPath& other)
+        : min_{other.min_},
+          max_{other.max_},
+          child_{std::make_unique<PropertyPath>(*other.child_)} {}
+    MinMaxPath& operator=(MinMaxPath&&) = default;
+    MinMaxPath& operator=(const MinMaxPath& other) {
+      min_ = other.min_;
+      max_ = other.max_;
+      child_ = std::make_unique<PropertyPath>(*other.child_);
+      return *this;
     }
-  }
-  PropertyPath(Operation op, std::string iri,
-               std::initializer_list<PropertyPath> children);
 
-  static PropertyPath fromIri(std::string iri) {
-    AD_CONTRACT_CHECK(!iri.starts_with("?"));
-    PropertyPath p(Operation::IRI);
-    p.iri_ = std::move(iri);
-    return p;
-  }
+    bool operator==(const MinMaxPath&) const;
+  };
 
-  static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
-                                       const Operation op) {
-    PropertyPath p(op);
-    p.children_ = std::move(children);
-    return p;
-  }
+  std::variant<BasicPath, ModifiedPath, MinMaxPath> path_;
 
-  static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
-    if (children.size() == 1) {
-      return std::move(children.front());
-    } else {
-      return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
-    }
-  }
+  explicit PropertyPath(std::variant<BasicPath, ModifiedPath, MinMaxPath> path);
 
-  static PropertyPath makeSequence(std::vector<PropertyPath> children) {
-    if (children.size() == 1) {
-      return std::move(children.front());
-    } else {
-      return makeWithChildren(std::move(children), Operation::SEQUENCE);
-    }
-  }
+ public:
+  PropertyPath(PropertyPath&&) = default;
+  PropertyPath(const PropertyPath&) = default;
+  PropertyPath& operator=(PropertyPath&&) = default;
+  PropertyPath& operator=(const PropertyPath&) = default;
 
-  static PropertyPath makeInverse(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::INVERSE);
-  }
+  static PropertyPath fromIri(ad_utility::triple_component::Iri iri);
 
-  /**
-   * @brief Make a PropertyPath based on the given child and apply the path
-   * modifier. The path modifier may be one of: ? + *
-   *
-   * @param child The PropertyPath child
-   * @param modifier A PropertyPath modifier (? + *)
-   * @return PropertyPath With given modifier as Operation and given child
-   */
-  static PropertyPath makeModified(PropertyPath child,
-                                   std::string_view modifier);
+  static PropertyPath makeWithLength(PropertyPath child, size_t min,
+                                     size_t max);
 
-  static PropertyPath makeZeroOrMore(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_MORE);
-  }
+  static PropertyPath makeAlternative(std::vector<PropertyPath> children);
 
-  static PropertyPath makeOneOrMore(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::ONE_OR_MORE);
-  }
+  static PropertyPath makeSequence(std::vector<PropertyPath> children);
 
-  static PropertyPath makeZeroOrOne(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::ZERO_OR_ONE);
-  }
+  static PropertyPath makeInverse(PropertyPath child);
 
-  static PropertyPath makeNegated(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::NEGATED);
-  }
+  static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
   bool operator==(const PropertyPath& other) const = default;
 
   void writeToStream(std::ostream& out) const;
+
   [[nodiscard]] std::string asString() const;
 
-  void computeCanBeNull();
+  const ad_utility::triple_component::Iri& getIri() const;
 
-  // ASSERT that this property path consists of a single IRI and return that
-  // IRI.
-  [[nodiscard]] const std::string& getIri() const;
   bool isIri() const;
 
-  Operation operation_;
+  const PropertyPath* getInvertedChild() const;
 
-  // In case of an iri
-  std::string iri_;
-
-  std::vector<PropertyPath> children_;
-
-  /**
-   * True iff this property path is either a transitive path with minimum length
-   * of 0, or if all of this transitive path's children can be null.
-   */
-  bool canBeNull_ = false;
+  CPP_template(typename T, typename Func1, typename Func2, typename Func3)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          Func1, T, const ad_utility::triple_component::Iri&>
+          CPP_and ad_utility::InvocableWithConvertibleReturnType<
+              Func2, T, const std::vector<PropertyPath>&, Modifier>
+              CPP_and ad_utility::InvocableWithConvertibleReturnType<
+                  Func3, T, const PropertyPath&, size_t, size_t>) T
+      handlePath(const Func1& func1, const Func2& func2,
+                 const Func3& func3) const {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [&func1](const BasicPath& path) { return func1(path.iri_); },
+            [&func2](const ModifiedPath& path) {
+              return func2(path.children_, path.modifier_);
+            },
+            [&func3](const MinMaxPath& path) {
+              return func3(*path.child_, path.min_, path.max_);
+            }},
+        path_);
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H

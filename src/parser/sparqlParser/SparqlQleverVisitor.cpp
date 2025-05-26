@@ -361,7 +361,9 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return PropertyPath::fromIri(item.toSparql());
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              item.toSparql()));
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
@@ -1772,10 +1774,7 @@ PathObjectPairsAndTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::VerbPathContext* ctx) {
-  PropertyPath p = visit(ctx->path());
-  // TODO move computeCanBeNull into PropertyPath constructor.
-  p.computeCanBeNull();
-  return p;
+  return visit(ctx->path());
 }
 
 // ____________________________________________________________________________________
@@ -1793,7 +1792,9 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(term.toSparql());
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              term.toSparql()));
     }
   };
   for (auto& triple : objectList.second) {
@@ -1846,12 +1847,20 @@ PropertyPath Visitor::visit(Parser::PathContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
-  return PropertyPath::makeAlternative(visitVector(ctx->pathSequence()));
+  auto alternatives = visitVector(ctx->pathSequence());
+  if (alternatives.size() == 1) {
+    return std::move(alternatives[0]);
+  }
+  return PropertyPath::makeAlternative(std::move(alternatives));
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
-  return PropertyPath::makeSequence(visitVector(ctx->pathEltOrInverse()));
+  auto sequence = visitVector(ctx->pathEltOrInverse());
+  if (sequence.size() == 1) {
+    return std::move(sequence[0]);
+  }
+  return PropertyPath::makeSequence(std::move(sequence));
 }
 
 // ____________________________________________________________________________________
@@ -1859,8 +1868,8 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
-    std::string modifier = ctx->pathMod()->getText();
-    p = PropertyPath::makeModified(p, modifier);
+    auto [min, max] = visit(ctx->pathMod());
+    p = PropertyPath::makeWithLength(std::move(p), min, max);
   }
   return p;
 }
@@ -1877,20 +1886,22 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::PathModContext*) {
-  // This rule is only used by the `PathElt` rule which should have handled the
-  // content of this rule.
-  AD_FAIL();
+std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  std::string mod = ctx->getText();
+  if (mod == "*") {
+    return {0, std::numeric_limits<size_t>::max()};
+  } else if (mod == "+") {
+    return {1, std::numeric_limits<size_t>::max()};
+  } else {
+    AD_CORRECTNESS_CHECK(mod == "?");
+    return {0, 1};
+  }
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
-  // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
-  //  simple `return visit(...)`. Then the three cases which are not the
-  //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
-    return PropertyPath::fromIri(
-        std::string{visit(ctx->iri()).toStringRepresentation()});
+    return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -1898,7 +1909,8 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(std::string{a});
+    return PropertyPath::fromIri(
+        ad_utility::triple_component::Iri::fromIriref(a));
   }
 }
 
@@ -1909,11 +1921,11 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
-  std::string iri = ctx->iri()
-                        ? std::move(visit(ctx->iri()).toStringRepresentation())
-                        : std::string{a};
+  auto iri = ctx->iri() ? visit(ctx->iri())
+                        : ad_utility::triple_component::Iri::fromIriref(a);
   const std::string& text = ctx->getText();
-  AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
+  AD_CORRECTNESS_CHECK((iri.toStringRepresentation() == a) ==
+                       (text == "a" || text == "^a"));
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
   if (text.starts_with("^")) {
     return PropertyPath::makeInverse(propertyPath);
@@ -2008,8 +2020,10 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
   return toRdfCollection(
-      visitVector(ctx->graphNodePath()),
-      [](std::string iri) { return PropertyPath::fromIri(std::move(iri)); });
+      visitVector(ctx->graphNodePath()), [](std::string_view iri) {
+        return PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(iri));
+      });
 }
 
 // ____________________________________________________________________________________
