@@ -198,16 +198,16 @@ class DocsFileParser : public WordsAndDocsFileParser,
 // every word in the document.
 inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
                                      const LocaleManager& localeManager) {
-  auto wordLines =
-      parser | ql::views::transform([&](const DocsFileLine& line) {
-        auto words = tokenizeAndNormalizeText(line.docContent_, localeManager);
-        return words | ql::views::transform([&](const std::string& word) {
-                 return WordsFileLine{word, false,
-                                      TextRecordIndex::make(line.docId_.get()),
-                                      0, false};
-               });
-      });
-  return wordLines | ql::views::join;
+  return parser | ql::views::transform([&](const DocsFileLine& line) {
+           return ad_utility::OwningView{tokenizeAndNormalizeText(
+                      line.docContent_, localeManager)} |
+                  ql::views::transform([&](const std::string& word) {
+                    return WordsFileLine{
+                        word, false, TextRecordIndex::make(line.docId_.get()),
+                        0, false};
+                  });
+         }) |
+         ql::views::join;
 }
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
