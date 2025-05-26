@@ -239,7 +239,7 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all
   // underlying vocabularies and calls the appropriate one depending on the
   // result of SplitFunction for the given word.
-  std::unique_ptr<WordWriter> makeWordWriterPtr(
+  std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
     return std::make_unique<WordWriter>(underlying_, filename);
   }

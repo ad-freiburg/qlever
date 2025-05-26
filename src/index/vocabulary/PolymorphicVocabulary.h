@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -46,8 +47,9 @@ class PolymorphicVocabulary {
   using External = VocabularyInternalExternal;
   using CompressedInMemory = CompressedVocabulary<InMemory>;
   using CompressedExternal = CompressedVocabulary<External>;
-  using Variant =
-      std::variant<InMemory, External, CompressedExternal, CompressedInMemory>;
+  using CompressedExtGeoSplit = SplitGeoVocabulary<CompressedExternal>;
+  using Variant = std::variant<InMemory, External, CompressedExternal,
+                               CompressedInMemory, CompressedExtGeoSplit>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;

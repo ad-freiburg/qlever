@@ -354,7 +354,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 1);
 
-  auto ww = sv.makeWordWriterPtr("twoSplitVocab.dat");
+  auto ww = sv.makeDiskWriterPtr("twoSplitVocab.dat");
   ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
   ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(0, 1));
   ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(1, 1));
@@ -427,7 +427,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv.getMarkerForWord("<abc>"), 0);
   ASSERT_EQ(sv.getMarkerForWord("\"abc\""), 0);
 
-  auto ww = sv.makeWordWriterPtr("threeSplitVocab.dat");
+  auto ww = sv.makeDiskWriterPtr("threeSplitVocab.dat");
   ASSERT_EQ((*ww)("\"\"", true), sv.addMarker(0, 0));
   ASSERT_EQ((*ww)("\"abc\"", true), sv.addMarker(1, 0));
   ASSERT_EQ((*ww)("\"axyz\"", true), sv.addMarker(2, 0));

@@ -85,6 +85,9 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
     case VocabularyType::Enum::OnDiskCompressed:
       vocab_.emplace<CompressedExternal>();
       break;
+    case VocabularyType::Enum::OnDiskCompressedGeoSplit:
+      vocab_.emplace<CompressedExtGeoSplit>();
+      break;
     default:
       AD_FAIL();
   }

@@ -248,7 +248,7 @@ class Vocabulary {
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
   auto makeWordWriterPtr(const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
+    return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
   }
 };
 
