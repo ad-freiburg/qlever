@@ -1420,8 +1420,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  return GraphPatternOperation{
+  auto visibleVariables = std::move(visibleVariables_);
+  GraphPatternOperation operation{
       parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // Make sure that the variables from the minus graph pattern are NOT added to
+  // visible variables.
+  visibleVariables_ = std::move(visibleVariables);
+  return operation;
 }
 
 // ____________________________________________________________________________________
