@@ -1,4 +1,6 @@
-
+// Copyright 2024, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Felix Meisen (fesemeisen@outlook.de)
 
 #include "index/TextIndexReadWrite.h"
 

@@ -7,6 +7,5 @@ add_library(index
         PrefixHeuristic.cpp CompressedRelation.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp LocalVocabEntry.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp
-        TextIndexBuilder.cpp
-        TextIndexBuilder.h)
+        TextIndexBuilder.cpph)
 qlever_target_link_libraries(index util parser vocabulary)

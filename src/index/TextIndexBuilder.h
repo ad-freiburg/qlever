@@ -7,6 +7,8 @@
 
 #include "index/IndexImpl.h"
 
+// This class contains all the code that is only required when building the
+// fulltext index
 class TextIndexBuilder : public IndexImpl {
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
