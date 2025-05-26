@@ -165,6 +165,10 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
       inverseMap.erase(triple);
     }
   });
+  // Manually update the block metadata, because `eraseTripleInAllPermutations`
+  // does not update them for performance reason.
+  ql::ranges::for_each(locatedTriples(),
+                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
@@ -255,7 +259,7 @@ ReturnType DeltaTriplesManager::modify(
         }
       });
 }
-// Explicit instantions
+// Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
