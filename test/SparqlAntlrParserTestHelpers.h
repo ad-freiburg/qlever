@@ -952,9 +952,9 @@ inline auto SelectAllPattern =
            std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
   return GraphPattern(
       false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
-      Group(
-          GraphPattern(Triples({{{::Variable("?s"), "?p", ::Variable("?o")}}})),
-          std::move(graph)));
+      Group(GraphPattern(Triples(
+                {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
+            std::move(graph)));
 };
 
 inline auto GraphUpdate =

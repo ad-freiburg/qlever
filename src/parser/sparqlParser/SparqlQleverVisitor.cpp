@@ -284,29 +284,23 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  // The following fields are not reset:
+  // - prefixMap_ and baseIri_: prefixes carry over between chained updates
+  // - datasetsAreFixed_: set for the whole request which can contain multiple
+  // operations
+  // - activeDatasetClauses_: if `datasetsAreFixed_` is true
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
-  activeDatasetClauses_ = {};
+  // When fixed datasets are given for a request (see SPARQL Protocol), these
+  // cannot be changed by a SPARQL operation but are also constant for chained
+  // updates.
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = {};
+  }
   prologueString_ = {};
   parsedQuery_ = {};
   isInsideConstructTriples_ = false;
-}
-
-// ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && ctx->update()->update1().empty()) {
-    // An empty query currently matches the `update()` rule. We handle this
-    // case manually to get a better error message. If an update query doesn't
-    // have an `update1()`, then it consists of a (possibly empty) prologue, but
-    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
-    // details.
-    reportError(ctx->update(),
-                "Empty query (this includes queries that only consist "
-                "of comments or prefix declarations).");
-  }
-  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
-                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -613,11 +607,11 @@ std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
     return visitAlternative<Updates>(ctx->deleteWhere(), ctx->modify(),
                                      ctx->clear(), ctx->drop(), ctx->create(),
                                      ctx->copy(), ctx->move(), ctx->add());
-  } else {
-    parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-        ctx->load(), ctx->insertData(), ctx->deleteData());
   }
-
+  AD_CORRECTNESS_CHECK(ctx->load() || ctx->insertData() || ctx->deleteData());
+  parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
+      ctx->load(), ctx->insertData(), ctx->deleteData());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return {std::move(parsedQuery_)};
 }
 
@@ -660,8 +654,8 @@ parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
 
 GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
   GraphPattern inner;
-  inner._graphPatterns.emplace_back(
-      BasicGraphPattern{{{{Variable("?s")}, "?p", {Variable("?o")}}}});
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
   return {parsedQuery::GroupGraphPattern{std::move(inner),
                                          transformGraphspec(graph)}};
 }
@@ -721,6 +715,7 @@ ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
@@ -738,6 +733,7 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
     parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
     parsedQuery_._clause = parsedQuery::UpdateClause{
         GraphUpdate{{}, {makeAllTripleTemplatee(ALL{})}}};
+    parsedQuery_.datasetClauses_ = activeDatasetClauses_;
     return parsedQuery_;
   }
 
@@ -745,6 +741,7 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, {makeAllTripleTemplatee(graph)}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
@@ -754,6 +751,7 @@ ParsedQuery Visitor::makeCopyAll(const GraphOrDefault& source,
       makeAllTripleGraphPattern(source));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{makeAllTripleTemplate(target)}, {}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
@@ -831,6 +829,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns = triples.toGraphPatternOperations();
@@ -1583,8 +1582,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  return GraphPatternOperation{
+  auto visibleVariables = std::move(visibleVariables_);
+  GraphPatternOperation operation{
       parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // Make sure that the variables from the minus graph pattern are NOT added to
+  // visible variables.
+  visibleVariables_ = std::move(visibleVariables);
+  return operation;
 }
 
 // ____________________________________________________________________________________
