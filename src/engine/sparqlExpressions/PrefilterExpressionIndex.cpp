@@ -548,7 +548,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   // Set lower reference.
   const auto& lowerIdVocab = Id::makeFromVocabIndex(lowerVocabIndex);
   const auto& beginIdIri = getValueIdFromIdOrLocalVocabEntry(
-      LVE::fromStringRepresentation("<"), localVocab);
+      LVE::fromStringRepresentation("<>"), localVocab);
 
   // The `vocab.prefixRanges` returns the correct bounds only for preindexed
   // vocab entries, there might be local vocab entries in `(lowerVocabIndex-1,

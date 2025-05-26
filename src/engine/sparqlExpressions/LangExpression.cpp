@@ -33,12 +33,7 @@ CPP_template(typename NaryOperation)(
   std::optional<Variable> variable() const {
     auto children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 1);
-    if (auto stringPtr =
-            dynamic_cast<const VariableExpression*>(children[0].get())) {
-      return stringPtr->value();
-    } else {
-      return std::nullopt;
-    }
+    return children[0]->getVariableOrNullopt();
   }
 };
 
