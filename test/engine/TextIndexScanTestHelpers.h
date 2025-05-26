@@ -28,12 +28,15 @@ inline std::string getTextRecordFromResultTable(
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
   if (lastTextRecordIndexOfNonLiterals < textRecordIdFromTable) {
     // Return when from Literals
-    return qec->getIndex().indexToString(VocabIndex::make(
-        textRecordIdFromTable - (lastTextRecordIndexOfNonLiterals + 1)));
+    // Note: the return type of `indexToString` might be `string_view` if the
+    // vocabulary is stored uncompressed in memory, hence the explicit cast to
+    // `std::string`.
+    return std::string{qec->getIndex().indexToString(VocabIndex::make(
+        textRecordIdFromTable - (lastTextRecordIndexOfNonLiterals + 1)))};
   } else {
     // Return when from DocsDB
-    return qec->getIndex().getTextExcerpt(
-        result.idTable().getColumn(0)[rowIndex].getTextRecordIndex());
+    return std::string{qec->getIndex().getTextExcerpt(
+        result.idTable().getColumn(0)[rowIndex].getTextRecordIndex())};
   }
 }
 
