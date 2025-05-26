@@ -97,9 +97,6 @@ class Index {
   void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
-  // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const std::string& docsFile);
-
   // Add text index from on-disk index that has previously been constructed.
   // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();

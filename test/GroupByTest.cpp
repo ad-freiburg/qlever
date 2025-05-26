@@ -83,7 +83,7 @@ class GroupByTest : public ::testing::Test {
         std::pair<std::string, std::string>{"group_by_test.words",
                                             "group_by_test.documents"},
         false);
-    _index.buildDocsDB("group_by_test.documents");
+    textIndexBuilder.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
     _index.parserBufferSize() = 1_kB;

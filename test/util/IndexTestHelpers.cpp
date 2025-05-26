@@ -230,7 +230,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
             std::pair<std::string, std::string>{indexBasename + ".wordsfile",
                                                 indexBasename + ".docsfile"},
             c.addWordsFromLiterals);
-        index.buildDocsDB(indexBasename + ".docsfile");
+        textIndexBuilder.buildDocsDB(indexBasename + ".docsfile");
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }

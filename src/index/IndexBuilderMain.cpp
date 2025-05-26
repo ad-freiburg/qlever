@@ -333,9 +333,10 @@ int main(int argc, char** argv) {
           "text index. If none are given the option to add words from literals "
           "has to be true. For details see --help."));
     }
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      auto textIndexBuilder = TextIndexBuilder(
-          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       textIndexBuilder.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
@@ -345,7 +346,7 @@ int main(int argc, char** argv) {
     }
 
     if (!docsfile.empty()) {
-      index.buildDocsDB(docsfile);
+      textIndexBuilder.buildDocsDB(docsfile);
     }
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;

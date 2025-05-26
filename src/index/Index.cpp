@@ -26,11 +26,6 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase,
 }
 
 // ____________________________________________________________________________
-void Index::buildDocsDB(const std::string& docsFile) {
-  pimpl_->buildDocsDB(docsFile);
-}
-
-// ____________________________________________________________________________
 void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
 
 // ____________________________________________________________________________

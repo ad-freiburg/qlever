@@ -29,6 +29,9 @@ class TextIndexBuilder : public IndexImpl {
       TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT,
       std::pair<float, float> bAndKForBM25 = {0.75f, 1.75f});
 
+  // Build docsDB file from given file (one text record per line).
+  void buildDocsDB(const string& docsFile) const;
+
  private:
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);

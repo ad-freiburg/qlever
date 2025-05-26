@@ -258,9 +258,6 @@ class IndexImpl {
   void createFromOnDiskIndex(const string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
-  // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const string& docsFile) const;
-
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();

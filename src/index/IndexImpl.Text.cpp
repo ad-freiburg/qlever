@@ -20,41 +20,6 @@
 #include "util/MmapVector.h"
 
 // _____________________________________________________________________________
-void IndexImpl::buildDocsDB(const string& docsFileName) const {
-  LOG(INFO) << "Building DocsDB...\n";
-  std::ifstream docsFile{docsFileName};
-  std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
-  // To avoid excessive use of RAM,
-  // we write the offsets to and `ad_utility::MmapVector` first;
-  ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
-  off_t currentOffset = 0;
-  uint64_t currentContextId = 0;
-  string line;
-  line.reserve(BUFFER_SIZE_DOCSFILE_LINE);
-  while (std::getline(docsFile, line)) {
-    std::string_view lineView = line;
-    size_t tab = lineView.find('\t');
-    uint64_t contextId = 0;
-    // Get contextId from line
-    std::from_chars(lineView.data(), lineView.data() + tab, contextId);
-    // Set lineView to the docText
-    lineView = lineView.substr(tab + 1);
-    ofs << lineView;
-    while (currentContextId < contextId) {
-      offsets.push_back(currentOffset);
-      currentContextId++;
-    }
-    offsets.push_back(currentOffset);
-    currentContextId++;
-    currentOffset += static_cast<off_t>(lineView.size());
-  }
-  offsets.push_back(currentOffset);
-  ofs.write(reinterpret_cast<const char*>(offsets.data()),
-            sizeof(off_t) * offsets.size());
-  LOG(INFO) << "DocsDB done.\n";
-}
-
-// _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
   textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
