@@ -85,7 +85,9 @@ class TextIndexConfig {
            (wordsFile_.has_value() || useDocsFileForVocabulary_);
   }
 
+  // Returns the set wordsFile or if not set an empty string
   std::string getWordsFile() const { return wordsFile_.value_or(""); }
+  // Returns the set docsFile or if not set an empty string
   std::string getDocsFile() const { return docsFile_.value_or(""); }
   bool getAddWordsFromLiterals() const { return addWordsFromLiterals_; }
   bool getUseDocsFileForVocabulary() const { return useDocsFileForVocabulary_; }

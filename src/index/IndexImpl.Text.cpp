@@ -99,7 +99,7 @@ void IndexImpl::logEntityNotFound(const string& word,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::buildTextIndexFile(TextIndexConfig&& textIndexConfig) {
+void IndexImpl::buildTextIndexFile(TextIndexConfig textIndexConfig) {
   const auto config = TextIndexConfig(std::move(textIndexConfig));
   const string wordsFile = config.getWordsFile();
   const string docsFile = config.getDocsFile();
@@ -127,7 +127,7 @@ void IndexImpl::buildTextIndexFile(TextIndexConfig&& textIndexConfig) {
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  { storeTextScoringParamsInConfiguration(config.getTextScoringConfig()); }
+  storeTextScoringParamsInConfiguration(config.getTextScoringConfig());
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
@@ -346,7 +346,7 @@ void IndexImpl::wordsFromDocsFileEntitiesFromWordsFile(
   // iterators to parse in parallel
   auto wordsFileParser = WordsFileParser{wordsFile, localeManager};
   auto wordsFileIterator = wordsFileParser.begin();
-  AD_CORRECTNESS_CHECK(wordsFileParser.begin() != wordsFileParser.end(),
+  AD_CORRECTNESS_CHECK(wordsFileIterator != wordsFileParser.end(),
                        "When adding entities from wordsfile the given "
                        "wordsfile can't be an empty file.");
   WordsFileLine currentWordsFileLine;

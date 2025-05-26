@@ -263,7 +263,7 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(TextIndexConfig&& textIndexConfig);
+  void buildTextIndexFile(TextIndexConfig textIndexConfig);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -557,7 +557,7 @@ class IndexImpl {
   // occurrences)
   size_t processWordsForVocabulary(const TextIndexConfig& textIndexConfig);
 
-  // Fills the given vector with all occurrences of entities and words in the
+  // Fills the given 'vec' with all occurrences of entities and words in the
   // respective TextRecords. Depending on the configuration the words and
   // entities are read from different files and/or added from literals (for
   // details see TextIndexConfig).
