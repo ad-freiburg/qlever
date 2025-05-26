@@ -39,7 +39,7 @@ CPP_template(typename NaryOperation)(
     // The bool flag isNegated (by default false) acts as decision variable
     // to select the correct merging procedure while constructing the
     // PrefilterExpression(s) for a binary expression (AND or OR). For the
-    // negation procedure, we apply (partially over multiple Variables)
+    // negation procedure, we apply (considering multiple Variables)
     // De-Morgans law w.r.t. the affected (lower) expression parts, and
     // isNegated indicates if we should apply it (or not). For more detailed
     // information see NumericBinaryExpressions.cpp. For UnaryNegate we have to
@@ -50,34 +50,8 @@ CPP_template(typename NaryOperation)(
     // parents: the negation cancels out (isNegated = false).
     // - For an uneven number of NOT expressions as parent nodes: the
     // sub-tree is actually negated (isNegated = true).
-    //
-    // Example - Apply De-Morgans law in two steps (see (1) and (2)) on
-    // expression !(?x >= IntId(10) || ?y >= IntId(10)) (SparqlExpression)
-    // With De-Morgan's rule we retrieve: ?x < IntId(10) && ?y < IntId(10)
-    //
-    // (1) Merge {<(>= IntId(10)), ?x>} and {<(>= IntId(10)), ?y>}
-    // with mergeChildrenForBinaryOpExpressionImpl (defined in
-    // NumericBinaryExpressions.cpp), which we select based on isNegated = true
-    // (first part of De-Morgans law).
-    // Result (1): {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>}
-    //
-    // (2) On each pair <PrefilterExpression, Variable> given the result from
-    // (1), apply NotExpression (see the following implementation part).
-    // Step by step for the given example:
-    // {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>} (apply NotExpression) =>
-    // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
-    // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
-    auto child =
-        this->getChildAtIndex(0).value()->getPrefilterExpressionForMetadata(
-            !isNegated);
-    ql::ranges::for_each(
-        child | ql::views::keys,
-        [](std::unique_ptr<p::PrefilterExpression>& expression) {
-          expression =
-              std::make_unique<p::NotExpression>(std::move(expression));
-        });
-    p::detail::checkPropertiesForPrefilterConstruction(child);
-    return child;
+    return this->getChildAtIndex(0).value()->getPrefilterExpressionForMetadata(
+        !isNegated);
   }
 };
 
@@ -100,8 +74,8 @@ inline const auto roundImpl = [](auto num) {
   using T = decltype(num);
   if constexpr (ad_utility::FloatingPoint<T>) {
     auto res = std::round(num);
-    // In SPARQL, negative numbers are rounded towards zero if they lie exactly
-    // between two integers.
+    // In SPARQL, negative numbers are rounded towards zero if they lie
+    // exactly between two integers.
     return (num < 0 && std::abs(res - num) == 0.5) ? res + 1 : res;
   } else {
     return num;

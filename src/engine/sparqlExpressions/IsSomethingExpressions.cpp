@@ -30,7 +30,7 @@ class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      [[maybe_unused]] bool isNegated) const override {
+      bool isNegated) const override {
     using namespace prefilterExpressions;
     std::vector<PrefilterExprVariablePair> prefilterVec;
     const auto& children = this->children();
@@ -40,7 +40,8 @@ class IsDatatypeExpressionImpl : public NaryExpression<NaryOperation> {
     std::optional<Variable> optVar = childExpr->getVariableOrNullopt();
     if (optVar.has_value()) {
       prefilterVec.emplace_back(
-          std::make_unique<IsDatatypeExpression<Datatype>>(), optVar.value());
+          std::make_unique<IsDatatypeExpression<Datatype>>(isNegated),
+          optVar.value());
     }
     return prefilterVec;
   }

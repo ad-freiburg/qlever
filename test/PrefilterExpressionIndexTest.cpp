@@ -747,47 +747,46 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
 
   // Test !isBlank.
   // All blocks are relevant given that even b28 is partially relevant here.
-  makeTestIsDatatype(
-      notExpr(isBlank()),
+  makeTestIsDatatype(isBlank(true),
       std::vector<CompressedBlockMetadata>(allTestBlocksIsDatatype), false);
 
   // Test !isNum
-  makeTestIsDatatype(notExpr(isNum()),
+  makeTestIsDatatype(isNum(true),
                      {b1, b2, b3, b4GapNumeric, b25, b27, b28}, false,
                      {b1, b2, b3, b4GapNumeric, b25, b27, b28});
-  makeTestIsDatatype(notExpr(isNum()), {b4GapNumeric, b25, b27, b28}, false,
+  makeTestIsDatatype(isNum(true), {b4GapNumeric, b25, b27, b28}, false,
                      {b4GapNumeric, b25, b27, b28});
-  makeTestIsDatatype(notExpr(isNum()), {b1, b2, b3, b4GapNumeric}, false,
+  makeTestIsDatatype(isNum(true), {b1, b2, b3, b4GapNumeric}, false,
                      {b1, b2, b3, b4GapNumeric});
 
   // Test !isLiteral
   // Blocks b19 - b21 contain only IRI related Ids (not contained in expected)
-  makeTestIsDatatype(notExpr(isLit()), {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,
+  makeTestIsDatatype(isLit(true), {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,
                                         b9,  b10, b11, b12, b13, b14, b15, b16,
                                         b17, b18, b22, b23, b24, b25, b27, b28},
                      true);
   // b18GapIriAndLiteral should be considered relevant when evaluating
   // expression !isLit.
-  makeTestIsDatatype(notExpr(isLit()), {b18GapIriAndLiteral}, false,
+  makeTestIsDatatype(isLit(true), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()), {b1, b2, b3, b17, b18GapIriAndLiteral},
+  makeTestIsDatatype(isLit(true), {b1, b2, b3, b17, b18GapIriAndLiteral},
                      false, {b1, b2, b3, b17, b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isLit()),
+  makeTestIsDatatype(isLit(true),
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28}, false,
                      {b1, b2, b3, b17, b18GapIriAndLiteral, b27, b28});
 
   // Test !isIri
   // Blocks b23 - b24 contain only IRI related Ids (not contained in expected)
   makeTestIsDatatype(
-      notExpr(isIri()),
+      isIri(true),
       {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13,
        b14, b15, b16, b17, b18, b19, b20, b21, b22, b25, b27, b28},
       true);
-  makeTestIsDatatype(notExpr(isIri()), {b18GapIriAndLiteral}, false,
+  makeTestIsDatatype(isIri(true), {b18GapIriAndLiteral}, false,
                      {b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isIri()), {b1, b2, b3, b17, b18GapIriAndLiteral},
+  makeTestIsDatatype(isIri(true), {b1, b2, b3, b17, b18GapIriAndLiteral},
                      false, {b1, b2, b3, b17, b18GapIriAndLiteral});
-  makeTestIsDatatype(notExpr(isIri()), {b18GapIriAndLiteral, b27, b28}, false,
+  makeTestIsDatatype(isIri(true), {b18GapIriAndLiteral, b27, b28}, false,
                      {b18GapIriAndLiteral, b27, b28});
 }
 
@@ -868,55 +867,6 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(eq(augsburg), eq(DoubleId(0.25))), {b6, b11, b18}, true);
 }
 
-//______________________________________________________________________________
-// Test NotExpression
-// Note: the `makeTest` function automatically adds the blocks with mixed
-// datatypes to the expected result.
-TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
-  makeTest(notExpr(eq(berlin)), {b18, b19, b20, b21, b26}, true);
-  makeTest(notExpr(eq(hamburg)), {b18, b19, b21, b26});
-  makeTest(notExpr(neq(hamburg)), {b19, b20, b21}, true);
-  makeTest(notExpr(gt(berlin)), {b18});
-  makeTest(notExpr(lt(DoubleId(-14.01))),
-           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
-  makeTest(notExpr(ge(DoubleId(-14.01))), {b18});
-  makeTest(notExpr(gt(DoubleId(-4.00))), {b9, b10, b11, b15, b16, b17, b18},
-           true);
-  makeTest(notExpr(ge(DoubleId(-24.4))), {b18});
-  makeTest(notExpr(gt(referenceDate2)), {b26, b27});
-  makeTest(notExpr(le(trueId)), {});
-  makeTest(notExpr(le(IntId(0))), {b6, b7, b8, b11, b12, b13, b14}, true);
-  makeTest(notExpr(gt(undef)), {});
-  makeTest(notExpr(eq(DoubleId(-6.25))),
-           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
-  makeTest(notExpr(neq(DoubleId(4))), {b6, b11, b13, b14, b18});
-  makeTest(notExpr(gt(DoubleId(0))),
-           {b4, b5, b6, b9, b10, b11, b15, b16, b17, b18}, true);
-  makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b5, b6, b11}, true);
-  makeTest(notExpr(notExpr(neq(DoubleId(-6.25)))),
-           {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
-  makeTest(notExpr(notExpr(lt(düsseldorf))), {b18});
-  makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14},
-           true);
-  makeTest(notExpr(andExpr(le(IntId(0)), ge(IntId(0)))),
-           {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
-  makeTest(notExpr(andExpr(neq(IntId(-10)), neq(DoubleId(-14.02)))), {b9, b18});
-  makeTest(
-      notExpr(andExpr(gt(IntId(10)), ge(DoubleId(-6.25)))),
-      {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
-  makeTest(
-      notExpr(andExpr(lt(DoubleId(-7)), ge(IntId(6)))),
-      {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
-  makeTest(notExpr(orExpr(le(IntId(0)), ge(DoubleId(6)))),
-           {b6, b7, b11, b12, b13, b14}, true);
-  makeTest(notExpr(orExpr(ge(DoubleId(0)), gt(IntId(-10)))),
-           {b9, b11, b17, b18}, true);
-  makeTest(notExpr(orExpr(lt(düsseldorf), gt(düsseldorf))), {b19});
-  makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15},
-           true);
-  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(augsburg))), {b11}, true);
-  makeTest(notExpr(orExpr(ge(hamburg), gt(köln))), {b18, b19});
-}
 
 //______________________________________________________________________________
 // Test PrefilterExpressions mixed
@@ -924,7 +874,6 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest,
        testGeneralPrefilterExprCombinations) {
-  makeTest(andExpr(notExpr(gt(DoubleId(-14.01))), lt(IntId(0))), {b18});
   makeTest(
       orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), eq(DoubleId(-6.25))),
       {b8, b14, b15, b16}, true);
@@ -937,8 +886,6 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   makeTest(
       andExpr(eq(DoubleId(-4)), orExpr(gt(IntId(-4)), lt(DoubleId(-1.25)))),
       {b10, b11, b15});
-  makeTest(orExpr(notExpr(andExpr(lt(IntId(10)), gt(IntId(5)))), eq(IntId(0))),
-           {b4, b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(andExpr(orExpr(gt(köln), le(berlin)), gt(DoubleId(7.25))), {}, true);
   makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
            {});
@@ -1031,15 +978,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(neq(IntId(10)));
   makeTestClone(le(LVE("\"Hello World\"")));
   makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
-  makeTestClone(notExpr(ge(referenceDate1)));
-  makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
-  makeTestClone(notExpr(andExpr(eq(IntId(10)), neq(DoubleId(10)))));
   makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
                        andExpr(gt(referenceDate1), lt(referenceDate2))));
   makeTestClone(andExpr(andExpr(neq(IntId(10)), neq(DoubleId(100.23))),
                         orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
-  makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
-                       notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
   makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
                        neq(LVE("<iri/id10>"))));
 }
@@ -1059,14 +1001,6 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*isLit() == *isNum());
   ASSERT_TRUE(*isIri(true) == *isIri(true));
   ASSERT_FALSE(*isNum(true) == *isNum(false));
-  // NotExpression
-  ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
-  ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
-              *notExpr(notExpr(ge(VocabId(0)))));
-  ASSERT_TRUE(*notExpr(le(LVE("<iri>"))) == *notExpr(le(LVE("<iri>"))));
-  ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
-  ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
-               *notExpr(ge(VocabId(0))));
   // Binary PrefilterExpressions (AND and OR)
   ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
               *orExpr(eq(IntId(0)), le(IntId(0))));
@@ -1077,8 +1011,6 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
               *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
                *andExpr(le(VocabId(1)), le(IntId(0))));
-  ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
-               *orExpr(eq(IntId(0)), le(IntId(0))));
 }
 
 //______________________________________________________________________________
@@ -1146,10 +1078,6 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
       matcher("Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ : "
               "D:8.210000 .\n.\n"));
   EXPECT_THAT(
-      *notExpr(eq(VocabId(0))),
-      matcher("Prefilter NotExpression:\nchild {Prefilter "
-              "RelationalExpression<NE(!=)>\nreferenceValue_ : V:0 .\n}\n.\n"));
-  EXPECT_THAT(
       *orExpr(le(IntId(0)), ge(IntId(5))),
       matcher("Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
               "RelationalExpression<LE(<=)>\nreferenceValue_ : I:0 .\n}child2 "
@@ -1199,10 +1127,6 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
   EXPECT_THAT(*isBlank(true),
               matcher("Prefilter IsDatatypeExpression:\nPrefilter "
                       "for datatype: Blank\nis negated: true.\n.\n"));
-  EXPECT_THAT(*notExpr(isNum()),
-              matcher("Prefilter NotExpression:\nchild {Prefilter "
-                      "IsDatatypeExpression:\nPrefilter for datatype: "
-                      "Numeric\nis negated: true.\n}\n.\n"));
 }
 
 //______________________________________________________________________________

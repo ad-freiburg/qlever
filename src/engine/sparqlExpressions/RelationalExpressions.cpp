@@ -462,14 +462,15 @@ static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
 template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
-    [[maybe_unused]] bool isNegated) const {
+    bool isNegated) const {
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression* child0 = children_.at(0).get();
   const SparqlExpression* child1 = children_.at(1).get();
 
   const auto tryGetPrefilterExprVariablePairVec =
-      [](const SparqlExpression* child0, const SparqlExpression* child1,
-         bool reversed) -> std::vector<PrefilterExprVariablePair> {
+      [isNegated](const SparqlExpression* child0,
+                  const SparqlExpression* child1,
+                  bool reversed) -> std::vector<PrefilterExprVariablePair> {
     const auto& optVariableIsYearPair = getOptVariableAndIsYear(child0);
     if (!optVariableIsYearPair.has_value()) return {};
     const auto& [variable, prefilterDate] = optVariableIsYearPair.value();
@@ -477,7 +478,8 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
         detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
     if (!optReferenceValue.has_value()) return {};
     return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
-        optReferenceValue.value(), variable, reversed, prefilterDate);
+        optReferenceValue.value(), variable, reversed, prefilterDate,
+        isNegated);
   };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child

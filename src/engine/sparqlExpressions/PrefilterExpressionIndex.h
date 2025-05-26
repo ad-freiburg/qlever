@@ -275,30 +275,6 @@ class RelationalExpression : public PrefilterExpression {
 };
 
 //______________________________________________________________________________
-class NotExpression : public PrefilterExpression {
- private:
-  std::unique_ptr<PrefilterExpression> child_;
-
- public:
-  // `makeCopy` should always be set to `false`, except when it is called within
-  // the implementation of the `clone()` method. For the copy construction,
-  // the `logicalComplement` for the child is omitted because it has
-  // already been complemented for the original expression.
-  explicit NotExpression(std::unique_ptr<PrefilterExpression> child,
-                         bool makeCopy = false)
-      : child_(makeCopy ? std::move(child) : child->logicalComplement()) {}
-
-  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
-  bool operator==(const PrefilterExpression& other) const override;
-  std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string asString(size_t depth) const override;
-
- private:
-  BlockMetadataRanges evaluateImpl(const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
-};
-
-//______________________________________________________________________________
 // Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.
 using LessThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::LT>;
@@ -407,7 +383,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDateByYear = false);
+    bool mirrored, bool prefilterDateByYear = false, bool isNegated = false);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

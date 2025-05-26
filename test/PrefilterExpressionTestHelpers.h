@@ -45,12 +45,6 @@ auto logExpr = [](std::unique_ptr<PrefilterExpression> child1,
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<LogExpr>(std::move(child1), std::move(child2));
 };
-
-// Make NotExpression
-auto notPrefilterExpression = [](std::unique_ptr<PrefilterExpression> child)
-    -> std::unique_ptr<PrefilterExpression> {
-  return std::make_unique<NotExpression>(std::move(child));
-};
 }  // namespace
 
 // Make PrefilterExpression
@@ -80,8 +74,6 @@ constexpr auto isBlank = isDtypeExpr<IsBlankExpression>;
 constexpr auto andExpr = logExpr<AndExpression>;
 // OR (`||`)
 constexpr auto orExpr = logExpr<OrExpression>;
-// NOT (`!`)
-constexpr auto notExpr = notPrefilterExpression;
 
 namespace filterHelper {
 

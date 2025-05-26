@@ -790,45 +790,6 @@ std::string LogicalExpression<Operation>::asString(size_t depth) const {
   return stream.str();
 };
 
-// SECTION NOT-EXPRESSION
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
-  // Logically we complement (negate) a NOT here => NOT cancels out.
-  // Therefore, we can simply return the child of the respective NOT
-  // expression after undoing its previous complementation.
-  return child_->logicalComplement();
-};
-
-//______________________________________________________________________________
-BlockMetadataRanges NotExpression::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) const {
-  return child_->evaluateImpl(idRange, blockRange);
-};
-
-//______________________________________________________________________________
-bool NotExpression::operator==(const PrefilterExpression& other) const {
-  const auto* otherNotExpression = dynamic_cast<const NotExpression*>(&other);
-  if (!otherNotExpression) {
-    return false;
-  }
-  return *child_ == *otherNotExpression->child_;
-}
-
-//______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
-  return make<NotExpression>((child_->clone()), true);
-};
-
-//______________________________________________________________________________
-std::string NotExpression::asString(size_t depth) const {
-  std::string childInfo =
-      depth < maxInfoRecursion ? child_->asString(depth + 1) : "MAX_DEPTH";
-  std::stringstream stream;
-  stream << "Prefilter NotExpression:\n"
-         << "child {" << childInfo << "}" << std::endl;
-  return stream.str();
-}
-
 //______________________________________________________________________________
 // Instanitate templates with specializations (for linking accessibility)
 template class RelationalExpression<CompOp::LT>;
@@ -905,7 +866,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
 
 //______________________________________________________________________________
 template <CompOp comparison>
-static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
+static std::unique_ptr<PrefilterExpression> makePrefilterExpressionImpl(
     const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
   using enum Datatype;
   // Standard pre-filtering procedure.
@@ -959,9 +920,10 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDateByYear) {
+    bool mirrored, bool prefilterDateByYear, bool isNegated) {
   using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
+  std::unique_ptr<PrefilterExpression> expr;
   if (mirrored) {
     using P = std::pair<CompOp, CompOp>;
     // Retrieve by map the corresponding mirrored `CompOp` value for
@@ -970,15 +932,14 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     // `referenceValue > ?var` into `?var < referenceValue`.
     constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
         {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
-    resVec.emplace_back(
-        makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
-            referenceValue, prefilterDateByYear),
-        variable);
+    expr = makePrefilterExpressionImpl<mirrorMap.at(comparison)>(
+        referenceValue, prefilterDateByYear);
   } else {
-    resVec.emplace_back(makePrefilterExpressionVecImpl<comparison>(
-                            referenceValue, prefilterDateByYear),
-                        variable);
+    expr = makePrefilterExpressionImpl<comparison>(referenceValue,
+                                                   prefilterDateByYear);
   }
+  resVec.emplace_back(isNegated ? expr->logicalComplement() : std::move(expr),
+                      variable);
   return resVec;
 }
 
@@ -986,7 +947,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
 #define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
   template std::vector<PrefilterExprVariablePair>                    \
   makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
-                                         const Variable&, bool, bool);
+                                         const Variable&, bool, bool, bool);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
 INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
 INSTANTIATE_MAKE_PREFILTER(CompOp::GE);

@@ -101,32 +101,6 @@ using BinaryOperator = prefilterExpressions::LogicalOperator;
 // right child: {<(!= 15), ?x>, <(= 10), ?y>}; (?x != 15 && ?y = 10)
 // Returns {<((>= 10 AND <= 20) AND != 15), ?x>, <(= 10), ?y>}
 //
-//
-// MERGE <BinaryOperator::AND, OrExpression>
-// (Partial De-Morgan applied w.r.t. Or-conjunction)
-//______________________________________________________________________________
-// Merge the pair values of leftChild and rightChild with the combine logic for
-// AND. Given we have a respective pair <PrefilterExpression,
-// Variable> from leftChild and rightChild for which the Variable value is
-// equal, conjunct the two PrefilterExpressions over an OrExpression. For the
-// resulting pairs, NOT (NotExpression) is applied later on. (As a result we
-// have fully applied De-Morgan on the available PrefilterExpression)
-//
-// EXAMPLE 1
-// !...(?x = 5 OR ?y = VocabId(10))
-// partial De-Morgan: ...(?x = 5 AND ?y = VocabId(10))
-// (complete De-Morgan later on with NotExpression:
-// ...(?x != 5 AND ?y != VocabId(10))) (in NumericUnaryExpression.cpp)
-// The merge function implements the following:
-// left child: {<(= 5), ?x>}
-// right child: {<(= VocabId(10)), ?y>}
-// merged: {<(= 5), ?x>, <(= VocabId(10)), ?y>}
-//
-// EXAMPLE 2
-// left child: {<(>= 10 OR <= 20), ?x>}
-// right child: {<(!= 15), ?x>, <(= 10), ?y>}
-// merged: {<((>= 10 OR <= 20) OR ?x != 15), ?x>, <(= 10), ?y>}
-//
 // MERGE <BinaryOperator::OR, OrExpression>
 //______________________________________________________________________________
 // Four examples on how this function (OR) merges the content of two children.
@@ -160,32 +134,6 @@ using BinaryOperator = prefilterExpressions::LogicalOperator;
 // PrefiterExpression. We can't make a distinct prediction w.r.t. ?y != 0
 // => not relevant for the PrefilterExpression. Thus, we return the
 // PrefilterExpresion {<(>= 10 OR <= 0), ?x>}.
-//
-//
-// MERGE <BinaryOperator::OR, AndExpression>
-// (Partial De-Morgan applied w.r.t. And-conjunction)
-//______________________________________________________________________________
-// Merge the pair values of leftChild and rightChild with the combine logic for
-// OR. The difference, given we have a respective pair <PrefilterExpression,
-// Variable> from leftChild and rightChild for which the Variable value is
-// equal, conjunct the two PrefilterExpressions over an AndExpression. For the
-// resulting pairs, NOT (NotExpression) is applied later on. As a result we
-// have fully applied De-Morgan on the available PrefilterExpression.
-//
-// EXAMPLE 1
-// !...(?y = 5 AND ?x <= 3); apply partial De-Morgan given NOT(!): Thus OR
-// instead of AND merge (here).
-// left child: {<(= 5), ?y>}
-// right child: {<(<= 3), ?x>}
-// merged result: {}
-//
-// EXAMPLE 2
-// !...((?x = 10 OR ?y != 0) AND ?x <= 0); apply partial De-Morgan given NOT(!):
-// Thus OR instead of AND merge (here).
-// left child: {<(= 10), ?x), <(!= 0), ?y>};
-// right child: {<(<= 0), ?x>}
-// merged result: {<((= 10) AND (<= 0)), ?x>}
-// (with NOT applied later on: {<((!= 10) OR (> 0)), ?x>})
 //______________________________________________________________________________
 template <BinaryOperator binOp, typename BinaryPrefilterExpr>
 std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
@@ -232,82 +180,28 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
 
 // TEMPLATED STANDARD MERGE
 //______________________________________________________________________________
-constexpr auto makeAndMergeWithAndConjunction =
+constexpr auto mergeAndConjunction =
     mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
                                            prefilterExpressions::AndExpression>;
-constexpr auto makeOrMergeWithOrConjunction =
+constexpr auto mergeOrConjunction =
     mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
                                            prefilterExpressions::OrExpression>;
-// TEMPLATED (PARTIAL) DE-MORGAN MERGE
-//______________________________________________________________________________
-constexpr auto makeAndMergeWithOrConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
-                                           prefilterExpressions::OrExpression>;
-constexpr auto makeOrMergeWithAndConjunction =
-    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
-                                           prefilterExpressions::AndExpression>;
+
 
 // GET TEMPLATED MERGE FUNCTION (CONJUNCTION AND / OR)
-//______________________________________________________________________________
-// getMergeFunction (get the respective merging function) follows the
-// principles of De Morgan's law. If this is a child of a NotExpression
-// (NOT(!)), we have to swap the combination procedure (swap AND(&&) and
-// OR(||) respectively). This equals a partial application of De Morgan's
-// law. On the resulting PrefilterExpressions, NOT is applied in
-// UnaryNegateExpression(Impl). For more details take a look at the
-// implementation in NumericUnaryExpressions.cpp (see
-// UnaryNegateExpressionImpl).
-//
-// EXAMPLE
-// - How De-Morgan's law is applied in steps
-// !((?y != 10 || ?x = 0) || (?x = 5 || ?x >= 10)) is the complete (Sparql
-// expression). With De-Morgan's law applied:
-// (?y = 10 && ?x != 0) && (?x != 5 && ?x < 10)
-//
-// {<expr1, var1>, ....<exprN, varN>} represents the PrefilterExpressions
-// with their corresponding Variable.
-//
-// At the current step we have: isNegated = true; because of !(...) (NOT)
-// left child: {<(!= 10), ?y>, <(!= 0), ?x>}; (?y != 10 || ?x != 0)
-//
-// Remark: The (child) expressions of the left and right child have been
-// combined with the merging procedure AND (makeAndMergeWithOrConjunction),
-// because with isNegated = true, it is implied that De-Morgan's law is applied.
-// Thus, the OR is logically an AND conjunction with its application.
-//
-// right child: {<((= 5) OR (>= 10)), ?x>} (?x = 5 || ?x >= 10)
-//
-// isNegated is true, hence we know that we have to partially apply
-// De-Morgan's law. Given that, OR switches to an AND. Therefore we use
-// mergeChildrenForBinaryOpExpressionImpl with OrExpression
-// (PrefilterExpression) as a template value (BinaryPrefilterExpr). Call
-// makeAndMergeWithOrConjunction with left and right child as arguments, we get
-// their merged combination:
-// {<(!= 10), ?y>, <((!= 0) OR ((= 5) OR (>= 10))), ?x>}
-//
-// Next their merged value is returned to UnaryNegateExpressionImpl
-// (defined in NumericUnaryExpressions.cpp), where for each expression of
-// the <PrefilterExpression, Variable> pairs, NOT (NotExpression) is
-// applied.
-// {<(!= 10), ?y>, <((!= 0) OR ((= 5) OR (>= 10))), ?x>}
-// apply NotExpr.: {<!(!= 10), ?y>, <!((!= 0) OR ((= 5) OR (>= 10))), ?x>}
-// This procedure yields: {<(= 10), ?y>, <((= 0) AND ((!= 5) AND (< 10))), ?x>}
 //______________________________________________________________________________
 template <typename BinaryPrefilterExpr>
 constexpr auto getMergeFunction(bool isNegated) {
   if constexpr (std::is_same_v<BinaryPrefilterExpr,
                                prefilterExpressions::AndExpression>) {
-    return !isNegated ? makeAndMergeWithAndConjunction
-                      // negated, partially apply De-Morgan:
-                      // change AND to OR
-                      : makeOrMergeWithAndConjunction;
+    return !isNegated
+               ? mergeAndConjunction  // apply De-Morgan: change AND to OR
+               : mergeOrConjunction;
   } else {
     static_assert(std::is_same_v<BinaryPrefilterExpr,
                                  prefilterExpressions::OrExpression>);
-    return !isNegated ? makeOrMergeWithOrConjunction
-                      // negated, partially apply De-Morgan:
-                      // change OR to AND
-                      : makeAndMergeWithOrConjunction;
+    return !isNegated ? mergeOrConjunction  // apply De-Morgan: change OR to AND
+                      : mergeAndConjunction;
   }
 }
 
@@ -329,6 +223,7 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
     auto rightChild =
         this->getChildAtIndex(1).value()->getPrefilterExpressionForMetadata(
             isNegated);
+    // Apply De-Morgan if `isNegated` is set to true.
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
   }
