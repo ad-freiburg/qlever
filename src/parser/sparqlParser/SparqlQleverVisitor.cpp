@@ -622,31 +622,12 @@ Load Visitor::visit(Parser::LoadContext* ctx) {
   reportNotSupported(ctx, "LOAD Update is");
 }
 
-parsedQuery::GroupGraphPattern::GraphSpec transformGraphspec(
-    const auto& graph) {
-  using Graph = parsedQuery::GroupGraphPattern::GraphSpec;
-  return std::visit(
-      ad_utility::OverloadCallOperator{
-          [](const ad_utility::triple_component::Iri& iri) -> Graph {
-            return iri;
-          },
-          [](const ALL&) -> Graph { return Variable("?g"); },
-          [](const DEFAULT&) -> Graph {
-            return ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
-          },
-          [](const NAMED&) -> Graph { AD_FAIL(); }},
-      graph);
-}
-
-GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
-  GraphPattern inner;
-  inner._graphPatterns.emplace_back(BasicGraphPattern{
-      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
-  return {parsedQuery::GroupGraphPattern{std::move(inner),
-                                         transformGraphspec(graph)}};
-}
-
+// Helper functions for some inner parts of graph management operations.
+namespace {
+// ____________________________________________________________________________________
+// Transform a `GraphRefAll` or `GraphOrDefault` into a
+// `SparqlTripleSimpleWithGraph::Graph`/`parsedQuery::GroupGraphPattern::GraphSpec`
+// (which are the same type).
 SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
   using Graph = SparqlTripleSimpleWithGraph::Graph;
   return std::visit(
@@ -655,20 +636,28 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
             return iri;
           },
           [](const ALL&) -> Graph { return Variable("?g"); },
-          [](const DEFAULT&) -> Graph {
-            return ad_utility::triple_component::Iri::fromIriref(
-                DEFAULT_GRAPH_IRI);
-          },
+          [](const DEFAULT&) -> Graph { return std::monostate{}; },
           [](const NAMED&) -> Graph { AD_FAIL(); }},
       graph);
 }
 
+// ____________________________________________________________________________________
+GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
+  GraphPattern inner;
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+  return {
+      parsedQuery::GroupGraphPattern{std::move(inner), transformGraph(graph)}};
+}
+
+// ____________________________________________________________________________________
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
   return {{Variable("?s")},
           {Variable("?p")},
           {Variable("?o")},
           transformGraph(graph)};
 }
+}  // namespace
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {

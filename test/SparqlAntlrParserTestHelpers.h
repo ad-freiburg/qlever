@@ -1162,15 +1162,14 @@ inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
 };
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
-inline auto AddAll = [](const TripleComponent::Iri& from,
-                        const TripleComponent::Iri& to) {
-  return UpdateClause(
-      GraphUpdate({},
-                  {SparqlTripleSimpleWithGraph(
-                      ::Variable("?s"), ::Variable("?p"), ::Variable("?o"),
-                      SparqlTripleSimpleWithGraph::Graph{to})},
-                  std::nullopt),
-      SelectAllPattern(from));
+inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
+                        const SparqlTripleSimpleWithGraph::Graph& to) {
+  return UpdateClause(GraphUpdate({},
+                                  {SparqlTripleSimpleWithGraph(
+                                      ::Variable("?s"), ::Variable("?p"),
+                                      ::Variable("?o"), to)},
+                                  std::nullopt),
+                      SelectAllPattern(from));
 };
 
 }  // namespace matchers
