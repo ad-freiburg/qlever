@@ -51,48 +51,49 @@ PropertyPath PropertyPath::makeNegated(std::vector<PropertyPath> children) {
 }
 
 // _____________________________________________________________________________
+void PropertyPath::ModifiedPath::writeToStream(std::ostream& out) const {
+  if (modifier_ == Modifier::INVERSE) {
+    out << '^';
+  } else if (modifier_ == Modifier::NEGATED) {
+    out << '!';
+  }
+  if (children_.empty()) {
+    out << "()";
+    return;
+  }
+
+  char separator = modifier_ == Modifier::SEQUENCE ? '/' : '|';
+
+  if (modifier_ == Modifier::NEGATED) {
+    out << '(';
+  }
+  bool firstRun = true;
+  for (const auto& child : children_) {
+    if (!firstRun) {
+      out << separator;
+    }
+    firstRun = false;
+    bool needsBraces = std::holds_alternative<ModifiedPath>(child.path_);
+    if (needsBraces) {
+      out << '(';
+    }
+    child.writeToStream(out);
+    if (needsBraces) {
+      out << ')';
+    }
+  }
+  if (modifier_ == Modifier::NEGATED) {
+    out << ')';
+  }
+}
+
+// _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
   std::visit(ad_utility::OverloadCallOperator{
                  [&out](const BasicPath& path) {
                    out << path.iri_.toStringRepresentation();
                  },
-                 [&out](const ModifiedPath& path) {
-                   if (path.modifier_ == Modifier::INVERSE) {
-                     out << '^';
-                   } else if (path.modifier_ == Modifier::NEGATED) {
-                     out << '!';
-                   }
-                   if (path.children_.empty()) {
-                     out << "()";
-                     return;
-                   }
-
-                   char separator =
-                       path.modifier_ == Modifier::SEQUENCE ? '/' : '|';
-
-                   if (path.modifier_ == Modifier::NEGATED) {
-                     out << '(';
-                   }
-                   bool firstRun = true;
-                   for (const auto& child : path.children_) {
-                     if (!firstRun) {
-                       out << separator;
-                     }
-                     firstRun = false;
-                     bool needsBraces =
-                         std::holds_alternative<ModifiedPath>(child.path_);
-                     if (needsBraces) {
-                       out << '(';
-                     }
-                     child.writeToStream(out);
-                     if (needsBraces) {
-                       out << ')';
-                     }
-                   }
-                   if (path.modifier_ == Modifier::NEGATED) {
-                     out << ')';
-                   }
-                 },
+                 [&out](const ModifiedPath& path) { path.writeToStream(out); },
                  [&out](const MinMaxPath& path) {
                    out << '(';
                    path.child_->writeToStream(out);

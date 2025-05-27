@@ -36,6 +36,8 @@ class PropertyPath {
     Modifier modifier_;
 
     bool operator==(const ModifiedPath&) const = default;
+
+    void writeToStream(std::ostream& out) const;
   };
 
   class MinMaxPath {

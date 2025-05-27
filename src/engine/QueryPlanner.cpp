@@ -879,8 +879,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [this, &left, &right](const ad_utility::triple_component::Iri& iri) {
-        return this->seedFromVarOrIri(left, iri, right);
+      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+        return seedFromVarOrIri(left, iri, right);
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
                             PropertyPath::Modifier modifier) {
@@ -914,7 +914,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
   for (size_t i = 0; i < paths.size(); i++) {
-    auto child = paths[i];
+    const auto& child = paths[i];
 
     if (i == paths.size() - 1) {
       innerRight = right;
