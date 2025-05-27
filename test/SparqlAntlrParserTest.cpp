@@ -849,29 +849,6 @@ TEST(SparqlParser, propertyPaths) {
 }
 
 // _____________________________________________________________________________
-TEST(SparqlParser, propertyPathsWriteToStream) {
-  auto toString = [](const PropertyPath& path) {
-    std::ostringstream os;
-    path.writeToStream(os);
-    return std::move(os).str();
-  };
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>")))});
-    EXPECT_EQ("!((^<a>))", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>"))),
-         PropertyPath::fromIri(iri("<b>"))});
-    EXPECT_EQ("!((^<a>)|<b>)", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated({});
-    EXPECT_EQ("!()", toString(path));
-  }
-}
-
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};

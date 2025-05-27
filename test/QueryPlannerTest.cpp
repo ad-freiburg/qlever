@@ -3919,6 +3919,12 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, InverseGraphPattern) {
+  h::expect("SELECT * { ?a ^<b> ?c }",
+            h::IndexScanFromStrings("?c", "<b>", "?a"));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   auto query = SparqlParser::parseQuery(
       "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");

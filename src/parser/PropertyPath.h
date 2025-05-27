@@ -12,6 +12,7 @@
 
 #include "backports/concepts.h"
 #include "parser/Iri.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 
 class PropertyPath {
@@ -121,5 +122,7 @@ class PropertyPath {
         path_);
   }
 };
+
+std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 
 #endif  // QLEVER_SRC_PARSER_PROPERTYPATH_H
