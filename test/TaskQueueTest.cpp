@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../src/util/TaskQueue.h"
+#include "../src/util/ValueIdentity.h"
 
 using namespace std::chrono_literals;
 
@@ -53,13 +54,13 @@ TEST(TaskQueue, ThrowOnMaxQueueSizeZero) {
 
 // ___________________________________________________________________
 TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
-  auto runTest = []<bool trackTimes, bool destructorRunsFinish>() {
+  auto runTest = [](auto trackTimes, auto destructorRunsFinish) {
     // We need the size of the queue to be larger than the number of pushes,
     // otherwise we cannot test the case where the destructor runs before
     // any of the threads have reached the call to `finish()`.
     ad_utility::TaskQueue<trackTimes> q{200, 5};
     for (size_t i = 0; i <= 100; ++i) {
-      q.push([&q] {
+      q.push([&q, destructorRunsFinish] {
         if (destructorRunsFinish) {
           std::this_thread::sleep_for(10ms);
         }
@@ -70,8 +71,9 @@ TEST(TaskQueue, finishFromWorkerThreadDoesntDeadlock) {
       std::this_thread::sleep_for(10ms);
     }
   };
-  EXPECT_NO_THROW((runTest.template operator()<true, true>()));
-  EXPECT_NO_THROW((runTest.template operator()<true, false>()));
-  EXPECT_NO_THROW((runTest.template operator()<false, true>()));
-  EXPECT_NO_THROW((runTest.template operator()<false, false>()));
+  using ad_utility::use_value_identity::vi;
+  EXPECT_NO_THROW((runTest(vi<true>, vi<true>)));
+  EXPECT_NO_THROW((runTest(vi<true>, vi<false>)));
+  EXPECT_NO_THROW((runTest(vi<false>, vi<true>)));
+  EXPECT_NO_THROW((runTest(vi<false>, vi<false>)));
 }
