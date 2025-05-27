@@ -373,6 +373,8 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
+  // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
+  // lower and upper bounds of the path length.
   static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);

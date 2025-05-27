@@ -295,18 +295,29 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
 
-  /**
-   * @brief Returns a parsed query for the property path.
-   */
+  // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
+  // further planning.
   ParsedQuery::GraphPattern seedFromPropertyPath(const TripleComponent& left,
                                                  const PropertyPath& path,
                                                  const TripleComponent& right);
+
+  // Turn a sequence of `PropertyPath`s into a `GraphPattern` that can be used
+  // for further planning. This handles the case for predicates separated by
+  // `/`, for example in `SELECT ?x { ?x <a>/<b> ?y }`.
   ParsedQuery::GraphPattern seedFromSequence(
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
+
+  // Turn a union of `PropertyPath`s into a `GraphPattern` that can be used for
+  // further planning. This handles the case for predicates separated by `|`,
+  // for example in `SELECT ?x { ?x <a>|<b> ?y }`.
   ParsedQuery::GraphPattern seedFromAlternative(
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
+
+  // Create `GraphPattern` for property paths of the form `<a>+`, `<a>?` or
+  // `<a>*`, where `<a>` can also be a complex `PropertyPath` (e.g. a sequence
+  // or an alternative).
   ParsedQuery::GraphPattern seedFromTransitive(const TripleComponent& left,
                                                const PropertyPath& path,
                                                const TripleComponent& right,
