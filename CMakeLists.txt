@@ -325,7 +325,7 @@ add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
-        GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e
+        GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
 )
 
 
