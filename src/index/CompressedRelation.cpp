@@ -273,7 +273,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
     std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     LimitOffsetClause limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
@@ -536,7 +536,7 @@ IdTable CompressedRelationReader::scan(
     ql::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     const LimitOffsetClause& limitOffset) const {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
@@ -657,8 +657,7 @@ template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecification& scanSpec,
     const vector<CompressedBlockMetadata>& blocks,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-    const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
@@ -743,8 +742,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
 size_t CompressedRelationReader::getResultSizeOfScan(
     const ScanSpecification& scanSpec,
     const vector<CompressedBlockMetadata>& blocks,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-    const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   auto [lower, upper] =
       getResultSizeImpl<true>(scanSpec, blocks, locatedTriplesPerBlock);
   AD_CORRECTNESS_CHECK(lower == upper);
@@ -840,8 +838,7 @@ CPP_template_def(typename IdGetter)(
 IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
     const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     const CancellationHandle& cancellationHandle,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-    const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return getDistinctColIdsAndCountsImpl(
       &CompressedBlockMetadata::PermutedTriple::col0Id_, scanSpec,
@@ -852,8 +849,7 @@ IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
 IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     const CancellationHandle& cancellationHandle,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-    const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
 
   return getDistinctColIdsAndCountsImpl(
@@ -1101,7 +1097,7 @@ CompressedRelationReader::getBlocksFromMetadata(
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
     const CompressedRelationReader::ScanSpecAndBlocks& metadataAndBlocks,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const
     -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
   if (relevantBlocks.empty()) {
@@ -1562,8 +1558,7 @@ auto CompressedRelationWriter::createPermutationPair(
 std::optional<CompressedRelationMetadata>
 CompressedRelationReader::getMetadataForSmallRelation(
     const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
-    [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-    const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
   metadata.offsetInBlock_ = 0;
