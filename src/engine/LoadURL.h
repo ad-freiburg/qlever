@@ -34,9 +34,9 @@ class LoadURL final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
-  // Backing value for `canResultBeCached()`. It is the value of the
-  // runtime parameter `cache-load-results` at time of construction.
-  bool canResultBeCached_ = false;
+  // Initialized to the value of the runtime parameter `cache-load-results` at
+  // construction.
+  bool loadResultCachingEnabled_;
 
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
@@ -44,9 +44,9 @@ class LoadURL final : public Operation {
 
   ~LoadURL() override = default;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  bool canResultBeCached() const override;
+  bool canResultBeCachedImpl() const override;
 
   std::string getCacheKeyImpl() const override;
 

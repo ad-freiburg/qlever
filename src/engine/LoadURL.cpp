@@ -15,11 +15,11 @@ LoadURL::LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
     : Operation(qec),
       loadURLClause_(std::move(loadURLClause)),
       getResultFunction_(std::move(getResultFunction)),
-      canResultBeCached_(RuntimeParameters().get<"cache-load-results">()) {}
+      loadResultCachingEnabled_(
+          RuntimeParameters().get<"cache-load-results">()) {}
 
 // _____________________________________________________________________________
 string LoadURL::getCacheKeyImpl() const {
-  // TODO<qup42> do caching based on ETag, Last-Modified or similar
   if (RuntimeParameters().get<"cache-load-results">()) {
     return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(),
                         loadURLClause_.silent_ ? " SILENT" : "");
@@ -171,8 +171,6 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool LoadURL::canResultBeCached() const {
-  // This differs from the implementation in the base class only in a different
-  // default value set in the constructor.
-  return canResultBeCached_;
+bool LoadURL::canResultBeCachedImpl() const {
+  return loadResultCachingEnabled_;
 }

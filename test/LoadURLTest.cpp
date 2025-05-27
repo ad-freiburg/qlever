@@ -215,6 +215,9 @@ TEST_F(LoadURLTest, getCacheKey) {
     LoadURL load1{testQec, pqLoadURL("https://mundhahs.dev")};
     LoadURL load2{testQec, pqLoadURL("https://mundhahs.dev")};
     LoadURL load3{testQec, pqLoadURL("https://mundhahs.dev", true)};
+    EXPECT_THAT(load1.canResultBeCached(), testing::IsTrue());
+    EXPECT_THAT(load2.canResultBeCached(), testing::IsTrue());
+    EXPECT_THAT(load3.canResultBeCached(), testing::IsTrue());
     EXPECT_THAT(load1.getCacheKey(), testing::Eq(load2.getCacheKey()));
     EXPECT_THAT(load1.getCacheKey(),
                 testing::Not(testing::Eq(load3.getCacheKey())));
@@ -229,6 +232,9 @@ TEST_F(LoadURLTest, getCacheKey) {
     LoadURL load1{testQec, pqLoadURL("https://mundhahs.dev")};
     LoadURL load2{testQec, pqLoadURL("https://mundhahs.dev")};
     LoadURL load3{testQec, pqLoadURL("https://mundhahs.dev", true)};
+    EXPECT_THAT(load1.canResultBeCached(), testing::IsFalse());
+    EXPECT_THAT(load2.canResultBeCached(), testing::IsFalse());
+    EXPECT_THAT(load3.canResultBeCached(), testing::IsFalse());
     EXPECT_THAT(load1.getCacheKey(),
                 testing::Not(testing::Eq(load2.getCacheKey())));
     EXPECT_THAT(load1.getCacheKey(),
