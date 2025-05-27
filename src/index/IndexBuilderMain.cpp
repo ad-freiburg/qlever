@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/TextIndexBuilder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/File.h"
@@ -332,10 +333,13 @@ int main(int argc, char** argv) {
       index.createFromFiles(fileSpecifications);
     }
 
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
     bool buildFromDocsOrWordsFile =
         !docsfile.empty() && (!wordsfile.empty() || useWordsFromDocsfile);
     if (buildFromDocsOrWordsFile || addWordsFromLiterals) {
-      index.buildTextIndexFile(TextIndexConfig{
+      textIndexBuilder.buildTextIndexFile(TextIndexConfig{
           wordsfile.empty() ? std::nullopt
                             : std::optional<const string>(wordsfile),
           docsfile.empty() ? std::nullopt
@@ -348,7 +352,7 @@ int main(int argc, char** argv) {
     }
 
     if (!docsfile.empty()) {
-      index.buildDocsDB(docsfile);
+      textIndexBuilder.buildDocsDB(docsfile);
     }
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;
