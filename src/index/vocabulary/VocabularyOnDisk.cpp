@@ -78,6 +78,15 @@ void VocabularyOnDisk::WordWriter::finishImpl() {
 }
 
 // _____________________________________________________________________________
+VocabularyOnDisk::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`VocabularyOnDisk::WordWriter`");
+  }
+}
+
+// _____________________________________________________________________________
 void VocabularyOnDisk::buildFromStringsAndIds(
     const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
     const std::string& fileName) {

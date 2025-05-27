@@ -78,11 +78,20 @@ class WordWriterBase {
   // index that was assigned to the word.
   virtual uint64_t operator()(std::string_view word, bool isExternal) = 0;
 
-  // Destructor. Calls `finish` if it wasn't called  explicitly beforehand.
+  // Destructor. If `finish` hasn't been called, the program is terminated.
+  // Derived classes have to make sure that their destructors call `finish` if
+  // necessary. Note: It is unfortunately not possible to call the virtual
+  // function `finish` directly from this base class destructor, as at that
+  // point the derived class is already destroyed.
   virtual ~WordWriterBase() {
-    ad_utility::terminateIfThrows([this]() { this->finish(); },
-                                  "Calling `finish` on a `WordWriter` that "
-                                  "inherits from `WordWriterBase`");
+    ad_utility::terminateIfThrows(
+        [this]() {
+          if (!finishWasCalled_) {
+            throw std::runtime_error{"no call to finish before destructor"};
+          }
+        },
+        " `finish` was not called before destroying a `WordWriter` that "
+        "inherits from `WordWriterBase`. This is a bug, please report it.");
   };
 
   // Calling this function will signal that the last word has been pushed.
@@ -95,6 +104,8 @@ class WordWriterBase {
     }
     finishImpl();
   }
+
+  bool finishWasCalled() const { return finishWasCalled_; }
 
   // Access to a `readableName` of the vocabulary that is written. Some
   // implementations use it to customize log messages.

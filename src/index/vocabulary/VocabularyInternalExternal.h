@@ -111,6 +111,8 @@ class VocabularyInternalExternal {
     // stored on disk, and not be cached in RAM.
     uint64_t operator()(std::string_view word, bool isExternal) override;
 
+    ~WordWriter() override;
+
     // Finish writing.
     void finishImpl() override;
   };

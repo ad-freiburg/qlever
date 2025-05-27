@@ -53,6 +53,8 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     // Add the next word to the vocabulary and return its index.
     uint64_t operator()(std::string_view word, bool isExternalDummy) override;
 
+    ~WordWriter() override;
+
    private:
     // Finish the writing. After this no more calls to `operator()` are allowed.
     void finishImpl() override;

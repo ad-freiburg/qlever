@@ -78,6 +78,14 @@ class VocabularyInMemory
       return index_++;
     }
 
+    ~WordWriter() override {
+      if (!finishWasCalled()) {
+        ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                      "Calling `finish` from the destructor of "
+                                      "`VocabularyInMemory::WordWriter`");
+      }
+    }
+
    private:
     void finishImpl() override { writer_.finish(); }
   };

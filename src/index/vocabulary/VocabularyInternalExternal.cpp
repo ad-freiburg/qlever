@@ -39,6 +39,15 @@ void VocabularyInternalExternal::WordWriter::finishImpl() {
 }
 
 // _____________________________________________________________________________
+VocabularyInternalExternal::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`VocabularyInternalExternal::WordWriter`");
+  }
+}
+
+// _____________________________________________________________________________
 void VocabularyInternalExternal::open(const string& filename) {
   internalVocab_.open(filename + ".internal");
   externalVocab_.open(filename + ".external");

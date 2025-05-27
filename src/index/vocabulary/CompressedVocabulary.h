@@ -160,6 +160,14 @@ CPP_template(typename UnderlyingVocabulary,
       return counter_++;
     }
 
+    ~DiskWriterFromUncompressedWords() override {
+      if (!finishWasCalled()) {
+        ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                      "Calling `finish` from the destructor of "
+                                      "`DiskWriterFromUncompressedWords`");
+      }
+    }
+
    private:
     /// Dump all the words that still might be contained in intermediate buffers
     /// to the underlying file and close the file. After calls to `finish()` no
