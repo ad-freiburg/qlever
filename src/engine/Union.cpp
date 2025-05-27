@@ -363,10 +363,11 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> Union::createSortedVariant(
-    const vector<ColumnIndex>& sortOrder) const {
-  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
-                                 _subtrees.at(1), sortOrder);
+std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return ad_utility::makeExecutionTree<Union>(
+      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________
@@ -399,10 +400,10 @@ Result::LazyResult Union::computeResultKeepOrder(
   return std::visit(
       [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
        &applyPermutation](auto left, auto right) {
-        return ad_utility::callFixedSize(
+        return ad_utility::callFixedSizeVi(
             trimmedTargetOrder.size(),
             [this, requestLaziness, &result1, &result2, &left, &right,
-             &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
+             &trimmedTargetOrder, &applyPermutation](auto COMPARATOR_WIDTH) {
               constexpr size_t extent =
                   COMPARATOR_WIDTH == 0 ? ql::dynamic_extent : COMPARATOR_WIDTH;
               sortedUnion::IterationData leftData{std::move(result1),

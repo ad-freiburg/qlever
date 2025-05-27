@@ -168,6 +168,9 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
+    AD_CORRECTNESS_CHECK(result.idTable().empty() || !knownEmptyResult(),
+                         "Operation returned non-empty result, but "
+                         "knownEmptyResult() returned true");
   } else {
     auto& rti = runtimeInfo();
     rti.status_ = RuntimeInformation::lazilyMaterialized;
@@ -175,10 +178,13 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     rti.originalTotalTime_ = rti.totalTime_;
     rti.originalOperationTime_ = rti.getOperationTime();
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
-            const Result::IdTableVocabPair& pair,
-            std::chrono::microseconds duration) mutable {
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{},
+         ker = knownEmptyResult()](const Result::IdTableVocabPair& pair,
+                                   std::chrono::microseconds duration) mutable {
           const IdTable& idTable = pair.idTable_;
+          AD_CORRECTNESS_CHECK(idTable.empty() || !ker,
+                               "Operation returned non-empty result, but "
+                               "knownEmptyResult() returned true");
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
@@ -676,6 +682,27 @@ std::unique_ptr<Operation> Operation::clone() const {
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
   AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
   return result;
+}
+
+// _____________________________________________________________________________
+bool Operation::isSortedBy(const vector<ColumnIndex>& sortColumns) const {
+  auto inputSortedOn = resultSortedOn();
+  if (sortColumns.size() > inputSortedOn.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < sortColumns.size(); ++i) {
+    if (sortColumns[i] != inputSortedOn[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

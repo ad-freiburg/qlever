@@ -20,8 +20,9 @@ class SparqlParser {
   // Passing no datasets means that the datasets are set normally from the
   // query or update.
   static ParsedQuery parseQuery(
-      std::string queryOrUpdate,
-      const std::vector<DatasetClause>& datasets = {});
+      std::string query, const std::vector<DatasetClause>& datasets = {});
+  static std::vector<ParsedQuery> parseUpdate(
+      std::string update, const std::vector<DatasetClause>& datasets = {});
 };
 
 #endif  // QLEVER_SRC_PARSER_SPARQLPARSER_H

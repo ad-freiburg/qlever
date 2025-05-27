@@ -5,22 +5,23 @@
 #ifndef QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 #define QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 
-#include "engine/GroupBy.h"
+#include "engine/GroupByImpl.h"
 
 // Helper class to lazily compute the result of a group by operation. It makes
 // use of the hash map optimization to store the intermediate results of the
 // groups.
 class LazyGroupBy {
   LocalVocab& localVocab_;
-  std::vector<GroupBy::HashMapAliasInformation> aggregateAliases_;
+  std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases_;
   const ad_utility::AllocatorWithLimit<Id>& allocator_;
-  GroupBy::HashMapAggregationData<0> aggregationData_;
+  GroupByImpl::HashMapAggregationData<0> aggregationData_;
 
  public:
-  LazyGroupBy(LocalVocab& localVocab,
-              std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-              const ad_utility::AllocatorWithLimit<Id>& allocator,
-              size_t numGroupColumns);
+  LazyGroupBy(
+      LocalVocab& localVocab,
+      std::vector<GroupByImpl::HashMapAliasInformation> aggregateAliases,
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      size_t numGroupColumns);
 
   // Delete copy and move functions to avoid unexpected behavior.
   LazyGroupBy(const LazyGroupBy&) = delete;
@@ -32,7 +33,7 @@ class LazyGroupBy {
   // into the `resultTable` and reset the aggregation data for the next group.
   void commitRow(IdTable& resultTable,
                  sparqlExpression::EvaluationContext& evaluationContext,
-                 const GroupBy::GroupBlock& currentGroupBlock);
+                 const GroupByImpl::GroupBlock& currentGroupBlock);
 
   // Process the next potentially partial group as a block of rows. This
   // modifies the state of `aggregateData_`. Call `commitRow` to write the final
@@ -47,14 +48,15 @@ class LazyGroupBy {
 
   // Helper function to visit the correct variant of the aggregation data.
   template <typename Visitor, typename... Args>
-  void visitAggregate(const Visitor& visitor,
-                      const GroupBy::HashMapAggregateInformation& aggregateInfo,
-                      Args&&... additionalVariants);
+  void visitAggregate(
+      const Visitor& visitor,
+      const GroupByImpl::HashMapAggregateInformation& aggregateInfo,
+      Args&&... additionalVariants);
 
   auto allAggregateInfoView() const {
     return aggregateAliases_ |
            ql::views::transform(
-               &GroupBy::HashMapAliasInformation::aggregateInfo_) |
+               &GroupByImpl::HashMapAliasInformation::aggregateInfo_) |
            ql::views::join;
   }
 
