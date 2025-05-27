@@ -519,6 +519,20 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(isNumericSprql((IntId(-0.01))));
 }
 
+// Test PrefilterExpression creation for SparqlExpression InExpression
+//______________________________________________________________________________
+TEST(GetPrefilterExpressionFromSparqlExpression, getPrefilterExprIsIn) {
+  const auto varX = Variable{"?x"};
+  evalAndEqualityCheck(inSprqlExpr(varX, IntId(0), VocabId(10)),
+                       pr(inExpr({IntId(0), VocabId(10)}), varX));
+  evalAndEqualityCheck(
+      notSprqlExpr(inSprqlExpr(varX, IntId(0), VocabId(10))),
+      pr(notExpr(inExpr({IntId(0), VocabId(10)}, true)), varX));
+  evalAndEqualityCheck(inSprqlExpr(L("\"Bob\""), IntId(5), DoubleId(10)));
+  evalAndEqualityCheck(inSprqlExpr(varX, IntId(5), DoubleId(10), varX));
+  evalAndEqualityCheck(inSprqlExpr(varX, gtSprql(varX, IntId(10)), IntId(33)));
+}
+
 //______________________________________________________________________________
 // Test PrefilterExpression creation for the expression: `YEAR(?var) op INT`.
 TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
