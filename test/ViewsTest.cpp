@@ -12,6 +12,7 @@
 
 #include "util/InputRangeUtils.h"
 #include "util/Random.h"
+#include "util/ValueIdentity.h"
 #include "util/Views.h"
 
 TEST(Views, BufferedAsyncView) {
@@ -282,59 +283,50 @@ TEST(Views, RvalueView) {
     }
   };
 
-  std::vector<MoveTracker> vec;
-  vec.resize(13);
+  // This impl tests the different ways an `RvalueView` can be created:
+  // Either from a const or mutable input (first argument of type
+  // `ValueIdentity<bool>`, And the view is either copied or moved into the
+  // place where its used (second argument).
+  auto testImpl = [](auto isConst, bool doMove) {
+    std::vector<MoveTracker> vec;
+    vec.resize(13);
 
-  std::vector<MoveTracker> target;
-  {
+    std::vector<MoveTracker> target;
     // Move the first 5 elements via an `RvalueView` + ql::ranges::copy.
-    auto view = ad_utility::RvalueView{vec};
-    static_assert(ql::ranges::random_access_range<decltype(view)>);
-    ASSERT_EQ(view.size(), 13);
-    ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
-    ASSERT_EQ(target.size(), 5);
-    for (size_t i = 0; i < vec.size(); ++i) {
-      ASSERT_EQ(i < 5, vec[i].wasMoved_);
+    auto getView = [&]() {
+      if constexpr (isConst) {
+        return ad_utility::RvalueView{std::as_const(vec)};
+      } else {
+        return ad_utility::RvalueView{vec};
+      }
+    };
+    static_assert(ql::ranges::random_access_range<
+                  std::invoke_result_t<decltype(getView)>>);
+    if (doMove) {
+      ql::ranges::copy(getView() | ql::views::take(5),
+                       std::back_inserter(target));
+    } else {
+      auto view = getView();
+      ASSERT_EQ(view.size(), 13);
+      ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
     }
-    for (auto& el : target) {
-      ASSERT_FALSE(el.wasMoved_);
-    }
-  }
-  target.clear();
-  vec.clear();
-  vec.resize(13);
-  {
-    // If the view is `const`, then even rvalues are not moved.
-    auto view = ad_utility::RvalueView{std::as_const(vec)};
-    static_assert(ql::ranges::random_access_range<decltype(view)>);
-    ASSERT_EQ(view.size(), 13);
-    ql::ranges::copy(view | ql::views::take(5), std::back_inserter(target));
     ASSERT_EQ(target.size(), 5);
-    for (size_t i = 0; i < vec.size(); ++i) {
+    for (size_t i = 0; i < 5; ++i) {
+      ASSERT_NE(vec[i].wasMoved_, isConst);
+    }
+    for (size_t i = 5; i < vec.size(); ++i) {
       ASSERT_FALSE(vec[i].wasMoved_);
     }
     for (auto& el : target) {
       ASSERT_FALSE(el.wasMoved_);
     }
-  }
-  target.clear();
-  vec.clear();
-  vec.resize(13);
+  };
 
-  {
-    // Move the vector into the view, test that everything still works as
-    // expected.
-    auto view = ad_utility::RvalueView{std::move(vec)};
-    static_assert(ql::ranges::random_access_range<decltype(view)>);
-    ASSERT_EQ(view.size(), 13);
-    ASSERT_TRUE(vec.empty());
-    ql::ranges::copy(std::move(view) | ql::views::take(5),
-                     std::back_inserter(target));
-    ASSERT_EQ(target.size(), 5);
-    for (auto& el : target) {
-      ASSERT_FALSE(el.wasMoved_);
-    }
-  }
+  using namespace ad_utility::use_value_identity;
+  testImpl(vi<true>, true);
+  testImpl(vi<true>, false);
+  testImpl(vi<false>, false);
+  testImpl(vi<false>, true);
 }
 
 // _____________________________________________________________________________

@@ -264,25 +264,6 @@ CPP_template(typename UnderlyingRange)(
     }
   }
 
-  // Const iterators. Note that these will yield `const &&`, which at first
-  // glance seems pointless, but makes the interface more consistent and
-  // generic.
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
-      const  //
-      requires(ql::ranges::range<const UnderlyingRange>)) {
-    return std::make_move_iterator(ql::ranges::begin(underlyingRange_));
-  }
-
-  CPP_auto_member constexpr auto CPP_fun(end)()(
-      const  //
-      requires(ql::ranges::range<const UnderlyingRange>)) {
-    if constexpr (ql::ranges::common_range<const UnderlyingRange>) {
-      return std::move_iterator{ql::ranges::end(underlyingRange_)};
-    } else {
-      return ql::move_sentinel(ql::ranges::end(underlyingRange_));
-    }
-  }
-
   // Size function. Note: The member functions `empty` and `data` are present
   // via the inheritance from `view_interface` iff they are supported by the
   // `UnderlyingRange`.

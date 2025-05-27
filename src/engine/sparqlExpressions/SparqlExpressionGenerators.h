@@ -80,6 +80,7 @@ inline auto resultGeneratorImpl(const ad_utility::SetOfIntervals& set,
   bounds.reserve(set._intervals.size() * 2 + 1);
   size_t last = 0;
   for (const auto& [lower, upper] : set._intervals) {
+    AD_CONTRACT_CHECK(upper <= targetSize);
     if (lower != last) {
       bounds.push_back(Bounds{lower - last, false});
     }
