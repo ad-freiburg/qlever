@@ -790,24 +790,27 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       };
     };
     auto generateBiggerEqualLambdaDesc =
-        []<typename OptionType,
-           typename = std::enable_if_t<ad_utility::isInstantiation<
-               OptionType, ad_utility::ConstConfigOptionProxy>>>(
-            const OptionType& option, const auto& minimumValue,
-            bool canBeEqual) {
-      return absl::StrCat("'", option.getConfigOption().getIdentifier(),
-                          "' must be bigger than",
-                          canBeEqual ? ", or equal to," : "", " ", minimumValue,
-                          ".");
-    };
+        [](const auto& option, const auto& minimumValue, bool canBeEqual) {
+          static_assert(
+              ad_utility::isInstantiation<std::decay_t<decltype(option)>,
+                                          ad_utility::ConstConfigOptionProxy>,
+              "The option must be an instance of 'ConfigOptionProxy'.");
+          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                              "' must be bigger than",
+                              canBeEqual ? ", or equal to," : "", " ",
+                              minimumValue, ".");
+        };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
-    auto generateLessEqualLambdaDesc =
-        []<typename OptionType,
-           typename = std::enable_if_t<ad_utility::isInstantiation<
-               OptionType, ad_utility::ConstConfigOptionProxy>>>(
-            const OptionType& lhs, const OptionType& rhs) {
+    auto generateLessEqualLambdaDesc = [](const auto& lhs, const auto& rhs) {
+      static_assert(std::is_same_v<std::decay_t<decltype(lhs)>,
+                                   std::decay_t<decltype(lhs)>>,
+                    "The arguments must be of the same type.");
+      static_assert(
+          ad_utility::isInstantiation<std::decay_t<decltype(lhs)>,
+                                      ad_utility::ConstConfigOptionProxy>,
+          "The arguments must be a instances of 'ConfigOptionProxy'.");
       return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
                           "' must be smaller than, or equal to, "
                           "'",

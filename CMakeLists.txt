@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
-cmake_policy(SET CMP0167 NEW)
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 NEW)
+endif()
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -25,17 +27,26 @@ add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
+option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+set(RANGE_V3_REQUIRED_BY_COMPILER OFF)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-    else ()
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "11.0.0")
         add_compile_options(-fcoroutines)
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "17.0.0")
+        # clang-16 doesn't support templated structs without explicit deduction guides, but those are required with
+        # libstdc++13 ranges in some cases.
+        MESSAGE(STATUS "range-v3 is used for clang-16 because of its incompatibility with libstdc++13")
+        set(RANGE_V3_REQUIRED_BY_COMPILER ON)
+    endif()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif ()
@@ -170,7 +181,7 @@ endif ()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED CONFIG)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -210,7 +221,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept
 # macros from `range-v3`.
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
-if (${USE_CPP_17_BACKPORTS})
+if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} )
+    MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
     add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
 endif()
 

@@ -10,6 +10,7 @@
 #include "./engine/sparqlExpressions/LiteralExpression.h"
 #include "./engine/sparqlExpressions/NaryExpression.h"
 #include "./engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "./engine/sparqlExpressions/RegexExpression.h"
 #include "./engine/sparqlExpressions/RelationalExpressions.h"
 #include "./engine/sparqlExpressions/SparqlExpression.h"
 #include "util/DateYearDuration.h"
@@ -51,6 +52,13 @@ auto notPrefilterExpression = [](std::unique_ptr<PrefilterExpression> child)
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<NotExpression>(std::move(child));
 };
+
+// Make PrefixRegexExpression
+auto makePrefixRegexExpression = [](const TripleComponent::Literal& prefix,
+                                    bool isNegated = false) {
+  return std::make_unique<PrefixRegexExpression>(prefix, isNegated);
+};
+
 }  // namespace
 
 // Make PrefilterExpression
@@ -82,6 +90,8 @@ constexpr auto andExpr = logExpr<AndExpression>;
 constexpr auto orExpr = logExpr<OrExpression>;
 // NOT (`!`)
 constexpr auto notExpr = notPrefilterExpression;
+// PREFIX REGEX
+constexpr auto prefixRegex = makePrefixRegexExpression;
 
 namespace filterHelper {
 
@@ -104,21 +114,22 @@ auto pr =
 //______________________________________________________________________________
 // Create a vector containing the provided `<PrefilterExpression, Variable>`
 // pairs.
-constexpr auto makePrefilterVec =
-    []<QL_CONCEPT_OR_TYPENAME(
-        std::convertible_to<
-            sparqlExpression::PrefilterExprVariablePair>)... Args>(
-        Args&&... prefilterArgs) {
-      std::vector<sparqlExpression::PrefilterExprVariablePair>
-          prefilterVarPairs = {};
-      if constexpr (sizeof...(prefilterArgs) > 0) {
-        (prefilterVarPairs.emplace_back(
-             std::forward<sparqlExpression::PrefilterExprVariablePair>(
-                 prefilterArgs)),
-         ...);
-      }
-      return prefilterVarPairs;
-    };
+struct MakePrefilterVec {
+  template <QL_CONCEPT_OR_TYPENAME(
+      std::convertible_to<sparqlExpression::PrefilterExprVariablePair>)... Args>
+  constexpr auto operator()(Args&&... prefilterArgs) const {
+    std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
+        {};
+    if constexpr (sizeof...(prefilterArgs) > 0) {
+      (prefilterVarPairs.emplace_back(
+           std::forward<sparqlExpression::PrefilterExprVariablePair>(
+               prefilterArgs)),
+       ...);
+    }
+    return prefilterVarPairs;
+  }
+};
+constexpr inline MakePrefilterVec makePrefilterVec;
 
 }  // namespace filterHelper
 
@@ -185,6 +196,20 @@ std::unique_ptr<SparqlExpression> makeYearSparqlExpression(VariantArgs child) {
 };
 
 //______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makePrefixRegexExpression(
+    VariantArgs varExpr, VariantArgs litExpr) {
+  return sparqlExpression::makeRegexExpression(
+      std::visit(getExpr, std::move(varExpr)),
+      std::visit(getExpr, std::move(litExpr)), nullptr);
+}
+
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeStrSparqlExpression(
+    VariantArgs childVal) {
+  return makeStrExpression(std::visit(getExpr, std::move(childVal)));
+}
+
+//______________________________________________________________________________
 template <prefilterExpressions::IsDatatype Datatype>
 std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     VariantArgs child) {
@@ -233,6 +258,10 @@ constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 //______________________________________________________________________________
 // Create SparqlExpression `STRSTARTS`.
 constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
+// Create SparqlExpression `REGEX`.
+constexpr auto regexSparql = &makePrefixRegexExpression;
+// Create SparqlExpression `STR`
+constexpr auto strSprql = &makeStrSparqlExpression;
 
 //______________________________________________________________________________
 // Create SparqlExpression `isIri`
