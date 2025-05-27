@@ -473,7 +473,7 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
     result =
         getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
-            evaluateImpl(vocab, idRange, blockRange),
+            evaluateImpl(vocab, idRange, blockRange, false),
             // always add mixed datatype blocks
             getRangesMixedDatatypeBlocks(idRange, blockRange)));
     checkRequirementsBlockMetadata(result, evaluationColumn);
@@ -535,7 +535,7 @@ std::string PrefixRegexExpression::asString(
 //______________________________________________________________________________
 BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     const Vocab& vocab, const ValueIdSubrange& idRange,
-    BlockMetadataSpan blockRange) const {
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
   using LVE = LocalVocabEntry;
@@ -564,7 +564,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
                make<LessThanExpression>(lowerIdVocab),
                make<AndExpression>(make<GreaterThanExpression>(upperIdAdjusted),
                                    make<LessThanExpression>(beginIdIri)))
-        .evaluateImpl(vocab, idRange, blockRange);
+        .evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
   }
 
   // Set expression associated with the lower reference.
@@ -580,7 +580,7 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
   // Case `STRSTARTS(?var, "prefix")` or `REGEX(?var, "^prefix")`.
   // Prefilter ?var > Id(prev("prefix)) && ?var < Id(next("prefix)).
   return AndExpression(std::move(lowerRefExpr), std::move(upperRefExpr))
-      .evaluateImpl(vocab, idRange, blockRange);
+      .evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
 };
 
 // SECTION RELATIONAL OPERATIONS
@@ -608,14 +608,14 @@ RelationalExpression<Comparison>::logicalComplement() const {
 //______________________________________________________________________________
 template <CompOp Comparison>
 BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    bool getTotalComplement) const {
+    [[maybe_unused]] const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
   // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
-  LocalVocab vocab{};
+  LocalVocab localVocab{};
   auto referenceId =
-      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, vocab);
+      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
   // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
@@ -719,7 +719,8 @@ std::string IsDatatypeExpression<Datatype>::asString(
 
 //______________________________________________________________________________
 template <IsDatatype Datatype>
-BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const ValueIdSubrange& idRange,
+BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const Vocab& vocab,
+                                                 const ValueIdSubrange& idRange,
                                                  BlockMetadataSpan blockRange,
                                                  const bool isNegated) {
   using enum IsDatatype;
@@ -731,11 +732,11 @@ BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(const ValueIdSubrange& idRange,
              // in order. The smallest possible IRI is represented by "<>", we
              // use its corresponding ValueId later on as a lower bound.
              ? make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
-                   ->evaluateImpl(idRange, blockRange, isNegated)
+                   ->evaluateImpl(vocab, idRange, blockRange, isNegated)
              // For pre-filtering LITERAL related ValueIds we use the ValueId
              // representing the beginning of IRI values as an upper bound.
              : make<LessThanExpression>(LVE::fromStringRepresentation("<"))
-                   ->evaluateImpl(idRange, blockRange, isNegated);
+                   ->evaluateImpl(vocab, idRange, blockRange, isNegated);
 }
 
 //______________________________________________________________________________
@@ -790,7 +791,8 @@ static BlockMetadataRanges evaluateIsBlankOrIsNumericImpl(
 //______________________________________________________________________________
 template <IsDatatype Datatype>
 BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
   using enum IsDatatype;
   if constexpr (Datatype == BLANK || Datatype == NUMERIC) {
@@ -798,7 +800,7 @@ BlockMetadataRanges IsDatatypeExpression<Datatype>::evaluateImpl(
                                                     isNegated_);
   } else {
     static_assert(Datatype == IRI || Datatype == LITERAL);
-    return evaluateIsIriOrIsLiteralImpl<Datatype>(idRange, blockRange,
+    return evaluateIsIriOrIsLiteralImpl<Datatype>(vocab, idRange, blockRange,
                                                   isNegated_);
   }
 };
@@ -835,7 +837,8 @@ std::string IsInExpression::asString([[maybe_unused]] size_t depth) const {
 
 //______________________________________________________________________________
 BlockMetadataRanges IsInExpression::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange,
     [[maybe_unused]] bool getTotalComplement) const {
   if (referenceValues_.empty()) {
     if (!isNegated_) {
@@ -854,7 +857,8 @@ BlockMetadataRanges IsInExpression::evaluateImpl(
                           : make<OrExpression>(AD_FWD(c1), AD_FWD(c2));
       });
 
-  return prefilterExpr.value()->evaluateImpl(idRange, blockRange, isNegated_);
+  return prefilterExpr.value()->evaluateImpl(vocab, idRange, blockRange,
+                                             isNegated_);
 };
 
 // SECTION LOGICAL OPERATIONS
@@ -880,18 +884,18 @@ LogicalExpression<Operation>::logicalComplement() const {
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 BlockMetadataRanges LogicalExpression<Operation>::evaluateImpl(
-    const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-    bool getTotalComplement) const {
+    const Vocab& vocab, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
     return detail::logicalOps::mergeRelevantBlockItRanges<false>(
-        child1_->evaluateImpl(idRange, blockRange, getTotalComplement),
-        child2_->evaluateImpl(idRange, blockRange, getTotalComplement));
+        child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
+        child2_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement));
   } else {
     static_assert(Operation == OR);
     return detail::logicalOps::mergeRelevantBlockItRanges<true>(
-        child1_->evaluateImpl(idRange, blockRange, getTotalComplement),
-        child2_->evaluateImpl(idRange, blockRange, getTotalComplement));
+        child1_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement),
+        child2_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement));
   }
 };
 
@@ -940,10 +944,11 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-BlockMetadataRanges NotExpression::evaluateImpl(const ValueIdSubrange& idRange,
+BlockMetadataRanges NotExpression::evaluateImpl(const Vocab& vocab,
+                                                const ValueIdSubrange& idRange,
                                                 BlockMetadataSpan blockRange,
                                                 bool getTotalComplement) const {
-  return child_->evaluateImpl(idRange, blockRange, getTotalComplement);
+  return child_->evaluateImpl(vocab, idRange, blockRange, getTotalComplement);
 };
 
 //______________________________________________________________________________

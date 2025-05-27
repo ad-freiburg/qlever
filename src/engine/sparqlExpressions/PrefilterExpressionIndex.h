@@ -158,8 +158,8 @@ class PrefilterExpression {
   // return their corresponding complement over ALL datatypes. This is in
   // particular needed for the complement of `IsDatatype` and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
-      const Vocab& vocab, const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-      bool getTotalComplement = false) const = 0;
+      const Vocab& vocab, const ValueIdSubrange& idRange,
+      BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -199,7 +199,8 @@ class PrefixRegexExpression : public PrefilterExpression {
  private:
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange, bool getTotalComplement) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -232,7 +233,8 @@ class LogicalExpression : public PrefilterExpression {
   friend class PrefixRegexExpression;
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange, bool getTotalComplement) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -258,7 +260,8 @@ class IsDatatypeExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const Vocab& vocab, const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
 };
@@ -287,7 +290,8 @@ class IsInExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const Vocab& vocabconst ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
 };
@@ -323,10 +327,11 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  // If `getComplementOverAllDatatypes` is set to `true`, this method returns
+  // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
-  BlockMetadataRanges evaluateImpl(const Vocab& vocab, const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
 };
@@ -351,7 +356,8 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  BlockMetadataRanges evaluateImpl(const Vocab& vocab, const ValueIdSubrange& idRange,
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
                                    BlockMetadataSpan blockRange,
                                    bool getTotalComplement) const override;
 };
