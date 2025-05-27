@@ -1140,7 +1140,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 // Test the (full) invariant check of `ScanSpecAndBlocks` constructor.
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
-  auto filteredBlocks = gt(IntId(0))->evaluate(blocks, 2);
+  const auto& vocab = ad_utility::testing::getQec()->getIndex().getVocab();
+  auto filteredBlocks = gt(IntId(0))->evaluate(vocab, blocks, 2);
   BlockMetadataSpan blockSpan(filteredBlocks);
   BlockMetadataRanges blockRanges;
   blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
