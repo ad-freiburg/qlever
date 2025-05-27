@@ -88,7 +88,7 @@ class alignas(16) LiteralOrIri {
   // exception if no Literal object is contained
   bool hasDatatype() const;
 
-  // Return content of contained Literal as string without leading or training
+  // Return content of contained Literal as string without leading or trailing
   // quotation marks. Throw exception if no Literal object is contained
   NormalizedStringView getLiteralContent() const;
 

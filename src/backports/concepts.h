@@ -115,6 +115,7 @@ using ::ranges::contiguous_iterator;
 using ::ranges::forward_iterator;
 using ::ranges::input_iterator;
 using ::ranges::random_access_iterator;
+using ::ranges::sized_sentinel_for;
 #else
 using namespace std;
 #endif
