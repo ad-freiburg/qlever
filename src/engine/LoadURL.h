@@ -17,7 +17,7 @@
 // document from a remote URL via HTTP and converts it to an `IdTable`.
 class LoadURL final : public Operation {
  public:
-  const std::vector<ad_utility::MediaType> SUPPORTED_MEDIATYPES{
+  static constexpr std::array<ad_utility::MediaType, 2> SUPPORTED_MEDIATYPES{
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
  private:

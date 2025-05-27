@@ -13,7 +13,7 @@
 LoadURL::LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
                  SendRequestType getResultFunction)
     : Operation(qec),
-      loadURLClause_(loadURLClause),
+      loadURLClause_(std::move(loadURLClause)),
       getResultFunction_(std::move(getResultFunction)),
       canResultBeCached_(RuntimeParameters().get<"cache-load-results">()) {}
 
@@ -78,8 +78,8 @@ Result LoadURL::computeResult(bool requestLaziness) {
   } catch (const std::exception&) {
     // If the `SILENT` keyword is set, catch the error and return the neutral
     // element for this operation (an empty `IdTable`). The `IdTable` is used to
-    // interpolate a triple with variables. No update triples are generated
-    // because of the empty `IdTable` which leaves the state unchanged.
+    // fill in the variables in the template triple `?s ?p ?o`. The empty
+    // `IdTable` results in no triples being updated.
     if (loadURLClause_.silent_) {
       return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
               resultSortedOn(), LocalVocab{}};
