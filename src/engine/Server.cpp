@@ -1124,14 +1124,4 @@ void Server::adjustParsedQueryLimitOffset(
   if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
     exportLimit = std::stoul(sendParameter.value());
   }
-
-  // Make sure that the offset is not applied again when exporting the
-  // result (it is already applied by the root operation in the query
-  // execution tree). Note that we don't need this for the limit because
-  // applying a fixed limit is idempotent. This only works because the query
-  // planner does the exact same `supportsLimit()` check.
-  const auto& qet = plannedQuery.queryExecutionTree_;
-  if (qet.supportsLimit()) {
-    limitOffset._offset = 0;
-  }
 }

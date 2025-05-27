@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -282,12 +283,17 @@ class Operation {
   // its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
-  // Hook subclasses can override to pass changes to the limit to their children
+ private:
+  // This function is called each time `applyLimit` is called. It can be
+  // overridden by subclasses to e.g. implement the LIMIT in a more efficient
+  // way
   virtual void onLimitChanged(const LimitOffsetClause&) const {}
 
+ public:
   // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation. It will not replace any previous limit, stacking on top
-  // instead.
+  // this operation. If a LIMIT was previously set, this limit will not be
+  // replaced, but the new LIMIT will be applied additionally after the previous
+  // LIMITs. This might happen e.g. for nested subqueries
   void applyLimit(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
@@ -378,6 +384,12 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Helper function to allow dynamic modification of LIMIT/OFFSET from child
+  // operations.
+  [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
+                                      std::function<void()>>
+  resetChildLimitsAndOffsetOnDestruction() final;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -478,6 +490,7 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
+  FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

@@ -770,3 +770,22 @@ TEST(OperationTest, disableCaching) {
   valuesForTesting.getResult(false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
 }
+
+// _____________________________________________________________________________
+TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction) {
+  auto qec = getQec();
+
+  auto parent = ShallowParentOperation::of<NeutralElementOperation>(qec);
+
+  auto child = parent.getChildren().at(0)->getRootOperation();
+  child->applyLimit({10, 1});
+
+  {
+    auto cleanup = parent.resetChildLimitsAndOffsetOnDestruction();
+    EXPECT_EQ(child->getLimit(), LimitOffsetClause(10, 1));
+
+    child->applyLimit({9, 1});
+    EXPECT_EQ(child->getLimit(), LimitOffsetClause(9, 2));
+  }
+  EXPECT_EQ(child->getLimit(), LimitOffsetClause(10, 1));
+}

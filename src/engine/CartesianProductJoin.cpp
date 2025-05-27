@@ -136,6 +136,9 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   }
+  // Make sure the children are reset back to their initial state after
+  // computing the results.
+  auto cleanup = resetChildLimitsAndOffsetOnDestruction();
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
   LocalVocab staticMergedVocab{};
@@ -260,8 +263,6 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() && childTree->supportsLimit()) {
-      // NOTE: If computeResult is called more than once on the same instance of
-      // `CartesianProduct`
       childTree->applyLimit(limitIfPresent.value());
     }
     auto& child = *childTree->getRootOperation();

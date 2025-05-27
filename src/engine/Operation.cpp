@@ -503,11 +503,7 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 
 // __________________________________________________________________
 void Operation::applyLimit(const LimitOffsetClause& limitOffsetClause) {
-  _limit._offset += limitOffsetClause._offset;
-  if (limitOffsetClause._limit.has_value()) {
-    _limit._limit =
-        std::min(_limit.limitOrDefault(), limitOffsetClause._limit.value());
-  }
+  _limit.mergeLimitAndOffset(limitOffsetClause);
   // We can safely ignore members that are not `_offset` and `_limit` since
   // they are unused by subclasses of `Operation`.
   onLimitChanged(limitOffsetClause);
@@ -572,6 +568,21 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
     variableToColumnMap_ = computeVariableToColumnMap();
   }
   return variableToColumnMap_.value();
+}
+
+// _____________________________________________________________________________
+absl::Cleanup<absl::cleanup_internal::Tag, std::function<void()>>
+Operation::resetChildLimitsAndOffsetOnDestruction() {
+  std::vector<std::pair<QueryExecutionTree*, LimitOffsetClause>>
+      childrenClauses;
+  for (QueryExecutionTree* qet : getChildren()) {
+    childrenClauses.emplace_back(qet, qet->getRootOperation()->getLimit());
+  }
+  return absl::Cleanup{std::function{[original = std::move(childrenClauses)]() {
+    for (auto& [qet, originalLimit] : original) {
+      qet->getRootOperation()->_limit = originalLimit;
+    }
+  }}};
 }
 
 // ___________________________________________________________________________
