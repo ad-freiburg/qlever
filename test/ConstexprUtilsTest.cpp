@@ -117,19 +117,20 @@ TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstexprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
+  ConstexprForLoopVi(std::make_index_sequence<100>{},
+                     [&i](auto /*valueIdentity*/) { i++; });
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
-  ConstexprForLoop(std::index_sequence<2, 5, 9>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ConstexprForLoopVi(std::index_sequence<2, 5, 9>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 16);
 
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
-  ConstexprForLoop(std::index_sequence<>{},
-                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ConstexprForLoopVi(std::index_sequence<>{},
+                     [&i](auto NumberToAdd) { i += NumberToAdd; });
   ASSERT_EQ(i, 0);
 }
 
@@ -137,15 +138,15 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
   // Create one function, that sets `i` to x, for every possible
   // version of x in [0,100].
   size_t i = 1;
-  auto setI = [&i]<size_t Number>() { i = Number; };
+  auto setI = [&i](auto Number) { i = Number.value; };
   for (size_t d = 0; d <= 100; d++) {
-    RuntimeValueToCompileTimeValue<100>(d, setI);
+    RuntimeValueToCompileTimeValueVi<100>(d, setI);
     ASSERT_EQ(i, d);
   }
 
   // Should cause an exception, if the given value is bigger than the
   // `MaxValue`.
-  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValue<5>(10, setI));
+  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValueVi<5>(10, setI));
 }
 
 // A helper struct for the following test.
@@ -158,13 +159,14 @@ struct F1 {
 TEST(ConstexprUtils, ConstexprSwitch) {
   using namespace ad_utility;
   {
-    auto f = []<int i> { return i * 2; };
+    auto f = ad_utility::ApplyAsValueIdentity{[](auto i) { return i * 2; }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2)), 4);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4)));
   }
   {
-    auto f = []<int i>(int j) { return i * j; };
+    auto f =
+        ad_utility::ApplyAsValueIdentity{[](auto i, int j) { return i * j; }};
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2, 7)), 14);
     ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5, 2)), 10);
     ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4, 3)));
@@ -341,4 +343,52 @@ TEST(ConstexprUtils, forEachTypeInTemplateTypeWithTI) {
   // Normal call with `std::tuple`.
   testConstExprForEachNormalCall(TestForEachTypeInTemplateTypeWithTIOfTuple{},
                                  typeToStringFactoryWithTI);
+}
+
+template <typename Values>
+struct TestForEachValueInValueSequence {
+  Values& values;
+
+  template <auto V>
+  void operator()() const {
+    values.push_back(V);
+  }
+};
+
+template <typename Values>
+TestForEachValueInValueSequence(Values&)
+    -> TestForEachValueInValueSequence<Values>;
+
+TEST(ConstexprUtils, forEachValueInValueSequence) {
+  // Test with an empty ValueSequence.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int>{}, collectValues);
+    ASSERT_TRUE(values.empty());
+  }
+
+  // Test with a ValueSequence of integers.
+  {
+    std::vector<int> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(ValueSequence<int, 1, 2, 3>{}, collectValues);
+    ASSERT_EQ(values.size(), 3);
+    ASSERT_EQ(values[0], 1);
+    ASSERT_EQ(values[1], 2);
+    ASSERT_EQ(values[2], 3);
+  }
+
+  // Test with a ValueSequence of std::array.
+  {
+    using ArrayType = std::array<int, 3>;
+    std::vector<ArrayType> values;
+    auto collectValues = TestForEachValueInValueSequence{values};
+    forEachValueInValueSequence(
+        ValueSequence<ArrayType, ArrayType{1, 2, 3}, ArrayType{4, 5, 6}>{},
+        collectValues);
+    ASSERT_EQ(values.size(), 2);
+    ASSERT_EQ(values[0], (ArrayType{1, 2, 3}));
+    ASSERT_EQ(values[1], (ArrayType{4, 5, 6}));
+  }
 }

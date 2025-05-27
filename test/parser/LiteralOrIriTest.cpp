@@ -282,6 +282,18 @@ TEST(LiteralOrIri, Hashing) {
 }
 
 // _______________________________________________________________________
+TEST(LiteralTest, isPlain) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  EXPECT_TRUE(literal.getLiteral().isPlain());
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  EXPECT_FALSE(literal.getLiteral().isPlain());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  EXPECT_FALSE(literal.getLiteral().isPlain());
+}
+
+// _______________________________________________________________________
 TEST(LiteralTest, SetSubstr) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World!",

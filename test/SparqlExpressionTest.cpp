@@ -261,18 +261,19 @@ auto testBinaryExpressionCommutative =
 // the `source_location`. TODO<joka921> Rewrite all the tests to use this
 // facility.
 template <auto makeFunction>
-auto testNaryExpressionVec =
-    []<VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>(
-        Exp expected, std::tuple<Ops...> ops,
-        source_location l = source_location::current()) {
-      auto t = generateLocationTrace(l, "testBinaryExpressionVec");
+struct TestNaryExpressionVec {
+  template <VectorOrExpressionResult Exp, VectorOrExpressionResult... Ops>
+  void operator()(Exp expected, std::tuple<Ops...> ops,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l, "testBinaryExpressionVec");
 
-      std::apply(
-          [&](auto&... args) {
-            testNaryExpression(makeFunction, expected, args...);
-          },
-          ops);
-    };
+    std::apply(
+        [&](auto&... args) {
+          testNaryExpression(makeFunction, expected, args...);
+        },
+        ops);
+  }
+};
 
 auto testOr = testBinaryExpressionCommutative<&makeOrExpression>;
 auto testAnd = testBinaryExpressionCommutative<&makeAndExpression>;
@@ -581,7 +582,7 @@ TEST(SparqlExpression, dateOperators) {
 namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testNaryExpressionVec<&makeIriOrUriExpression>;
+auto checkIriOrUri = TestNaryExpressionVec<&makeIriOrUriExpression>{};
 auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
@@ -710,18 +711,14 @@ TEST(SparqlExpression, uppercaseAndLowercase) {
       IdOrLiteralOrIriVec{
           lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("One", "@en"), U, I(12)},
-      IdOrLiteralOrIriVec{
-          lit("one", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("one", "@en"), U, U});
+      IdOrLiteralOrIriVec{lit("one"), lit("one", "@en"), U, U});
   checkUcase(IdOrLiteralOrIriVec{lit("One"), lit("tWÖ"), U, I(12)},
              IdOrLiteralOrIriVec{lit("ONE"), lit("TWÖ"), U, U});
   checkUcase(
       IdOrLiteralOrIriVec{
           lit("One", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("One", "@en"), U, I(12)},
-      IdOrLiteralOrIriVec{
-          lit("ONE", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("ONE", "@en"), U, U});
+      IdOrLiteralOrIriVec{lit("ONE"), lit("ONE", "@en"), U, U});
 }
 
 // _____________________________________________________________________________________
@@ -766,11 +763,9 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
       S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
   checkStrAfter(
-      IdOrLiteralOrIriVec{
-          lit("bc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("c", "@en"), lit(""), lit("abc", "@en"), lit("abc", "@en"),
-          lit(""), lit("abc", "@en")},
+      IdOrLiteralOrIriVec{lit("bc"), lit("abc"), lit("c", "@en"), lit(""),
+                          lit("abc", "@en"), lit("abc", "@en"), lit(""),
+                          lit("abc", "@en")},
       IdOrLiteralOrIriVec{
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
@@ -785,21 +780,18 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
       S({U, "", "", "", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo", "Hällo"}),
       S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
-  checkStrBefore(
-      IdOrLiteralOrIriVec{
-          lit("a", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("a", "@en"), lit(""), lit("", "@en"), lit("", "@en"), lit(""),
-          lit("", "@en")},
-      IdOrLiteralOrIriVec{
-          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
-      IdOrLiteralOrIriVec{
-          lit("bc"), lit(""), lit("bc"), lit("z"), lit(""), lit("", "@en"),
-          lit("z", "@en"),
-          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+  checkStrBefore(IdOrLiteralOrIriVec{lit("a"), lit(""), lit("a", "@en"),
+                                     lit(""), lit("", "@en"), lit("", "@en"),
+                                     lit(""), lit("", "@en")},
+                 IdOrLiteralOrIriVec{
+                     lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+                 IdOrLiteralOrIriVec{
+                     lit("bc"), lit(""), lit("bc"), lit("z"), lit(""),
+                     lit("", "@en"), lit("z", "@en"),
+                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
 }
 
 // ______________________________________________________________________________
@@ -866,8 +858,7 @@ TEST(SparqlExpression, substr) {
               IdOrLiteralOrIri{lit("bye")});
   // WithDataType xsd:string
   checkSubstr(
-      IdOrLiteralOrIriVec{
-          lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      IdOrLiteralOrIriVec{lit("Hello")},
       IdOrLiteralOrIriVec{
           lit("Hello World", "^^<http://www.w3.org/2001/XMLSchema#string>")},
       I(1), I(5));
@@ -896,8 +887,18 @@ TEST(SparqlExpression, strIriDtTagged) {
                  IdOrLiteralOrIriVec{U});
   checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
                  IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{U});
   checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
                  IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{lit(
+                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{lit("chat", "@en")},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
 }
 
 // _____________________________________________________________________________________
@@ -919,10 +920,18 @@ TEST(SparqlExpression, strLangTagged) {
               IdOrLiteralOrIriVec{lit("@")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
               IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{U});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{lit("d")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
               IdOrLiteralOrIriVec{U});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{
+                  lit("123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+              IdOrLiteralOrIriVec{lit("en")});
 }
 
 // _____________________________________________________________________________________
@@ -1323,8 +1332,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, ifAndCoalesce) {
-  auto checkIf = testNaryExpressionVec<&makeIfExpression>;
-  auto checkCoalesce = testNaryExpressionVec<makeCoalesceExpressionVariadic>;
+  auto checkIf = TestNaryExpressionVec<&makeIfExpression>{};
+  auto checkCoalesce = TestNaryExpressionVec<makeCoalesceExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
@@ -1366,7 +1375,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
 
 // ________________________________________________________________________________________
 TEST(SparqlExpression, concatExpression) {
-  auto checkConcat = testNaryExpressionVec<makeConcatExpressionVariadic>;
+  auto checkConcat = TestNaryExpressionVec<makeConcatExpressionVariadic>{};
 
   const auto T = Id::makeFromBool(true);
 
@@ -1409,8 +1418,7 @@ TEST(SparqlExpression, concatExpression) {
                              ::testing::HasSubstr("<bam>")));
   // Only constants with datatypes or language tags.
   checkConcat(
-      IdOrLiteralOrIri{
-          lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      IdOrLiteralOrIri{lit("HelloWorld")},
       std::tuple{IdOrLiteralOrIri{lit(
                      "Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
                  IdOrLiteralOrIri{lit(
@@ -1442,9 +1450,7 @@ TEST(SparqlExpression, concatExpression) {
                          IdOrLiteralOrIriVec{lit("Hello", "@en"), lit("World"),
                                              lit("Hallo", "@de")}});
   checkConcat(
-      IdOrLiteralOrIriVec{
-          lit("MeHello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("MeWorld"), lit("MeHallo")},
+      IdOrLiteralOrIriVec{lit("MeHello"), lit("MeWorld"), lit("MeHallo")},
       std::tuple{
           IdOrLiteralOrIri{
               lit("Me", "^^<http://www.w3.org/2001/XMLSchema#string>")},
@@ -1454,9 +1460,7 @@ TEST(SparqlExpression, concatExpression) {
 
   // Vector at the beginning with datatypes or language tags.
   checkConcat(
-      IdOrLiteralOrIriVec{
-          lit("HelloWorld", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("HiWorld"), lit("HalloWorld")},
+      IdOrLiteralOrIriVec{lit("HelloWorld"), lit("HiWorld"), lit("HalloWorld")},
       std::tuple{
           IdOrLiteralOrIriVec{
               lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>"),
@@ -1482,8 +1486,8 @@ TEST(SparqlExpression, ReplaceExpression) {
     return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
                                  nullptr);
   };
-  auto checkReplace = testNaryExpressionVec<makeReplaceExpressionThreeArgs>;
-  auto checkReplaceWithFlags = testNaryExpressionVec<&makeReplaceExpression>;
+  auto checkReplace = TestNaryExpressionVec<makeReplaceExpressionThreeArgs>{};
+  auto checkReplaceWithFlags = TestNaryExpressionVec<&makeReplaceExpression>{};
   // A simple replace( no regexes involved).
   checkReplace(
       idOrLitOrStringVec({"null", "Eins", "zwEi", "drEi", U, U}),
@@ -1575,9 +1579,7 @@ TEST(SparqlExpression, ReplaceExpression) {
 
   // Datatype or language tag
   checkReplace(
-      IdOrLiteralOrIriVec{
-          lit("Eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
-          lit("zwEi", "@en")},
+      IdOrLiteralOrIriVec{lit("Eins"), lit("zwEi", "@en")},
       std::tuple{IdOrLiteralOrIriVec{
                      lit("eins", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("zwei", "@en")},

@@ -137,6 +137,9 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // __________________________________________
+bool Literal::isPlain() const { return beginOfSuffix_ == content_.size(); }
+
+// __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
   std::size_t contentLength =
       beginOfSuffix_ - 2;  // Ignore the two quotation marks
