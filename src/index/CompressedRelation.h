@@ -618,8 +618,7 @@ class CompressedRelationReader {
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
-      [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-      const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
   // For a given relation, determine the `col1Id`s and their counts. This is
