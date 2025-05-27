@@ -521,7 +521,7 @@ class CompressedRelationReader {
     // If `BlockMetadataRanges blockMetadata_` contains exactly one
     // `BlockMetadataRange` (verified via AD_CONTRACT_CHECK), return the
     // corresponding CompressedBlockMetadata values as a span.
-    std::span<const CompressedBlockMetadata> getBlockMetadataSpan() const;
+    ql::span<const CompressedBlockMetadata> getBlockMetadataSpan() const;
 
     // Check the provided `BlockMetadataRange`s for the following invariants:
     //   - All contained `CompressedBlockMetadata` values must be unique.

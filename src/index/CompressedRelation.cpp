@@ -1788,14 +1788,13 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
   const auto& blockRangeView = blockMetadataRanges | ql::views::join;
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
   blockMetadata_ = getRelevantBlocks(scanSpec_, blockMetadataRanges);
-  auto blockMetadataView = getBlockMetadataView();
   checkBlockMetadataInvariantBlockConsistencyImpl(
-      blockMetadataView, scanSpec_.firstFreeColIndex());
+      getBlockMetadataView(), scanSpec_.firstFreeColIndex());
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
 }
 
 // _____________________________________________________________________________
-std::span<const CompressedBlockMetadata>
+ql::span<const CompressedBlockMetadata>
 CompressedRelationReader::ScanSpecAndBlocks::getBlockMetadataSpan() const {
   // ScanSpecAndBlocks must contain exactly one BlockMetadataRange to be
   // accessible as a span.

@@ -1141,7 +1141,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 TEST_F(PrefilterExpressionOnMetadataTest,
        testScanSpecAndBlocksConstructionFromPrefilteredBlocks) {
   auto filteredBlocks = gt(IntId(0))->evaluate(blocks, 2);
-  std::span<const CompressedBlockMetadata> blockSpan(filteredBlocks);
+  BlockMetadataSpan blockSpan(filteredBlocks);
   BlockMetadataRanges blockRanges;
   blockRanges.emplace_back(blockSpan.begin(), blockSpan.end());
   ASSERT_NO_THROW(CompressedRelationReader::ScanSpecAndBlocks(
