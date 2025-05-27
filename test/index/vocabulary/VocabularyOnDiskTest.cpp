@@ -40,7 +40,7 @@ class VocabularyCreator {
       {
         auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
         for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-          EXPECT_EQ(writer(word), static_cast<uint64_t>(i));
+          EXPECT_EQ(writer(word, false), static_cast<uint64_t>(i));
         }
         writer.readableName() = "blubb";
         EXPECT_EQ(writer.readableName(), "blubb");
