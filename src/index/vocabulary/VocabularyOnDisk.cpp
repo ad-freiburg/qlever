@@ -69,21 +69,12 @@ uint64_t VocabularyOnDisk::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::WordWriter::finish() {
-  if (std::exchange(isFinished_, true)) {
-    return;
-  }
+void VocabularyOnDisk::WordWriter::finishImpl() {
   // End offset of last vocabulary entry, also consistent with the empty
   // vocabulary.
   offsets_.push_back(currentOffset_);
   file_.close();
   offsets_.close();
-}
-
-// _____________________________________________________________________________
-VocabularyOnDisk::WordWriter::~WordWriter() {
-  throwInDestructorIfSafe_([this]() { finish(); },
-                           "`~VocabularyOnDisk::WordWriter`");
 }
 
 // _____________________________________________________________________________

@@ -34,36 +34,18 @@ std::string PolymorphicVocabulary::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
-PolymorphicVocabulary::WordWriter::WordWriter(WordWriters writer)
-    : writer_(std::move(writer)) {}
-
-// _____________________________________________________________________________
-void PolymorphicVocabulary::WordWriter::finish() {
-  std::visit([](auto& writer) { return writer->finish(); }, writer_);
-}
-
-// _____________________________________________________________________________
-uint64_t PolymorphicVocabulary::WordWriter::operator()(std::string_view word,
-                                                       bool isExternal) {
-  return std::visit(
-      [&word, isExternal](auto& writer) { return (*writer)(word, isExternal); },
-      writer_);
-}
-
-// _____________________________________________________________________________
 auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
-    -> std::unique_ptr<WordWriter> {
-  return std::make_unique<WordWriter>(std::visit(
-      [&filename](auto& vocab) -> WordWriters {
+    -> std::unique_ptr<WordWriterBase> {
+  return std::visit(
+      [&filename](auto& vocab) -> std::unique_ptr<WordWriterBase> {
         return vocab.makeDiskWriterPtr(filename);
       },
-      vocab_));
+      vocab_);
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<PolymorphicVocabulary::WordWriter>
-PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename,
-                                         VocabularyType type) {
+std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
+    const std::string& filename, VocabularyType type) {
   PolymorphicVocabulary dummyVocab;
   dummyVocab.resetToType(type);
   return dummyVocab.makeDiskWriterPtr(filename);

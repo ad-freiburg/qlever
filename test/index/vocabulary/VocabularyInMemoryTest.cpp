@@ -20,7 +20,7 @@ auto createVocabulary(const std::vector<std::string>& words) {
     auto writerPtr = v.makeDiskWriterPtr(filename);
     auto& writer = *writerPtr;
     for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-      auto idx = writer(word);
+      auto idx = writer(word, false);
       EXPECT_EQ(idx, static_cast<uint64_t>(i));
     }
     writer.readableName() = "blubb";

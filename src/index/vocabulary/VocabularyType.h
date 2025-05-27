@@ -94,7 +94,7 @@ class VocabularyType {
   // vocabulary type (repeating all these tests for all types exhaustively would
   // be infeasible).
   static VocabularyType random() {
-    ad_utility::FastRandomIntGenerator<size_t> r;
+    static thread_local ad_utility::FastRandomIntGenerator<size_t> r;
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 };
