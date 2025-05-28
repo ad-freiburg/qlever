@@ -76,6 +76,18 @@ Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  AD_LOG_DEBUG
+      << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
+         "different sort order. This indicates a flaw during query planning."
+      << std::endl;
+  return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
+                                             sortColumns);
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
                                 sortColumnIndices_);
