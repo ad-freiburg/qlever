@@ -10,8 +10,16 @@
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
+LoadURL::LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
+                 SendRequestType getResultFunction)
+    : Operation(qec),
+      loadURLClause_(std::move(loadURLClause)),
+      getResultFunction_(std::move(getResultFunction)),
+      loadResultCachingEnabled_(
+          RuntimeParameters().get<"cache-load-results">()) {}
+
+// _____________________________________________________________________________
 string LoadURL::getCacheKeyImpl() const {
-  // TODO<qup42> do caching based on ETag, Last-Modified or similar
   if (RuntimeParameters().get<"cache-load-results">()) {
     return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(),
                         loadURLClause_.silent_ ? " SILENT" : "");
@@ -68,13 +76,13 @@ Result LoadURL::computeResult(bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // If the `SILENT` keyword is set, catch the error and return a neutral
-    // Element.
+    // If the `SILENT` keyword is set, catch the error and return the neutral
+    // element for this operation (an empty `IdTable`). The `IdTable` is used to
+    // fill in the variables in the template triple `?s ?p ?o`. The empty
+    // `IdTable` results in no triples being updated.
     if (loadURLClause_.silent_) {
-      IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-      Id u = Id::makeUndefined();
-      idTable.push_back(std::array{u, u, u});
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+              resultSortedOn(), LocalVocab{}};
     }
     throw;
   }
@@ -163,4 +171,6 @@ void LoadURL::throwErrorWithContext(std::string_view msg,
 }
 
 // _____________________________________________________________________________
-bool LoadURL::canResultBeCached() const { return false; }
+bool LoadURL::canResultBeCachedImpl() const {
+  return loadResultCachingEnabled_;
+}

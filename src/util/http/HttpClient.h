@@ -101,7 +101,7 @@ using HttpClient = HttpClientImpl<boost::beast::tcp_stream>;
 using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
 
-// The type of the sendHttpOrHttpsRequest function below, wrapped in a
+// The type of the `sendHttpOrHttpsRequest` function below, wrapped in a
 // `std::function`. This type alias can be used when mocking an HTTP connection
 // for testing purposes.
 using SendRequestType = std::function<HttpOrHttpsResponse(

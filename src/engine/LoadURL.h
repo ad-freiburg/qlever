@@ -17,7 +17,7 @@
 // document from a remote URL via HTTP and converts it to an `IdTable`.
 class LoadURL final : public Operation {
  public:
-  const std::vector<ad_utility::MediaType> SUPPORTED_MEDIATYPES{
+  static constexpr std::array<ad_utility::MediaType, 2> SUPPORTED_MEDIATYPES{
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
  private:
@@ -34,18 +34,19 @@ class LoadURL final : public Operation {
   // instance of the class.
   uint32_t cacheBreaker_ = counter_++;
 
+  // Initialized to the value of the runtime parameter `cache-load-results` at
+  // construction.
+  bool loadResultCachingEnabled_;
+
  public:
   LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
-          SendRequestType getResultFunction = sendHttpOrHttpsRequest)
-      : Operation(qec),
-        loadURLClause_(loadURLClause),
-        getResultFunction_(std::move(getResultFunction)){};
+          SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   ~LoadURL() override = default;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  bool canResultBeCached() const override;
+  bool canResultBeCachedImpl() const override;
 
   std::string getCacheKeyImpl() const override;
 
