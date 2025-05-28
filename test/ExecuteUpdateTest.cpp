@@ -53,13 +53,16 @@ TEST(ExecuteUpdate, executeUpdate) {
           qec.updateLocatedTriplesSnapshot();
         }
       };
+  ad_utility::testing::TestIndexConfig indexConfig{};
   // Execute the given `update` and check that the delta triples are correct.
-  auto expectExecuteUpdate_ =
-      [&expectExecuteUpdateHelper](
-          Index& index, const std::string& update,
+  auto expectExecuteUpdate =
+      [&expectExecuteUpdateHelper, &indexConfig](
+          const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
+        Index index = ad_utility::testing::makeTestIndex(
+            "ExecuteUpdate_executeUpdate", indexConfig);
         QueryResultCache cache = QueryResultCache();
         QueryExecutionContext qec(index, &cache,
                                   ad_utility::testing::makeAllocator(
@@ -87,17 +90,6 @@ TEST(ExecuteUpdate, executeUpdate) {
             expectExecuteUpdateHelper(update, qec, index), messageMatcher);
       };
   {
-    auto expectExecuteUpdate =
-        [&expectExecuteUpdate_](
-            const std::string& update,
-            const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
-            source_location sourceLocation = source_location::current()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
-          expectExecuteUpdate_(index, update, deltaTriplesMatcher,
-                               sourceLocation);
-        };
     auto expectExecuteUpdateFails =
         [&expectExecuteUpdateFails_](
             const std::string& update,
@@ -163,25 +155,15 @@ TEST(ExecuteUpdate, executeUpdate) {
     expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
   }
   {
-    auto indexConfig = ad_utility::testing::TestIndexConfig(
+    indexConfig.turtleInput =
         "<x> <is-a> <y> . "
         "<v> <is-a> <y>  <q>. "
         "<y> <label> \"foo\"@en  <q>. "
         "<y> <label> \"bar\"@de  <q>. "
         "<u> <is-a> <a> <s> ."
         "<u> <label> \"baz\"@en <s> ."
-        "<u> <blub> <blah> <s> .");
+        "<u> <blub> <blah> <s> .";
     indexConfig.indexType = qlever::Filetype::NQuad;
-    auto expectExecuteUpdate =
-        [&expectExecuteUpdate_, &indexConfig](
-            const std::string& update,
-            const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
-            source_location sourceLocation = source_location::current()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate", indexConfig);
-          expectExecuteUpdate_(index, update, deltaTriplesMatcher,
-                               sourceLocation);
-        };
     auto expectExecuteUpdateFails =
         [&expectExecuteUpdateFails_](
             const std::string& update,
