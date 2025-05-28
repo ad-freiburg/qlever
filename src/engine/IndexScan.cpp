@@ -353,7 +353,7 @@ std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
   AD_CORRECTNESS_CHECK(prefilter_.has_value() && getLimit().isUnconstrained());
   // Apply the prefilter on given blocks.
   auto& [prefilterExpr, columnIndex] = prefilter_.value();
-  return prefilterExpr->evaluate(blocks, columnIndex);
+  return prefilterExpr->evaluate(getIndex().getVocab(), blocks, columnIndex);
 }
 
 // _____________________________________________________________________________
