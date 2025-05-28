@@ -630,6 +630,7 @@ namespace {
 // (which are the same type).
 SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphRefAll& graph) {
   using Graph = SparqlTripleSimpleWithGraph::Graph;
+  // This case cannot be handled in this function and must be handled before.
   AD_CORRECTNESS_CHECK(!std::holds_alternative<NAMED>(graph));
   return std::visit(
       ad_utility::OverloadCallOperator{
