@@ -67,10 +67,10 @@ class ExecuteUpdate {
   // Compute the set of quads to insert and delete for the given update. The
   // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
   // must be a GraphUpdate.
-  static std::tuple<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab,
-                    std::shared_ptr<const Result>>
+  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
-                          const QueryExecutionTree& qet,
+                          std::shared_ptr<const Result> result,
+                          const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);

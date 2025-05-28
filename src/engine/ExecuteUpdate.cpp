@@ -11,8 +11,10 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
   UpdateMetadata metadata{};
-  auto [toInsert, toDelete, result] =
-      computeGraphUpdateQuads(index, query, qet, cancellationHandle, metadata);
+  auto result = qet.getResult(false);
+  auto [toInsert, toDelete] =
+      computeGraphUpdateQuads(index, query, result, qet.getVariableColumns(),
+                              cancellationHandle, metadata);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
@@ -121,10 +123,12 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 }
 
 // _____________________________________________________________________________
-std::tuple<ExecuteUpdate::IdTriplesAndLocalVocab,
-           ExecuteUpdate::IdTriplesAndLocalVocab, std::shared_ptr<const Result>>
+std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+          ExecuteUpdate::IdTriplesAndLocalVocab>
 ExecuteUpdate::computeGraphUpdateQuads(
-    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
+    const Index& index, const ParsedQuery& query,
+    std::shared_ptr<const Result> result,
+    const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
@@ -135,19 +139,16 @@ ExecuteUpdate::computeGraphUpdateQuads(
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
   // Fully materialize the result for now. This makes it easier to execute the
   // update. Return the result to keep it alive.
-  // TODO<qup42>: pass in the result and variable columns explicitly, this makes
-  // the lifetime less awkward
-  auto result = qet.getResult(false);
 
   // Start the timer once the where clause has been evaluated.
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &qet,
+      [&vocab, &variableColumns,
        &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(vocab, qet.getVariableColumns(),
+            transformTriplesTemplate(vocab, variableColumns,
                                      std::move(tripleTemplates));
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
@@ -186,8 +187,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
-      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)},
-      std::move(result)};
+      IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
 }
 
 // _____________________________________________________________________________
