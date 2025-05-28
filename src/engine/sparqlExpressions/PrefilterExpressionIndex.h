@@ -130,13 +130,8 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  //
-  // TODO: `evaluate` should also return `BlockMetadataRanges` to avoid deep
-  // copies. This requires additional changes in `IndexScan` and
-  // `CompressedRelation`.
-  std::vector<CompressedBlockMetadata> evaluate(const Vocab& vocab,
-                                                BlockMetadataSpan blockRange,
-                                                size_t evaluationColumn) const;
+  BlockMetadataRanges evaluate(const Vocab& vocab, BlockMetadataSpan blockRange,
+                               size_t evaluationColumn) const;
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at

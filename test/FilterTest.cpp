@@ -47,19 +47,13 @@ void checkSetPrefilterExpressionVariablePair(
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
     std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
     ColumnIndex columnIdx, bool prefilterIsApplicable) {
-  Filter filter{
-      qec,
-      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
-      {std::move(sparqlExpr), "Expression ?x"}};
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *prefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
+  auto subtree =
+      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
+  Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
   if (prefilterIsApplicable) {
-    EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(os.str()));
+    EXPECT_NE(subtree, filter.getSubtree());
   } else {
-    EXPECT_THAT(filter.getCacheKey(),
-                ::testing::Not(::testing::HasSubstr(os.str())));
+    EXPECT_EQ(subtree, filter.getSubtree());
   }
 }
 
