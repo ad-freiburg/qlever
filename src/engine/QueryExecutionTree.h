@@ -103,7 +103,7 @@ class QueryExecutionTree {
   // the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
+      const Operation::Prefilters& prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /
