@@ -151,7 +151,8 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (!requestLaziness) {
     AD_CORRECTNESS_CHECK(!lazyResult);
     return {writeAllColumns(subResults | ql::views::transform(&Result::idTable),
-                            getLimit()._offset, getLimit().limitOrDefault()),
+                            getLimitOffset()._offset,
+                            getLimitOffset().limitOrDefault()),
             resultSortedOn(), std::move(staticMergedVocab)};
   }
 
@@ -165,7 +166,8 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   return {produceTablesLazily(std::move(staticMergedVocab),
                               ad_utility::OwningView{std::move(subResults)} |
                                   ql::views::transform(&Result::idTable),
-                              getLimit()._offset, getLimit().limitOrDefault()),
+                              getLimitOffset()._offset,
+                              getLimitOffset().limitOrDefault()),
           resultSortedOn()};
 }
 
@@ -252,8 +254,8 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // TODO<joka921> We could in theory also apply this optimization if a
   // non-zero OFFSET is specified, but this would make the algorithm more
   // complicated.
-  std::optional<LimitOffsetClause> limitIfPresent = getLimit();
-  if (!getLimit()._limit.has_value() || getLimit()._offset != 0) {
+  std::optional<LimitOffsetClause> limitIfPresent = getLimitOffset();
+  if (!getLimitOffset()._limit.has_value() || getLimitOffset()._offset != 0) {
     limitIfPresent = std::nullopt;
   }
 
@@ -337,8 +339,8 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
     std::vector<std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
-  size_t limit = getLimit().limitOrDefault();
-  size_t offset = getLimit()._offset;
+  size_t limit = getLimitOffset().limitOrDefault();
+  size_t offset = getLimitOffset()._offset;
   std::vector<std::reference_wrapper<const IdTable>> idTables;
   idTables.reserve(subresults.size() + 1);
   for (const auto& result : subresults) {

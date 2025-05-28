@@ -48,10 +48,10 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimit() const { return true; }
+bool NeutralOptional::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
-void NeutralOptional::onLimitChanged(
+void NeutralOptional::onLimitOffsetChanged(
     const LimitOffsetClause& limitOffset) const {
   tree_->applyLimit(limitOffset);
 }
@@ -106,7 +106,7 @@ struct WrapperWithEnsuredRow
 
 // _____________________________________________________________________________
 bool NeutralOptional::singleRowCroppedByLimit() const {
-  const auto& limit = getLimit();
+  const auto& limit = getLimitOffset();
   return limit._offset > 0 || limit.limitOrDefault() == 0;
 }
 

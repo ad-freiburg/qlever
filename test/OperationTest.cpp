@@ -55,7 +55,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
     NeutralElementOperation n{getQec()};
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
     l._limit = 20;
-    n.applyLimit(l);
+    n.applyLimitOffset(l);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
   }
@@ -63,7 +63,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
   {
     NeutralElementOperation n{getQec()};
     l._offset = 34;
-    n.applyLimit(l);
+    n.applyLimitOffset(l);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
   }
 }
@@ -72,17 +72,17 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
 TEST(OperationTest, limitAndOffsetAreStacked) {
   NeutralElementOperation n{getQec()};
 
-  n.applyLimit({std::nullopt, 1});
-  EXPECT_EQ(n.getLimit(), LimitOffsetClause(std::nullopt, 1));
+  n.applyLimitOffset({std::nullopt, 1});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(std::nullopt, 1));
 
-  n.applyLimit({20, 2});
-  EXPECT_EQ(n.getLimit(), LimitOffsetClause(20, 3));
+  n.applyLimitOffset({20, 2});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
-  n.applyLimit({std::nullopt, 4});
-  EXPECT_EQ(n.getLimit(), LimitOffsetClause(20, 7));
+  n.applyLimitOffset({std::nullopt, 4});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
 
-  n.applyLimit({10, 8});
-  EXPECT_EQ(n.getLimit(), LimitOffsetClause(10, 15));
+  n.applyLimitOffset({10, 8});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
 }
 
 // ________________________________________________
@@ -295,7 +295,7 @@ TEST(OperationTest, estimatesForCachedResults) {
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
   NeutralElementOperation operation{getQec()};
-  operation.applyLimit({12, 3});
+  operation.applyLimitOffset({12, 3});
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
@@ -545,7 +545,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
 
-  valuesForTesting.applyLimit({._limit = 1, ._offset = 1});
+  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1});
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
@@ -778,14 +778,14 @@ TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction) {
   auto parent = ShallowParentOperation::of<NeutralElementOperation>(qec);
 
   auto child = parent.getChildren().at(0)->getRootOperation();
-  child->applyLimit({10, 1});
+  child->applyLimitOffset({10, 1});
 
   {
     auto cleanup = parent.resetChildLimitsAndOffsetOnDestruction();
-    EXPECT_EQ(child->getLimit(), LimitOffsetClause(10, 1));
+    EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(10, 1));
 
-    child->applyLimit({9, 1});
-    EXPECT_EQ(child->getLimit(), LimitOffsetClause(9, 2));
+    child->applyLimitOffset({9, 1});
+    EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(9, 2));
   }
-  EXPECT_EQ(child->getLimit(), LimitOffsetClause(10, 1));
+  EXPECT_EQ(child->getLimitOffset(), LimitOffsetClause(10, 1));
 }

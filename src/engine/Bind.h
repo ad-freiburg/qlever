@@ -31,8 +31,9 @@ class Bind : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
-  bool supportsLimit() const override;
-  void onLimitChanged(const LimitOffsetClause& limitOffset) const override;
+  bool supportsLimitOffset() const override;
+  void onLimitOffsetChanged(
+      const LimitOffsetClause& limitOffset) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

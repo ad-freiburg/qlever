@@ -64,7 +64,7 @@ class Operation {
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
   // future.
-  LimitOffsetClause _limit;
+  LimitOffsetClause limitOffset_;
 
   // Mutex that protects the `variableToColumnMap_` below.
   mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
@@ -281,20 +281,24 @@ class Operation {
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
  private:
   // This function is called each time `applyLimit` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way
-  virtual void onLimitChanged(const LimitOffsetClause&) const {}
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
+    // If `supportsLimitOffset()` returns `false`, this function has to be
+    // no-op.
+  }
 
  public:
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation. If a LIMIT was previously set, this limit will not be
-  // replaced, but the new LIMIT will be applied additionally after the previous
-  // LIMITs. This might happen e.g. for nested subqueries.
-  void applyLimit(const LimitOffsetClause& limitOffsetClause);
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation. If a `LIMIT`/`OFFSET` was previously set, this
+  // `LIMIT`/`OFFSET` will not be replaced, but the new `LIMIT`/`OFFSET` will be
+  // applied additionally after the previous `LIMIT`s/`OFFSET`s. This might
+  // happen e.g. for nested subqueries.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -323,7 +327,7 @@ class Operation {
     return computeResult(requestLaziness);
   }
 
-  const auto& getLimit() const { return _limit; }
+  const auto& getLimitOffset() const { return limitOffset_; }
 
  private:
   // Actual implementation of `clone()` without extra checks.

@@ -3921,7 +3921,7 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
 TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
   auto hasLimit = [](const LimitOffsetClause& limit) {
     return queryPlannerTestHelpers::RootOperationBase(
-        AD_PROPERTY(Operation, getLimit, ::testing::Eq(limit)));
+        AD_PROPERTY(Operation, getLimitOffset, ::testing::Eq(limit)));
   };
 
   h::expect("SELECT * { SELECT ?a { ?a ?b ?c } LIMIT 1 }",

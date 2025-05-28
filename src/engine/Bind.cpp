@@ -38,10 +38,10 @@ size_t Bind::getCostEstimate() {
 }
 
 // We delegate the limit to the child operation, so we always support it.
-bool Bind::supportsLimit() const { return true; }
+bool Bind::supportsLimitOffset() const { return true; }
 
 // _____________________________________________________________________________
-void Bind::onLimitChanged(const LimitOffsetClause& limitOffset) const {
+void Bind::onLimitOffsetChanged(const LimitOffsetClause& limitOffset) const {
   _subtree->applyLimit(limitOffset);
 }
 

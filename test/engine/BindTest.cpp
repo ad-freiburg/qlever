@@ -166,7 +166,7 @@ TEST(Bind, limitIsPropagated) {
            std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
        Variable{"?b"}}};
 
-  bind.applyLimit({1, 1});
+  bind.applyLimitOffset({1, 1});
 
   auto result = bind.computeResultOnlyForTesting();
   const auto& idTable = result.idTable();

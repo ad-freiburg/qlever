@@ -215,7 +215,7 @@ Result::Generator IndexScan::chunkedIndexScan() const {
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
       getScanSpecification(), additionalColumns(), cancellationHandle_,
-      locatedTriplesSnapshot(), getLimit(),
+      locatedTriplesSnapshot(), getLimitOffset(),
       getBlockMetadataOptionallyPrefiltered());
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
@@ -258,7 +258,7 @@ size_t IndexScan::getExactSize() const {
 size_t IndexScan::getCostEstimate() {
   // If we have a limit present, we only have to read the first
   // `limit + offset` elements.
-  return getLimit().upperBound(getSizeEstimateBeforeLimit());
+  return getLimitOffset().upperBound(getSizeEstimateBeforeLimit());
 }
 
 // _____________________________________________________________________________
@@ -350,7 +350,8 @@ IndexScan::getBlockMetadataOptionallyPrefiltered() const {
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
     ql::span<const CompressedBlockMetadata> blocks) const {
-  AD_CORRECTNESS_CHECK(prefilter_.has_value() && getLimit().isUnconstrained());
+  AD_CORRECTNESS_CHECK(prefilter_.has_value() &&
+                       getLimitOffset().isUnconstrained());
   // Apply the prefilter on given blocks.
   auto& [prefilterExpr, columnIndex] = prefilter_.value();
   return prefilterExpr->evaluate(getIndex().getVocab(), blocks, columnIndex);
@@ -363,7 +364,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto filteredBlocks = getLimit().isUnconstrained()
+  auto filteredBlocks = getLimitOffset().isUnconstrained()
                             ? std::optional(std::move(blocks))
                             : std::nullopt;
   if (filteredBlocks.has_value() && prefilter_.has_value()) {
@@ -373,9 +374,9 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
     // be applied.
     filteredBlocks = applyPrefilter(filteredBlocks.value());
   }
-  return getScanPermutation().lazyScan(getScanSpecification(), filteredBlocks,
-                                       additionalColumns(), cancellationHandle_,
-                                       locatedTriplesSnapshot(), getLimit());
+  return getScanPermutation().lazyScan(
+      getScanSpecification(), filteredBlocks, additionalColumns(),
+      cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 };
 
 // _____________________________________________________________________________
