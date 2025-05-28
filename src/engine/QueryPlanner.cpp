@@ -895,8 +895,9 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
             return seedFromNegated(left, children, right);
           case SEQUENCE:
             return seedFromSequence(left, children, right);
+          default:
+            AD_FAIL();
         }
-        AD_FAIL();
       },
       [this, &left, &right](const PropertyPath& basePath, size_t min,
                             size_t max) {

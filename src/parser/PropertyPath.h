@@ -1,7 +1,7 @@
 //   Copyright 2025, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
 //   Author: Florian Kramer <florian.kramer@mail.uni-freiburg.de>
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//           Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
 #define QLEVER_SRC_PARSER_PROPERTYPATH_H
@@ -12,6 +12,7 @@
 
 #include "backports/concepts.h"
 #include "parser/Iri.h"
+#include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 

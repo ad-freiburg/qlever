@@ -105,6 +105,18 @@ TEST(PropertyPath, MinMaxPathCopyAssignment) {
 }
 
 // _____________________________________________________________________________
+TEST(PropertyPath, MinMaxPathMoveAssignment) {
+  // Test that the move assignment operator works correctly for MinMaxPath.
+  auto path1 = PropertyPath::makeWithLength(PropertyPath::fromIri(iri1), 1, 3);
+  auto path2 = std::move(path1);
+  auto path3 = PropertyPath::makeWithLength(PropertyPath::fromIri(iri2), 2, 4);
+
+  path1 = std::move(path3);
+
+  EXPECT_NE(path1, path2);
+}
+
+// _____________________________________________________________________________
 TEST(PropertyPath, OstreamOutput) {
   auto path1 = PropertyPath::fromIri(iri1);
   auto path2 = PropertyPath::makeInverse(PropertyPath::fromIri(iri2));
@@ -146,4 +158,25 @@ TEST(PropertyPath, propertyPathsFormatting) {
                                             PropertyPath::fromIri(iri("<b>"))});
     EXPECT_EQ("<a>/<a>/<b>", path.asString());
   }
+}
+
+// _____________________________________________________________________________
+TEST(PropertyPath, getInvertedChild) {
+  auto path0 = PropertyPath::fromIri(iri("<a>"));
+  EXPECT_FALSE(path0.getInvertedChild().has_value());
+
+  auto path1 = PropertyPath::makeInverse(path0);
+  EXPECT_EQ(path1.getInvertedChild(), std::optional{path0});
+
+  auto path2 = PropertyPath::makeNegated(
+      {PropertyPath::makeInverse(PropertyPath::fromIri(iri("<a>")))});
+  EXPECT_FALSE(path2.getInvertedChild().has_value());
+  auto path3 = PropertyPath::makeAlternative({path1, path2});
+  EXPECT_FALSE(path3.getInvertedChild().has_value());
+
+  auto path4 = PropertyPath::makeSequence({path1, path2});
+  EXPECT_FALSE(path4.getInvertedChild().has_value());
+
+  auto path5 = PropertyPath::makeWithLength(path0, 0, 1);
+  EXPECT_FALSE(path5.getInvertedChild().has_value());
 }
