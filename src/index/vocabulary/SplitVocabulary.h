@@ -59,8 +59,7 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   using AnyUnderlyingVocab =
       ad_utility::UniqueVariant<UnderlyingVocabularies...>;
   using UnderlyingVocabsArray = std::array<AnyUnderlyingVocab, numberOfVocabs>;
-  using AnyUnderlyingWordWriterPtr = ad_utility::UniqueVariant<
-      std::unique_ptr<typename UnderlyingVocabularies::WordWriter>...>;
+  using AnyUnderlyingWordWriterPtr = std::unique_ptr<WordWriterBase>;
   using UnderlyingWordWriterPtrsArray =
       std::array<AnyUnderlyingWordWriterPtr, numberOfVocabs>;
 
@@ -215,10 +214,9 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
 
   // This word writer writes words to different vocabularies depending on the
   // result of SplitFunction.
-  class WordWriter {
+  class WordWriter : public WordWriterBase {
    private:
     UnderlyingWordWriterPtrsArray underlyingWordWriters_;
-    std::string readableName_ = "";
 
    public:
     // Construct a WordWriter for each vocabulary in the given array. Determine
@@ -227,13 +225,11 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
                const std::string& filename);
 
     // Add the next word to the vocabulary and return its index.
-    uint64_t operator()(std::string_view word, bool isExternal);
+    uint64_t operator()(std::string_view word, bool isExternal) override;
 
     // Finish the writing on all underlying word writers. After this no more
     // calls to `operator()` are allowed.
-    void finish();
-
-    std::string& readableName() { return readableName_; }
+    void finishImpl() override;
   };
 
   // Construct a SplitVocabulary::WordWriter that creates WordWriters on all

@@ -85,20 +85,17 @@ CPP_template(const auto& SF, const auto& SFN,
   // function. Therefore the word's index needs the marker bit(s) set
   // accordingly.
   auto splitIdx = SF(word);
-  return std::visit(
-      [&](auto& wordWriterPtr) {
-        return addMarker((*wordWriterPtr)(word, isExternal), splitIdx);
-      },
-      underlyingWordWriters_[splitIdx]);
+  return addMarker((*underlyingWordWriters_[splitIdx])(word, isExternal),
+                   splitIdx);
 }
 
 // _____________________________________________________________________________
 CPP_template(const auto& SF, const auto& SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
-        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN,
-                                                 S...>::WordWriter::finish() {
+        SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::WordWriter::
+    finishImpl() {
   for (const auto& wordWriter : underlyingWordWriters_) {
-    std::visit([&](auto& ww) { ww->finish(); }, wordWriter);
+    wordWriter->finish();
   }
 }
 
