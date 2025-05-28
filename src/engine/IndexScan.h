@@ -211,11 +211,6 @@ class IndexScan final : public Operation {
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
-  // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
-  // applying any additional pre-filter procedure.
-  std::optional<ql::span<const CompressedBlockMetadata>> getBlockMetadata()
-      const;
-
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
   Permutation::ScanSpecAndBlocks getScanSpecAndBlocks() const;
@@ -223,7 +218,8 @@ class IndexScan final : public Operation {
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata> blocks) const;
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };
 

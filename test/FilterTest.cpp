@@ -45,8 +45,7 @@ void checkSetPrefilterExpressionVariablePair(
     QueryExecutionContext* qec, const Permutation::Enum& permutation,
     SparqlTripleSimple triple,
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
-    std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
-    ColumnIndex columnIdx, bool prefilterIsApplicable) {
+    bool prefilterIsApplicable) {
   auto subtree =
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
   Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
@@ -173,26 +172,26 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   // construction.
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
-      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
+      ltSprql(Variable{"?z"}, IntId(10)), true);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
                    gtSprql(Variable{"?y"}, DoubleId(0))),
-      neq(IntId(10)), 1, true);
+      true);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::PSO,
       {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
        Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), true);
 
   // We expect that no <PrefilterExpression, Variable> pair is assigned
   // (no prefilter procedure applicable) with Filter construction.
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::PSO, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 1, false);
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), false);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
-      gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
+      gtSprql(Variable{"?x"}, VocabId(10)), false);
 }
 
 // _____________________________________________________________________________

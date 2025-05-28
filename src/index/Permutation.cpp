@@ -177,6 +177,18 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
 }
 
 // _____________________________________________________________________
+bool Permutation::hasFirstAndLastTriple(
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
+  return p.reader()
+      .getFirstAndLastTriple(
+          scanSpecAndBlocks,
+          p.getLocatedTriplesForPermutation(locatedTriplesSnapshot))
+      .has_value();
+}
+
+// _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {

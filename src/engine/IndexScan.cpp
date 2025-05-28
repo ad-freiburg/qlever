@@ -203,15 +203,11 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 
 // _____________________________________________________________________________
 Result::Generator IndexScan::chunkedIndexScan() const {
-  auto optBlockMetadata = getBlockMetadata();
-  if (!optBlockMetadata.has_value()) {
+  if (!getScanPermutation().hasFirstAndLastTriple(scanSpecAndBlocks_,
+                                                  locatedTriplesSnapshot())) {
     co_return;
   }
-  const auto& blockMetadata = optBlockMetadata.value();
-  // Note: Given a `PrefilterIndexPair` is available, the corresponding
-  // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable :
-       getLazyScan({blockMetadata.begin(), blockMetadata.end()})) {
+  for (IdTable& idTable : getLazyScan()) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
@@ -323,16 +319,6 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   return std::make_pair(tripleComp->getVariable(), colIdx);
 }
 
-// _____________________________________________________________________________
-std::optional<ql::span<const CompressedBlockMetadata>>
-IndexScan::getBlockMetadata() const {
-  const auto& metadata = getMetadataForScan();
-  if (metadata.has_value()) {
-    return metadata.value().getBlockMetadataSpan();
-  }
-  return std::nullopt;
-}
-
 // ___________________________________________________________________________
 Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
   return getScanPermutation().getScanSpecAndBlocks(getScanSpecification(),
@@ -341,14 +327,13 @@ Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
 
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
-    std::vector<CompressedBlockMetadata> blocks) const {
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto filteredBlocks = getLimit().isUnconstrained()
-                            ? std::optional(std::move(blocks))
-                            : std::nullopt;
+  auto filteredBlocks =
+      getLimit().isUnconstrained() ? std::move(blocks) : std::nullopt;
   return getScanPermutation().lazyScan(scanSpecAndBlocks_, filteredBlocks,
                                        additionalColumns(), cancellationHandle_,
                                        locatedTriplesSnapshot(), getLimit());

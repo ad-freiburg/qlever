@@ -118,17 +118,22 @@ class Permutation {
   std::optional<CompressedRelationMetadata> getMetadata(
       Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
+  // Returns `true` if `.getFirstAndLastTriple()` yields a value.
+  bool hasFirstAndLastTriple(
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+
   // Return the metadata for the scan specified by the `scanSpecification`
-  // along with the metadata for all the blocks that are relevant for this scan.
-  // If there are no matching blocks (meaning that the scan result will be
-  // empty) return `nullopt`.
+  // along with the metadata for all the blocks that are relevant for this
+  // scan. If there are no matching blocks (meaning that the scan result will
+  // be empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Get the exact size of the result of a scan, taking into account the
-  // given located triples. This requires an exact location of the delta triples
-  // within the respective blocks.
+  // given located triples. This requires an exact location of the delta
+  // triples within the respective blocks.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
@@ -189,8 +194,8 @@ class Permutation {
   // The metadata for this permutation.
   MetaData meta_;
 
-  // This member is `optional` because we initialize it in a deferred way in the
-  // `loadFromDisk` method.
+  // This member is `optional` because we initialize it in a deferred way in
+  // the `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
 
