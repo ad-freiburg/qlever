@@ -63,6 +63,14 @@ class ScanSpecification {
   const T& col1Id() const { return col1Id_; }
   const T& col2Id() const { return col2Id_; }
 
+  // Get the corresponding index to the first free `colXId_`.
+  size_t firstFreeColIndex() const {
+    if (!col0Id_) return 0;
+    if (!col1Id_) return 1;
+    if (!col2Id_) return 2;
+    return 3;
+  }
+
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
   // Only used in tests.

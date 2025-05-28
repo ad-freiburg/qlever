@@ -40,107 +40,19 @@ static Id getIdFromColumnIndex(
 };
 
 //______________________________________________________________________________
-// Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
-// position (column index) defined by `ignoreIndex`. The ignored positions are
-// filled with Ids `Id::min()`. `Id::min()` is guaranteed
-// to be smaller than Ids of all other types.
-static auto getMaskedTriple(
-    const CompressedBlockMetadata::PermutedTriple& triple,
-    size_t ignoreIndex = 3) {
-  const Id& undefined = Id::min();
-  switch (ignoreIndex) {
-    case 3:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, triple.col2Id_);
-    case 2:
-      return std::make_tuple(triple.col0Id_, triple.col1Id_, undefined);
-    case 1:
-      return std::make_tuple(triple.col0Id_, undefined, undefined);
-    case 0:
-      return std::make_tuple(undefined, undefined, undefined);
-    default:
-      // ignoreIndex out of bounds
-      AD_FAIL();
-  }
-};
-
-//______________________________________________________________________________
-// Check for constant values in all columns `< evaluationColumn`
-static bool checkBlockIsInconsistent(const CompressedBlockMetadata& block,
-                                     size_t evaluationColumn) {
-  return getMaskedTriple(block.firstTriple_, evaluationColumn) !=
-         getMaskedTriple(block.lastTriple_, evaluationColumn);
-}
-
-//______________________________________________________________________________
 // Check for the following conditions.
 // (1) All `CompressedBlockMetadata` values in `input` must be unique.
 // (2) `input` must contain those `CompressedBlockMetadata` values in sorted
-// order. (3) Columns with `column index < evaluationColumn` must contain equal
+// order.
+// (3) Columns with `column index < evaluationColumn` must contain equal
 // values (`ValueId`s).
 static void checkRequirementsBlockMetadata(
     ql::span<const CompressedBlockMetadata> input, size_t evaluationColumn) {
-  const auto throwRuntimeError = [](const std::string& errorMessage) {
-    throw std::runtime_error(errorMessage);
-  };
-  // Check for duplicates.
-  if (auto it = ql::ranges::adjacent_find(input); it != input.end()) {
-    throwRuntimeError("The provided data blocks must be unique.");
-  }
-  // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
-  // satisfied.
-  const auto checkOrder = [](const CompressedBlockMetadata& b1,
-                             const CompressedBlockMetadata& b2) {
-    if (b1.blockIndex_ < b2.blockIndex_) {
-      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) <=
-                           getMaskedTriple(b2.lastTriple_));
-      return true;
-    }
-    if (b1.blockIndex_ == b2.blockIndex_) {
-      // Given the previous check detects duplicates in the input, the
-      // correctness check here will never evaluate to true.
-      // => blockIndex_ assignment issue.
-      AD_CORRECTNESS_CHECK(b1 == b2);
-    } else {
-      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) >
-                           getMaskedTriple(b2.firstTriple_));
-    }
-    return false;
-  };
-  if (!ql::ranges::is_sorted(input, checkOrder)) {
-    throwRuntimeError("The blocks must be provided in sorted order.");
-  }
-  // Helper to check for column consistency. Returns `true` if the columns for
-  // `b1` and `b2` up to the evaluation are inconsistent.
-  const auto checkColumnConsistency = [evaluationColumn](
-                                          const CompressedBlockMetadata& b1,
-                                          const CompressedBlockMetadata& b2) {
-    return checkBlockIsInconsistent(b1, evaluationColumn) ||
-           getMaskedTriple(b1.lastTriple_, evaluationColumn) !=
-               getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
-           checkBlockIsInconsistent(b2, evaluationColumn);
-  };
-  if (auto it = ql::ranges::adjacent_find(input, checkColumnConsistency);
-      it != input.end()) {
-    throwRuntimeError(
-        "The values in the columns up to the evaluation column must be "
-        "consistent.");
-  }
+  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+      input, evaluationColumn);
 };
 
-//______________________________________________________________________________
-static std::vector<CompressedBlockMetadata> getRelevantBlocks(
-    const BlockMetadataRanges& relevantBlockRanges) {
-  std::vector<CompressedBlockMetadata> relevantBlocks;
-  relevantBlocks.reserve(std::transform_reduce(relevantBlockRanges.begin(),
-                                               relevantBlockRanges.end(), 0ULL,
-                                               std::plus{}, ql::ranges::size));
-  ql::ranges::copy(relevantBlockRanges | ql::views::join,
-                   std::back_inserter(relevantBlocks));
-  return relevantBlocks;
-}
-
 namespace detail {
-
 //______________________________________________________________________________
 // Merge `BlockMetadataRange blockRange` with the previous (relevant)
 // `BlockMetadataRange`s.
@@ -455,11 +367,11 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
 
   std::optional<CompressedBlockMetadata> firstBlock = std::nullopt;
   std::optional<CompressedBlockMetadata> lastBlock = std::nullopt;
-  if (checkBlockIsInconsistent(blockRange.front(), evaluationColumn)) {
+  if (blockRange.front().containsInconsistentTriples(evaluationColumn)) {
     firstBlock = blockRange.front();
     blockRange = blockRange.subspan(1);
   }
-  if (checkBlockIsInconsistent(blockRange.back(), evaluationColumn)) {
+  if (blockRange.back().containsInconsistentTriples(evaluationColumn)) {
     lastBlock = blockRange.back();
     blockRange = blockRange.subspan(0, blockRange.size() - 1);
   }
@@ -471,8 +383,8 @@ std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
-    result =
-        getRelevantBlocks(detail::logicalOps::mergeRelevantBlockItRanges<true>(
+    result = CompressedRelationReader::convertBlockMetadataRangesToVector(
+        detail::logicalOps::mergeRelevantBlockItRanges<true>(
             evaluateImpl(vocab, idRange, blockRange, false),
             // always add mixed datatype blocks
             getRangesMixedDatatypeBlocks(idRange, blockRange)));
