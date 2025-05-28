@@ -35,18 +35,6 @@ using Vocab = RdfsVocabulary;
 constexpr size_t maxInfoRecursion = 3;
 
 //______________________________________________________________________________
-// `ql::span` containing `CompressedBlockMetadata` (defined in
-// CompressedRelation.h) values.
-using BlockMetadataSpan = ql::span<const CompressedBlockMetadata>;
-// Iterator with respect to a `CompressedBlockMetadata` value of
-// `ql::span<const CompressedBlockMetadata>` (`BlockMetadataSpan`).
-using BlockMetadataIt = BlockMetadataSpan::iterator;
-// Section of relevant blocks as a subrange defined by `BlockMetadataIt`s.
-using BlockMetadataRange = ql::ranges::subrange<BlockMetadataIt>;
-// Vector containing `BlockMetadataRange`s.
-using BlockMetadataRanges = std::vector<BlockMetadataRange>;
-
-//______________________________________________________________________________
 // `AccessValueIdFromBlockMetadata` implements the `ValueId` access operator on
 // containerized `ql::span<cont CompressedBlockMetadata>` objects. This
 // (indexable) containerization procedure allows us to efficiently define
@@ -142,13 +130,8 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  //
-  // TODO: `evaluate` should also return `BlockMetadataRanges` to avoid deep
-  // copies. This requires additional changes in `IndexScan` and
-  // `CompressedRelation`.
-  std::vector<CompressedBlockMetadata> evaluate(const Vocab& vocab,
-                                                BlockMetadataSpan blockRange,
-                                                size_t evaluationColumn) const;
+  BlockMetadataRanges evaluate(const Vocab& vocab, BlockMetadataSpan blockRange,
+                               size_t evaluationColumn) const;
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
