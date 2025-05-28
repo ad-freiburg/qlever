@@ -75,8 +75,7 @@ jobs:
         # future, then we can set this to `true`. Then the ARM64 image will also
         # be built on pull requests which allows for debugging without changing
         # the master branch.
-        if: true
-        #TODO<joka921> revert back once this works
+        if: false
         uses: docker/build-push-action@v6
         with:
           context: .

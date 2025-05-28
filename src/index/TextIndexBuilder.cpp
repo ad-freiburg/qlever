@@ -345,20 +345,6 @@ static auto fourLetterPrefixes() {
            auto [a, b, c, d] = x;
            return std::string{a, b, c, d};
          });
-  /*
-  return ql::views::join(ql::views::join(ql::views::join(
-      ql::views::transform(aToZ, [aToZ](char a) {
-        return ql::views::transform(aToZ, [=](char b) {
-          return ql::views::transform(
-              aToZ, [=](char c) {
-                return ql::views::transform(aToZ,
-                                            [=](char d) {
-                                              return std::string{a, b, c, d};
-                                            });
-              });
-        });
-      }))));
-      */
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
