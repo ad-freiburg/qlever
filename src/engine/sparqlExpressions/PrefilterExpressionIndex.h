@@ -154,9 +154,13 @@ class PrefilterExpression {
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
   // column index `evaluationColumn` over the containerized `ql::span<const
   // CompressedBlockMetadata> input` (`BlockMetadataSpan`).
+  // If `getTotalComplement` is set to `true`, the leaf `RelationalExpression`s
+  // return their corresponding complement over ALL datatypes. This is in
+  // particular needed for the complement of `IsDatatype` and `InExpression`.
   virtual BlockMetadataRanges evaluateImpl(
       const Vocab& vocab, const ValueIdSubrange& idRange,
-      BlockMetadataSpan blockRange) const = 0;
+      BlockMetadataSpan blockRange, bool getTotalComplement = false) const = 0;
+
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
                                   const PrefilterExpression& expression) {
@@ -195,7 +199,8 @@ class PrefixRegexExpression : public PrefilterExpression {
  private:
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -228,7 +233,8 @@ class LogicalExpression : public PrefilterExpression {
   friend class PrefixRegexExpression;
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -256,7 +262,38 @@ class IsDatatypeExpression : public PrefilterExpression {
  private:
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
+};
+
+//______________________________________________________________________________
+// The `PrefilterExpression` associated with the `RelationalExpressions` `IN`,
+// and implicitly `NOT IN`. `IsInExpression` provides prefilter support for
+// statements such as `FILTER("4.0"  IN (<http://example/iri>, "someStr", 4.0))`
+// or `FILTER("4.0" NOT IN (<http://example/iri>, 2, 4.0))`.
+class IsInExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+  // Represents the reference values used for equality-based prefiltering, since
+  // the applied `PrefilterExpression` over these referenceValues is
+  // semantically equivalent to: refVal1 || refVal2 || ... || refValN.
+  std::vector<IdOrLocalVocabEntry> referenceValues_;
+
+ public:
+  explicit IsInExpression(std::vector<IdOrLocalVocabEntry> referenceValues,
+                          bool isNegated = false)
+      : isNegated_(isNegated), referenceValues_(std::move(referenceValues)) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string asString(size_t depth) const override;
+
+ private:
+  BlockMetadataRanges evaluateImpl(const Vocab& vocab,
+                                   const ValueIdSubrange& idRange,
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -279,13 +316,6 @@ class RelationalExpression : public PrefilterExpression {
   // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
   // represent ?var = "Freiburg".
   IdOrLocalVocabEntry rightSideReferenceValue_;
-  // `evaluateIsIriOrisLiteralImpl` (for `IsDatatype::IRI` and
-  // `IsDatatype::LITERAL`) requires access to
-  // `evaluateOptGetCompleteComplementImpl`.
-  template <IsDatatype Datatype>
-  friend BlockMetadataRanges evaluateIsIriOrIsLiteralImpl(
-      const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-      const bool isNegated);
 
  public:
   explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
@@ -297,18 +327,13 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  // If `getComplementOverAllDatatypes` is set to `true`, this method returns
+  // If `getTotalComplement` is set to `true`, this method returns
   // the total complement over all datatype `ValueId`s from the
   // provided `CompressedBlockMetadata` values.
-  BlockMetadataRanges evaluateOptGetCompleteComplementImpl(
-      const ValueIdSubrange& idRange, BlockMetadataSpan blockRange,
-      bool getComplementOverAllDatatypes = false) const;
-  // Calls `evaluateOptGetCompleteComplementImpl` with
-  // `getComplementOverAllDatatypes` set to `false` (standard evaluation
-  // procedure).
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
@@ -333,7 +358,8 @@ class NotExpression : public PrefilterExpression {
  private:
   BlockMetadataRanges evaluateImpl(const Vocab& vocab,
                                    const ValueIdSubrange& idRange,
-                                   BlockMetadataSpan blockRange) const override;
+                                   BlockMetadataSpan blockRange,
+                                   bool getTotalComplement) const override;
 };
 
 //______________________________________________________________________________
