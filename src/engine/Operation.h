@@ -293,7 +293,7 @@ class Operation {
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation. If a LIMIT was previously set, this limit will not be
   // replaced, but the new LIMIT will be applied additionally after the previous
-  // LIMITs. This might happen e.g. for nested subqueries
+  // LIMITs. This might happen e.g. for nested subqueries.
   void applyLimit(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
@@ -386,7 +386,8 @@ class Operation {
       const final;
 
   // Helper function to allow dynamic modification of LIMIT/OFFSET from child
-  // operations.
+  // operations. It returns an object that restores the original LIMIT + OFFSET
+  // the child operations haven when calling this function on destruction.
   [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
                                       std::function<void()>>
   resetChildLimitsAndOffsetOnDestruction() final;

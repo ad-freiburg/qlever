@@ -5,6 +5,7 @@
 #include "engine/Operation.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/container/inlined_vector.h>
 
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
@@ -573,9 +574,12 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
 // _____________________________________________________________________________
 absl::Cleanup<absl::cleanup_internal::Tag, std::function<void()>>
 Operation::resetChildLimitsAndOffsetOnDestruction() {
-  std::vector<std::pair<QueryExecutionTree*, LimitOffsetClause>>
+  // We estimate that most operations will have 3 or fewer children.
+  absl::InlinedVector<std::pair<QueryExecutionTree*, LimitOffsetClause>, 3>
       childrenClauses;
-  for (QueryExecutionTree* qet : getChildren()) {
+  const auto& children = getChildren();
+  childrenClauses.reserve(children.size());
+  for (QueryExecutionTree* qet : children) {
     childrenClauses.emplace_back(qet, qet->getRootOperation()->getLimit());
   }
   return absl::Cleanup{std::function{[original = std::move(childrenClauses)]() {
