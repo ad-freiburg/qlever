@@ -310,7 +310,7 @@ class CompressedExternalIdTableWriter {
       fut.get();
     }
     return block;
-  };
+  }
 };
 
 // The common base implementation of `CompressedExternalIdTable` and
