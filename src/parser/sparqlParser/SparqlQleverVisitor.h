@@ -644,12 +644,13 @@ class SparqlQleverVisitor {
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 
- private:
-  // Constructs a `ParsedQuery` that clears the given graph.
+  // Constructs a `ParsedQuery` that clears the given graph equivalent to
+  // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
   ParsedQuery makeClear(const GraphOrDefault& graph);
   // Constructs a `ParsedQuery` that adds all triples from the source graph to
-  // the target graph.
+  // the target graph equivalent to `INSERT { GRAPH target { ?s ?p ?o } } WHERE
+  // { GRAPH source { ?s ?p ?o } }`.
   ParsedQuery makeAdd(const GraphOrDefault& source,
                       const GraphOrDefault& target);
 

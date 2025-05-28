@@ -586,7 +586,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
     // ignored in the string representation.
     const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
     const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
-    std::string updateStringRepr = std::string{ad_utility::getUTF8Substring(
+    auto updateStringRepr = std::string{ad_utility::getUTF8Substring(
         ctx->getStart()->getInputStream()->toString(), updateStartPos,
         updateEndPos - updateStartPos + 1)};
     // Many graph management operations are desugared into multiple updates. We
@@ -628,8 +628,9 @@ namespace {
 // Transform a `GraphRefAll` or `GraphOrDefault` into a
 // `SparqlTripleSimpleWithGraph::Graph`/`parsedQuery::GroupGraphPattern::GraphSpec`
 // (which are the same type).
-SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
+SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphRefAll& graph) {
   using Graph = SparqlTripleSimpleWithGraph::Graph;
+  AD_CORRECTNESS_CHECK(!std::holds_alternative<NAMED>(graph));
   return std::visit(
       ad_utility::OverloadCallOperator{
           [](const ad_utility::triple_component::Iri& iri) -> Graph {
@@ -642,22 +643,33 @@ SparqlTripleSimpleWithGraph::Graph transformGraph(const auto& graph) {
 }
 
 // ____________________________________________________________________________________
+SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphOrDefault& graph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const ad_utility::triple_component::Iri& iri) -> Graph {
+            return iri;
+          },
+          [](const DEFAULT&) -> Graph { return std::monostate{}; }},
+      graph);
+}
+
+// ____________________________________________________________________________________
 // Make a `GraphPatternOperation` that matches all triples in the graph.
-GraphPatternOperation makeAllTripleGraphPattern(const auto& graph) {
+GraphPatternOperation makeAllTripleGraphPattern(
+    parsedQuery::GroupGraphPattern::GraphSpec graph) {
   GraphPattern inner;
   inner._graphPatterns.emplace_back(BasicGraphPattern{
       {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
-  return {
-      parsedQuery::GroupGraphPattern{std::move(inner), transformGraph(graph)}};
+  return {parsedQuery::GroupGraphPattern{std::move(inner), std::move(graph)}};
 }
 
 // ____________________________________________________________________________________
 // Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
-SparqlTripleSimpleWithGraph makeAllTripleTemplate(const auto& graph) {
-  return {{Variable("?s")},
-          {Variable("?p")},
-          {Variable("?o")},
-          transformGraph(graph)};
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(
+    SparqlTripleSimpleWithGraph::Graph graph) {
+  return {
+      {Variable("?s")}, {Variable("?p")}, {Variable("?o")}, std::move(graph)};
 }
 }  // namespace
 
@@ -668,19 +680,22 @@ ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
 
 ParsedQuery Visitor::makeClear(const GraphOrDefault& graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-      makeAllTripleGraphPattern(graph));
+      makeAllTripleGraphPattern(transformGraph(graph)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+      GraphUpdate{{}, {makeAllTripleTemplate(transformGraph(graph))}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
+// ____________________________________________________________________________________
 ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   if (std::holds_alternative<NAMED>(graph)) {
-    // We select all graphs and then filter out the default graph, to get only
-    // the named graphs.
+    // We first select all graphs and then filter out the default graph, to get
+    // only the named graphs. `Variable("?g")` selects all graphs.
     parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-        makeAllTripleGraphPattern(GraphRefAll{ALL{}}));
+        makeAllTripleGraphPattern(Variable("?g")));
+    // TODO<joka921,qup> Extend the graph filtering s.t. we can exclude a single
+    //  graph more efficiently
     auto e = SparqlExpressionPimpl{
         createExpression<sparqlExpression::NotEqualExpression>(
             std::make_unique<sparqlExpression::VariableExpression>(
@@ -690,25 +705,26 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
         absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
     parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
     parsedQuery_._clause = parsedQuery::UpdateClause{
-        GraphUpdate{{}, {makeAllTripleTemplate(GraphRefAll{ALL{}})}}};
+        GraphUpdate{{}, {makeAllTripleTemplate(Variable("?g"))}}};
     parsedQuery_.datasetClauses_ = activeDatasetClauses_;
     return parsedQuery_;
   }
 
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-      makeAllTripleGraphPattern(graph));
+      makeAllTripleGraphPattern(transformGraph(graph)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+      GraphUpdate{{}, {makeAllTripleTemplate(transformGraph(graph))}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
 
+// ____________________________________________________________________________________
 ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
                              const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-      makeAllTripleGraphPattern(source));
+      makeAllTripleGraphPattern(transformGraph(source)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{makeAllTripleTemplate(target)}, {}}};
+      GraphUpdate{{makeAllTripleTemplate(transformGraph(target))}, {}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
