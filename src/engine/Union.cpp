@@ -363,10 +363,11 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> Union::createSortedVariant(
-    const vector<ColumnIndex>& sortOrder) const {
-  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
-                                 _subtrees.at(1), sortOrder);
+std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return ad_utility::makeExecutionTree<Union>(
+      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
 }
 
 // _____________________________________________________________________________
