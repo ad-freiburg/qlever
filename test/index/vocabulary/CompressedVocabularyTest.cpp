@@ -62,7 +62,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   auto writerPtr = v.makeDiskWriterPtr("vocabtmp.txt");
   auto& writer = *writerPtr;
   for (const auto& [i, word] : ::ranges::views::enumerate(words)) {
-    ASSERT_EQ(writer(word), static_cast<uint64_t>(i));
+    ASSERT_EQ(writer(word, false), static_cast<uint64_t>(i));
   }
   writer.finish();
   writer.readableName() = "blabb";
@@ -102,7 +102,7 @@ struct CompressedVocabularyF : public testing::Test {
       auto writerPtr = vocab.makeDiskWriterPtr(filename);
       auto& writer = *writerPtr;
       for (const auto& word : words) {
-        writer(word);
+        writer(word, false);
       }
       writer.finish();
       vocab.open(filename);

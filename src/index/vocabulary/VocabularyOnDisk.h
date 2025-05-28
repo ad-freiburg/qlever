@@ -41,26 +41,23 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // At the end, the `finish()` method can be called. Note that `finish`
   // is also implicitly called by the destructor, but doing so implicitly
   // releases resources earlier and is cleaner in case of exceptions.
-  class WordWriter {
+  class WordWriter : public WordWriterBase {
    private:
     ad_utility::File file_;
     ad_utility::MmapVector<Offset> offsets_;
     uint64_t currentOffset_ = 0;
-    bool isFinished_ = false;
-    ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
-    std::string readableName_ = "";
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`.
     explicit WordWriter(const std::string& filename);
     // Add the next word to the vocabulary and return its index.
-    uint64_t operator()(std::string_view word, bool isExternalDummy = true);
-    // Finish the writing. After this no more calls to `operator()` are allowed.
-    void finish();
-    // Destructor. Implicitly calls `finish` if it hasn't been called before.
-    ~WordWriter();
+    uint64_t operator()(std::string_view word, bool isExternalDummy) override;
 
-    std::string& readableName() { return readableName_; }
+    ~WordWriter() override;
+
+   private:
+    // Finish the writing. After this no more calls to `operator()` are allowed.
+    void finishImpl() override;
   };
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to

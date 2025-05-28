@@ -17,21 +17,6 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/json.h"
 
-namespace polymorphic_vocabulary::detail {
-
-// For `T = std::variant<VocabType1, VocabType2, ...` `WriterPointers<T> =
-// std::variant<unique_ptr<VocabType1::WordWriter>,
-// unique_ptr<VocabType2::WordWriter>, ...>`. This is used in the implementation
-// of the `PolymorphicVocabulary` below.
-template <typename T>
-struct WriterPointers {};
-
-template <typename... Vocabs>
-struct WriterPointers<std::variant<Vocabs...>> {
-  using type = std::variant<std::unique_ptr<typename Vocabs::WordWriter>...>;
-};
-}  // namespace polymorphic_vocabulary::detail
-
 // A vocabulary that can at runtime choose between different vocabulary
 // implementations. The only restriction is, that a vocabulary can only be read
 // from disk with the same implementation that it was written to.
@@ -96,37 +81,14 @@ class PolymorphicVocabulary {
         },
         vocab_);
   }
-
-  using WordWriters =
-      polymorphic_vocabulary::detail::WriterPointers<Variant>::type;
-
-  // The `WordWriter` is used to write a vocabulary to disk word by word (in
-  // sorted order).
-  class WordWriter {
-    WordWriters writer_;
-    std::string readableName_;
-
-   public:
-    // Constructor, used by the `makeDiskWriter` functions below.
-    explicit WordWriter(WordWriters);
-
-    // This function has to be called after the last word has been written.
-    void finish();
-
-    // Write the next word to the vocabulary.
-    uint64_t operator()(std::string_view word, bool isExternal);
-
-    std::string& readableName() { return readableName_; }
-  };
-
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
-  static std::unique_ptr<WordWriter> makeDiskWriterPtr(
+  static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename, VocabularyType type);
 
   // Same as above, but the `VocabularyType` is the currently active type of
   // `this`.
-  std::unique_ptr<WordWriter> makeDiskWriterPtr(
+  std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
       const std::string& filename) const;
 };
 
