@@ -163,6 +163,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
                                  {4, {LT6, LT7, LT9}}}));
 
   locatedTriplesPerBlock.erase(3, handles[0]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
@@ -177,6 +178,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
                ad_utility::Exception);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   // Nothing changed.
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
@@ -190,6 +192,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
           {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
 
   locatedTriplesPerBlock.erase(4, handles[1]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
@@ -787,6 +790,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Erasing the update of T4 restores the beginning of block 4.
     locatedTriplesPerBlock.erase(4, handles[0]);
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(PT8, PT8);
     // The block 4 has no more updates, so we restore the info about the block
