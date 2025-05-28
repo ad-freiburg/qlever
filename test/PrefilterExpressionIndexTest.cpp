@@ -957,6 +957,42 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
                      {b18GapIriAndLiteral, b27, b28});
 }
 
+// Test InExpression
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, testIsInExpression) {
+  auto date2001 = DateId(DateParser, "2000-01-01");
+  // IN
+  makeTest(inExpr({}), {});
+  makeTest(inExpr({idDüsseldorf}), {b19});
+  makeTest(inExpr({idAugsburg, idHamburg}), {b18, b19, b20, b21});
+  makeTest(inExpr({falseId, IntId(0), DoubleId(2.5), idStuttgart, date2001}),
+           {b2, b3, b4, b5, b6, b11, b27});
+  makeTest(inExpr({falseId, IntId(-10), DoubleId(-2.5), idHamburg, date2001}),
+           {b2, b3, b9, b11, b15, b19, b20, b21, b27});
+  makeTest(
+      inExpr({IntId(-100), IntId(-40), IntId(-5), IntId(0), DoubleId(7.5)}),
+      {b4, b5, b6, b11, b14, b15});
+
+  // NOT IN (isNegated = true)
+  makeTest(inExpr({}, true),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b20, b21, b26, b27, b28});
+  makeTest(inExpr({idHamburg}, true),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
+  makeTest(inExpr({idMünchen, idHamburg, idDüsseldorf}, true),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b21, b26, b27, b28});
+  makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4)}, true),
+           {b1,  b2,  b3,  b4,  b6,  b7,  b8,  b9,  b11, b12, b13,
+            b14, b15, b17, b18, b19, b20, b21, b26, b27, b28});
+  makeTest(inExpr({DoubleId(0.00), DoubleId(-6.25), IntId(-4), idHamburg,
+                   idDüsseldorf, date2001},
+                  true),
+           {b1, b2, b3, b4, b6, b7, b8, b9, b11, b12, b13, b14, b15, b17, b18,
+            b19, b21, b26, b28});
+}
+
 // Test Logical Expressions
 //______________________________________________________________________________
 // Test AndExpression
@@ -1210,6 +1246,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
                        notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
   makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
                        neq(LVE("<iri/id10>"))));
+  makeTestClone(inExpr({referenceDate2, idDüsseldorf, idHamburg, IntId(0)}));
+  makeTestClone(inExpr({falseId, IntId(10), DoubleId(42.5)}, true));
   makeTestClone(prefixRegex(L("prefixPreeefix")));
   makeTestClone(prefixRegex(L("prefixPreeefix"), true));
   makeTestClone(prefixRegex(L("prefixPreeefix"), false));
@@ -1250,6 +1288,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
                *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
                *orExpr(eq(IntId(0)), le(IntId(0))));
+  // IsInExpression
+  ASSERT_NE(*inExpr({IntId(0), IntId(10)}), *isLit());
+  ASSERT_NE(*inExpr({IntId(10)}), *inExpr({IntId(0)}));
+  ASSERT_NE(*inExpr({idStuttgart}, false), *inExpr({idStuttgart}, true));
+  ASSERT_EQ(*inExpr({idStuttgart}), *inExpr({idStuttgart}));
   // PrefixRegex PrefilterExpression
   ASSERT_NE(*prefixRegex(L("prefix"), true), *prefixRegex(L("pref"), true));
   ASSERT_NE(*prefixRegex(L("prefix"), false), *prefixRegex(L("prefix"), true));
@@ -1301,8 +1344,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndMergeBlockItRanges) {
 
 //______________________________________________________________________________
 // Test PrefilterExpression content formatting for debugging.
-TEST(PrefilterExpressionExpressionOnMetadataTest,
-     checkPrintFormattedPrefilterExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest,
+       checkPrintFormattedPrefilterExpression) {
   auto exprToString = [](const auto& expr) {
     return (std::stringstream{} << expr).str();
   };
@@ -1381,6 +1424,12 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
               matcher("Prefilter NotExpression:\nchild {Prefilter "
                       "IsDatatypeExpression:\nPrefilter for datatype: "
                       "Numeric\nis negated: true.\n}\n.\n"));
+  EXPECT_THAT(*inExpr({idStuttgart, idDüsseldorf}),
+              matcher("Prefilter IsInExpression\nisNegated: false\nWith the "
+                      "following number of reference values: 2.\n"));
+  EXPECT_THAT(*inExpr({DoubleId33}, true),
+              matcher("Prefilter IsInExpression\nisNegated: true\nWith the "
+                      "following number of reference values: 1.\n"));
   EXPECT_THAT(
       *prefixRegex(L("str")),
       matcher(
