@@ -977,8 +977,9 @@ std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
   std::vector<string_view> inverseIris;
   for (const auto& child : children) {
     if (auto unwrapped = child.getInvertedChild()) {
-      AD_CORRECTNESS_CHECK(unwrapped->isIri());
-      inverseIris.emplace_back(unwrapped->getIri().toStringRepresentation());
+      const PropertyPath& path = unwrapped.value();
+      AD_CORRECTNESS_CHECK(path.isIri());
+      inverseIris.emplace_back(path.getIri().toStringRepresentation());
     } else {
       AD_CORRECTNESS_CHECK(child.isIri());
       forwardIris.emplace_back(child.getIri().toStringRepresentation());

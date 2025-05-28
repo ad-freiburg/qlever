@@ -5,18 +5,28 @@
 #include "parser/PropertyPath.h"
 
 // _____________________________________________________________________________
+PropertyPath::MinMaxPath& PropertyPath::MinMaxPath::operator=(
+    const MinMaxPath& other) {
+  min_ = other.min_;
+  max_ = other.max_;
+  child_ = std::make_unique<PropertyPath>(*other.child_);
+  return *this;
+}
+
+// _____________________________________________________________________________
 bool PropertyPath::MinMaxPath::operator==(const MinMaxPath& other) const {
   return min_ == other.min_ && max_ == other.max_ && *child_ == *other.child_;
 }
 
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(
-    std::variant<BasicPath, ModifiedPath, MinMaxPath> path)
+    std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
+        path)
     : path_{std::move(path)} {}
 
 // _____________________________________________________________________________
 PropertyPath PropertyPath::fromIri(ad_utility::triple_component::Iri iri) {
-  return PropertyPath{BasicPath{std::move(iri)}};
+  return PropertyPath{std::move(iri)};
 }
 
 // _____________________________________________________________________________
@@ -90,8 +100,8 @@ void PropertyPath::ModifiedPath::writeToStream(std::ostream& out) const {
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
   std::visit(ad_utility::OverloadCallOperator{
-                 [&out](const BasicPath& path) {
-                   out << path.iri_.toStringRepresentation();
+                 [&out](const ad_utility::triple_component::Iri& iri) {
+                   out << iri.toStringRepresentation();
                  },
                  [&out](const ModifiedPath& path) { path.writeToStream(out); },
                  [&out](const MinMaxPath& path) {
@@ -112,24 +122,25 @@ std::string PropertyPath::asString() const {
 // _____________________________________________________________________________
 const ad_utility::triple_component::Iri& PropertyPath::getIri() const {
   AD_CONTRACT_CHECK(isIri());
-  return std::get<BasicPath>(path_).iri_;
+  return std::get<ad_utility::triple_component::Iri>(path_);
 }
 
 // _____________________________________________________________________________
 bool PropertyPath::isIri() const {
-  return std::holds_alternative<BasicPath>(path_);
+  return std::holds_alternative<ad_utility::triple_component::Iri>(path_);
 }
 
 // _____________________________________________________________________________
-const PropertyPath* PropertyPath::getInvertedChild() const {
+std::optional<std::reference_wrapper<const PropertyPath>>
+PropertyPath::getInvertedChild() const {
   if (std::holds_alternative<ModifiedPath>(path_)) {
     const auto& path = std::get<ModifiedPath>(path_);
     if (path.modifier_ == Modifier::INVERSE) {
       AD_CORRECTNESS_CHECK(path.children_.size() == 1);
-      return &path.children_.at(0);
+      return path.children_.at(0);
     }
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

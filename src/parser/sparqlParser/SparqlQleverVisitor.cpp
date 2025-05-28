@@ -61,8 +61,9 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 namespace {
-constexpr std::string_view a =
-    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+static const ad_utility::triple_component::Iri a =
+    ad_utility::triple_component::Iri::fromIriref(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }  // namespace
 
 // _____________________________________________________________________________
@@ -1606,7 +1607,7 @@ GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{std::string{a}}};
+    return GraphTerm{Iri{a.toStringRepresentation()}};
   }
 }
 
@@ -1849,7 +1850,7 @@ PropertyPath Visitor::visit(Parser::PathContext* ctx) {
 PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
   auto alternatives = visitVector(ctx->pathSequence());
   if (alternatives.size() == 1) {
-    return std::move(alternatives[0]);
+    return std::move(alternatives.at(0));
   }
   return PropertyPath::makeAlternative(std::move(alternatives));
 }
@@ -1858,7 +1859,7 @@ PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
 PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
   auto sequence = visitVector(ctx->pathEltOrInverse());
   if (sequence.size() == 1) {
-    return std::move(sequence[0]);
+    return std::move(sequence.at(0));
   }
   return PropertyPath::makeSequence(std::move(sequence));
 }
@@ -1909,8 +1910,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(
-        ad_utility::triple_component::Iri::fromIriref(a));
+    return PropertyPath::fromIri(a);
   }
 }
 
@@ -1921,11 +1921,9 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
-  auto iri = ctx->iri() ? visit(ctx->iri())
-                        : ad_utility::triple_component::Iri::fromIriref(a);
+  auto iri = ctx->iri() ? visit(ctx->iri()) : a;
   const std::string& text = ctx->getText();
-  AD_CORRECTNESS_CHECK((iri.toStringRepresentation() == a) ==
-                       (text == "a" || text == "^a"));
+  AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
   if (text.starts_with("^")) {
     return PropertyPath::makeInverse(propertyPath);

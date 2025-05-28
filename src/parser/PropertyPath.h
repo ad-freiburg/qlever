@@ -1,5 +1,6 @@
 //   Copyright 2025, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
+//   Author: Florian Kramer <florian.kramer@mail.uni-freiburg.de>
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_PARSER_PROPERTYPATH_H
@@ -14,21 +15,13 @@
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 
-// Class representing complex graph patterns. This includes basic patterns as a
-// baseline, alternative patterns, sequence patterns, inverse patterns, negated
-// patterns, and property paths with minimum and maximum lengths.
+// Class representing property paths. This includes simple IRIs as a baseline,
+// alternative paths, sequence paths, inverse paths, negated paths, and paths
+// with minimum and maximum lengths.
 class PropertyPath {
- private:
-  // Represent a basic path with just a single IRI.
-  struct BasicPath {
-    ad_utility::triple_component::Iri iri_;
-
-    bool operator==(const BasicPath&) const = default;
-  };
-
  public:
-  // Enum representing the different modifiers that can be applied to a graph
-  // pattern.
+  // Enum representing the different modifiers that can be applied to a property
+  // path.
   enum class Modifier : std::uint8_t {
     SEQUENCE,
     ALTERNATIVE,
@@ -38,8 +31,8 @@ class PropertyPath {
 
  private:
   // Represent a modified path that can have multiple children and a modifier.
-  // This is used to represent sequence patterns, alternative patterns, inverse
-  // patterns, and negated patterns.
+  // This is used to represent sequence paths, alternative paths, inverse paths,
+  // and negated paths.
   struct ModifiedPath {
     std::vector<PropertyPath> children_;
     Modifier modifier_;
@@ -63,7 +56,12 @@ class PropertyPath {
     // Construct an instance of MinMaxPath with the given minimum and maximum
     // length and the child path.
     MinMaxPath(size_t min, size_t max, std::unique_ptr<PropertyPath> child)
-        : min_{min}, max_{max}, child_{std::move(child)} {}
+        : min_{min}, max_{max}, child_{std::move(child)} {
+      AD_CONTRACT_CHECK(
+          min_ <= max_,
+          "The minimum length must not be greater than the maximum "
+          "length in property paths.");
+    }
 
     // Default move and copy constructors and assignment operators.
     MinMaxPath(MinMaxPath&&) = default;
@@ -72,22 +70,22 @@ class PropertyPath {
           max_{other.max_},
           child_{std::make_unique<PropertyPath>(*other.child_)} {}
     MinMaxPath& operator=(MinMaxPath&&) = default;
-    MinMaxPath& operator=(const MinMaxPath& other) {
-      min_ = other.min_;
-      max_ = other.max_;
-      child_ = std::make_unique<PropertyPath>(*other.child_);
-      return *this;
-    }
+    // This cannot be defaulted, because `std::unique_ptr` doesn't have a copy
+    // assignment operator.
+    MinMaxPath& operator=(const MinMaxPath& other);
 
     // Make sure `child_` is compared by value, not by pointer.
     bool operator==(const MinMaxPath&) const;
   };
 
   // The main content of this object.
-  std::variant<BasicPath, ModifiedPath, MinMaxPath> path_;
+  std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
+      path_;
 
   // Private constructor that initializes the path with a variant type.
-  explicit PropertyPath(std::variant<BasicPath, ModifiedPath, MinMaxPath> path);
+  explicit PropertyPath(
+      std::variant<ad_utility::triple_component::Iri, ModifiedPath, MinMaxPath>
+          path);
 
  public:
   // Default copy and move constructors and assignment operators.
@@ -103,13 +101,13 @@ class PropertyPath {
   static PropertyPath makeWithLength(PropertyPath child, size_t min,
                                      size_t max);
 
-  // Create an alternative pattern with the given children.
+  // Create an alternative property path with the given children.
   static PropertyPath makeAlternative(std::vector<PropertyPath> children);
 
-  // Create a sequence pattern with the given children.
+  // Create a sequence property path with the given children.
   static PropertyPath makeSequence(std::vector<PropertyPath> children);
 
-  // Create an inverse pattern with the given child.
+  // Create an inverse property path with the given child.
   static PropertyPath makeInverse(PropertyPath child);
 
   // Create a negated property path with the given children.
@@ -133,27 +131,30 @@ class PropertyPath {
 
   // If the path is a modified path with an inverse modifier, return the pointer
   // to its only child. Otherwise, return nullptr.
-  const PropertyPath* getInvertedChild() const;
+  std::optional<std::reference_wrapper<const PropertyPath>> getInvertedChild()
+      const;
 
   // Process the path with the given functions. The functions are called
   // depending on which internal representation this instance has.
-  CPP_template(typename T, typename Func1, typename Func2, typename Func3)(
+  CPP_template(typename T, typename IriFunc, typename ModifiedPathFunc,
+               typename MinMaxPathFunc)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          Func1, T, const ad_utility::triple_component::Iri&>
+          IriFunc, T, const ad_utility::triple_component::Iri&>
           CPP_and ad_utility::InvocableWithConvertibleReturnType<
-              Func2, T, const std::vector<PropertyPath>&, Modifier>
+              ModifiedPathFunc, T, const std::vector<PropertyPath>&, Modifier>
               CPP_and ad_utility::InvocableWithConvertibleReturnType<
-                  Func3, T, const PropertyPath&, size_t, size_t>) T
-      handlePath(const Func1& func1, const Func2& func2,
-                 const Func3& func3) const {
+                  MinMaxPathFunc, T, const PropertyPath&, size_t, size_t>) T
+      handlePath(const IriFunc& iriFunc,
+                 const ModifiedPathFunc& modifiedPathFunc,
+                 const MinMaxPathFunc& minMaxPathFunc) const {
     return std::visit(
         ad_utility::OverloadCallOperator{
-            [&func1](const BasicPath& path) { return func1(path.iri_); },
-            [&func2](const ModifiedPath& path) {
-              return func2(path.children_, path.modifier_);
+            iriFunc,
+            [&modifiedPathFunc](const ModifiedPath& path) {
+              return modifiedPathFunc(path.children_, path.modifier_);
             },
-            [&func3](const MinMaxPath& path) {
-              return func3(*path.child_, path.min_, path.max_);
+            [&minMaxPathFunc](const MinMaxPath& path) {
+              return minMaxPathFunc(*path.child_, path.min_, path.max_);
             }},
         path_);
   }

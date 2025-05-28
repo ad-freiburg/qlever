@@ -80,10 +80,13 @@ class SparqlTriple
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
     bool holdsVariable = std::holds_alternative<Variable>(p_);
-    AD_CONTRACT_CHECK(holdsVariable || getSimplePredicate().has_value());
+    auto predicate = getSimplePredicate();
+    AD_CONTRACT_CHECK(holdsVariable || predicate.has_value());
     TripleComponent p =
-        holdsVariable ? TripleComponent{std::get<Variable>(p_)}
-                      : TripleComponent(std::get<PropertyPath>(p_).getIri());
+        holdsVariable
+            ? TripleComponent{std::get<Variable>(p_)}
+            : TripleComponent(ad_utility::triple_component::Iri::fromIriref(
+                  predicate.value()));
     return {s_, p, o_, additionalScanColumns_};
   }
 
