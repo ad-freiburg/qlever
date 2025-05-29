@@ -103,8 +103,8 @@ class TextIndexConfig {
   }
 
  private:
-  std::optional<const std::string> wordsFile_ = std::nullopt;
-  std::optional<const std::string> docsFile_ = std::nullopt;
+  std::optional<std::string> wordsFile_ = std::nullopt;
+  std::optional<std::string> docsFile_ = std::nullopt;
   bool addWordsFromLiterals_ = true;
   bool useDocsFileForVocabulary_ = false;
   bool addOnlyEntitiesFromWordsFile_ = false;
