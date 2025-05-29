@@ -199,16 +199,15 @@ class DocsFileParser : public WordsAndDocsFileParser,
 inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
                                      const LocaleManager& localeManager) {
   return parser |
-         ql::views::transform(
-             [&parser, &localeManager](const DocsFileLine& line) {
-               return ad_utility::OwningView{tokenizeAndNormalizeText(
-                          line.docContent_, localeManager)} |
-                      ql::views::transform([&](const std::string& word) {
-                        return WordsFileLine{
-                            word, false,
-                            TextRecordIndex::make(line.docId_.get()), 0, false};
-                      });
-             }) |
+         ql::views::transform([&localeManager](const DocsFileLine& line) {
+           return ad_utility::OwningView{tokenizeAndNormalizeText(
+                      line.docContent_, localeManager)} |
+                  ql::views::transform([&](const std::string& word) {
+                    return WordsFileLine{
+                        word, false, TextRecordIndex::make(line.docId_.get()),
+                        0, false};
+                  });
+         }) |
          ql::views::join;
 }
 

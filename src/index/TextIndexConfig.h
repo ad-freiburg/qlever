@@ -66,8 +66,8 @@
 class TextIndexConfig {
  public:
   explicit TextIndexConfig(
-      std::optional<const std::string> wordsFile = std::nullopt,
-      std::optional<const std::string> docsFile = std::nullopt,
+      std::optional<std::string> wordsFile = std::nullopt,
+      std::optional<std::string> docsFile = std::nullopt,
       bool addWordsFromLiterals = true, bool useDocsFileForVocabulary = false,
       bool addOnlyEntitiesFromWordsFile = false,
       TextScoringConfig textScoringConfig = TextScoringConfig())
@@ -80,6 +80,7 @@ class TextIndexConfig {
     checkValid();
   };
 
+  // This can be changed when necessary
   TextIndexConfig(TextIndexConfig&&) noexcept = default;
   TextIndexConfig& operator=(TextIndexConfig&&) noexcept = default;
 
