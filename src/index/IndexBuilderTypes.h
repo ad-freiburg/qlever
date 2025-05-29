@@ -24,15 +24,20 @@
 // of the external vocabulary
 struct PossiblyExternalizedIriOrLiteral {
   PossiblyExternalizedIriOrLiteral(TripleComponent iriOrLiteral,
-                                   bool isExternal = false)
-      : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
+                                   bool isExternal = false,
+                                   bool inTextIndex = false)
+      : iriOrLiteral_{std::move(iriOrLiteral)},
+        isExternal_{isExternal},
+        inTextIndex_{inTextIndex} {}
   PossiblyExternalizedIriOrLiteral() = default;
   TripleComponent iriOrLiteral_;
   bool isExternal_ = false;
+  bool inTextIndex_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
     serializer | arg.iriOrLiteral_;
     serializer | arg.isExternal_;
+    serializer | arg.inTextIndex_;
   }
 };
 
@@ -40,17 +45,21 @@ struct TripleComponentWithIndex {
   std::string iriOrLiteral_;
   bool isExternal_ = false;
   uint64_t index_ = 0;
+  bool inTextIndex_ = false;
 
   [[nodiscard]] const auto& isExternal() const { return isExternal_; }
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
+  [[nodiscard]] const auto& inTextIndex() const { return inTextIndex_; }
+  [[nodiscard]] auto& inTextIndex() { return inTextIndex_; }
   bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;
     serializer | arg.isExternal_;
     serializer | arg.index_;
+    serializer | arg.inTextIndex_;
   }
 };
 

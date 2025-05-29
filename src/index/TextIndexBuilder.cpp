@@ -155,9 +155,8 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
   // ROUND 2: Optionally, consider each literal from the internal vocabulary as
   // a text record.
   if (addWordsFromLiterals) {
-    for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-         index = index.incremented()) {
-      auto text = vocab_[index];
+    for (const auto& index : textIndexIndices_) {
+      auto text = vocab_[VocabIndex::make(index)];
       if (!isLiteral(text)) {
         continue;
       }

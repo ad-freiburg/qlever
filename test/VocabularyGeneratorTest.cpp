@@ -157,8 +157,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   std::vector<std::pair<std::string, bool>> mergeResult;
   {
     auto internalVocabularyAction =
-        [&mergeResult](const auto& word,
-                       [[maybe_unused]] bool isExternal) -> uint64_t {
+        [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal,
+                       [[maybe_unused]] bool inTextIndexDummy) -> uint64_t {
       mergeResult.emplace_back(word, isExternal);
       return mergeResult.size() - 1;
     };

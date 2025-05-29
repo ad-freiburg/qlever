@@ -206,6 +206,11 @@ void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
 }
 
 // ____________________________________________________________________________
+const vector<uint64_t>& Index::getTextIndexIndices() const {
+  return pimpl_->getTextIndexIndices();
+}
+
+// ____________________________________________________________________________
 const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 
 // ____________________________________________________________________________

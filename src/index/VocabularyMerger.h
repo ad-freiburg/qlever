@@ -27,13 +27,14 @@ using TripleVec =
     ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
 namespace ad_utility::vocabulary_merger {
-// Concept for a callback that can be called with a `string_view` and a `bool`.
-// If the `bool` is true, then the word is to be stored in the external
-// vocabulary else in the internal vocabulary.
+// Concept for a callback that can be called with a `string_view` and two
+// `bool`s. If the first `bool` is true, then the word is to be stored in the
+// external vocabulary else in the internal vocabulary. If the second `bool` is
+// true the word is a literal that should be part of the textvocab
 template <typename T>
 CPP_concept WordCallback =
     ad_utility::InvocableWithExactReturnType<T, uint64_t, std::string_view,
-                                             bool>;
+                                             bool, bool>;
 // Concept for a callable that compares two `string_view`s.
 template <typename T>
 CPP_concept WordComparator =
@@ -205,6 +206,10 @@ class VocabularyMerger {
     }
 
     [[nodiscard]] const auto& id() const { return entry_.index_; }
+
+    [[nodiscard]] const bool& inTextIndex() const {
+      return entry_.inTextIndex();
+    }
   };
 
   constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {

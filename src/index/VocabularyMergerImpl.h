@@ -171,7 +171,8 @@ CPP_template_def(typename C, typename L)(
                   << top.iriOrLiteral() << std::endl;
       }
       lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
+          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal(),
+          top.inTextIndex()};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -183,7 +184,8 @@ CPP_template_def(typename C, typename L)(
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
         nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal(),
+                         nextWord.inTextIndex());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
