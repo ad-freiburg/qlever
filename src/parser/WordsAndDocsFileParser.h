@@ -14,6 +14,7 @@
 
 #include "global/Id.h"
 #include "index/StringSortComparator.h"
+#include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Views.h"
 
@@ -128,6 +129,7 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
                                 return localeManager.getLowercaseUtf8(str);
                               });
 }
+
 /**
  * @brief This class is the parent class of WordsFileParser and DocsFileParser
  *
@@ -191,5 +193,22 @@ class DocsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 };
+
+// Parses a docsfile and splits up the documents to return a WordsFileLine for
+// every word in the document.
+inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
+                                     const LocaleManager& localeManager) {
+  return parser |
+         ql::views::transform([&localeManager](const DocsFileLine& line) {
+           return ad_utility::OwningView{tokenizeAndNormalizeText(
+                      line.docContent_, localeManager)} |
+                  ql::views::transform([&](const std::string& word) {
+                    return WordsFileLine{
+                        word, false, TextRecordIndex::make(line.docId_.get()),
+                        0, false};
+                  });
+         }) |
+         ql::views::join;
+}
 
 #endif  // QLEVER_SRC_PARSER_WORDSANDDOCSFILEPARSER_H
