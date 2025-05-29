@@ -80,6 +80,9 @@ class TextIndexConfig {
     checkValid();
   };
 
+  TextIndexConfig(TextIndexConfig&&) noexcept = default;
+  TextIndexConfig& operator=(TextIndexConfig&&) noexcept = default;
+
   bool addWordsFromFiles() const {
     return docsFile_.has_value() &&
            (wordsFile_.has_value() || useDocsFileForVocabulary_);
