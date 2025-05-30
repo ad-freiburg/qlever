@@ -4,8 +4,8 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_LOADURL_H
-#define QLEVER_LOADURL_H
+#ifndef QLEVER_LOAD_H
+#define QLEVER_LOAD_H
 
 #include <string>
 
@@ -15,14 +15,14 @@
 
 // This class implements the SPARQL UPDATE `LOAD` operation. It reads a turtle
 // document from a remote URL via HTTP and converts it to an `IdTable`.
-class LoadURL final : public Operation {
+class Load final : public Operation {
  public:
   static constexpr std::array<ad_utility::MediaType, 2> SUPPORTED_MEDIATYPES{
       ad_utility::MediaType::turtle, ad_utility::MediaType::ntriples};
 
  private:
-  // The generated LOAD URL clause.
-  parsedQuery::LoadURL loadURLClause_;
+  // The generated LOAD clause.
+  parsedQuery::Load loadClause_;
 
   // The function used to obtain the result from the remote endpoint.
   SendRequestType getResultFunction_;
@@ -39,10 +39,10 @@ class LoadURL final : public Operation {
   bool loadResultCachingEnabled_;
 
  public:
-  LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
-          SendRequestType getResultFunction = sendHttpOrHttpsRequest);
+  Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
+       SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
-  ~LoadURL() override = default;
+  ~Load() override = default;
 
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -85,4 +85,4 @@ class LoadURL final : public Operation {
       std::string_view last100 = ""sv) const;
 };
 
-#endif  // QLEVER_LOADURL_H
+#endif  // QLEVER_LOAD_H
