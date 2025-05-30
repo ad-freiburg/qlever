@@ -66,7 +66,7 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
-    } else if constexpr (std::is_same_v<T, p::LoadURL>) {
+    } else if constexpr (std::is_same_v<T, p::Load>) {
       return false;
     } else {
       static_assert(

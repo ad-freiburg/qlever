@@ -199,7 +199,7 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe, LoadURL>;
+                 Minus, GroupGraphPattern, Describe, Load>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

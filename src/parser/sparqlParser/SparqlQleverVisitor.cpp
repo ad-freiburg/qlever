@@ -616,7 +616,7 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
   auto iri = visit(ctx->iri());
-  pattern._graphPatterns.emplace_back(parsedQuery::LoadURL{
+  pattern._graphPatterns.emplace_back(parsedQuery::Load{
       ad_utility::httpUtils::Url(asStringViewUnsafe(iri.getContent())),
       static_cast<bool>(ctx->SILENT())});
   parsedQuery_._rootGraphPattern = std::move(pattern);

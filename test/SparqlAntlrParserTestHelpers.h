@@ -716,12 +716,11 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
-inline auto LoadURL =
-    [](const ad_utility::httpUtils::Url& url,
-       bool silent) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::LoadURL>(
-      testing::AllOf(AD_FIELD(p::LoadURL, url_, testing::Eq(url)),
-                     AD_FIELD(p::LoadURL, silent_, testing::Eq(silent))));
+inline auto Load = [](const ad_utility::httpUtils::Url& url,
+                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Load>(
+      testing::AllOf(AD_FIELD(p::Load, url_, testing::Eq(url)),
+                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
 };
 
 inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
