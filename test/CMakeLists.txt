@@ -304,7 +304,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTestSerial(LoadURLTest engine)
+addLinkAndDiscoverTestSerial(LoadTest engine)
 
 addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 

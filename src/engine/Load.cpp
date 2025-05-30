@@ -4,71 +4,71 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#include "engine/LoadURL.h"
+#include "engine/Load.h"
 
 #include "global/RuntimeParameters.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
-LoadURL::LoadURL(QueryExecutionContext* qec, parsedQuery::LoadURL loadURLClause,
-                 SendRequestType getResultFunction)
+Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
+           SendRequestType getResultFunction)
     : Operation(qec),
-      loadURLClause_(std::move(loadURLClause)),
+      loadClause_(std::move(loadClause)),
       getResultFunction_(std::move(getResultFunction)),
       loadResultCachingEnabled_(
           RuntimeParameters().get<"cache-load-results">()) {}
 
 // _____________________________________________________________________________
-string LoadURL::getCacheKeyImpl() const {
+string Load::getCacheKeyImpl() const {
   if (RuntimeParameters().get<"cache-load-results">()) {
-    return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString(),
-                        loadURLClause_.silent_ ? " SILENT" : "");
+    return absl::StrCat("LOAD ", loadClause_.url_.asString(),
+                        loadClause_.silent_ ? " SILENT" : "");
   }
-  return absl::StrCat("LOAD URL ", cacheBreaker_);
+  return absl::StrCat("LOAD ", cacheBreaker_);
 }
 
 // _____________________________________________________________________________
-string LoadURL::getDescriptor() const {
-  return absl::StrCat("LOAD URL ", loadURLClause_.url_.asString());
+string Load::getDescriptor() const {
+  return absl::StrCat("LOAD ", loadClause_.url_.asString());
 }
 
 // _____________________________________________________________________________
-size_t LoadURL::getResultWidth() const { return 3; }
+size_t Load::getResultWidth() const { return 3; }
 
 // _____________________________________________________________________________
-size_t LoadURL::getCostEstimate() {
+size_t Load::getCostEstimate() {
   // This Operation will always be the only operation in a query tree, so we
   // don't really need estimates.
   return 10 * getSizeEstimateBeforeLimit();
 }
 
 // _____________________________________________________________________________
-uint64_t LoadURL::getSizeEstimateBeforeLimit() {
+uint64_t Load::getSizeEstimateBeforeLimit() {
   // This Operation will always be the only operation in a query tree, so we
   // don't really need estimates.
   return 100'000;
 }
 
 // _____________________________________________________________________________
-float LoadURL::getMultiplicity(size_t) {
+float Load::getMultiplicity(size_t) {
   // This Operation will always be the only operation in a query tree, so we
   // don't really need estimates.
   return 1;
 }
 
 // _____________________________________________________________________________
-bool LoadURL::knownEmptyResult() { return false; }
+bool Load::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> LoadURL::cloneImpl() const {
-  return std::make_unique<LoadURL>(_executionContext, loadURLClause_);
+std::unique_ptr<Operation> Load::cloneImpl() const {
+  return std::make_unique<Load>(_executionContext, loadClause_);
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> LoadURL::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Load::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-Result LoadURL::computeResult(bool requestLaziness) {
+Result Load::computeResult(bool requestLaziness) {
   try {
     return computeResultImpl(requestLaziness);
   } catch (const ad_utility::CancellationException&) {
@@ -80,7 +80,7 @@ Result LoadURL::computeResult(bool requestLaziness) {
     // element for this operation (an empty `IdTable`). The `IdTable` is used to
     // fill in the variables in the template triple `?s ?p ?o`. The empty
     // `IdTable` results in no triples being updated.
-    if (loadURLClause_.silent_) {
+    if (loadClause_.silent_) {
       return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
               resultSortedOn(), LocalVocab{}};
     }
@@ -89,12 +89,12 @@ Result LoadURL::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-Result LoadURL::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
-  LOG(INFO) << "Loading RDF dataset from " << loadURLClause_.url_.asString()
+  LOG(INFO) << "Loading RDF dataset from " << loadClause_.url_.asString()
             << std::endl;
   HttpOrHttpsResponse response =
-      getResultFunction_(loadURLClause_.url_, cancellationHandle_,
+      getResultFunction_(loadClause_.url_, cancellationHandle_,
                          boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
@@ -150,7 +150,7 @@ Result LoadURL::computeResultImpl([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap LoadURL::computeVariableToColumnMap() const {
+VariableToColumnMap Load::computeVariableToColumnMap() const {
   VariableToColumnMap map;
   map[Variable("?s")] = makeAlwaysDefinedColumn(0);
   map[Variable("?p")] = makeAlwaysDefinedColumn(1);
@@ -159,18 +159,15 @@ VariableToColumnMap LoadURL::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-void LoadURL::throwErrorWithContext(std::string_view msg,
-                                    std::string_view first100,
-                                    std::string_view last100) const {
+void Load::throwErrorWithContext(std::string_view msg,
+                                 std::string_view first100,
+                                 std::string_view last100) const {
   throw std::runtime_error(absl::StrCat(
-      "Error while executing a LoadURL request to <",
-      loadURLClause_.url_.asString(), ">: ", msg,
-      ". First 100 bytes of the response: '", first100,
+      "Error while executing a Load request to <", loadClause_.url_.asString(),
+      ">: ", msg, ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }
 
 // _____________________________________________________________________________
-bool LoadURL::canResultBeCachedImpl() const {
-  return loadResultCachingEnabled_;
-}
+bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }

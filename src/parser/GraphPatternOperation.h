@@ -70,7 +70,7 @@ struct Service {
 };
 
 /// An internal pattern used in the `LOAD` update operation.
-struct LoadURL {
+struct Load {
  public:
   ad_utility::httpUtils::Url url_;
   bool silent_;
