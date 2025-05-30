@@ -173,13 +173,20 @@ class Operation {
   // actual result because it has been constrained by a parent operation (e.g.
   // an IndexScan that has been prefiltered by another operation which it is
   // joined with).
-  virtual bool canResultBeCached() const { return canResultBeCached_; }
+  virtual bool canResultBeCached() const final {
+    return canResultBeCachedImpl() && canResultBeCached_;
+  }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
   // above for details).
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
+  // Return if the result of this `Operation` can be cached at all. Caching can
+  // still be disabled for other reason external to this operation with
+  // `disableStoringInCache()`.
+  virtual bool canResultBeCachedImpl() const { return true; }
+
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
   virtual string getCacheKeyImpl() const = 0;
