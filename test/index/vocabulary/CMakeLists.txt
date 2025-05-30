@@ -9,3 +9,5 @@ addLinkAndDiscoverTestNoLibs(UnicodeVocabularyTest vocabulary)
 addLinkAndDiscoverTestNoLibs(VocabularyInternalExternalTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)
+
+addLinkAndDiscoverTest(GeoVocabularyTest vocabulary)
