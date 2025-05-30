@@ -1913,6 +1913,32 @@ TEST(SparqlParser, FunctionCall) {
                          variableExpressionMatcher(Variable{"?b"}),
                          variableExpressionMatcher(Variable{"?unit"})));
 
+  // Geometric relation functions
+  expectFunctionCall(
+      absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::INTERSECTS>,
+                Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfContains>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::CONTAINS>,
+                Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfCrosses>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>,
+                Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfTouches>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>,
+                Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfEquals>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>,
+                Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
+                Variable{"?a"}, Variable{"?b"}));
+
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
                      matchUnary(&makeLogExpression));
@@ -1955,6 +1981,31 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfContains>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a, ?b, ?c)"));
+
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
