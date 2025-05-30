@@ -5,8 +5,10 @@
 #ifndef QLEVER_GROUPCONCATEXPRESSION_H
 #define QLEVER_GROUPCONCATEXPRESSION_H
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatHelper.h"
 
 namespace sparqlExpression {
 /// The GROUP_CONCAT Expression
@@ -29,17 +31,29 @@ class GroupConcatExpression : public SparqlExpression {
     auto impl = [this, context](auto&& el)
         -> CPP_ret(ExpressionResult)(
             requires SingleExpressionResult<decltype(el)>) {
+      bool undefined = false;
       std::string result;
-      auto groupConcatImpl = [this, &result, context](auto generator) {
+      std::optional<std::string> langTag;
+      auto groupConcatImpl = [this, &result, context, &undefined,
+                              &langTag](auto generator) {
         // TODO<joka921> Make this a configurable constant.
         result.reserve(20000);
+        bool firstIteration = true;
         for (auto& inp : generator) {
-          const auto& s = detail::StringValueGetter{}(std::move(inp), context);
-          if (s.has_value()) {
-            if (!result.empty()) {
-              result.append(separator_);
-            }
-            result.append(s.value());
+          auto literal = detail::LiteralValueGetterWithoutStrFunction{}(
+              std::move(inp), context);
+          if (firstIteration) {
+            firstIteration = false;
+            detail::pushLanguageTag(langTag, literal);
+          } else {
+            result.append(separator_);
+          }
+          if (literal.has_value()) {
+            result.append(asStringViewUnsafe(literal.value().getContent()));
+            detail::mergeLanguageTags(langTag, literal.value());
+          } else {
+            undefined = true;
+            return;
           }
           context->cancellationHandle_->throwIfCancelled();
         }
@@ -53,10 +67,12 @@ class GroupConcatExpression : public SparqlExpression {
       } else {
         groupConcatImpl(std::move(generator));
       }
+      if (undefined) {
+        return Id::makeUndefined();
+      }
       result.shrink_to_fit();
-      return IdOrLiteralOrIri(ad_utility::triple_component::LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(result))});
+      return IdOrLiteralOrIri{detail::stringWithOptionalLangTagToLiteral(
+          result, std::move(langTag))};
     };
 
     auto childRes = child_->evaluate(context);
@@ -79,10 +95,8 @@ class GroupConcatExpression : public SparqlExpression {
   }
 
  private:
-  // _________________________________________________________________________
-  ql::span<SparqlExpression::Ptr> childrenImpl() override {
-    return {&child_, 1};
-  }
+  // ___________________________________________________________________________
+  ql::span<Ptr> childrenImpl() override { return {&child_, 1}; }
 };
 }  // namespace sparqlExpression
 

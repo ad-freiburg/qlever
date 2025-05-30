@@ -211,7 +211,9 @@ TEST_F(GroupByHashMapOptimizationTest,
   addString("a");
   EXPECT_EQ(getResultString(), "a");
   addValue(Id::makeUndefined());
-  EXPECT_EQ(getResultString(), "a");
+  EXPECT_EQ(calc(), Id::makeUndefined());
+  addString("a");
+  EXPECT_EQ(calc(), Id::makeUndefined());
 }
 
 // _____________________________________________________________________________
