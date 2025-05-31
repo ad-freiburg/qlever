@@ -23,6 +23,13 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
   // Make sure that the left and right input are sorted on the join columns.
   std::tie(left_, right_) = QueryExecutionTree::createSortedTrees(
       std::move(left_), std::move(right_), joinColumns_);
+
+  if (joinColumns_.empty()) {
+    // For non-lazy results applying the limit introduces some overhead, but for
+    // lazy results it ensures that we don't have to compute the whole result,
+    // so we consider this a tradeoff worth to make.
+    right_->applyLimit({1});
+  }
 }
 
 // _____________________________________________________________________________
@@ -85,12 +92,6 @@ size_t ExistsJoin::getCostEstimate() {
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
   auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
-  if (noJoinNecessary) {
-    // For non-lazy results applying the limit introduces some overhead, but for
-    // lazy results it ensures that we don't have to compute the whole result,
-    // so we consider this a tradeoff worth to make.
-    right_->setLimit({1});
-  }
   auto rightRes = right_->getResult();
   const auto& right = rightRes->idTable();
 

@@ -113,10 +113,10 @@ class ValuesForTesting : public Operation {
     auto table = optionalTable.has_value() ? std::move(optionalTable).value()
                                            : tables_.at(0).clone();
     if (supportsLimit_) {
-      table.erase(table.begin() + getLimit().upperBound(table.size()),
+      table.erase(table.begin() + getLimitOffset().upperBound(table.size()),
                   table.end());
       table.erase(table.begin(),
-                  table.begin() + getLimit().actualOffset(table.size()));
+                  table.begin() + getLimitOffset().actualOffset(table.size()));
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
@@ -131,7 +131,7 @@ class ValuesForTesting : public Operation {
     cacheSizeStorage_ = cacheSizeStorage;
   }
 
-  bool supportsLimit() const override { return supportsLimit_; }
+  bool supportsLimitOffset() const override { return supportsLimit_; }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
 

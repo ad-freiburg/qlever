@@ -108,7 +108,7 @@ void testLazyScanForJoinOfTwoScans(
     config.blocksizePermutations = blocksizePermutations;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
-    s1.setLimit(limit);
+    s1.applyLimitOffset(limit);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
     auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                             const auto& expectedR,

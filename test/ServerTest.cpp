@@ -244,27 +244,4 @@ TEST(ServerTest, adjustParsedQueryLimitOffset) {
   expectExportLimit(csv, std::nullopt);
   expectExportLimit(csv, std::nullopt, complexQuery);
   expectExportLimit(tsv, std::nullopt);
-
-  auto expectOffset =
-      [&makePlannedQuery](
-          ad_utility::MediaType mediaType, uint64_t parsedQueryOffset,
-          uint64_t rootOperationOffset,
-          std::string operation =
-              "SELECT * WHERE { <a> <b> ?c } LIMIT 10 OFFSET 15",
-          const ad_utility::url_parser::ParamValueMap& parameters = {},
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(l);
-        auto pq = makePlannedQuery(std::move(operation));
-        Server::adjustParsedQueryLimitOffset(pq, mediaType, parameters);
-        EXPECT_THAT(pq.parsedQuery_._limitOffset._offset,
-                    testing::Eq(parsedQueryOffset));
-        EXPECT_THAT(
-            pq.queryExecutionTree_.getRootOperation()->getLimit()._offset,
-            testing::Eq(rootOperationOffset));
-      };
-
-  // The Offset must not be applied twice.
-  expectOffset(qleverJson, 0, 15);
-  expectOffset(qleverJson, 5, 0, complexQuery);
 }

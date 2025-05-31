@@ -88,7 +88,7 @@ TEST(NeutralOptional, getSizeEstimate) {
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({0, 0});
+    no.applyLimitOffset({0, 0});
     EXPECT_EQ(no.getSizeEstimate(), 0);
   }
   {
@@ -97,7 +97,7 @@ TEST(NeutralOptional, getSizeEstimate) {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({40, 1});
+    no.applyLimitOffset({40, 1});
     EXPECT_EQ(no.getSizeEstimate(), 40);
   }
   {
@@ -139,7 +139,7 @@ TEST(NeutralOptional, supportsLimit) {
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
-  EXPECT_TRUE(no.supportsLimit());
+  EXPECT_TRUE(no.supportsLimitOffset());
 }
 
 // _____________________________________________________________________________
@@ -192,7 +192,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1});
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
@@ -205,7 +205,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1});
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
@@ -217,7 +217,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({0});
+    no.applyLimitOffset({0});
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
@@ -230,7 +230,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.setLimit({0});
+    no.applyLimitOffset({0});
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
@@ -318,7 +318,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.setLimit({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
     EXPECT_EQ(result.idTable(), makeIdTableFromVector({{2}, {3}}));
@@ -332,7 +332,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.setLimit({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
     auto& idTables = result.idTables();
@@ -352,7 +352,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.setLimit({2});
+    no.applyLimitOffset({2});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
     EXPECT_EQ(result.idTable(), makeIdTableFromVector({{1}, {2}}));
@@ -366,7 +366,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.setLimit({2});
+    no.applyLimitOffset({2});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
     auto& idTables = result.idTables();
