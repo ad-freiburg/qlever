@@ -680,7 +680,10 @@ std::unique_ptr<Operation> Operation::clone() const {
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  // If the result can be cached, then the cache key must be the same for
+  // the cloned operation.
+  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+                     getCacheKey() == result->getCacheKey());
   return result;
 }
 

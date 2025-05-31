@@ -24,7 +24,7 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 SendRequestType getResultFunction)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getResultFunction_{std::move(getResultFunction)} {}
@@ -158,16 +158,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       "application/sparql-results+json");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
-    std::string ctx;
-    ctx.reserve(100);
-    for (const auto& bytes : std::move(response.body_)) {
-      ctx += std::string(reinterpret_cast<const char*>(bytes.data()),
-                         bytes.size());
-      if (ctx.size() >= 100) {
-        break;
-      }
-    }
-    this->throwErrorWithContext(sv, std::string_view(ctx).substr(0, 100));
+    this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
   };
 
   // Verify status and content-type of the response.
