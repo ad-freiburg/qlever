@@ -1526,3 +1526,15 @@ TEST(ParserTest, variablesInMinusAreHidden) {
                   {Variable{"?a"}, Variable{"?b"}},
                   {{TripleComponent{2}, TripleComponent{2}}}))))));
 }
+
+namespace sparqlParserHelpers {
+
+TEST(ParserTest, unescapeUnicodeSequences) {
+  auto unescape =
+      sparqlParserHelpers::ParserAndVisitor::unescapeUnicodeSequences;
+  EXPECT_THAT(unescape(R"(\\u0026)"), testing::Eq(R"(\\u0026)"));
+  EXPECT_THAT(unescape(R"(\u0026)"), testing::Eq(R"(&)"));
+  EXPECT_THAT(unescape(R"(\\\u0026)"), testing::Eq(R"(\\&)"));
+}
+
+}  // namespace sparqlParserHelpers

@@ -39,6 +39,8 @@ struct ParserAndVisitor {
   // before beginning with actual parsing as the SPARQL standard mandates.
   static std::string unescapeUnicodeSequences(std::string input);
 
+  FRIEND_TEST(ParserTest, unescapeUnicodeSequences);
+
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
