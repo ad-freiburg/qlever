@@ -52,13 +52,18 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   if (!hasUpdates(blockIndex)) {
     return {0, 0};
   } else {
-    // NOTE: A previous version of this code iterated over `blockUpdateTriples`
+    // TODO: A previous version of this code iterated over `blockUpdateTriples`
     // and counted the number of triples with `shouldTripleExist_ == true` and
     // `shouldTripleExist_ == false` separately. This makes the estimate
     // slightly more precise, but turned out to be very slow because iterating
-    // over a `std::set` is surprisingly slow. Note that in the typical use
-    // case, the number of update triples per block is small relative to the
-    // total number of triples in the block.
+    // over a `std::set` is surprisingly slow. However, it would be easy to
+    // simply keep track of the number of insertions and deletions per block,
+    // which would then enable the previous more precise estimate in constant
+    // time.
+    //
+    // Note that in the typical use case, the number of update triples per block
+    // is small relative to the total number of triples in the block. Therefore,
+    // the different in precision probably does not matter much.
     const auto& blockUpdateTriples = map_.at(blockIndex);
     return {blockUpdateTriples.size(), blockUpdateTriples.size()};
   }
