@@ -120,15 +120,13 @@ CPP_template(typename UnderlyingVocabulary,
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
   /// the underlying vocabulary.
-  class DiskWriterFromUncompressedWords {
+  class DiskWriterFromUncompressedWords : public WordWriterBase {
    private:
     std::vector<std::string> wordBuffer_;
     std::vector<bool> isExternalBuffer_;
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
-    std::string readableName_ = "";
-    bool isFinished_ = false;
     ad_utility::MemorySize uncompressedSize_ = bytes(0);
     ad_utility::MemorySize compressedSize_ = bytes(0);
     size_t numBlocks_ = 0u;
@@ -153,8 +151,7 @@ CPP_template(typename UnderlyingVocabulary,
 
     /// Compress the `uncompressedWord` and write it to disk.
     uint64_t operator()(std::string_view uncompressedWord,
-                        bool isExternal = false) {
-      AD_CORRECTNESS_CHECK(!isFinished_);
+                        bool isExternal) override {
       wordBuffer_.emplace_back(uncompressedWord);
       isExternalBuffer_.push_back(isExternal);
       if (wordBuffer_.size() == NumWordsPerBlock) {
@@ -163,14 +160,20 @@ CPP_template(typename UnderlyingVocabulary,
       return counter_++;
     }
 
+    ~DiskWriterFromUncompressedWords() override {
+      if (!finishWasCalled()) {
+        ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                      "Calling `finish` from the destructor of "
+                                      "`DiskWriterFromUncompressedWords`");
+      }
+    }
+
+   private:
     /// Dump all the words that still might be contained in intermediate buffers
     /// to the underlying file and close the file. After calls to `finish()` no
     /// more words can be pushed. `finish()` is implicitly also called by the
     /// destructor.
-    void finish() {
-      if (std::exchange(isFinished_, true)) {
-        return;
-      }
+    void finishImpl() override {
       finishBlock();
       compressQueue_.finish();
       writeQueue_.finish();
@@ -184,7 +187,7 @@ CPP_template(typename UnderlyingVocabulary,
           (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
           std::max(uncompressedSize_.getBytes(), size_t(1));
       std::string nameString =
-          readableName_.empty() ? std::string{"vocabulary"} : readableName_;
+          readableName().empty() ? std::string{"vocabulary"} : readableName();
       LOG(INFO) << "Finished writing compressed " << nameString
                 << ", size = " << compressedSize_
                 << " [uncompressed = " << uncompressedSize_
@@ -197,16 +200,7 @@ CPP_template(typename UnderlyingVocabulary,
       }
     }
 
-    // Access the human-readable description for the vocabulary to be written
-    // that will be used in log message.
-    std::string& readableName() { return readableName_; }
-
-    // Call `finish`, does nothing if `finish` has been manually called.
-    ~DiskWriterFromUncompressedWords() noexcept {
-      ad_utility::terminateIfThrows(
-          [this]() { this->finish(); },
-          "The destructor of a DiskWriter of a `CompressedVocabulary`");
-    }
+   public:
     DiskWriterFromUncompressedWords(const DiskWriterFromUncompressedWords&) =
         delete;
     DiskWriterFromUncompressedWords& operator=(

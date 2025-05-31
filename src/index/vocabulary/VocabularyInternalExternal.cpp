@@ -23,7 +23,7 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
 // _____________________________________________________________________________
 uint64_t VocabularyInternalExternal::WordWriter::operator()(
     std::string_view str, bool isExternal) {
-  externalWriter_(str);
+  externalWriter_(str, true);
   if (!isExternal || sinceMilestone_ >= milestoneDistance_ || idx_ == 0) {
     internalWriter_(str, idx_);
     sinceMilestone_ = 0;
@@ -33,9 +33,18 @@ uint64_t VocabularyInternalExternal::WordWriter::operator()(
 }
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::WordWriter::finish() {
+void VocabularyInternalExternal::WordWriter::finishImpl() {
   internalWriter_.finish();
   externalWriter_.finish();
+}
+
+// _____________________________________________________________________________
+VocabularyInternalExternal::WordWriter::~WordWriter() {
+  if (!finishWasCalled()) {
+    ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                  "Calling `finish` from the destructor of "
+                                  "`VocabularyInternalExternal::WordWriter`");
+  }
 }
 
 // _____________________________________________________________________________
