@@ -11,6 +11,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupBy.h"
+#include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryPlanner.h"
@@ -26,6 +27,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
+#include "index/TextIndexBuilder.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -75,11 +77,13 @@ class GroupByTest : public ::testing::Test {
     _index.setOnDiskBase("group_ty_test");
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
-    _index.buildTextIndexFile(
+    TextIndexBuilder textIndexBuilder{ad_utility::makeUnlimitedAllocator<Id>(),
+                                      _index.getOnDiskBase()};
+    textIndexBuilder.buildTextIndexFile(
         std::pair<std::string, std::string>{"group_by_test.words",
                                             "group_by_test.documents"},
         false);
-    _index.buildDocsDB("group_by_test.documents");
+    textIndexBuilder.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
     _index.parserBufferSize() = 1_kB;
@@ -412,26 +416,26 @@ struct GroupByOptimizations : ::testing::Test {
       "<z> <label> \"zz\"@en .";
 
   QueryExecutionContext* qec = getQec(turtleInput);
-  SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
+  SparqlTripleSimple xyzTriple{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}};
   Tree xyzScanSortedByX =
       makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
   Tree xyzScanSortedByY =
       makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{iri("<x>"), {"<label>"}, Variable{"?x"}});
+      SparqlTripleSimple{iri("<x>"), iri("<label>"), Variable{"?x"}});
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?x"}, iri("<label>"), Variable{"?y"}});
   Tree yxScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::POS,
-      SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?x"}, iri("<label>"), Variable{"?y"}});
   Tree xScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{iri("<x>")}, {"<notInVocab>"}, Variable{"?x"}});
+      SparqlTripleSimple{{iri("<x>")}, iri("<notInVocab>"), Variable{"?x"}});
   Tree xyScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?x"}, {"<notInVocab>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?x"}, iri("<notInVocab>"), Variable{"?y"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
@@ -545,24 +549,24 @@ TEST_F(GroupByOptimizations, getPermutationForThreeVariableTriple) {
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
-  ASSERT_EQ(SPO,
-            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varX));
-  ASSERT_EQ(POS,
-            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varY, varZ));
-  ASSERT_EQ(OSP,
-            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varZ, varY));
+  ASSERT_EQ(SPO, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
+                                                                   varX, varX));
+  ASSERT_EQ(POS, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
+                                                                   varY, varZ));
+  ASSERT_EQ(OSP, GroupByImpl::getPermutationForThreeVariableTriple(xyzScan,
+                                                                   varZ, varY));
 
   // First variable not contained in triple.
   AD_EXPECT_NULLOPT(
-      GroupBy::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
+      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
 
   // Second variable not contained in triple.
   AD_EXPECT_NULLOPT(
-      GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
+      GroupByImpl::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
 
   // Not a three variable triple.
   AD_EXPECT_NULLOPT(
-      GroupBy::getPermutationForThreeVariableTriple(*xScan, varX, varX));
+      GroupByImpl::getPermutationForThreeVariableTriple(*xScan, varX, varX));
 }
 
 // _____________________________________________________________________________
@@ -580,7 +584,7 @@ TEST_F(GroupByOptimizations, findAggregates) {
       std::move(twoTimesAvgYExpr), std::move(avgFourTimesYExpr));
 
   auto foundAggregates =
-      GroupBy::findAggregates(twoTimesAvgY_times_avgFourTimesYExpr.get());
+      GroupByImpl::findAggregates(twoTimesAvgY_times_avgFourTimesYExpr.get());
   ASSERT_TRUE(foundAggregates.has_value());
   auto value = foundAggregates.value();
   ASSERT_EQ(value.size(), 2);
@@ -620,15 +624,16 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
   input._values.push_back(std::vector{TC(1.0), TC(3.0)});
   auto values = ad_utility::makeExecutionTree<Values>(
       ad_utility::testing::getQec(), input);
-  GroupBy groupBy{ad_utility::testing::getQec(), {Variable{"?a"}}, {}, values};
+  GroupByImpl groupBy{
+      ad_utility::testing::getQec(), {Variable{"?a"}}, {}, values};
 
   auto variableAtTop = groupBy.findGroupedVariable(expr1.get(), Variable{"?a"});
-  ASSERT_TRUE(std::get_if<GroupBy::OccurAsRoot>(&variableAtTop));
+  ASSERT_TRUE(std::get_if<GroupByImpl::OccurAsRoot>(&variableAtTop));
 
   auto variableInExpression =
       groupBy.findGroupedVariable(expr2.get(), Variable{"?a"});
   auto variableInExpressionOccurrences =
-      std::get_if<std::vector<GroupBy::ParentAndChildIndex>>(
+      std::get_if<std::vector<GroupByImpl::ParentAndChildIndex>>(
           &variableInExpression);
   ASSERT_TRUE(variableInExpressionOccurrences);
   ASSERT_EQ(variableInExpressionOccurrences->size(), 1);
@@ -639,7 +644,8 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
   auto variableNotFound =
       groupBy.findGroupedVariable(expr3.get(), Variable{"?a"});
   auto variableNotFoundOccurrences =
-      std::get_if<std::vector<GroupBy::ParentAndChildIndex>>(&variableNotFound);
+      std::get_if<std::vector<GroupByImpl::ParentAndChildIndex>>(
+          &variableNotFound);
   ASSERT_EQ(variableNotFoundOccurrences->size(), 0);
 }
 
@@ -647,14 +653,14 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
 TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join, auto& aggregates) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, join};
     ASSERT_EQ(std::nullopt,
               groupBy.checkIfHashMapOptimizationPossible(aggregates));
   };
 
   auto testSuccess = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join, auto& aggregates) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, join};
     auto optimizedAggregateData =
         groupBy.checkIfHashMapOptimizationPossible(aggregates);
     ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -684,15 +690,15 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Alias> aliasesSumX{Alias{sumXPimpl, Variable{"?sumX"}}};
   std::vector<Alias> aliasesSampleX{Alias{sampleXPimpl, Variable{"?sampleX"}}};
 
-  std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> avgDistinctAggregate = {
+  std::vector<GroupByImpl::Aggregate> countAggregate = {{countXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> avgAggregate = {{avgXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> avgDistinctAggregate = {
       {avgDistinctXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> maxAggregate = {{maxXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> sumAggregate = {{sumXPimpl, 1}};
-  std::vector<GroupBy::Aggregate> sampleAggregate = {{sampleXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> avgCountAggregate = {{avgCountXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> minAggregate = {{minXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> maxAggregate = {{maxXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> sumAggregate = {{sumXPimpl, 1}};
+  std::vector<GroupByImpl::Aggregate> sampleAggregate = {{sampleXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
@@ -718,7 +724,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testSuccess(variablesOnlyX, aliasesSampleX, subtreeWithSort, sampleAggregate);
 
   // Check details of data structure are correct.
-  GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
+  GroupByImpl groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
   auto optimizedAggregateData =
       groupBy.checkIfHashMapOptimizationPossible(avgAggregate);
   ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -745,10 +751,10 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
  */
   Tree zxScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is-a>"), Variable{"?x"}});
   Tree zyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
 
@@ -825,10 +831,10 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
  */
   Tree zxScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is-a>"), Variable{"?x"}});
   Tree zyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
 
@@ -1340,7 +1346,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   QueryExecutionContext* qec = getQec(turtleInput);
 
   Tree xyScan = makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{varX, {"<label>"}, varY});
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
   std::vector<ColumnIndex> sortedColumns = {0};
@@ -1438,7 +1445,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
   QueryExecutionContext* qec = getQec(turtleInput);
 
   Tree xyScan = makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{varX, {"<label>"}, varY});
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
   std::vector<ColumnIndex> sortedColumns = {0};
@@ -1482,10 +1490,10 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
 
   Tree zxScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is-a>"), Variable{"?x"}});
   Tree zyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+      SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
   Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
@@ -1577,7 +1585,7 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   // can not perform the `OptimizedAggregateOnJoinChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, join};
     ASSERT_EQ(std::nullopt,
               groupBy.checkIfJoinWithFullScan(getOperation(join)));
   };
@@ -1598,7 +1606,8 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   testFailure(variablesOnlyY, aliasesCountX, validJoinWhenGroupingByX);
 
   // Everything is valid for the following example.
-  GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, validJoinWhenGroupingByX};
+  GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX,
+                      validJoinWhenGroupingByX};
   auto optimizedAggregateData =
       groupBy.checkIfJoinWithFullScan(getOperation(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
@@ -1611,14 +1620,16 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
 TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   {
     // One of the invalid cases from the previous test.
-    GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
-                                   validJoinWhenGroupingByX};
+    GroupBy invalidForOptimizationPimpl{qec, emptyVariables, aliasesCountX,
+                                        validJoinWhenGroupingByX};
+    auto& invalidForOptimization = invalidForOptimizationPimpl.getImpl();
     ASSERT_EQ(std::nullopt,
               invalidForOptimization.computeGroupByForJoinWithFullScan());
 
     // The child of the GROUP BY is not a join, so this is also
     // invalid.
-    GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
+    GroupBy invalidGroupBy2Pimpl{qec, variablesOnlyX, emptyAliases, xScan};
+    auto& invalidGroupBy2 = invalidGroupBy2Pimpl.getImpl();
     ASSERT_EQ(std::nullopt,
               invalidGroupBy2.computeGroupByForJoinWithFullScan());
   }
@@ -1647,7 +1658,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // The last two arguments of the `Join` constructor are the indices of the
     // join columns.
     auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
-    GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
+    GroupByImpl validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
     auto optional =
         chooseInterface
             ? validForOptimization.computeGroupByForJoinWithFullScan()
@@ -1661,7 +1672,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   {
     auto join = makeExecutionTree<Join>(qec, xScanIriNotInVocab,
                                         xyzScanSortedByX, 0, 0);
-    GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
+    GroupByImpl groupBy{qec, variablesOnlyX, aliasesCountX, join};
     auto result = groupBy.computeGroupByForJoinWithFullScan();
     EXPECT_THAT(result, Optional(matchesIdTable(2u, qec->getAllocator())));
   }
@@ -1673,7 +1684,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // can not perform the `OptimizedAggregateOnIndexScanChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, indexScan};
     ASSERT_EQ(std::nullopt, groupBy.computeGroupByForSingleIndexScan());
   };
   // The IndexScan has only one variable, this is currently not supported.
@@ -1696,9 +1707,9 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   auto testWithBothInterfaces = [&](bool chooseInterface,
                                     bool countVarIsUndef) {
     auto groupBy =
-        GroupBy{qec, emptyVariables,
-                countVarIsUndef ? aliasesCountNotExisting : aliasesCountX,
-                xyzScanSortedByX};
+        GroupByImpl{qec, emptyVariables,
+                    countVarIsUndef ? aliasesCountNotExisting : aliasesCountX,
+                    xyzScanSortedByX};
     auto optional = chooseInterface
                         ? groupBy.computeGroupByForSingleIndexScan()
                         : groupBy.computeOptimizedGroupByIfPossible();
@@ -1716,15 +1727,15 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   testWithBothInterfaces(false, false);
 
   {
-    auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
+    auto groupBy = GroupByImpl{qec, emptyVariables, aliasesCountX, xyScan};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
     ASSERT_THAT(optional, optionalHasTable({{I(5)}}));
   }
   {
-    auto groupBy =
-        GroupBy{qec, emptyVariables, aliasesCountDistinctX, xyzScanSortedByX};
+    auto groupBy = GroupByImpl{qec, emptyVariables, aliasesCountDistinctX,
+                               xyzScanSortedByX};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
@@ -1744,7 +1755,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   auto isSuited = [this](const auto& groupByVariables, const auto& aliases,
                          const auto& indexScan,
                          bool callSpecializedMethod = true) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, indexScan};
     return callSpecializedMethod
                ? groupBy.computeGroupByObjectWithCount().has_value()
                : groupBy.computeOptimizedGroupByIfPossible().has_value();
@@ -1784,14 +1795,14 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   // Group by subject.
   auto getId = makeGetId(qec->getIndex());
   {
-    auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
+    auto groupBy = GroupByImpl{qec, variablesOnlyX, aliasesCountX, xyScan};
     ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
   }
 
   // Group by object.
   {
-    auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
+    auto groupBy = GroupByImpl{qec, variablesOnlyY, aliasesCountY, yxScan};
     ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
                 optionalHasTable({{getId("\"A\""), I(1)},
                                   {getId("\"alpha\""), I(1)},
@@ -1807,7 +1818,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // can not perform the `GroupByForSingleIndexScan2` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {
-    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    auto groupBy = GroupByImpl{qec, groupByVariables, aliases, indexScan};
     ASSERT_EQ(std::nullopt, groupBy.computeGroupByForFullIndexScan());
   };
   // The IndexScan doesn't have three variables.
@@ -1840,7 +1851,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         }
         return countVarIsUnbound ? aliasesCountNotExisting : aliasesCountX;
       }();
-      auto groupBy = GroupBy{qec, variablesOnlyX, aliases, xyzScanSortedByX};
+      auto groupBy =
+          GroupByImpl{qec, variablesOnlyX, aliases, xyzScanSortedByX};
       auto optional = chooseInterface
                           ? groupBy.computeGroupByForFullIndexScan()
                           : groupBy.computeOptimizedGroupByIfPossible();
@@ -2059,6 +2071,25 @@ TEST(GroupBy, Descriptor) {
   EXPECT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
   GroupBy groupBy2{qec, {}, {}, subtree};
   EXPECT_EQ(groupBy2.getDescriptor(), "GroupBy (implicit)");
+}
+
+// _____________________________________________________________________________
+TEST(GroupBy, knownEmptyResult) {
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()},
+      std::vector<std::optional<Variable>>{Variable{"?a"}});
+
+  // Explicit group by should propagate knownEmptyResult() from child operation.
+  {
+    GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
+    EXPECT_TRUE(groupBy.knownEmptyResult());
+  }
+  // Implicit group by always returns a result
+  {
+    GroupBy groupBy{qec, {}, {}, subtree};
+    EXPECT_FALSE(groupBy.knownEmptyResult());
+  }
 }
 
 namespace {

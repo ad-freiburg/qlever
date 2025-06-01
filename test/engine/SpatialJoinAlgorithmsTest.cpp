@@ -257,7 +257,8 @@ class SpatialJoinParamTest
         ad_utility::triple_component::Iri::fromIriref(geometry)};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
-        SparqlTriple{subject, std::string{"<asWKT>"}, point1});
+        SparqlTripleSimple{subject, TripleComponent::Iri::fromIriref("<asWKT>"),
+                           point1});
     // ====================== build big input ================================
     auto bigChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
@@ -1573,8 +1574,9 @@ TEST(SpatialJoin, trueAreaDistance) {
       TripleComponent object{Variable{objStr}};
       return ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::PSO,
-          SparqlTriple{TripleComponent::Iri::fromIriref(subject), "<asWKT>",
-                       object});
+          SparqlTripleSimple{TripleComponent::Iri::fromIriref(subject),
+                             TripleComponent::Iri::fromIriref("<asWKT>"),
+                             object});
     };
     auto scan1 = makeIndexScan(nr1);
     auto scan2 = makeIndexScan(nr2);

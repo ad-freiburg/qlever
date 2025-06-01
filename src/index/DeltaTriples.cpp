@@ -206,6 +206,14 @@ void DeltaTriples::modifyTriplesImpl(
   });
   if (tracer) {
     tracer->get().endTrace("removeInverseTriples");
+    tracer->get().beginTrace("updateMetadata");
+  }
+  // Manually update the block metadata, because `eraseTripleInAllPermutations`
+  // does not update them for performance reason.
+  ql::ranges::for_each(locatedTriples(),
+                       &LocatedTriplesPerBlock::updateAugmentedMetadata);
+  if (tracer) {
+    tracer->get().endTrace("updateMetadata");
     tracer->get().beginTrace("locatedAndAdd");
   }
 

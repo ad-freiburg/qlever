@@ -173,13 +173,20 @@ class Operation {
   // actual result because it has been constrained by a parent operation (e.g.
   // an IndexScan that has been prefiltered by another operation which it is
   // joined with).
-  virtual bool canResultBeCached() const { return canResultBeCached_; }
+  virtual bool canResultBeCached() const final {
+    return canResultBeCachedImpl() && canResultBeCached_;
+  }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
   // above for details).
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
+  // Return if the result of this `Operation` can be cached at all. Caching can
+  // still be disabled for other reason external to this operation with
+  // `disableStoringInCache()`.
+  virtual bool canResultBeCachedImpl() const { return true; }
+
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
   virtual string getCacheKeyImpl() const = 0;
@@ -324,6 +331,18 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Helper function to check hif the result of this operation is
+  // already sorted accordigngly.
+  virtual bool isSortedBy(const vector<ColumnIndex>& sortColumns) const final;
+
+  // Try to create a version of this operation that is sorted on the given
+  // `sortColumns`. The default implementation returns `std::nullopt`, assuming
+  // most operations can't efficiently produce a sorted result. Subclasses may
+  // override this function if they are able to provide more efficient
+  // implementations.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const;
 
  protected:
   // The QueryExecutionContext for this particular element.

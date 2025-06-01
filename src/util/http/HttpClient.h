@@ -29,6 +29,22 @@ struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
   cppcoro::generator<ql::span<std::byte>> body_;
+
+  // Return the first `length` bytes of the response body as a string.
+  std::string readResponseHead(size_t length) && {
+    std::string ctx;
+    ctx.reserve(length);
+    for (const auto& bytes : std::move(body_)) {
+      // only copy until the ctx has reached length
+      size_t bytesToCopy = std::min(bytes.size(), length - ctx.size());
+      ctx += std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                              bytesToCopy);
+      if (ctx.size() == length) {
+        break;
+      }
+    }
+    return ctx;
+  }
 };
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
@@ -84,6 +100,15 @@ using HttpClient = HttpClientImpl<boost::beast::tcp_stream>;
 // Instantiation for HTTPS.
 using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
+
+// The type of the `sendHttpOrHttpsRequest` function below, wrapped in a
+// `std::function`. This type alias can be used when mocking an HTTP connection
+// for testing purposes.
+using SendRequestType = std::function<HttpOrHttpsResponse(
+    const ad_utility::httpUtils::Url&,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb&, std::string_view, std::string_view,
+    std::string_view)>;
 
 // Global convenience function for sending a request (default: GET) to the given
 // URL and obtaining the result as a `cppcoro::generator<ql::span<std::byte>>`.
