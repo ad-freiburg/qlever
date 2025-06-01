@@ -1,7 +1,11 @@
-// Copyright 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2024 The QLever Authors, in particular:
+//
+// 2024        Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
