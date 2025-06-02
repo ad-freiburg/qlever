@@ -6,7 +6,6 @@
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 
-#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"

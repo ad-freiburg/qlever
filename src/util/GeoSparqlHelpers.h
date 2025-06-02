@@ -12,8 +12,9 @@
 #include <optional>
 #include <string_view>
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
+#include "global/ValueId.h"
 #include "parser/GeoPoint.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"

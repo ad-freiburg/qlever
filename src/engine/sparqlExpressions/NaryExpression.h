@@ -12,7 +12,7 @@
 #include <cstdlib>
 
 #include "backports/concepts.h"
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 // Factory functions for all kinds of expressions that only have other

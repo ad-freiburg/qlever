@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "util/GeoSparqlHelpers.h"
 
