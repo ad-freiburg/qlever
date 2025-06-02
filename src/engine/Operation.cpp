@@ -680,6 +680,30 @@ std::unique_ptr<Operation> Operation::clone() const {
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  // If the result can be cached, then the cache key must be the same for
+  // the cloned operation.
+  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+                     getCacheKey() == result->getCacheKey());
   return result;
+}
+
+// _____________________________________________________________________________
+bool Operation::isSortedBy(const vector<ColumnIndex>& sortColumns) const {
+  auto inputSortedOn = resultSortedOn();
+  if (sortColumns.size() > inputSortedOn.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < sortColumns.size(); ++i) {
+    if (sortColumns[i] != inputSortedOn[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
+    const vector<ColumnIndex>& sortColumns) const {
+  AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  return std::nullopt;
 }

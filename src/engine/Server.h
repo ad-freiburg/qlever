@@ -95,7 +95,10 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   boost::asio::static_thread_pool queryThreadPool_;
-  boost::asio::static_thread_pool updateThreadPool_{1};
+  // The update thread pool size has to be `1` s.t. UPDATE operations are run
+  // atomically under all circumstances.
+  static constexpr size_t UPDATE_THREAD_POOL_SIZE = 1;
+  boost::asio::static_thread_pool updateThreadPool_{UPDATE_THREAD_POOL_SIZE};
 
   /// Executor with a single thread that is used to run timers asynchronously.
   boost::asio::static_thread_pool timerExecutor_{1};
@@ -151,10 +154,11 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processQuery(
-          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-          const ad_utility::Timer& requestTimer,
+          const ad_utility::url_parser::ParamValueMap& params,
+          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, ResponseT&& send);
+          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static json createResponseMetadataForUpdate(
@@ -168,9 +172,11 @@ class Server {
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       Awaitable<void> processUpdate(
-          const PlannedQuery& update, const ad_utility::Timer& requestTimer,
+          std::vector<ParsedQuery>&& updates,
+          const ad_utility::Timer& requestTimer,
           ad_utility::SharedCancellationHandle cancellationHandle,
-          const RequestT& request, ResponseT&& send);
+          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+          TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
@@ -196,16 +202,16 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& parameters);
 
   // Plan a parsed query.
-  Awaitable<PlannedQuery> planQuery(
-      boost::asio::static_thread_pool& thread_pool, ParsedQuery&& operation,
-      const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
-      QueryExecutionContext& qec, SharedCancellationHandle handle);
+  PlannedQuery planQuery(ParsedQuery&& operation,
+                         const ad_utility::Timer& requestTimer,
+                         TimeLimit timeLimit, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle) const;
   // Creates a `MessageSender` for the given operation.
   CPP_template(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
       ad_utility::websocket::MessageSender createMessageSender(
           const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-          const RequestT& request, const string& operation);
+          const RequestT& request, std::string_view operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
