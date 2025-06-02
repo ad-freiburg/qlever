@@ -62,6 +62,12 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   isLoaded_ = true;
 }
 
+// TODO @realHannes:
+// When `ScanSpecAndBlocks` is properly integrated in `IndexScan`; `scan`,
+// `getResultSizeOfScan` and `getSizeEstimate` will not have to
+// explicitly call `getScanSpecAndBlocks`. This is because they get passed a
+// `ScanSpecAndBlocks` object instead a simple `ScanSpecification` in the
+// future.
 // _____________________________________________________________________
 IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           ColumnIndicesRef additionalColumns,

@@ -256,7 +256,7 @@ size_t IndexScan::getExactSize() const {
 size_t IndexScan::getCostEstimate() {
   // If we have a limit present, we only have to read the first
   // `limit + offset` elements.
-  return getLimit().upperBound(getSizeEstimateBeforeLimit());
+  return getLimitOffset().upperBound(getSizeEstimateBeforeLimit());
 }
 
 // _____________________________________________________________________________
@@ -318,6 +318,7 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   AD_CORRECTNESS_CHECK(tripleComp->isVariable());
   return std::make_pair(tripleComp->getVariable(), colIdx);
 }
+
 
 // ___________________________________________________________________________
 Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
