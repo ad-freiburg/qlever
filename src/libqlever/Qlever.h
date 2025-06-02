@@ -24,15 +24,10 @@
 
 namespace qlever {
 
-// A configuration for a QLever instance.
-struct QleverConfig {
+struct CommonConfig {
   // A basename for all files that QLever will write as part of the index
   // building.
   std::string baseName;
-
-  // The specification of the input files (Turtle/NT or NQuad) from which the
-  // index will be built.
-  std::vector<qlever::InputFileSpecification> inputFiles;
 
   // A memory limit that will be applied during the index building as well as
   // during the query processing.
@@ -50,6 +45,15 @@ struct QleverConfig {
   // probably broken because the UPDATE mechanism doesn't support only two
   // permutations.
   bool onlyPsoAndPos = false;
+};
+
+// A configuration for a QLever instance.
+struct IndexBuilderConfig : CommonConfig {
+  // The specification of the input files (Turtle/NT or NQuad) from which the
+  // index will be built.
+  std::vector<qlever::InputFileSpecification> inputFiles;
+
+  std::optional<ad_utility::MemorySize> parserBufferSize;
 
   // Optionally a filename to a .json file with additional settings...
   // TODO<joka921> Make these settings part of this struct directly
@@ -59,7 +63,7 @@ struct QleverConfig {
   // The following members are only required if QLever's full-text search
   // extension is to be used, see `IndexBuilderMain.cpp` for additional details.
   bool addWordsFromLiterals = false;
-  std::string kbIndexName;
+  std::string kbIndexName = "no index name specified";
   std::string wordsfile;
   std::string docsfile;
   std::string textIndexName;
@@ -68,6 +72,20 @@ struct QleverConfig {
   // If set to true, then certain temporary files which are created while
   // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles = false;
+
+  TextScoringMetric textScoringMetric = TextScoringMetric::EXPLICIT;
+  float bScoringParam = 0.75;
+  float kScoringParam = 1.75;
+
+  void validate();
+};
+
+struct EngineConfig : CommonConfig {
+  EngineConfig(const IndexBuilderConfig& c)
+      : CommonConfig{static_cast<const CommonConfig&>(c)} {}
+  EngineConfig() = default;
+  bool text = false;
+  bool persistUpdates = true;
 };
 
 // A class that can be used to use QLever without the HTTP server, e.g. as part
@@ -83,10 +101,10 @@ class Qlever {
 
  public:
   // Build a persistent on disk index using the `config`.
-  static void buildIndex(QleverConfig config);
+  static void buildIndex(IndexBuilderConfig config);
 
   // Load the qlever index from file.
-  explicit Qlever(const QleverConfig& config);
+  explicit Qlever(const EngineConfig& config);
 
   // Run the given query on the index. Currently only SELECT and ASK queries are
   // supported, and the result will always be in sparql-results+json format.

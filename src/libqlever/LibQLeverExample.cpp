@@ -19,12 +19,13 @@ SELECT * WHERE {
 std::vector<std::string> inputs{""};
 
 int main(int argc, char** argv) {
-  qlever::QleverConfig config;
+  qlever::IndexBuilderConfig config;
   AD_CONTRACT_CHECK(argc >= 2);
   config.baseName = "exampleIndex";
   config.inputFiles.emplace_back(argv[1], qlever::Filetype::Turtle);
   qlever::Qlever::buildIndex(config);
-  qlever::Qlever qlever{config};
+  qlever::EngineConfig engineConfig{config};
+  qlever::Qlever qlever{engineConfig};
   ad_utility::Timer t{ad_utility::Timer::Started};
   auto result = qlever.query(std::move(query));
   std::cout << "retrieved a query result of size " << result.size() << " in "

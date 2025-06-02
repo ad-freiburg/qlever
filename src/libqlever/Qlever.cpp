@@ -5,11 +5,12 @@
 #include "libqlever/Qlever.h"
 
 #include "index/IndexImpl.h"
+#include "index/TextIndexBuilder.h"
 
 namespace qlever {
 
 // _____________________________________________________________________________
-Qlever::Qlever(const QleverConfig& config)
+Qlever::Qlever(const EngineConfig& config)
     : allocator_{ad_utility::AllocatorWithLimit<Id>{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit.value())}},
@@ -29,15 +30,12 @@ Qlever::Qlever(const QleverConfig& config)
   enablePatternTrick_ = !config.noPatterns;
   index_.loadAllPermutations() = !config.onlyPsoAndPos;
 
-  // Init the index.
-  // TODO<joka921> expose the `persistUpdates` flag to the `config`.
-  index_.createFromOnDiskIndex(config.baseName, true);
-  // TODO<joka921> Enable the loading of the text index via the QLever lib.
-  /*
-  if (useText) {
+  // Initialize the index.
+  index_.createFromOnDiskIndex(config.baseName, config.persistUpdates);
+  ;
+  if (config.text) {
     index_.addTextFromOnDiskIndex();
   }
-   */
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -45,13 +43,17 @@ Qlever::Qlever(const QleverConfig& config)
 }
 
 // _____________________________________________________________________________
-void Qlever::buildIndex(QleverConfig config) {
+void Qlever::buildIndex(IndexBuilderConfig config) {
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   if (config.memoryLimit.has_value()) {
     index.memoryLimitIndexBuilding() = config.memoryLimit.value();
   }
+  if (config.parserBufferSize.has_value()) {
+    index.parserBufferSize() = config.parserBufferSize.value();
+  }
+
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
   if (config.textIndexName.empty() && !config.wordsfile.empty()) {
@@ -72,17 +74,33 @@ void Qlever::buildIndex(QleverConfig config) {
       index.createFromFiles(config.inputFiles);
     }
 
-    // TODO<joka921> How do we nowadays correctly build the text index.
-    /*
-    if (!config.wordsfile.empty() || config.addWordsFromLiterals) {
-      index.(config.wordsfile,
-                                   config.addWordsFromLiterals);
+    const auto& wordsfile = config.wordsfile;
+    const auto& docsfile = config.docsfile;
+    bool wordsAndDocsFileSpecified = !(wordsfile.empty() || docsfile.empty());
+
+    if (!(wordsAndDocsFileSpecified ||
+          (wordsfile.empty() && docsfile.empty()))) {
+      throw std::runtime_error(absl::StrCat(
+          "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
+          ". Both or none of docsfile and wordsfile have to be given to build "
+          "text index. If none are given the option to add words from literals "
+          "has to be true. For details see --help."));
+    }
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
+    if (wordsAndDocsFileSpecified || config.addWordsFromLiterals) {
+      textIndexBuilder.buildTextIndexFile(
+          wordsAndDocsFileSpecified
+              ? std::optional{std::pair{wordsfile, docsfile}}
+              : std::nullopt,
+          config.addWordsFromLiterals, config.textScoringMetric,
+          {config.bScoringParam, config.kScoringParam});
     }
 
-    if (!config.docsfile.empty()) {
-      index.buildDocsDB(config.docsfile);
+    if (!docsfile.empty()) {
+      textIndexBuilder.buildDocsDB(docsfile);
     }
-     */
   } catch (std::exception& e) {
     LOG(ERROR) << "Creating the index for QLever failed with the following "
                   "exception: "
@@ -131,6 +149,17 @@ Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
   return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
+}
+
+void IndexBuilderConfig::validate() {
+  if (kScoringParam < 0) {
+    throw std::invalid_argument("The value of bm25-k must be >= 0");
+  }
+  if (bScoringParam < 0 || bScoringParam > 1) {
+    throw std::invalid_argument(
+        "The value of bm25-b must be between and "
+        "including 0 and 1");
+  }
 }
 
 }  // namespace qlever
