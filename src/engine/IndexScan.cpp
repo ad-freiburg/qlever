@@ -319,7 +319,6 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   return std::make_pair(tripleComp->getVariable(), colIdx);
 }
 
-
 // ___________________________________________________________________________
 Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
   return getScanPermutation().getScanSpecAndBlocks(getScanSpecification(),
