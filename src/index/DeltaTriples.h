@@ -1,8 +1,13 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
-//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_DELTATRIPLES_H
 #define QLEVER_SRC_INDEX_DELTATRIPLES_H
@@ -193,20 +198,21 @@ class DeltaTriples {
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
-  // `shouldExist` specifies the action: insert or delete. Return the iterators
-  // of where it was added (so that we can easily delete it again from these
-  // maps later).
+  // When `insertOrDelete` is `true`, the triples are inserted, otherwise
+  // deleted. Return the iterators of where it was added (so that we can easily
+  // delete it again from these maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       CancellationHandle cancellationHandle,
-      ql::span<const IdTriple<0>> idTriples, bool shouldExist);
+      ql::span<const IdTriple<0>> triples, bool insertOrDelete);
 
-  // Common implementation for `insertTriples` and `deleteTriples`.
-  // `shouldExist` specifies the action: insert or delete. `targetMap` contains
-  // triples for the current action. `inverseMap` contains triples for the
-  // inverse action. These are then used to resolve idempotent actions and
-  // update the corresponding maps.
+  // Common implementation for `insertTriples` and `deleteTriples`. When
+  // `insertOrDelete` is `true`, the triples are inserted, `targetMap` contains
+  // the already inserted triples, and `inverseMap` contains the already deleted
+  // triples. When `insertOrDelete` is `false`, the triples are deleted, and it
+  // is the other way around:. This is used to resolve insertions or deletions
+  // that are idempotent or cancel each other out.
   void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
-                         bool shouldExist, TriplesToHandlesMap& targetMap,
+                         bool insertOrDelete, TriplesToHandlesMap& targetMap,
                          TriplesToHandlesMap& inverseMap);
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
