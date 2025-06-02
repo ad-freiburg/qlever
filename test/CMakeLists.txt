@@ -463,3 +463,5 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
+
+addLinkAndDiscoverTest(GeometryInfoTest util)
