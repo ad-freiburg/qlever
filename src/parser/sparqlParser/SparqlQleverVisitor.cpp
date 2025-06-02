@@ -8,10 +8,12 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/functional/function_ref.h>
 #include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "engine/SpatialJoin.h"
@@ -26,6 +28,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/Constants.h"
@@ -173,7 +176,22 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   };
 
+  using Ptr = sparqlExpression::SparqlExpression::Ptr;
+  using UnaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr)>>;
+  using BinaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
+
   // Geo functions.
+  using enum SpatialJoinType;
+  BinaryFuncTable geoFuncs{
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+  };
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
@@ -183,67 +201,40 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
       return createUnary(&makeLatitudeExpression);
-    } else if (functionName == "sfIntersects") {
-      return createBinary(
-          &makeGeoRelationExpression<SpatialJoinType::INTERSECTS>);
-    } else if (functionName == "sfContains") {
-      return createBinary(
-          &makeGeoRelationExpression<SpatialJoinType::CONTAINS>);
-    } else if (functionName == "sfCrosses") {
-      return createBinary(&makeGeoRelationExpression<SpatialJoinType::CROSSES>);
-    } else if (functionName == "sfTouches") {
-      return createBinary(&makeGeoRelationExpression<SpatialJoinType::TOUCHES>);
-    } else if (functionName == "sfEquals") {
-      return createBinary(&makeGeoRelationExpression<SpatialJoinType::EQUALS>);
-    } else if (functionName == "sfOverlaps") {
-      return createBinary(
-          &makeGeoRelationExpression<SpatialJoinType::OVERLAPS>);
+    } else if (geoFuncs.contains(functionName)) {
+      return createBinary(geoFuncs.at(functionName));
     }
   }
 
   // Math functions.
+  UnaryFuncTable mathFuncs{
+      {"log", &makeLogExpression},   {"exp", &makeExpExpression},
+      {"sqrt", &makeSqrtExpression}, {"sin", &makeSinExpression},
+      {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
+  };
   if (checkPrefix(MATH_PREFIX)) {
-    if (functionName == "log") {
-      return createUnary(&makeLogExpression);
-    } else if (functionName == "exp") {
-      return createUnary(&makeExpExpression);
-    } else if (functionName == "sqrt") {
-      return createUnary(&makeSqrtExpression);
-    } else if (functionName == "sin") {
-      return createUnary(&makeSinExpression);
-    } else if (functionName == "cos") {
-      return createUnary(&makeCosExpression);
-    } else if (functionName == "tan") {
-      return createUnary(&makeTanExpression);
+    if (mathFuncs.contains(functionName)) {
+      return createUnary(mathFuncs.at(functionName));
     } else if (functionName == "pow") {
       return createBinary(&makePowExpression);
     }
   }
 
   // XSD conversion functions.
-  if (checkPrefix(XSD_PREFIX)) {
-    if (functionName == "integer" || functionName == "int") {
-      return createUnary(&makeConvertToIntExpression);
-    }
-    if (functionName == "decimal") {
-      return createUnary(&makeConvertToDecimalExpression);
-    }
-    // We currently don't have a float type, so we just convert to double.
-    if (functionName == "double" || functionName == "float") {
-      return createUnary(&makeConvertToDoubleExpression);
-    }
-    if (functionName == "boolean") {
-      return createUnary(&makeConvertToBooleanExpression);
-    }
-    if (functionName == "string") {
-      return createUnary(&makeConvertToStringExpression);
-    }
-    if (functionName == "dateTime") {
-      return createUnary(&makeConvertToDateTimeExpression);
-    }
-    if (functionName == "date") {
-      return createUnary(&makeConvertToDateExpression);
-    }
+  UnaryFuncTable convertFuncs{
+      {"integer", &makeConvertToIntExpression},
+      {"int", &makeConvertToIntExpression},
+      {"decimal", &makeConvertToDecimalExpression},
+      {"double", &makeConvertToDoubleExpression},
+      // We currently don't have a float type, so we just convert to double.
+      {"float", &makeConvertToDoubleExpression},
+      {"boolean", &makeConvertToBooleanExpression},
+      {"string", &makeConvertToStringExpression},
+      {"dateTime", &makeConvertToDateTimeExpression},
+      {"date", &makeConvertToDateExpression},
+  };
+  if (checkPrefix(XSD_PREFIX) && convertFuncs.contains(functionName)) {
+    return createUnary(convertFuncs.at(functionName));
   }
 
   // QLever-internal functions.
