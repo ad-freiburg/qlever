@@ -505,7 +505,7 @@ class CompressedExternalIdTable
           ad_utility::InputRangeTypeErased<IdTableStatic<NumStaticCols>>{
               ad_utility::InputRangeFromGetCallable(
                   [block = std::move(this->currentBlock_)]() mutable
-                      -> std::optional<IdTableStatic<NumStaticCols>> {
+                  -> std::optional<IdTableStatic<NumStaticCols>> {
                     if (!block.empty()) {
                       auto result = std::move(block);
                       block.clear();
