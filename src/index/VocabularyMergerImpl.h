@@ -171,8 +171,8 @@ CPP_template_def(typename C, typename L)(
                   << top.iriOrLiteral() << std::endl;
       }
       lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal(),
-          top.inTextIndex()};
+          top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
+          metaData_.numWordsTotal()};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -298,10 +298,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   for (const auto& [word, idAndSplitVal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
+    // belongs to the internal or external vocabulary and the information
+    // whether this word should appear in the text Index or not.
     const auto& [id, splitVal] = idAndSplitVal;
     byteBuffer << word;
     byteBuffer << splitVal.isExternalized_;
+    byteBuffer << splitVal.inTextIndex_;
     byteBuffer << id;
   }
   {

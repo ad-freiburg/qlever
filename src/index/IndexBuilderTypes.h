@@ -44,8 +44,8 @@ struct PossiblyExternalizedIriOrLiteral {
 struct TripleComponentWithIndex {
   std::string iriOrLiteral_;
   bool isExternal_ = false;
-  uint64_t index_ = 0;
   bool inTextIndex_ = false;
+  uint64_t index_ = 0;
 
   [[nodiscard]] const auto& isExternal() const { return isExternal_; }
   [[nodiscard]] auto& isExternal() { return isExternal_; }
@@ -58,8 +58,8 @@ struct TripleComponentWithIndex {
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;
     serializer | arg.isExternal_;
-    serializer | arg.index_;
     serializer | arg.inTextIndex_;
+    serializer | arg.index_;
   }
 };
 
@@ -185,7 +185,8 @@ struct alignas(256) ItemMapManager {
           keyView, LocalVocabIndexAndSplitVal{
                        res, comparator_->extractAndTransformComparableNonOwning(
                                 repr, TripleComponentComparator::Level::TOTAL,
-                                key.isExternal_, &buffer.charAllocator())});
+                                key.isExternal_, key.inTextIndex_,
+                                &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
       return Id::makeFromVocabIndex(VocabIndex::make(it->second.id_));

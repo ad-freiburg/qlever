@@ -194,8 +194,9 @@ class VocabularyMerger {
     QueueWord() = default;
     QueueWord(TripleComponentWithIndex&& v, size_t file)
         : entry_(std::move(v)), partialFileId_(file) {}
-    TripleComponentWithIndex entry_;  // the word, its local ID and the
+    TripleComponentWithIndex entry_;  // the word, its local ID, the
                                       // information if it will be externalized
+                                      // and if it will be in the text index
     size_t partialFileId_;  // from which partial vocabulary did this word come
 
     [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
