@@ -14,11 +14,6 @@
  */
 class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
  public:
-  virtual std::any visitQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* ctx) override {
-    return visitChildren(ctx);
-  }
-
   virtual std::any visitQuery(
       SparqlAutomaticParser::QueryContext* ctx) override {
     return visitChildren(ctx);

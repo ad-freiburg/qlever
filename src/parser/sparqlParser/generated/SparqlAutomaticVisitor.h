@@ -16,9 +16,6 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   /**
    * Visit parse trees produced by SparqlAutomaticParser.
    */
-  virtual std::any visitQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* context) = 0;
-
   virtual std::any visitQuery(SparqlAutomaticParser::QueryContext* context) = 0;
 
   virtual std::any visitPrologue(

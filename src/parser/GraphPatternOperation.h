@@ -25,6 +25,7 @@
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
+#include "util/http/HttpUtils.h"
 
 // First some forward declarations.
 // TODO<joka921> More stuff should consistently be in the `parsedQuery`
@@ -65,6 +66,13 @@ struct Service {
   // The body of the SPARQL query for the remote endpoint.
   std::string graphPatternAsString_;
   // The existence of the `SILENT`-keyword.
+  bool silent_;
+};
+
+/// An internal pattern used in the `LOAD` update operation.
+struct Load {
+ public:
+  ad_utility::httpUtils::Url url_;
   bool silent_;
 };
 
