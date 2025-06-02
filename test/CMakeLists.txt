@@ -304,9 +304,11 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
+addLinkAndDiscoverTestSerial(LoadTest engine)
+
 addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
-addLinkAndDiscoverTest(CallFixedSizeTest)
+addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 

@@ -71,7 +71,7 @@ class CartesianProductJoin : public Operation {
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
  protected:
   // Don't promise any sorting of the result.
@@ -89,8 +89,8 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(std::span<Id> targetColumn,
-                         std::span<const Id> inputColumn, size_t groupSize,
+  void writeResultColumn(ql::span<Id> targetColumn,
+                         ql::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.

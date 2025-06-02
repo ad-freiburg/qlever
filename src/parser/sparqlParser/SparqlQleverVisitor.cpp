@@ -300,29 +300,23 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 void SparqlQleverVisitor::resetStateForMultipleUpdates() {
+  // The following fields are not reset:
+  // - prefixMap_ and baseIri_: prefixes carry over between chained updates
+  // - datasetsAreFixed_: set for the whole request which can contain multiple
+  // operations
+  // - activeDatasetClauses_: if `datasetsAreFixed_` is true
   _blankNodeCounter = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
-  activeDatasetClauses_ = {};
+  // When fixed datasets are given for a request (see SPARQL Protocol), these
+  // cannot be changed by a SPARQL operation but are also constant for chained
+  // updates.
+  if (!datasetsAreFixed_) {
+    activeDatasetClauses_ = {};
+  }
   prologueString_ = {};
   parsedQuery_ = {};
   isInsideConstructTriples_ = false;
-}
-
-// ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && ctx->update()->update1().empty()) {
-    // An empty query currently matches the `update()` rule. We handle this
-    // case manually to get a better error message. If an update query doesn't
-    // have an `update1()`, then it consists of a (possibly empty) prologue, but
-    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
-    // details.
-    reportError(ctx->update(),
-                "Empty query (this includes queries that only consist "
-                "of comments or prefix declarations).");
-  }
-  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
-                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -378,10 +372,10 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
           item.toSparql());
     }
   };
-  auto toPropertyPath = [](const auto& item) -> PropertyPath {
+  auto toPredicate = [](const auto& item) -> VarOrPath {
     using T = std::decay_t<decltype(item)>;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
-      return PropertyPath::fromVariable(item);
+      return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(item.toSparql());
     } else {
@@ -392,7 +386,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
   };
   for (const auto& triple : triples) {
     auto subject = std::visit(toTripleComponent, triple.at(0));
-    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto predicate = std::visit(toPredicate, triple.at(1));
     auto object = std::visit(toTripleComponent, triple.at(2));
     pattern._triples.emplace_back(std::move(subject), std::move(predicate),
                                   std::move(object));
@@ -626,6 +620,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+    parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   }
 
   return std::move(parsedQuery_);
@@ -688,6 +683,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns = triples.toGraphPatternOperations();
@@ -907,32 +903,19 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto varToPropertyPath = [](const Variable& var) {
-    return PropertyPath::fromVariable(var);
-  };
-  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
-  auto visitVarOrPath =
-      [&varToPropertyPath, &propertyPathIdentity](
-          const ad_utility::sparql_types::VarOrPath& varOrPath) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{varToPropertyPath,
-                                             propertyPathIdentity},
-            varOrPath);
-      };
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
   auto convertAndRegisterTriple =
-      [&visitVarOrPath, &registerIfVariable](
+      [&registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {triple.subject_.toTripleComponent(),
-            visitVarOrPath(triple.predicate_),
+    return {triple.subject_.toTripleComponent(), triple.predicate_,
             triple.object_.toTripleComponent()};
   };
 
@@ -1453,8 +1436,13 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
-  return GraphPatternOperation{
+  auto visibleVariables = std::move(visibleVariables_);
+  GraphPatternOperation operation{
       parsedQuery::Minus{visit(ctx->groupGraphPattern())}};
+  // Make sure that the variables from the minus graph pattern are NOT added to
+  // visible variables.
+  visibleVariables_ = std::move(visibleVariables);
+  return operation;
 }
 
 // ____________________________________________________________________________________

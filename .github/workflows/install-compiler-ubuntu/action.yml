@@ -12,12 +12,12 @@ runs:
   using: "composite"
   steps:
     - name: Add PPA for GCC
-      if :  inputs.compiler == 'gcc'
+      if :  inputs.compiler == 'gcc' && inputs.compiler-version > 8
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update
       shell: bash
 
     - name: Install gcc
-      if :  inputs.compiler == 'gcc'
+      if :  inputs.compiler == 'gcc' && inputs.compiler-version > 8
       run : sudo apt install -y gcc-${{inputs.compiler-version}} g++-${{inputs.compiler-version}}
       shell: bash
 
@@ -32,6 +32,21 @@ runs:
         sed   's/apt-key del/echo/' llvm.sh -iy
         sudo ./llvm.sh ${{inputs.compiler-version}}
         sudo apt install -y clang-${{inputs.compiler-version}}
+      shell: bash
+    
+    - name: Install gcc8
+      if :  inputs.compiler == 'gcc' && inputs.compiler-version == 8
+      run:  |
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.edge.kernel.org/ubuntu/pool/universe/g/gcc-8/gcc-8-base_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/cpp-8_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libmpx2_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/main/i/isl/libisl22_0.22.1-1_amd64.deb
+        sudo apt install ./libisl22_0.22.1-1_amd64.deb ./libmpx2_8.4.0-3ubuntu2_amd64.deb ./cpp-8_8.4.0-3ubuntu2_amd64.deb ./libgcc-8-dev_8.4.0-3ubuntu2_amd64.deb ./gcc-8-base_8.4.0-3ubuntu2_amd64.deb ./gcc-8_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb
+        wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/g++-8_8.4.0-3ubuntu2_amd64.deb
+        sudo apt install ./libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb ./g++-8_8.4.0-3ubuntu2_amd64.deb
       shell: bash
 
 # TODO<joka921> Add assertion for unsupported compilers and versions.

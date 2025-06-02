@@ -68,12 +68,18 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+  // Joins two results on a single join column lazily, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
+  Result lazyOptionalJoin(std::shared_ptr<const Result> left,
+                          std::shared_ptr<const Result> right,
+                          bool requestLaziness);
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   void computeSizeEstimateAndMultiplicities();
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
