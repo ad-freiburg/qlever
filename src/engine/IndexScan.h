@@ -26,6 +26,12 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+  // TODO @realHannes:
+  // Remove `PrefilterIndexPair` as a member and set instead a member of type
+  // `ScanSpecAndBlocks` (see CompressedRelation.h) with optionally prefiltered
+  // `BlockMetadataRanges`. This `ScanSpecAndBlocks` member can be passed
+  // to the scan and size-estimate functions in the future making those
+  // evaluations simpler.
   PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
@@ -39,9 +45,6 @@ class IndexScan final : public Operation {
   std::vector<Variable> additionalVariables_;
 
  public:
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
@@ -99,7 +102,7 @@ class IndexScan final : public Operation {
   // join between the first column of the result with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
-      std::span<const Id> joinColumn) const;
+      ql::span<const Id> joinColumn) const;
 
   // Return two generators, the first of which yields exactly the elements of
   // `input` and the second of which yields the matching blocks, skipping the
@@ -161,7 +164,7 @@ class IndexScan final : public Operation {
   }
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
   Permutation::Enum permutation() const { return permutation_; }
 
@@ -219,7 +222,7 @@ class IndexScan final : public Operation {
 
   // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
   // applying any additional pre-filter procedure.
-  std::optional<std::span<const CompressedBlockMetadata>> getBlockMetadata()
+  std::optional<ql::span<const CompressedBlockMetadata>> getBlockMetadata()
       const;
 
   // This method retrieves all relevant `CompressedBlockMetadata` and performs
@@ -230,7 +233,7 @@ class IndexScan final : public Operation {
   // Apply the `prefilter_` to the `blocks`. May only be called if the limit is
   // unconstrained, and a `prefilter_` exists.
   std::vector<CompressedBlockMetadata> applyPrefilter(
-      std::span<const CompressedBlockMetadata> blocks) const;
+      ql::span<const CompressedBlockMetadata> blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

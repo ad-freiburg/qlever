@@ -43,7 +43,7 @@ class VariadicExpression : public SparqlExpression {
 
  private:
   // ___________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override {
+  ql::span<SparqlExpression::Ptr> childrenImpl() override {
     return {children_.data(), children_.size()};
   }
 };

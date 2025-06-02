@@ -261,23 +261,12 @@ CPP_template(typename UnderlyingVocabulary,
   };
   using WordWriter = DiskWriterFromUncompressedWords;
 
-  // Return a `DiskWriter` that can be used to create the vocabulary.
-  DiskWriterFromUncompressedWords makeDiskWriter(
-      const std::string& filename) const {
-    return DiskWriterFromUncompressedWords{
+  // Return a `unique_ptr<DiskWriter>` that can be used to create the
+  // vocabulary.
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<DiskWriterFromUncompressedWords>(
         absl::StrCat(filename, wordsSuffix),
-        absl::StrCat(filename, decodersSuffix)};
-  }
-  /// Initialize the vocabulary from the given `words`.
-  // TODO<joka921> This can be a generic Mixin...
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
+        absl::StrCat(filename, decodersSuffix));
   }
 
   // Access to the underlying vocabulary.

@@ -78,7 +78,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Variables and string constants add their values.
-  std::span<const Variable> getContainedVariablesNonRecursive() const override {
+  ql::span<const Variable> getContainedVariablesNonRecursive() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {&_value, 1};
     } else {
@@ -186,7 +186,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Literal expressions don't have children
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 // A simple expression that just returns an explicit result. It can only be used
@@ -214,7 +214,7 @@ struct SingleUseExpression : public SparqlExpression {
     AD_FAIL();
   }
 
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+  ql::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace detail
@@ -260,6 +260,21 @@ getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
     return std::nullopt;
   }
 }
+
+//______________________________________________________________________________
+// Given a `SparqlExpression*` pointing to a `StringLiteralExpression`, return
+// the contained `Literal`. For all other `LiteralExpression` types return
+// `std::nullopt`.
+inline std::optional<TripleComponent::Literal> getLiteralFromLiteralExpression(
+    const SparqlExpression* child) {
+  using enum Datatype;
+  if (const auto* literalExpr =
+          dynamic_cast<const StringLiteralExpression*>(child)) {
+    return literalExpr->value();
+  }
+  return std::nullopt;
+}
+
 }  // namespace detail
 
 }  // namespace sparqlExpression

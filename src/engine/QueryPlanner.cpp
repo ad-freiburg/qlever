@@ -69,8 +69,8 @@ namespace {
 using ad_utility::makeExecutionTree;
 using SubtreePlan = QueryPlanner::SubtreePlan;
 
-template <typename Operation>
-SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, auto&&... args) {
+template <typename Operation, typename... Args>
+SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, Args&&... args) {
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
@@ -211,8 +211,13 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->setLimit(pq._limitOffset);
+    // For subqueries the limit has already been applied, for the root query the
+    // exporter will apply LIMIT and OFFSET if `supportsLimit()` is not natively
+    // supported by the `Operation`. Check the documentation of
+    // `ExportQueryExecutionTrees::compensateForLimitOffsetClause to see `how
+    // this is comphandled in the exporter.
+    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
+      plan._qet->applyLimit(pq._limitOffset);
     }
   }
 
@@ -508,7 +513,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t.p_.iri_ == CONTAINS_WORD_PREDICATE) {
+    if (t.getSimplePredicate() == CONTAINS_WORD_PREDICATE) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -527,7 +532,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (t.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
+    } else if (t.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(
@@ -598,8 +603,7 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       auto... rewritePositions)
+       ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
@@ -619,9 +623,9 @@ void QueryPlanner::indexScanSingleVarCase(
     const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
-  if (isVariable(triple.s_)) {
+  if (triple.s_.isVariable()) {
     addIndexScan(POS);
-  } else if (isVariable(triple.p_)) {
+  } else if (triple.p_.isVariable()) {
     addIndexScan(SOP);
   } else {
     addIndexScan(PSO);
@@ -629,10 +633,10 @@ void QueryPlanner::indexScanSingleVarCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanTwoVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
 
   // Replace the position of the `triple` that is specified by the
@@ -642,7 +646,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -654,14 +658,15 @@ void QueryPlanner::indexScanTwoVarsCase(
   const auto& [s, p, o, _] = triple;
 
   using Tr = SparqlTripleSimple;
-  if (!isVariable(s)) {
+
+  if (!s.isVariable()) {
     if (p == o) {
       handleRepeatedVariables({{SPO}}, &Tr::o_);
     } else {
       addIndexScan(SPO);
       addIndexScan(SOP);
     }
-  } else if (!isVariable(p)) {
+  } else if (!p.isVariable()) {
     if (s == o) {
       handleRepeatedVariables({{PSO}}, &Tr::o_);
     } else {
@@ -669,7 +674,7 @@ void QueryPlanner::indexScanTwoVarsCase(
       addIndexScan(POS);
     }
   } else {
-    AD_CORRECTNESS_CHECK(!isVariable(o));
+    AD_CORRECTNESS_CHECK(!o.isVariable());
     if (s == p) {
       handleRepeatedVariables({{OPS}}, &Tr::s_);
     } else {
@@ -680,10 +685,10 @@ void QueryPlanner::indexScanTwoVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddedFilter>
 void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
@@ -696,7 +701,7 @@ void QueryPlanner::indexScanThreeVarsCase(
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
       [&triple, &addIndexScan, &addFilter, &generate](
-          std::span<const Permutation::Enum> permutations,
+          ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
@@ -736,9 +741,9 @@ void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
   auto triple = node.triple_.getSimple();
-  const size_t numVars = static_cast<size_t>(isVariable(triple.s_)) +
-                         static_cast<size_t>(isVariable(triple.p_)) +
-                         static_cast<size_t>(isVariable(triple.o_));
+  const size_t numVars = static_cast<size_t>(triple.s_.isVariable()) +
+                         static_cast<size_t>(triple.p_.isVariable()) +
+                         static_cast<size_t>(triple.o_.isVariable());
   if (numVars == 0) {
     // We could read this from any of the permutations.
     addIndexScan(Permutation::Enum::PSO);
@@ -793,13 +798,8 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    // Property paths must have been handled previously.
-    AD_CORRECTNESS_CHECK(node.triple_.p_.operation_ ==
-                         PropertyPath::Operation::IRI);
-    // At this point, we know that the predicate is a simple IRI or a variable.
-
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        isVariable(node.triple_.p_.iri_)) {
+        node.triple_.getPredicateVariable().has_value()) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -808,7 +808,17 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     // Backward compatibility with spatial search predicates
-    const auto& input = node.triple_.p_.iri_;
+    const auto& input = std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const PropertyPath& propertyPath) -> const std::string& {
+              AD_CORRECTNESS_CHECK(propertyPath.operation_ ==
+                                   PropertyPath::Operation::IRI);
+              return propertyPath.iri_;
+            },
+            [](const Variable& var) -> const std::string& {
+              return var.name();
+            }},
+        node.triple_.p_);
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
@@ -828,7 +838,7 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    if (node.triple_.p_.iri_ == HAS_PREDICATE_PREDICATE) {
+    if (input == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
     }
@@ -892,7 +902,9 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     case PropertyPath::Operation::NEGATED:
       return seedFromNegated(left, path, right);
     case PropertyPath::Operation::IRI:
-      return seedFromIri(left, path, right);
+      return seedFromVarOrIri(
+          left, ad_utility::triple_component::Iri::fromIriref(path.iri_),
+          right);
     case PropertyPath::Operation::SEQUENCE:
       return seedFromSequence(left, path, right);
     case PropertyPath::Operation::ZERO_OR_MORE:
@@ -1034,13 +1046,12 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
                                   const std::vector<string_view>& iris) {
     using namespace sparqlExpression;
     Variable variable = generateUniqueVarName();
-    ParsedQuery::GraphPattern pattern =
-        seedFromIri(left, PropertyPath::fromVariable(variable), right);
+    ParsedQuery::GraphPattern pattern = seedFromVarOrIri(left, variable, right);
     std::ostringstream descriptor;
     auto expression = makeNotEqualExpression(variable, iris.at(0));
     appendNotEqualString(descriptor, iris.at(0), variable);
     // Combine subsequent iris with a logical AND.
-    for (string_view iri : std::span{iris.begin() + 1, iris.end()}) {
+    for (const auto& iri : ql::views::drop(iris, 1)) {
       expression = makeAndExpression(std::move(expression),
                                      makeNotEqualExpression(variable, iri));
       descriptor << " && ";
@@ -1063,12 +1074,24 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern QueryPlanner::seedFromIri(
-    const TripleComponent& left, const PropertyPath& path,
+ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
+    const TripleComponent& left,
+    const ad_utility::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
-  basic._triples.push_back(SparqlTriple(left, path, right));
+  basic._triples.emplace_back(
+      left,
+      std::visit(
+          ad_utility::OverloadCallOperator{
+              [](const Variable& variable)
+                  -> ad_utility::sparql_types::VarOrPath { return variable; },
+              [](const ad_utility::triple_component::Iri& iri)
+                  -> ad_utility::sparql_types::VarOrPath {
+                return PropertyPath::fromIri(iri.toStringRepresentation());
+              }},
+          varOrIri),
+      right);
   p._graphPatterns.emplace_back(std::move(basic));
 
   return p;
@@ -1108,7 +1131,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (node.triple_.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
+  if (node.triple_.getSimplePredicate() == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
@@ -1435,7 +1458,7 @@ size_t QueryPlanner::findUniqueNodeIds(
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-      nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
+      nodeIds, [](auto nodeId) { return absl::popcount(nodeId) == 1; }));
   ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
@@ -1768,10 +1791,14 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->triple_.p_.iri_ ==
-              CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->triple_.p_.iri_ == CONTAINS_WORD_PREDICATE);
+  auto it = _nodeMap.find(i);
+  if (it == _nodeMap.end()) {
+    return false;
+  }
+  const auto& triple = it->second->triple_;
+  auto predicate = triple.getSimplePredicate();
+  return predicate == CONTAINS_ENTITY_PREDICATE ||
+         predicate == CONTAINS_WORD_PREDICATE;
 }
 
 // _____________________________________________________________________________
@@ -2674,8 +2701,9 @@ void QueryPlanner::checkCancellation(
 }
 
 // _____________________________________________________________________________
+template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
-    std::vector<SubtreePlan>& candidates, const auto& variables) {
+    std::vector<SubtreePlan>& candidates, const Variables& variables) {
   using enum SubtreePlan::Type;
   bool areVariablesUnconnected = ql::ranges::all_of(
       variables,
@@ -2852,13 +2880,13 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // A basic graph patterns consists only of triples. First collect all
   // the bound variables.
   for (const SparqlTriple& t : v._triples) {
-    if (isVariable(t.s_)) {
+    if (t.s_.isVariable()) {
       boundVariables_.insert(t.s_.getVariable());
     }
-    if (isVariable(t.p_)) {
-      boundVariables_.insert(Variable{t.p_.iri_});
+    if (auto predicate = t.getPredicateVariable()) {
+      boundVariables_.insert(predicate.value());
     }
-    if (isVariable(t.o_)) {
+    if (t.o_.isVariable()) {
       boundVariables_.insert(t.o_.getVariable());
     }
   }
@@ -2866,11 +2894,12 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
-    if (triple.p_.operation_ == PropertyPath::Operation::IRI) {
+    if (std::holds_alternative<Variable>(triple.p_) ||
+        triple.getSimplePredicate().has_value()) {
       candidateTriples_._triples.push_back(triple);
     } else {
-      auto children =
-          planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
+      auto children = planner_.seedFromPropertyPath(
+          triple.s_, std::get<PropertyPath>(triple.p_), triple.o_);
       for (auto& child : children._graphPatterns) {
         std::visit([self = this](
                        auto& arg) { self->graphPatternOperationVisitor(arg); },
@@ -2922,24 +2951,11 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
   for (auto& sub : candidatesIn) {
     TransitivePathSide left;
     TransitivePathSide right;
-    auto getSideValue =
-        [this](const TripleComponent& side) -> std::variant<Id, Variable> {
-      if (isVariable(side)) {
-        return side.getVariable();
-      } else {
-        if (auto opt = side.toValueId(planner_._qec->getIndex().getVocab());
-            opt.has_value()) {
-          return opt.value();
-        } else {
-          AD_THROW("No vocabulary entry for " + side.toString());
-        }
-      }
-    };
 
     left.subCol_ = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-    left.value_ = getSideValue(arg._left);
+    left.value_ = arg._left;
     right.subCol_ = sub._qet->getVariableColumn(arg._innerRight.getVariable());
-    right.value_ = getSideValue(arg._right);
+    right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
     if (planner_.activeGraphVariable_.has_value()) {
@@ -3085,7 +3101,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->setLimit(arg.get()._limitOffset);
+    plan._qet->applyLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
