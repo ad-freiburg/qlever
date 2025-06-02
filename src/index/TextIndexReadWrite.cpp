@@ -4,6 +4,67 @@
 
 #include "index/TextIndexReadWrite.h"
 
+#include "index/TextScoringEnum.h"
+
+namespace textIndexReadWrite::detail {
+
+// _____________________________________________________________________________
+IdTable readContextListHelper(
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const ContextListMetaData& contextList, bool isWordCl,
+    const ad_utility::File& textIndexFile,
+    TextScoringMetric textScoringMetric) {
+  IdTable idTable{3, allocator};
+  idTable.resize(contextList._nofElements);
+  // Read ContextList
+  readGapComprList<Id, uint64_t>(
+      idTable.getColumn(0).begin(), contextList._nofElements,
+      contextList._startContextlist, contextList.getByteLengthContextList(),
+      textIndexFile, [](uint64_t id) {
+        return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
+      });
+
+  // Helper lambda to read wordIndexList
+  auto wordIndexToId = [isWordCl](auto wordIndex) {
+    if (isWordCl) {
+      return Id::makeFromWordVocabIndex(WordVocabIndex::make(wordIndex));
+    }
+    return Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+  };
+
+  // Read wordIndexList
+  readFreqComprList<Id, WordIndex>(
+      idTable.getColumn(1).begin(), contextList._nofElements,
+      contextList._startWordlist, contextList.getByteLengthWordlist(),
+      textIndexFile, wordIndexToId);
+
+  // Helper lambdas to read scoreList
+  auto scoreToId = [](auto score) {
+    using T = decltype(score);
+    if constexpr (std::is_same_v<T, uint16_t>) {
+      return Id::makeFromInt(static_cast<uint64_t>(score));
+    } else {
+      return Id::makeFromDouble(static_cast<double>(score));
+    }
+  };
+
+  // Read scoreList
+  if (textScoringMetric == TextScoringMetric::EXPLICIT) {
+    readFreqComprList<Id, uint16_t>(
+        idTable.getColumn(2).begin(), contextList._nofElements,
+        contextList._startScorelist, contextList.getByteLengthScorelist(),
+        textIndexFile, scoreToId);
+  } else {
+    auto scores = readZstdComprList<Score>(
+        contextList._nofElements, contextList._startScorelist,
+        contextList.getByteLengthScorelist(), textIndexFile);
+    ql::ranges::transform(scores, idTable.getColumn(2).begin(), scoreToId);
+  }
+  return idTable;
+}
+
+}  // namespace textIndexReadWrite::detail
+
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
@@ -92,6 +153,24 @@ void encodeAndWriteSpanAndMoveOffset(ql::span<const T> spanToWrite,
     AD_CONTRACT_CHECK(bytes == ret);
   }
   currentOffset += bytes;
+}
+
+// ____________________________________________________________________________
+IdTable readWordCl(const TextBlockMetaData& tbmd,
+                   const ad_utility::AllocatorWithLimit<Id>& allocator,
+                   const ad_utility::File& textIndexFile,
+                   TextScoringMetric textScoringMetric) {
+  return detail::readContextListHelper(allocator, tbmd._cl, true, textIndexFile,
+                                       textScoringMetric);
+}
+
+// ____________________________________________________________________________
+IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
+                         const ad_utility::AllocatorWithLimit<Id>& allocator,
+                         const ad_utility::File& textIndexFile,
+                         TextScoringMetric textScoringMetric) {
+  return detail::readContextListHelper(allocator, tbmd._entityCl, false,
+                                       textIndexFile, textScoringMetric);
 }
 
 }  // namespace textIndexReadWrite

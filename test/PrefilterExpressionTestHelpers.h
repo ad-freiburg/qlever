@@ -1,4 +1,4 @@
-//  Copyright 2024, University of Freiburg,
+//  Copyright 2024 - 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
@@ -30,6 +30,12 @@ template <typename RelExpr>
 auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
     -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<RelExpr>(referenceId);
+};
+
+// Make IsInExpression
+auto isInExpression = [](std::vector<IdOrLocalVocabEntry>&& referenceValues,
+                         bool isNegated = false) {
+  return std::make_unique<IsInExpression>(referenceValues, isNegated);
 };
 
 // Make IsDatatypeExpression
@@ -90,11 +96,12 @@ constexpr auto andExpr = logExpr<AndExpression>;
 constexpr auto orExpr = logExpr<OrExpression>;
 // NOT (`!`)
 constexpr auto notExpr = notPrefilterExpression;
+// `IN`, or `NOT IN` if the `isNegated` flag is set to true.
+constexpr auto inExpr = isInExpression;
 // PREFIX REGEX
 constexpr auto prefixRegex = makePrefixRegexExpression;
 
 namespace filterHelper {
-
 //______________________________________________________________________________
 // Create `LocalVocabEntry` / `LiteralOrIri`.
 // Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
@@ -104,7 +111,8 @@ const auto LVE = [](const std::string& litOrIri) -> LocalVocabEntry {
 };
 
 //______________________________________________________________________________
-// Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
+// Construct a `PAIR` with the given `PrefilterExpression` and `Variable`
+// value.
 auto pr =
     [](std::unique_ptr<prefilterExpressions::PrefilterExpression> expr,
        const Variable& var) -> sparqlExpression::PrefilterExprVariablePair {
@@ -226,8 +234,21 @@ std::unique_ptr<SparqlExpression> makeIsDatatypeStartsWithExpression(
     return makeIsBlankExpression(std::move(childExpr));
   }
 }
-
 }  // namespace
+
+//______________________________________________________________________________
+CPP_template(typename... Args)(
+    requires(std::convertible_to<Args, VariantArgs>&&...))
+    std::unique_ptr<SparqlExpression> inSprqlExpr(VariantArgs first,
+                                                  Args&&... argList) {
+  std::vector<std::unique_ptr<SparqlExpression>> childrenSparql;
+  childrenSparql.reserve(sizeof...(argList));
+  (childrenSparql.push_back(
+       std::visit(getExpr, VariantArgs{std::forward<Args>(argList)})),
+   ...);
+  return std::make_unique<sparqlExpression::InExpression>(
+      std::visit(getExpr, std::move(first)), std::move(childrenSparql));
+}
 
 //______________________________________________________________________________
 // LESS THAN (`<`, `SparqlExpression`)
