@@ -1334,47 +1334,38 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    for (size_t i = 0; i < filters.size(); ++i) {
+    for (const auto& [i, filterAndSubst] :
+         ::ranges::views::enumerate(filters)) {
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
 
-      if (filters[i].second.has_value() &&
-          ql::ranges::any_of(filters[i].first.expression_.containedVariables(),
-                             [&plan](const auto& variable) {
-                               return plan._qet->isVariableCovered(*variable);
-                             })) {
+      if (filterAndSubst.hasSubstitute() &&
+          ql::ranges::any_of(
+              filterAndSubst.filter_.expression_.containedVariables(),
+              [&plan](const auto& variable) {
+                return plan._qet->isVariableCovered(*variable);
+              })) {
         // Apply filter substitution
-        auto jcs = getJoinColumns(filters[i].second.value(), plan);
-        // QueryPlanner::JoinColumns jcs2;
-        // for (auto x : filters[i].first.expression_.containedVariables()) {
-        //   if (filters[i].second.value()._qet->isVariableCovered(*x) &&
-        //       plan._qet->isVariableCovered(*x)) {
-        //     jcs2.push_back(std::array<ColumnIndex, 2>{
-        //         filters[i].second.value()._qet->getVariableColumn(*x),
-        //         plan._qet->getVariableColumn(*x)});
-        //   }
-        // }
+        auto jcs = getJoinColumns(filterAndSubst.substitute_.value(), plan);
         auto substPlans =
-            createJoinCandidates(filters[i].second.value(), plan, jcs);
+            createJoinCandidates(filterAndSubst.substitute_.value(), plan, jcs);
         for (auto& newPlan : substPlans) {
-          newPlan._idsOfIncludedFilters |= plan._idsOfIncludedFilters;
-          newPlan._idsOfIncludedNodes |= plan._idsOfIncludedNodes;
+          mergeSubtreePlanIds(newPlan, newPlan, plan);
           newPlan.type = plan.type;
           addedPlans.push_back(newPlan);
         }
-        // if (substPlans.size()) {
         continue;
-        // }
       }
 
-      if (ql::ranges::all_of(filters[i].first.expression_.containedVariables(),
-                             [&plan](const auto& variable) {
-                               return plan._qet->isVariableCovered(*variable);
-                             })) {
+      if (ql::ranges::all_of(
+              filterAndSubst.filter_.expression_.containedVariables(),
+              [&plan](const auto& variable) {
+                return plan._qet->isVariableCovered(*variable);
+              })) {
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filters[i].first.expression_);
+            _qec, plan._qet, filterAndSubst.filter_.expression_);
         newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
@@ -1651,11 +1642,9 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
   FiltersAndOptionalSubstitutes plans;
 
   // Check if the filter expression is suitable for the optimization
-  for (size_t i = 0; i < filters.size(); i++) {
-    auto& filterExpression = filters[i];
-    sparqlExpression::SparqlExpression* filterExp =
-        filterExpression.expression_.getPimpl();
-    const auto& filterBody = *filterExp;
+  for (const auto& [i, filterExpression] :
+       ::ranges::views::enumerate(filters)) {
+    const auto& filterBody = *filterExpression.expression_.getPimpl();
 
     // Currently, we can only optimize GeoSPARQL filters:
     // Analyze the expression: Check if the body of the filter directly is an
@@ -1668,8 +1657,8 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
       // distance spatial search (direct body of filter is comparison).
       auto distFilterRes = getGeoDistanceFilter(filterBody);
       if (!distFilterRes.has_value()) {
-        plans.push_back(std::pair<SparqlFilter, std::optional<SubtreePlan>>(
-            filterExpression, std::nullopt));
+        plans.push_back(
+            FilterAndOptionalSubstitute(filterExpression, std::nullopt));
         continue;
       }
       geoFuncCall = distFilterRes.value().first;
@@ -1691,8 +1680,8 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     // Mark that this subtree plan handles (that is, substitutes) the filter
     plan._idsOfIncludedFilters |= 1ull << i;
 
-    plans.push_back(std::pair<SparqlFilter, SubtreePlan>(filterExpression,
-                                                         std::move(plan)));
+    plans.push_back(
+        FilterAndOptionalSubstitute(filterExpression, std::move(plan)));
   }
 
   return plans;
@@ -2788,7 +2777,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   AD_CORRECTNESS_CHECK(
       !nextCandidates.empty(),
       "Could not find a single candidate join for two optimized graph "
-      "patterns. Please report this to the developers");
+      "patterns");
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
   candidatePlans_.clear();
   candidatePlans_.push_back({std::move(nextCandidates[idx])});

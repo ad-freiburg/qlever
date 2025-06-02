@@ -165,8 +165,15 @@ class QueryPlanner {
     size_t getSizeEstimate() const;
   };
 
+  struct FilterAndOptionalSubstitute {
+    SparqlFilter filter_;
+    std::optional<SubtreePlan> substitute_;
+
+    bool hasSubstitute() const { return substitute_.has_value(); }
+  };
+
   using FiltersAndOptionalSubstitutes =
-      std::vector<std::pair<SparqlFilter, std::optional<SubtreePlan>>>;
+      std::vector<FilterAndOptionalSubstitute>;
 
   // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
