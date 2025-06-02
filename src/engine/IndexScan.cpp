@@ -149,7 +149,7 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
-  if (!getLimit().isUnconstrained() ||
+  if (!getLimitOffset().isUnconstrained() ||
       scanSpecAndBlocks_.blockMetadata_.size() != 1) {
     return std::nullopt;
   }
@@ -216,7 +216,7 @@ Result::Generator IndexScan::chunkedIndexScan() const {
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
-      locatedTriplesSnapshot(), getLimit());
+      locatedTriplesSnapshot(), getLimitOffset());
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
@@ -333,10 +333,10 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
-      getLimit().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  return getScanPermutation().lazyScan(scanSpecAndBlocks_, filteredBlocks,
-                                       additionalColumns(), cancellationHandle_,
-                                       locatedTriplesSnapshot(), getLimit());
+      getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
+  return getScanPermutation().lazyScan(
+      scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
+      cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 };
 
 // _____________________________________________________________________________
