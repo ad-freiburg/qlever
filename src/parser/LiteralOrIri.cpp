@@ -128,7 +128,8 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
 // ___________________________________________
 std::strong_ordering LiteralOrIri::operator<=>(const LiteralOrIri& rhs) const {
   int i = IndexImpl::staticGlobalSingletonComparator().compare(
-      toStringRepresentation(), rhs.toStringRepresentation());
+      toStringRepresentation(), rhs.toStringRepresentation(),
+      LocaleManager::Level::TOTAL);
   if (i < 0) {
     return std::strong_ordering::less;
   } else if (i > 0) {

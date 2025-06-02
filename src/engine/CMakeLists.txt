@@ -6,7 +6,7 @@ add_library(engine
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
-        OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
+        OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
@@ -16,5 +16,5 @@ add_library(engine
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SPARQLProtocol.cpp ParsedRequestBuilder.cpp
-        NeutralOptional.cpp)
+        NeutralOptional.cpp Load.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2 spatialjoin-dev pb_util)
