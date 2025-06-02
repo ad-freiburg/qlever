@@ -317,34 +317,35 @@ CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
                                               size_t limit,
                                               size_t lastTableOffset) const {
   auto get = [cartesianProductJoin = this, mergedVocab = std::move(mergedVocab),
-              idTables = std::move(idTables), offset = offset, limit = limit,
-              lastTableOffset = lastTableOffset,
-              // tableSize will be overwritten on first execution, but it needs
-              // to be larger than limitWithChunkSize initially
-              tableSize = size_t{1},
-              limitWithChunkSize = uint64_t{
-                  0}]() mutable -> std::optional<Result::IdTableVocabPair> {
-    // If limit was reduced to 0, or the last produced table was smaller than
-    // the remaining limit, then all result have been produced and nullopt shall
-    // be returned
-    if (limit > 0 && tableSize >= limitWithChunkSize) {
-      limitWithChunkSize = std::min(limit, cartesianProductJoin->chunkSize_);
+              idTables = std::move(idTables), offset, limit,
+              lastTableOffset]() mutable -> Result::IdTableLoopControl {
+    if (limit > 0) {
+      auto limitWithChunkSize = std::min(limit, cartesianProductJoin->chunkSize_);
       IdTable idTable = cartesianProductJoin->writeAllColumns(
           ql::ranges::ref_view(idTables), offset, limitWithChunkSize,
           lastTableOffset);
-      tableSize = idTable.size();
+      auto tableSize = idTable.size();
       AD_CORRECTNESS_CHECK(tableSize <= limit);
       if (!idTable.empty()) {
         offset += tableSize;
         limit -= tableSize;
-        return std::optional(
-            Result::IdTableVocabPair{std::move(idTable), mergedVocab.clone()});
+        // If limit was reduced to 0, or the last produced table was smaller
+        // than the remaining limit, then all results have been produced
+        if (limit > 0 && tableSize >= limitWithChunkSize) {
+          // Not the last value
+          return Result::IdTableLoopControl::yieldValue(
+              Result::IdTableVocabPair{std::move(idTable), mergedVocab.clone()});
+        } else {
+          // This value is the last. BreakWithValue to end the loop.
+          return Result::IdTableLoopControl::breakWithValue(
+              Result::IdTableVocabPair{std::move(idTable), mergedVocab.clone()});
+        }
       }
     }
-    return std::nullopt;
+    return Result::IdTableLoopControl::makeBreak();
   };
   return Result::LazyResult(
-      ad_utility::InputRangeFromGetCallable(std::move(get)));
+      ad_utility::InputRangeFromLoopControlGet(std::move(get)));
 }
 
 // _____________________________________________________________________________
