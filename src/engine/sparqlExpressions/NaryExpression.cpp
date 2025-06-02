@@ -79,32 +79,18 @@ SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
 
 // Explicit instantiations for the different geometric relations to avoid linker
 // problems
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::INTERSECTS>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
+using Ptr = sparqlExpression::SparqlExpression::Ptr;
 
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::CONTAINS>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
+#ifndef QL_INSTANTIATE_GEO_RELATION_EXPR
+#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
+  template Ptr                                                                \
+      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
+          Ptr, Ptr);
+#endif  // QL_INSTANTIATE_GEO_RELATION_EXPR
 
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::CROSSES>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
-
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::TOUCHES>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
-
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::EQUALS>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
-
-template sparqlExpression::SparqlExpression::Ptr
-    sparqlExpression::makeGeoRelationExpression<SpatialJoinType::OVERLAPS>(
-        sparqlExpression::SparqlExpression::Ptr,
-        sparqlExpression::SparqlExpression::Ptr);
+QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(CROSSES);
+QL_INSTANTIATE_GEO_RELATION_EXPR(TOUCHES);
+QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);
