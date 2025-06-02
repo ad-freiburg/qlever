@@ -164,17 +164,6 @@ TEST(ExecuteUpdate, executeUpdate) {
         "<u> <label> \"baz\"@en <s> ."
         "<u> <blub> <blah> <s> .";
     indexConfig.indexType = qlever::Filetype::NQuad;
-    auto expectExecuteUpdateFails =
-        [&expectExecuteUpdateFails_](
-            const std::string& update,
-            const testing::Matcher<const std::string&>& messageMatcher,
-            source_location sourceLocation = source_location::current()) {
-          Index index = ad_utility::testing::makeTestIndex(
-              "ExecuteUpdate_executeUpdate",
-              ad_utility::testing::TestIndexConfig());
-          expectExecuteUpdateFails_(index, update, messageMatcher,
-                                    sourceLocation);
-        };
     // That the DEFAULT graph is the union graph again causes some problems.
     expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3));
     expectExecuteUpdate("CLEAR GRAPH <a>", NumTriples(0, 0, 0));
