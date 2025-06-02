@@ -61,7 +61,7 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 namespace {
-static const ad_utility::triple_component::Iri a =
+const ad_utility::triple_component::Iri a =
     ad_utility::triple_component::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }  // namespace
