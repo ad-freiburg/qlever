@@ -2437,7 +2437,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b) <= 0.5)"
       " }",
-      h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                      PayloadVariables::all(), algo, type,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
@@ -2450,17 +2450,17 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "FILTER(geof:distance(?y, ?n) <= 1)"
       " }",
       ::testing::AnyOf(
-          h::SpatialJoin(
+          h::spatialJoin(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+              h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                              PayloadVariables::all(), algo, type,
                              scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
               scan("?m", "<p>", "?n")),
-          h::SpatialJoin(
+          h::spatialJoin(
               500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+              h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                              PayloadVariables::all(), algo, type,
                              scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
               scan("?a", "<p>", "?b"))));
@@ -2477,37 +2477,37 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "FILTER(geof:distance(?y, ?n) <= 1)"
       " }",
       ::testing::AnyOf(
-          h::Bind(h::SpatialJoin(
+          h::Bind(h::spatialJoin(
                       1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                       PayloadVariables::all(), algo, type,
-                      h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                                      PayloadVariables::all(), algo, type,
                                      scan("?x", "<p>", "?y"),
                                      scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
                   "1", Variable{"?unrelated"}),
-          h::SpatialJoin(
+          h::spatialJoin(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::Bind(h::SpatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+              h::Bind(h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                                      PayloadVariables::all(), algo, type,
                                      scan("?x", "<p>", "?y"),
                                      scan("?a", "<p>", "?b")),
                       "1", Variable{"?unrelated"}),
               scan("?m", "<p>", "?n")),
-          h::SpatialJoin(
+          h::spatialJoin(
               500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::Bind(h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+              h::Bind(h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                                      PayloadVariables::all(), algo, type,
                                      scan("?x", "<p>", "?y"),
                                      scan("?m", "<p>", "?n")),
                       "1", Variable{"?unrelated"}),
               scan("?a", "<p>", "?b")),
-          h::Bind(h::SpatialJoin(
+          h::Bind(h::spatialJoin(
                       500, -1, V{"?y"}, V{"?b"}, std::nullopt,
                       PayloadVariables::all(), algo, type,
-                      h::SpatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                                      PayloadVariables::all(), algo, type,
                                      scan("?x", "<p>", "?y"),
                                      scan("?m", "<p>", "?n")),
