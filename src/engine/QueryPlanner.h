@@ -165,6 +165,10 @@ class QueryPlanner {
     size_t getSizeEstimate() const;
   };
 
+  // This struct represents a single SPARQL FILTER. Additionally, it has the
+  // option to also store a subtree plan, which is semantically equivalent to
+  // the filter, but might be cheaper to compute. This is currently used to
+  // rewrite FILTERs on geof: functions to spatial join operations.
   struct FilterAndOptionalSubstitute {
     SparqlFilter filter_;
     std::optional<SubtreePlan> substitute_;

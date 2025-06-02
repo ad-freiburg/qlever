@@ -2253,7 +2253,9 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   }
 
   if (jcs.size() > 1) {
-    // ...
+    // If a spatial join operation substitutes a geometric relation filter,
+    // we might have multiple spatial joins for different pairs of variables
+    // that share some variable.
     if (spatialJoin->getSubstitutesFilterOp()) {
       return std::nullopt;
     }
@@ -2264,10 +2266,6 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
-  // auto [left, right] = spatialJoin->getSpatialJoinVariables();
-  // if (var != left && var != right) {
-  //   return std::nullopt;
-  // }
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
