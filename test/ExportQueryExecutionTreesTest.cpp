@@ -1914,3 +1914,22 @@ TEST(ExportQueryExecutionTrees, blankNodeIrisAreProperlyFormatted) {
                 Iri::fromStringRepresentation("<some_iri>")),
             std::nullopt);
 }
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause) {
+  auto* qec = ad_utility::testing::getQec();
+
+  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, false);
+  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{std::nullopt}, true);
+
+  LimitOffsetClause limit{10, 5};
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet1);
+  EXPECT_EQ(limit._offset, 5);
+
+  ExportQueryExecutionTrees::compensateForLimitOffsetClause(limit, *qet2);
+  EXPECT_EQ(limit._offset, 0);
+}

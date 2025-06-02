@@ -1,8 +1,12 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
 #define QLEVER_SRC_INDEX_LOCATEDTRIPLES_H
@@ -35,15 +39,14 @@ struct LocatedTriple {
   // and `triple_[3]` is the graph.
   IdTriple<0> triple_;
 
-  // Flag that is true if the given triple is inserted and false if it
-  // is deleted.
-  bool shouldTripleExist_;
+  // If `true`, the triple is inserted, otherwise it is deleted.
+  bool insertOrDelete_;
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
       ql::span<const CompressedBlockMetadata> blockMetadata,
-      const qlever::KeyOrder& keyOrder, bool shouldExist,
+      const qlever::KeyOrder& keyOrder, bool insertOrDelete,
       ad_utility::SharedCancellationHandle cancellationHandle);
   bool operator==(const LocatedTriple&) const = default;
 
@@ -51,7 +54,7 @@ struct LocatedTriple {
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
     os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
-       << lt.shouldTripleExist_ << ")";
+       << lt.insertOrDelete_ << ")";
     return os;
   }
 };
@@ -100,12 +103,22 @@ class LocatedTriplesPerBlock {
   void updateAugmentedMetadata();
 
  public:
-  // Get upper limits for the number of located triples for the given block. The
-  // return value is a pair of numbers: first, the number of existing triples
-  // ("to be deleted") and second, the number of new triples ("to be inserted").
-  // The numbers are only upper limits because there may be triples that have no
-  // effect (like adding an already existing triple and deleting a non-existent
-  // triple).
+  // Get upper limits for the number of inserted and deleted located triples
+  // for the given block.
+  //
+  // NOTE: This currently returns the total number of triples in the block
+  // twice, in order to avoid counting the triples with `insertOrDelete_ ==
+  // true` and `insertOrDelete_ == false` separately, which turned out to
+  // be very expensive for a `std::set`, which is the underlying data
+  // structure.
+  //
+  // TODO: Since the average number of located triples per block is usually
+  // small, this estimate is usually fine. We could get better estimates in
+  // constant time by maintaining a counter for each of these two numbers in
+  // `LocatedTriplesPerBlock` and update these counters for each update
+  // operatoin. However, note that that would still be an estimate because at
+  // this point we do not know whether an insertion or deletion is actually
+  // effective.
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
   // Returns whether there are updates triples for the block with the index
@@ -191,11 +204,12 @@ class LocatedTriplesPerBlock {
     augmentedMetadata_.reset();
   }
 
-  // Return `true` iff the given triple is one of the located triples with the
-  // given status (inserted or deleted).
+  // Return `true` iff one of the blocks contains `triple` with the given
+  // `insertOrDelete` status (`true` for inserted, `false` for deleted).
   //
-  // NOTE: Only used for testing.
-  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
+  // NOTE: This is expensive because it iterates over all blocks and checks
+  // containment in each. It is only used in our tests, for convenience.
+  bool isLocatedTriple(const IdTriple<0>& triple, bool insertOrDelete) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
