@@ -1,6 +1,9 @@
 // Copyright 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
