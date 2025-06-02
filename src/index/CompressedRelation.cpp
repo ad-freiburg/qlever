@@ -275,12 +275,20 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     filterDuplicatesIfNecessary(IdTable& block,
                                 const CompressedBlockMetadata& blockMetadata) {
+  auto deleteLastIfDuplicate = [&]() {
+    if (blockMetadata.lastTripleIsDuplicateOfFirstTripleInNextBlock_) {
+      AD_CORRECTNESS_CHECK(!block.empty());
+      block.erase(block.end() - 1);
+    }
+  };
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
     AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
+    deleteLastIfDuplicate();
     return false;
   }
   auto endUnique = std::unique(block.begin(), block.end());
   block.erase(endUnique, block.end());
+  deleteLastIfDuplicate();
   return true;
 }
 
