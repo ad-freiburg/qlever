@@ -46,10 +46,10 @@ jobs:
         compiler-version: ${{matrix.compiler-version}}
     - name: Configure CMake Master
       working-directory: ${{github.workspace}}/master
-      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
     - name: Configure CMake PR
       working-directory: ${{github.workspace}}/pr
-      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      run:  cmake -B build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build master
         # Build your program with the given configuration
