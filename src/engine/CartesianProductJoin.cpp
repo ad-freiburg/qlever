@@ -136,6 +136,9 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   }
+  // Make sure the children are reset back to their initial state after
+  // computing the results.
+  auto cleanup = resetChildLimitsAndOffsetOnDestruction();
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
   LocalVocab staticMergedVocab{};
@@ -148,7 +151,8 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (!requestLaziness) {
     AD_CORRECTNESS_CHECK(!lazyResult);
     return {writeAllColumns(subResults | ql::views::transform(&Result::idTable),
-                            getLimit()._offset, getLimit().limitOrDefault()),
+                            getLimitOffset()._offset,
+                            getLimitOffset().limitOrDefault()),
             resultSortedOn(), std::move(staticMergedVocab)};
   }
 
@@ -162,7 +166,8 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
   return {produceTablesLazily(std::move(staticMergedVocab),
                               ad_utility::OwningView{std::move(subResults)} |
                                   ql::views::transform(&Result::idTable),
-                              getLimit()._offset, getLimit().limitOrDefault()),
+                              getLimitOffset()._offset,
+                              getLimitOffset().limitOrDefault()),
           resultSortedOn()};
 }
 
@@ -249,8 +254,8 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // TODO<joka921> We could in theory also apply this optimization if a
   // non-zero OFFSET is specified, but this would make the algorithm more
   // complicated.
-  std::optional<LimitOffsetClause> limitIfPresent = getLimit();
-  if (!getLimit()._limit.has_value() || getLimit()._offset != 0) {
+  std::optional<LimitOffsetClause> limitIfPresent = getLimitOffset();
+  if (!getLimitOffset()._limit.has_value() || getLimitOffset()._offset != 0) {
     limitIfPresent = std::nullopt;
   }
 
@@ -260,7 +265,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   // Get all child results (possibly with limit, see above).
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() && childTree->supportsLimit()) {
-      childTree->setLimit(limitIfPresent.value());
+      childTree->applyLimit(limitIfPresent.value());
     }
     auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child
@@ -355,60 +360,60 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
   }
   ad_utility::RangeToInputRangeFromGet inputRange{
       std::move(lazyResult->idTables())};
-  auto get =
-      [cartesianProductJoin = this,
-       staticMergedVocab = std::move(staticMergedVocab),
-       limit = getLimit().limitOrDefault(), offset = getLimit()._offset,
-       idTables = std::move(idTables), inputRange = std::move(inputRange),
-       lastTableOffset = size_t{0}, producedTableSize = size_t{0},
-       tableProducer = std::optional<Result::LazyResult>{},
-       idTableOpt = std::optional<Result::IdTableVocabPair>{}]() mutable {
-        // Set up tableProducer if necessary
-        if (!tableProducer.has_value()) {
-          idTableOpt = inputRange.get();
-          if (!idTableOpt.has_value()) {
-            return Result::IdTableLoopControl::makeBreak();
-          }
-          auto& [idTable, localVocab] = idTableOpt.value();
-          if (idTable.empty()) {
-            return Result::IdTableLoopControl::makeContinue();
-          }
-          idTables.emplace_back(idTable);
-          localVocab.mergeWith(staticMergedVocab);
-          producedTableSize = 0;
-          tableProducer = cartesianProductJoin->produceTablesLazily(
-              std::move(localVocab),
-              ql::views::transform(idTables,
-                                   [](const auto& wrapper) -> const IdTable& {
-                                     return wrapper;
-                                   }),
-              offset, limit, lastTableOffset);
-          lastTableOffset += idTable.size();
-        }
-
-        // tableProducer is set up, retrieve and return values
-        if (auto idTableAndVocab = tableProducer.value().get()) {
-          producedTableSize += idTableAndVocab.value().idTable_.size();
-          return Result::IdTableLoopControl::yieldValue(
-              std::move(idTableAndVocab.value()));
-        }
-
-        // The results of the current tableProducer are exhausted (otherwise
-        // they would have been returned above).
-        // Do some post-processing and continue to the next input
-        AD_CORRECTNESS_CHECK(limit >= producedTableSize);
-        limit -= producedTableSize;
-        if (limit == 0) {
-          return Result::IdTableLoopControl::makeBreak();
-        }
-        offset += producedTableSize;
-        idTables.pop_back();
-        tableProducer = std::nullopt;
-
-        // Nothing was returned, keep going to the next result
-        // Only break when limit is reached or inputRange is exhausted
+  auto get = [cartesianProductJoin = this,
+              staticMergedVocab = std::move(staticMergedVocab),
+              limit = getLimitOffset().limitOrDefault(),
+              offset = getLimitOffset()._offset, idTables = std::move(idTables),
+              inputRange = std::move(inputRange), lastTableOffset = size_t{0},
+              producedTableSize = size_t{0},
+              tableProducer = std::optional<Result::LazyResult>{},
+              idTableOpt =
+                  std::optional<Result::IdTableVocabPair>{}]() mutable {
+    // Set up tableProducer if necessary
+    if (!tableProducer.has_value()) {
+      idTableOpt = inputRange.get();
+      if (!idTableOpt.has_value()) {
+        return Result::IdTableLoopControl::makeBreak();
+      }
+      auto& [idTable, localVocab] = idTableOpt.value();
+      if (idTable.empty()) {
         return Result::IdTableLoopControl::makeContinue();
-      };
+      }
+      idTables.emplace_back(idTable);
+      localVocab.mergeWith(staticMergedVocab);
+      producedTableSize = 0;
+      tableProducer = cartesianProductJoin->produceTablesLazily(
+          std::move(localVocab),
+          ql::views::transform(
+              idTables,
+              [](const auto& wrapper) -> const IdTable& { return wrapper; }),
+          offset, limit, lastTableOffset);
+      lastTableOffset += idTable.size();
+    }
+
+    // tableProducer is set up, retrieve and return values
+    if (auto idTableAndVocab = tableProducer.value().get()) {
+      producedTableSize += idTableAndVocab.value().idTable_.size();
+      return Result::IdTableLoopControl::yieldValue(
+          std::move(idTableAndVocab.value()));
+    }
+
+    // The results of the current tableProducer are exhausted (otherwise
+    // they would have been returned above).
+    // Do some post-processing and continue to the next input
+    AD_CORRECTNESS_CHECK(limit >= producedTableSize);
+    limit -= producedTableSize;
+    if (limit == 0) {
+      return Result::IdTableLoopControl::makeBreak();
+    }
+    offset += producedTableSize;
+    idTables.pop_back();
+    tableProducer = std::nullopt;
+
+    // Nothing was returned, keep going to the next result
+    // Only break when limit is reached or inputRange is exhausted
+    return Result::IdTableLoopControl::makeContinue();
+  };
   return Result::LazyResult(
       ad_utility::InputRangeFromLoopControlGet(std::move(get)));
 }

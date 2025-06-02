@@ -3,7 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
-#include "./QueryExecutionTree.h"
+#include "engine/QueryExecutionTree.h"
 
 #include <array>
 #include <memory>
@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "engine/Union.h"
 #include "global/RuntimeParameters.h"
 
 using std::string;
@@ -171,34 +170,19 @@ QueryExecutionTree::createSortedTreeAnyPermutation(
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<ColumnIndex>& sortColumns) {
-  auto inputSortedOn = qet->resultSortedOn();
-  bool inputSorted = sortColumns.size() <= inputSortedOn.size();
-  for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {
-    inputSorted = sortColumns[i] == inputSortedOn[i];
-  }
-  if (sortColumns.empty() || inputSorted) {
+  const auto& rootOperation = qet->getRootOperation();
+  if (rootOperation->isSortedBy(sortColumns)) {
     return qet;
   }
+  auto sortedQet = rootOperation->makeSortedTree(sortColumns);
 
-  // Unwrap sort to avoid stacking sorts on top of each other.
-  if (auto sort = std::dynamic_pointer_cast<Sort>(qet->getRootOperation())) {
-    AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
-                    "with `Sort` with a different sort order. This is "
-                    "indicates a flaw during query planning."
-                 << std::endl;
-    qet = sort->getSubtree();
+  if (sortedQet.has_value()) {
+    AD_CORRECTNESS_CHECK(sortedQet.value() != nullptr);
+    return std::move(sortedQet).value();
   }
 
-  // Push down sort into Union.
-  QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
-  if (auto unionOperation =
-          std::dynamic_pointer_cast<Union>(qet->getRootOperation())) {
-    return std::make_shared<QueryExecutionTree>(
-        qec, unionOperation->createSortedVariant(sortColumns));
-  }
-
-  auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
-  return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  return ad_utility::makeExecutionTree<Sort>(
+      rootOperation->getExecutionContext(), std::move(qet), sortColumns);
 }
 
 // _____________________________________________________________________________
