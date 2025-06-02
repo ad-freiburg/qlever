@@ -1641,49 +1641,23 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     std::vector<SparqlFilter> filters) {
   FiltersAndOptionalSubstitutes plans;
 
-  // Check if the filter expression is suitable for the optimization
   for (const auto& [i, filterExpression] :
        ::ranges::views::enumerate(filters)) {
-    const auto& filterBody = *filterExpression.expression_.getPimpl();
-
-    // Currently, we can only optimize GeoSPARQL filters:
-    // Analyze the expression: Check if the body of the filter directly is an
-    // optimizable geof: function
-    auto geoFuncCall = getGeoFunctionExpressionParameters(filterBody);
-    std::optional<size_t> maxDist = std::nullopt;
-
-    if (!geoFuncCall.has_value()) {
-      // If the filter body is no geof: function, it can still be a maximum
-      // distance spatial search (direct body of filter is comparison).
-      auto distFilterRes = getGeoDistanceFilter(filterBody);
-      if (!distFilterRes.has_value()) {
-        plans.push_back(
-            FilterAndOptionalSubstitute(filterExpression, std::nullopt));
-        continue;
-      }
-      geoFuncCall = distFilterRes.value().first;
-      maxDist = distFilterRes.value().second;
+    // Check if the filter expression is suitable for spatial join optimization
+    auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
+    if (!sjConfig.has_value()) {
+      plans.push_back(
+          FilterAndOptionalSubstitute(filterExpression, std::nullopt));
+    } else {
+      // Construct spatial join
+      auto plan = makeSubtreePlan<SpatialJoin>(
+          _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
+      // Mark that this subtree plan handles (that is, substitutes) the filter
+      plan._idsOfIncludedFilters |= 1ull << i;
+      plans.push_back(
+          FilterAndOptionalSubstitute(filterExpression, std::move(plan)));
     }
-
-    // Construct spatial join
-    auto [type, left, right] = geoFuncCall.value();
-    SpatialJoinConfiguration sjConfig{SpatialJoinConfig{type, maxDist},
-                                      left,
-                                      right,
-                                      std::nullopt,
-                                      PayloadVariables::all(),
-                                      SpatialJoinAlgorithm::LIBSPATIALJOIN,
-                                      type};
-    auto plan = makeSubtreePlan<SpatialJoin>(_qec, sjConfig, std::nullopt,
-                                             std::nullopt, true);
-
-    // Mark that this subtree plan handles (that is, substitutes) the filter
-    plan._idsOfIncludedFilters |= 1ull << i;
-
-    plans.push_back(
-        FilterAndOptionalSubstitute(filterExpression, std::move(plan)));
   }
-
   return plans;
 };
 
