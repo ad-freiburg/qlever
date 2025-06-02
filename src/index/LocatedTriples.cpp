@@ -1,10 +1,12 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
 //
-// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/LocatedTriples.h"
 
@@ -19,13 +21,13 @@
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     ql::span<const IdTriple<0>> triples,
     ql::span<const CompressedBlockMetadata> blockMetadata,
-    const qlever::KeyOrder& keyOrder, bool shouldExist,
+    const qlever::KeyOrder& keyOrder, bool insertOrDelete,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   std::vector<LocatedTriple> out;
   out.reserve(triples.size());
   ad_utility::chunkedForLoop<10'000>(
       0, triples.size(),
-      [&triples, &out, &blockMetadata, &keyOrder, &shouldExist](size_t i) {
+      [&triples, &out, &blockMetadata, &keyOrder, &insertOrDelete](size_t i) {
         auto triple = triples[i].permute(keyOrder);
         // A triple belongs to the first block that contains at least one triple
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
@@ -35,7 +37,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
                                     std::less<>{},
                                     &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
-        out.emplace_back(blockIndex, triple, shouldExist);
+        out.emplace_back(blockIndex, triple, insertOrDelete);
       },
       [&cancellationHandle]() { cancellationHandle->throwIfCancelled(); });
 
@@ -49,15 +51,14 @@ bool LocatedTriplesPerBlock::hasUpdates(size_t blockIndex) const {
 
 // ____________________________________________________________________________
 NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
-  // If no located triples for `blockIndex_` exist, there is no entry in `map_`.
   if (!hasUpdates(blockIndex)) {
     return {0, 0};
+  } else {
+    const auto& blockUpdateTriples = map_.at(blockIndex);
+    // Simply return the number of located triples twice. See the comment in the
+    // header file for the reasons and potential improvements.
+    return {blockUpdateTriples.size(), blockUpdateTriples.size()};
   }
-
-  auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countInserts = ql::ranges::count_if(
-      blockUpdateTriples, &LocatedTriple::shouldTripleExist_);
-  return {countInserts, blockUpdateTriples.size() - countInserts};
 }
 
 namespace {
@@ -161,13 +162,13 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   while (rowIt != block.end() && locatedTripleIt != locatedTriples.end()) {
     if (lessThan(locatedTripleIt, *rowIt)) {
-      if (locatedTripleIt->shouldTripleExist_) {
+      if (locatedTripleIt->insertOrDelete_) {
         // Insertion of a non-existent triple.
         writeLocatedTripleToResult(*locatedTripleIt);
       }
       locatedTripleIt++;
     } else if (equal(locatedTripleIt, *rowIt)) {
-      if (!locatedTripleIt->shouldTripleExist_) {
+      if (!locatedTripleIt->insertOrDelete_) {
         // Deletion of an existing triple.
         rowIt++;
       }
@@ -182,7 +183,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     AD_CORRECTNESS_CHECK(rowIt == block.end());
     ql::ranges::for_each(
         ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
-            ql::views::filter(&LocatedTriple::shouldTripleExist_),
+            ql::views::filter(&LocatedTriple::insertOrDelete_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
@@ -284,7 +285,7 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
   ad_utility::HashSet<Id> newGraphs(graphs.value().begin(),
                                     graphs.value().end());
   for (auto& lt : locatedTriples) {
-    if (!lt.shouldTripleExist_) {
+    if (!lt.insertOrDelete_) {
       // Don't update the graph info for triples that are deleted.
       continue;
     }
@@ -370,10 +371,10 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
 
 // ____________________________________________________________________________
 bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
-                                             bool isInsertion) const {
-  auto blockContains = [&triple, isInsertion](const LocatedTriples& lt,
-                                              size_t blockIndex) {
-    LocatedTriple locatedTriple{blockIndex, triple, isInsertion};
+                                             bool insertOrDelete) const {
+  auto blockContains = [&triple, insertOrDelete](const LocatedTriples& lt,
+                                                 size_t blockIndex) {
+    LocatedTriple locatedTriple{blockIndex, triple, insertOrDelete};
     locatedTriple.blockIndex_ = blockIndex;
     return ad_utility::contains(lt, locatedTriple);
   };

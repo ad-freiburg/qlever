@@ -48,7 +48,13 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimit() const { return true; }
+bool NeutralOptional::supportsLimitOffset() const { return true; }
+
+// _____________________________________________________________________________
+void NeutralOptional::onLimitOffsetChanged(
+    const LimitOffsetClause& limitOffset) const {
+  tree_->applyLimit(limitOffset);
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
@@ -100,15 +106,12 @@ struct WrapperWithEnsuredRow
 
 // _____________________________________________________________________________
 bool NeutralOptional::singleRowCroppedByLimit() const {
-  const auto& limit = getLimit();
+  const auto& limit = getLimitOffset();
   return limit._offset > 0 || limit.limitOrDefault() == 0;
 }
 
 // _____________________________________________________________________________
 Result NeutralOptional::computeResult(bool requestLaziness) {
-  const auto& limit = getLimit();
-  tree_->setLimit(limit);
-
   auto childResult = tree_->getResult(requestLaziness);
 
   IdTable singleRowTable{getResultWidth(), allocator()};
