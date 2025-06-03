@@ -231,21 +231,30 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
-          const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
-          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
+          std::vector<Matcher<const std::vector<::IdTriple<>>&>>
+              toInsertMatchers,
+          std::vector<Matcher<const std::vector<::IdTriple<>>&>>
+              toDeleteMatchers,
           source_location sourceLocation = source_location::current()) {
         auto l = generateLocationTrace(sourceLocation);
+        ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
-        // Some operations are translated to multiple updates in qlever. We only
-        // care about the end effect here and not the break-down.
-        std::vector<::IdTriple<>> insertions;
-        std::vector<::IdTriple<>> deletions;
-        for (auto& updateQuads : graphUpdateQuads) {
-          ad_utility::appendVector(insertions, updateQuads.first.idTriples_);
-          ad_utility::appendVector(deletions, updateQuads.second.idTriples_);
-        }
-        EXPECT_THAT(insertions, toInsertMatcher);
-        EXPECT_THAT(deletions, toDeleteMatcher);
+        ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
+        std::vector<Matcher<pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                                 ExecuteUpdate::IdTriplesAndLocalVocab>>>
+            transformedMatchers;
+        ql::ranges::transform(
+            toInsertMatchers, toDeleteMatchers,
+            std::back_inserter(transformedMatchers),
+            [](auto insertMatcher, auto deleteMatcher) {
+              return testing::Pair(
+                  AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
+                           insertMatcher),
+                  AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab, idTriples_,
+                           deleteMatcher));
+            });
+        EXPECT_THAT(graphUpdateQuads,
+                    testing::ElementsAreArray(transformedMatchers));
       };
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
@@ -272,21 +281,21 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
 
     expectComputeGraphUpdateQuads(
         "INSERT DATA { <s> <p> <o> . }",
-        ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-        IsEmpty());
+        {ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))})},
+        {IsEmpty()});
     expectComputeGraphUpdateQuads(
-        "DELETE DATA { <z> <label> \"zz\"@en }", IsEmpty(),
-        ElementsAreArray(
-            {IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))}));
+        "DELETE DATA { <z> <label> \"zz\"@en }", {IsEmpty()},
+        {ElementsAreArray(
+            {IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))})});
     expectComputeGraphUpdateQuads(
         "DELETE { ?s <is-a> ?o } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-        ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-        ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                          IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+        {ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))})},
+        {ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+                           IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))})});
     expectComputeGraphUpdateQuads(
         "DELETE { <s> <p> <o> } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-        ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-        IsEmpty());
+        {ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))})},
+        {IsEmpty()});
     expectComputeGraphUpdateQuads(
         "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o "
         "}",
@@ -305,38 +314,41 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
                          IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"), g)};
     };
     auto allTriples = UnorderedElementsAreArray(allTriplesWith(std::nullopt));
-    expectComputeGraphUpdateQuads("DELETE WHERE { ?s ?p ?o }", IsEmpty(),
-                                  allTriples);
+    expectComputeGraphUpdateQuads("DELETE WHERE { ?s ?p ?o }", {IsEmpty()},
+                                  {allTriples});
     expectComputeGraphUpdateQuadsFails(
         "SELECT * WHERE { ?s ?p ?o }",
         HasSubstr(
             R"(Invalid SPARQL query: Token "SELECT": mismatched input 'SELECT')"));
-    expectComputeGraphUpdateQuads("CLEAR DEFAULT", IsEmpty(), allTriples);
-    expectComputeGraphUpdateQuads("CLEAR GRAPH <x>", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("CLEAR NAMED", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("CLEAR ALL", IsEmpty(), allTriples);
-    expectComputeGraphUpdateQuads("DROP DEFAULT", IsEmpty(), allTriples);
-    expectComputeGraphUpdateQuads("DROP GRAPH <x>", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("DROP NAMED", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("DROP ALL", IsEmpty(), allTriples);
+    expectComputeGraphUpdateQuads("CLEAR DEFAULT", {IsEmpty()}, {allTriples});
+    expectComputeGraphUpdateQuads("CLEAR GRAPH <x>", {IsEmpty()}, {IsEmpty()});
+    expectComputeGraphUpdateQuads("CLEAR NAMED", {IsEmpty()}, {IsEmpty()});
+    expectComputeGraphUpdateQuads("CLEAR ALL", {IsEmpty()}, {allTriples});
+    expectComputeGraphUpdateQuads("DROP DEFAULT", {IsEmpty()}, {allTriples});
+    expectComputeGraphUpdateQuads("DROP GRAPH <x>", {IsEmpty()}, {IsEmpty()});
+    expectComputeGraphUpdateQuads("DROP NAMED", {IsEmpty()}, {IsEmpty()});
+    expectComputeGraphUpdateQuads("DROP ALL", {IsEmpty()}, {allTriples});
     expectComputeGraphUpdateQuads(
         "ADD DEFAULT TO GRAPH <x>",
-        UnorderedElementsAreArray(allTriplesWith(Id("<x>"))), IsEmpty());
-    expectComputeGraphUpdateQuads("ADD <x> TO DEFAULT", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("MOVE DEFAULT TO DEFAULT", IsEmpty(),
-                                  IsEmpty());
-    expectComputeGraphUpdateQuads("MOVE <x> TO GRAPH <x>", IsEmpty(),
-                                  IsEmpty());
+        {UnorderedElementsAreArray(allTriplesWith(Id("<x>")))}, {IsEmpty()});
+    expectComputeGraphUpdateQuads("ADD <x> TO DEFAULT", {IsEmpty()},
+                                  {IsEmpty()});
+    expectComputeGraphUpdateQuads("MOVE DEFAULT TO DEFAULT", {}, {});
+    expectComputeGraphUpdateQuads("MOVE <x> TO GRAPH <x>", {}, {});
     expectComputeGraphUpdateQuads(
         "MOVE DEFAULT TO <y>",
-        UnorderedElementsAreArray(allTriplesWith(Id("<y>"))), allTriples);
-    expectComputeGraphUpdateQuads("MOVE GRAPH <y> TO DEFAULT", IsEmpty(),
-                                  allTriples);
+        {IsEmpty(), UnorderedElementsAreArray(allTriplesWith(Id("<y>"))),
+         IsEmpty()},
+        {IsEmpty(), IsEmpty(), allTriples});
+    expectComputeGraphUpdateQuads("MOVE GRAPH <y> TO DEFAULT",
+                                  {IsEmpty(), IsEmpty(), IsEmpty()},
+                                  {allTriples, IsEmpty(), IsEmpty()});
     expectComputeGraphUpdateQuads(
         "COPY DEFAULT TO GRAPH <x>",
-        UnorderedElementsAreArray(allTriplesWith(Id("<x>"))), IsEmpty());
-    expectComputeGraphUpdateQuads("CREATE GRAPH <x>", IsEmpty(), IsEmpty());
-    expectComputeGraphUpdateQuads("CREATE GRAPH <foo>", IsEmpty(), IsEmpty());
+        {IsEmpty(), UnorderedElementsAreArray(allTriplesWith(Id("<x>")))},
+        {IsEmpty(), IsEmpty()});
+    expectComputeGraphUpdateQuads("CREATE GRAPH <x>", {}, {});
+    expectComputeGraphUpdateQuads("CREATE GRAPH <foo>", {}, {});
   }
   {
     // An Index with Quads/triples that are not in the default graph.
@@ -351,22 +363,22 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
     expectComputeGraphUpdateQuads("DELETE WHERE { GRAPH <a> { ?s ?p ?o } }",
-                                  IsEmpty(),
-                                  ElementsAreArray({QuadFrom(Id("<a>"))}));
+                                  {IsEmpty()},
+                                  {ElementsAreArray({QuadFrom(Id("<a>"))})});
     expectComputeGraphUpdateQuads("DELETE WHERE { GRAPH ?g { <a> <a> <a> } }",
-                                  IsEmpty(),
-                                  ElementsAreArray({QuadFrom(Id("<a>"))}));
+                                  {IsEmpty()},
+                                  {ElementsAreArray({QuadFrom(Id("<a>"))})});
     expectComputeGraphUpdateQuads(
-        "DELETE WHERE { GRAPH ?g { ?s ?p ?o } }", IsEmpty(),
-        ElementsAreArray(
+        "DELETE WHERE { GRAPH ?g { ?s ?p ?o } }", {IsEmpty()},
+        {ElementsAreArray(
             {QuadFrom(Id("<a>")), QuadFrom(Id("<b>")), QuadFrom(Id("<c>")),
-             IdTriple(Id("<d>"), Id("<d>"), Id("<d>"), defaultGraphId)}));
+             IdTriple(Id("<d>"), Id("<d>"), Id("<d>"), defaultGraphId)})});
     // TODO<qup42>: the second triple is technically not correct. the funky
     // behaviour is caused by the default query graph being the union graph.
     expectComputeGraphUpdateQuads(
-        "DELETE WHERE { GRAPH <a> { ?s ?p ?o } . ?s ?p ?o }", IsEmpty(),
-        ElementsAreArray(
-            {QuadFrom(Id("<a>")), IdTriple(Id("<a>"), Id("<a>"), Id("<a>"))}));
+        "DELETE WHERE { GRAPH <a> { ?s ?p ?o } . ?s ?p ?o }", {IsEmpty()},
+        {ElementsAreArray(
+            {QuadFrom(Id("<a>")), IdTriple(Id("<a>"), Id("<a>"), Id("<a>"))})});
   }
 }
 

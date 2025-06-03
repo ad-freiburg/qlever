@@ -655,8 +655,12 @@ class SparqlQleverVisitor {
   ParsedQuery makeAdd(const GraphOrDefault& source,
                       const GraphOrDefault& target);
 
-  // TODO: docstring
+  // Construct `ParsedQuery`s that clear the target graph and then copy all
+  // triples from the source graph to the target graph.
   std::vector<ParsedQuery> makeCopy(GraphOrDefault from, GraphOrDefault to);
+
+  // Check that there are exactly 2 sub-clauses and returned the result from
+  // visiting them.
   std::pair<GraphOrDefault, GraphOrDefault> visitFromTo(
       std::vector<Parser::GraphOrDefaultContext*> ctxs);
 
