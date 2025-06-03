@@ -5,10 +5,9 @@
 #ifndef QLEVER_DATES_AND_DURATION_H
 #define QLEVER_DATES_AND_DURATION_H
 
-#include <util/Date.h>
-#include <util/Duration.h>
-
 #include "global/Constants.h"
+#include "util/Date.h"
+#include "util/Duration.h"
 #include "util/NBitInteger.h"
 
 // This class either encodes a `Date`, a year that is outside the range that

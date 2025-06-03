@@ -7,11 +7,11 @@
 
 #include "parser/TripleComponent.h"
 
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
-#include "parser/NormalizedString.h"
 #include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________

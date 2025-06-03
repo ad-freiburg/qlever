@@ -3,10 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Florian Kramer (flo.kramer@arcor.de)
 
-#include "./SparqlFilter.h"
+#include "parser/data/SparqlFilter.h"
 
-#include "absl/strings/str_cat.h"
-
+#include <absl/strings/str_cat.h>
 // _____________________________________________________________________________
 string SparqlFilter::asString() const {
   return absl::StrCat("FILTER(", expression_.getDescriptor(), ")");
