@@ -65,6 +65,15 @@ struct LimitOffsetClause {
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
   bool operator==(const LimitOffsetClause&) const = default;
+
+  // Merge two clauses together. This adds the offsets and takes the minimum of
+  // both limits. If the other limit is not set, the current limit is kept.
+  void mergeLimitAndOffset(const LimitOffsetClause& other) {
+    _offset += other._offset;
+    if (other._limit.has_value()) {
+      _limit = std::min(limitOrDefault(), other._limit.value());
+    }
+  }
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_LIMITOFFSETCLAUSE_H

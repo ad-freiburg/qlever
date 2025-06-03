@@ -324,13 +324,8 @@ add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 ################################
 FetchContent_Declare(
         fsst
-        #GIT_REPOSITORY https://github.com/cwida/fsst.git
-        #GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
-        #FSST Currently has a struct name `Encoder` that leads to ODR violations with the `Encoder`class of S2.
-        # I (joka921) have filed bug reports for both of them and a PR for fsst, but for now we use our own fork
-        # of Fsst.
-        GIT_REPOSITORY https://github.com/joka921/fsst.git
-        GIT_TAG 43fb2d1756f5a5d0e85e765c7b51f5e3be8cc83f
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG b228af6356196095eaf9f8f5654b0635f969661e # main branch from 27th May 2025
 )
 
 
