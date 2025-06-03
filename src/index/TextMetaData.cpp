@@ -8,8 +8,9 @@
 #include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
-const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
-    const uint64_t lower, const uint64_t upper) const {
+const vector<std::reference_wrapper<const TextBlockMetaData>>
+TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
+                                      const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() == _blockUpperBoundWordIds.size());
@@ -27,19 +28,24 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
 
-  if (upper > *it) {
-    AD_THROW(
-        "No words found for the given prefix. This usually means that the "
-        "prefix is smaller than the configured minimum prefix size. This range "
-        "spans over " +
-        std::to_string(upperIt - it) + " blocks");
-  }
+  // if (upper > *it) {
+  //   AD_THROW(
+  //       "No words found for the given prefix. This usually means that the "
+  //       "prefix is smaller than the configured minimum prefix size. This
+  //       range " "spans over " + std::to_string(upperIt - it) + " blocks");
+  // }
 
   // Use the info to retrieve an index.
-  size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
-  assert(lower <= _blocks[index]._lastWordId);
-  assert(lower >= _blocks[index]._firstWordId);
-  return _blocks[index];
+  vector<std::reference_wrapper<const TextBlockMetaData>> output;
+  size_t index;
+  while (it <= upperIt && it != _blockUpperBoundWordIds.end()) {
+    index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
+    assert(lower <= _blocks[index]._lastWordId);
+    assert(lower >= _blocks[index]._firstWordId);
+    output.push_back(std::cref(_blocks[index]));
+    ++it;
+  }
+  return output;
 }
 
 // _____________________________________________________________________________

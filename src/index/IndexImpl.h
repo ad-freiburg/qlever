@@ -572,8 +572,14 @@ class IndexImpl {
     bool hasToBeFiltered_;
     IdRange<WordVocabIndex> idRange_;
   };
-  std::optional<TextBlockMetadataAndWordInfo>
+  std::optional<std::vector<TextBlockMetadataAndWordInfo>>
   getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
+
+  template <typename Reader>
+  IdTable mergeIdTables(
+      Reader reader,
+      std::optional<std::vector<TextBlockMetadataAndWordInfo>> tbmds,
+      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 

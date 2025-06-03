@@ -85,16 +85,13 @@ IdTable IndexImpl::getWordPostingsForTerm(
     idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
-  const auto& tbmd = optionalTbmd.value().tbmd_;
-  idTable = textIndexReadWrite::readWordCl(tbmd, allocator, textIndexFile_,
-                                           textScoringMetric_);
-  if (optionalTbmd.value().hasToBeFiltered_) {
-    idTable =
-        FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, idTable);
-  }
+
+  IdTable output = mergeIdTables(textIndexReadWrite::readWordCl,
+                                 optionalTbmd.value(), allocator);
+
   LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << idTable.getColumn(0).size() << '\n';
-  return idTable;
+             << ": cids: " << output.getColumn(0).size() << '\n';
+  return output;
 }
 
 // _____________________________________________________________________________
@@ -105,9 +102,51 @@ IdTable IndexImpl::getEntityMentionsForWord(
   if (!optTbmd.has_value()) {
     return IdTable{allocator};
   }
-  const auto& tbmd = optTbmd.value().tbmd_;
-  return textIndexReadWrite::readWordEntityCl(tbmd, allocator, textIndexFile_,
-                                              textScoringMetric_);
+  return mergeIdTables(textIndexReadWrite::readWordEntityCl, optTbmd.value(),
+                       allocator);
+}
+
+// _____________________________________________________________________________
+template <typename Reader>
+IdTable IndexImpl::mergeIdTables(
+    Reader reader,
+    std::optional<std::vector<TextBlockMetadataAndWordInfo>> tbmds,
+    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+  auto tableToRowView = [](const IdTable& table) {
+    return ranges::views::zip(table.getColumn(0), table.getColumn(1),
+                              table.getColumn(2));
+  };
+
+  // Sort by TextRecordId then WordId and then score.
+  auto rowComparator = [](const auto& a, const auto& b) { return a < b; };
+
+  vector<IdTable> partialResults;
+  for (const auto& tbmd : tbmds) {
+    IdTable partialResult{allocator};
+    partialResult =
+        reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
+    if (tbmd.hasToBeFiltered_) {
+      partialResult =
+          FTSAlgorithms::filterByRange(tbmd.idRange_, partialResult);
+    }
+  }
+
+  std::vector<auto> tableRanges;
+  for (const auto& partialResult : partialResults) {
+    tableRanges.push_back(tableToRowView(partialResult));
+  }
+
+  // Merge
+  auto mergedRows =
+      ad_utility::parallelMultiwayMerge<std::tuple<ValueId, ValueId, ValueId>,
+                                        false>(
+          memoryLimitIndexBuilding(), std::move(tableRanges), rowComparator);
+  IdTable output{allocator};
+
+  for (const auto& row : mergedRows) {
+    output.push_back(row);
+  }
+  return output;
 }
 
 // _____________________________________________________________________________
@@ -129,9 +168,11 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
     if (!optTbmd.has_value()) {
       return i;
     }
-    const auto& tbmd = optTbmd.value().tbmd_;
-    toBeSorted.emplace_back(i, tbmd._firstWordId == tbmd._lastWordId,
-                            tbmd._entityCl._nofElements);
+    for (const auto& tbmdAndWordInfo : optTbmd.value()) {
+      const auto& tbmd = tbmdAndWordInfo.tbmd_;
+      toBeSorted.emplace_back(i, tbmd._firstWordId == tbmd._lastWordId,
+                              tbmd._entityCl._nofElements);
+    }
   }
   std::sort(toBeSorted.begin(), toBeSorted.end(),
             [](const std::tuple<size_t, bool, size_t>& a,
@@ -154,7 +195,11 @@ size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
   if (!optTbmd.has_value()) {
     return 0;
   }
-  return optTbmd.value().tbmd_._entityCl._nofElements;
+  size_t sum = 0;
+  for (const auto& tbmdAndWordInfo : optTbmd.value()) {
+    sum += tbmdAndWordInfo.tbmd_._entityCl._nofElements;
+  }
+  return sum;
 }
 
 // _____________________________________________________________________________
@@ -166,7 +211,11 @@ size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
   if (!optTbmd.has_value()) {
     return 0;
   }
-  return optTbmd.value().tbmd_._cl._nofElements;
+  size_t sum = 0;
+  for (const auto& tbmdAndWordInfo : optTbmd.value()) {
+    sum += tbmdAndWordInfo.tbmd_._cl._nofElements;
+  }
+  return sum;
 }
 
 // _____________________________________________________________________________
@@ -183,7 +232,10 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     if (!optTbmd.has_value()) {
       return 0;
     }
-    return 1 + optTbmd.value().tbmd_._entityCl._nofElements / 100;
+    return ql::ranges::min(
+        optTbmd.value() | ql::views::transform([](const auto& tbmdAndWordInfo) {
+          return 1 + tbmdAndWordInfo.tbmd_._entityCl._nofElements / 100;
+        }));
   };
   return ql::ranges::min(terms | ql::views::transform(termToEstimate));
 }
@@ -211,12 +263,19 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     }
     idRange = IdRange{idx, idx};
   }
-  const auto& tbmd = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
-                                                       idRange.last().get());
-  bool hasToBeFiltered = tbmd._cl.hasMultipleWords() &&
-                         !(tbmd._firstWordId == idRange.first().get() &&
-                           tbmd._lastWordId == idRange.last().get());
-  return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+  auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
+                                                      idRange.last().get());
+
+  bool hasToBeFiltered = false;
+  std::vector<TextBlockMetadataAndWordInfo> output;
+  for (auto tbmd : tbmdVector) {
+    hasToBeFiltered = tbmd.get()._cl.hasMultipleWords() &&
+                      !(tbmd.get()._firstWordId == idRange.first().get() &&
+                        tbmd.get()._lastWordId == idRange.last().get());
+    output.emplace_back(
+        TextBlockMetadataAndWordInfo{tbmd.get(), hasToBeFiltered, idRange});
+  }
+  return std::optional{output};
 }
 
 // _____________________________________________________________________________
