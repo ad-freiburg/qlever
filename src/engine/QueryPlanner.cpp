@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <type_traits>
 #include <variant>
 
@@ -61,6 +62,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/data/Variable.h"
+#include "range/v3/view/cartesian_product.hpp"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -277,8 +279,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible<true>(candidatePlans[0],
-                                 seedFilterSubstitutes(rootPattern->_filters));
+    applyFiltersIfPossible<true>(candidatePlans[0], optimizer.filtersAndSubst_);
     applyTextLimitsIfPossible(candidatePlans[0],
                               TextLimitVec{rootPattern->textLimits_.begin(),
                                            rootPattern->textLimits_.end()},
@@ -297,8 +298,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
       // or it only consists of a MINUS clause (which then has no effect).
       std::vector neutralPlans{makeSubtreePlan<NeutralElementOperation>(_qec)};
       // Neutral element can potentially still get filtered out
-      applyFiltersIfPossible<true>(
-          neutralPlans, seedFilterSubstitutes(rootPattern->_filters));
+      applyFiltersIfPossible<true>(neutralPlans, optimizer.filtersAndSubst_);
       return neutralPlans;
     }
     return candidatePlans[0];
@@ -1366,9 +1366,8 @@ void QueryPlanner::applyFiltersIfPossible(
         // Apply this filter regularly.
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
             _qec, plan._qet, filterAndSubst.filter_.expression_);
-        newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+        mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
-        newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
         newPlan.type = plan.type;
         if constexpr (replace) {
           plan = std::move(newPlan);
@@ -2589,10 +2588,10 @@ void QueryPlanner::QueryGraph::setupGraph(
             // This filter cannot be substituted: add no edges.
             continue;
           }
-          std::vector<Variable> varsToBeConnected;
+          absl::InlinedVector<const Variable*, 4> varsToBeConnected;
           for (auto var : filter.expression_.containedVariables()) {
             if (varToNode.contains(*var)) {
-              varsToBeConnected.push_back(*var);
+              varsToBeConnected.push_back(var);
             }
           }
           if (varsToBeConnected.size() < 2) {
@@ -2603,13 +2602,15 @@ void QueryPlanner::QueryGraph::setupGraph(
           auto first = varsToBeConnected[0];
           for (size_t i = 1; i < varsToBeConnected.size(); i++) {
             auto second = varsToBeConnected[i];
-            for (auto n1 : varToNode.at(first)) {
-              for (auto n2 : varToNode.at(second)) {
-                if (n1 != n2) {
-                  result[n1].insert(n2);
-                  result[n2].insert(n1);
-                }
-              }
+
+            for (auto [n1, n2] :
+                 ::ranges::views::cartesian_product(varToNode.at(*first),
+                                                    varToNode.at(*second)) |
+                     ql::views::filter([](const auto& pair) {
+                       return std::get<0>(pair) != std::get<1>(pair);
+                     })) {
+              result[n1].insert(n2);
+              result[n2].insert(n1);
             }
             first = second;
           }

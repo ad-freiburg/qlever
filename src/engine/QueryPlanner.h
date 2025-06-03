@@ -583,10 +583,18 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
+    // We remember the potential filter substitutions so we can avoid
+    // unnecessarily recomputing them.
+    FiltersAndOptionalSubstitutes filtersAndSubst_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
+        : planner_{planner},
+          rootPattern_{rootPattern},
+          qec_{planner._qec},
+          filtersAndSubst_{
+              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
