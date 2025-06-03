@@ -541,11 +541,12 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       } else if (normalizedLiteralContent == "false") {
         parser->lastParseResult_ = false;
       } else if (normalizedLiteralContent == "1") {
-        parser->lastParseResult_ = Id::makeFromBool(true, true);
+        parser->lastParseResult_ = Id::makeFromBinaryBool(true);
       } else if (normalizedLiteralContent == "0") {
-        parser->lastParseResult_ = Id::makeFromBool(false, true);
+        parser->lastParseResult_ = Id::makeFromBinaryBool(false);
       } else {
-        makeNormalLiteral();
+        raiseOrIgnoreTriple(absl::StrCat("Invalid boolean literal: '",
+                                         normalizedLiteralContent, "'"));
       }
     } else if (ad_utility::contains(floatDatatypes_, type)) {
       parser->parseDoubleConstant(normalizedLiteralContent);

@@ -256,12 +256,17 @@ class ValueId {
     return IntegerType::fromNBit(_bits);
   }
 
-  /// Create a `ValueId` for a boolean value. If `binaryLiteral` is true, this
-  /// will store it as 0/1 instead of false/true.
-  static constexpr ValueId makeFromBool(bool b,
-                                        bool binaryLiteral = false) noexcept {
+  /// Create a `ValueId` for a boolean value.
+  static constexpr ValueId makeFromBool(bool b) noexcept {
     auto bits = static_cast<T>(b);
-    bits |= static_cast<T>(binaryLiteral) << 1;
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
+  /// Create a `ValueId` for a boolean value, represented as 0/1 instead of
+  /// false/true.
+  static constexpr ValueId makeFromBinaryBool(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(true) << 1;
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
@@ -416,16 +421,21 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr](auto&& value) {
+    auto visitor = [&ostr, id](auto&& value) {
       using T = decltype(value);
-      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
+      if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
-        ostr << (value ? "true" : "false");
+        if (removeDatatypeBits(id._bits) & 0b10) {
+          ostr << '"' << (value ? '1' : '0') << "\"^^<" << XSD_BOOLEAN_TYPE
+               << '>';
+        } else {
+          ostr << (value ? "true" : "false");
+        }
       } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
