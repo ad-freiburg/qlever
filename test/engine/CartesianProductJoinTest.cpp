@@ -72,7 +72,7 @@ void testCartesianProductImpl(VectorTable expected,
     for (size_t offset = 0; offset < expected.size(); ++offset) {
       LimitOffsetClause limitClause{limit, 0, offset};
       auto join = makeJoin(inputs, useLimitInSuboperations);
-      join.setLimit(limitClause);
+      join.applyLimitOffset(limitClause);
       VectorTable partialResult;
       std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
                 expected.begin() + limitClause.upperBound(expected.size()),
@@ -297,7 +297,8 @@ class CartesianProductJoinLazyTest
         children.back()->getRootOperation())
         ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
-    join.setLimit(LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
+    join.applyLimitOffset(
+        LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
     return join;
   }
 

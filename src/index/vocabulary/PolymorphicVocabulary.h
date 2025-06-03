@@ -11,7 +11,6 @@
 #include <variant>
 
 #include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -25,16 +24,20 @@ class PolymorphicVocabulary {
   using VocabularyType = ad_utility::VocabularyType;
 
  private:
-  // Type aliases for all the currently supported vocabularies. If another
-  // vocabulary is added, don't forget to also register it in the
-  // `VocabularyType` enum.
-  using InMemory = VocabularyInMemory;
-  using External = VocabularyInternalExternal;
-  using CompressedInMemory = CompressedVocabulary<InMemory>;
-  using CompressedExternal = CompressedVocabulary<External>;
-  using CompressedExtGeoSplit = SplitGeoVocabulary<CompressedExternal>;
-  using Variant = std::variant<InMemory, External, CompressedExternal,
-                               CompressedInMemory, CompressedExtGeoSplit>;
+  // Type aliases for all the currently supported vocabularies. To add another
+  // vocabulary,
+  // 1. Add an enum value to the `VocabularyTypeEnum`.
+  // 2. Add an alias below for the vocabulary that has the same name as the enum
+  // value.
+  // 3. Add the alias type to the `Variant` below.
+  // 4. Add the corresponding line to the `resetToType` function in
+  // `PolymorphicVocabulary.cpp`.
+  using InMemoryUncompressed = VocabularyInMemory;
+  using OnDiskUncompressed = VocabularyInternalExternal;
+  using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
+  using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
+  using Variant = std::variant<InMemoryUncompressed, OnDiskUncompressed,
+                               OnDiskCompressed, InMemoryCompressed>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;

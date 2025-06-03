@@ -3918,6 +3918,42 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
+  auto hasLimit = [](const LimitOffsetClause& limit) {
+    return queryPlannerTestHelpers::RootOperationBase(
+        AD_PROPERTY(Operation, getLimitOffset, ::testing::Eq(limit)));
+  };
+
+  h::expect("SELECT * { SELECT ?a { ?a ?b ?c } LIMIT 1 }",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  h::expect(
+      "SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } } LIMIT 1 }",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 1"),
+            hasLimit({1})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } OFFSET 2 } OFFSET 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
+                  hasLimit({std::nullopt, 3})));
+  // Last offset should only be applied by exporter since VALUES does not
+  // support OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} OFFSET 1 } OFFSET 2 } OFFSET 5",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } OFFSET 3"),
+            hasLimit({std::nullopt, 3})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  // Last limit should only be applied by exporter since VALUES does not support
+  // OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} LIMIT 3 } LIMIT 2 } LIMIT 1",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 2"),
+            hasLimit({2})));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   auto query = SparqlParser::parseQuery(
       "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");

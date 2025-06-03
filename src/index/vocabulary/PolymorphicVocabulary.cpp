@@ -54,22 +54,19 @@ std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
 // _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
+  // The names of the enum values are the same as the type aliases for the
+  // implementations, so we can shorten the following code using a macro.
+#undef AD_CASE
+#define AD_CASE(vocabType)              \
+  case VocabularyType::Enum::vocabType: \
+    vocab_.emplace<vocabType>();        \
+    break
+
   switch (type.value()) {
-    case VocabularyType::Enum::InMemoryUncompressed:
-      vocab_.emplace<InMemory>();
-      break;
-    case VocabularyType::Enum::OnDiskUncompressed:
-      vocab_.emplace<External>();
-      break;
-    case VocabularyType::Enum::InMemoryCompressed:
-      vocab_.emplace<CompressedInMemory>();
-      break;
-    case VocabularyType::Enum::OnDiskCompressed:
-      vocab_.emplace<CompressedExternal>();
-      break;
-    case VocabularyType::Enum::OnDiskCompressedGeoSplit:
-      vocab_.emplace<CompressedExtGeoSplit>();
-      break;
+    AD_CASE(InMemoryUncompressed);
+    AD_CASE(OnDiskUncompressed);
+    AD_CASE(InMemoryCompressed);
+    AD_CASE(OnDiskCompressed);
     default:
       AD_FAIL();
   }
