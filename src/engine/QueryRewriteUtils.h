@@ -8,7 +8,7 @@
 #include "engine/SpatialJoin.h"
 #include "parser/data/SparqlFilter.h"
 
-// This module contains utilites for query rewriting, e.g. optimizing cartesian
+// This module contains utilities for query rewriting, e.g. optimizing cartesian
 // product and filter by replacing it with an appropriate special join.
 
 // Generate a spatial join configuration for a given filter, if this filter is
