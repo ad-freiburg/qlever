@@ -35,15 +35,26 @@ NARY_EXPRESSION(
 }  // namespace detail
 
 using namespace detail;
+
+SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LatitudeExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LongitudeExpression>(std::move(child));
+}
+
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
 }
+
 SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2) {
   return std::make_unique<MetricDistExpression>(std::move(child1),
                                                 std::move(child2));
 }
+
 SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3) {
@@ -75,13 +86,6 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     return std::nullopt;
   }
   return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1.value(), p2.value()};
-}
-
-SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LatitudeExpression>(std::move(child));
-}
-SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LongitudeExpression>(std::move(child));
 }
 
 }  // namespace sparqlExpression

@@ -572,7 +572,7 @@ template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
 
-//
+// _____________________________________________________________________________
 namespace sparqlExpression {
 
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, size_t>>
