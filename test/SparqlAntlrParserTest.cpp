@@ -2451,17 +2451,15 @@ TEST(SparqlParser, Create) {
 TEST(SparqlParser, Add) {
   auto expectAdd = ExpectCompleteParse<&Parser::add>{defaultPrefixMap};
   auto expectAddFails = ExpectParseFails<&Parser::add>{defaultPrefixMap};
+  auto Iri = TripleComponent::Iri::fromIriref;
 
-  auto addMatcher =
-      ElementsAre(m::AddAll(TripleComponent::Iri::fromIriref("<foo>"),
-                            TripleComponent::Iri::fromIriref("<bar>")));
+  auto addMatcher = ElementsAre(m::AddAll(Iri("<foo>"), Iri("<bar>")));
   expectAdd("ADD GRAPH <baz> to GRAPH <baz>", IsEmpty());
   expectAdd("ADD DEFAULT TO DEFAULT", IsEmpty());
   expectAdd("ADD GRAPH <foo> TO GRAPH <bar>", addMatcher);
   expectAdd("ADD SILENT GRAPH <foo> TO <bar>", addMatcher);
   expectAdd("ADD <foo> to DEFAULT",
-            ElementsAre(m::AddAll(TripleComponent::Iri::fromIriref("<foo>"),
-                                  std::monostate{})));
+            ElementsAre(m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI))));
   expectAdd("ADD GRAPH <foo> to GRAPH <foo>", testing::IsEmpty());
   expectAddFails("ADD ALL TO NAMED");
 }
@@ -2469,15 +2467,15 @@ TEST(SparqlParser, Add) {
 TEST(SparqlParser, Clear) {
   auto expectClear = ExpectCompleteParse<&Parser::clear>{defaultPrefixMap};
   auto expectClearFails = ExpectParseFails<&Parser::clear>{defaultPrefixMap};
+  auto Iri = TripleComponent::Iri::fromIriref;
 
   expectClear("CLEAR ALL", m::Clear(Variable("?g")));
-  expectClear("CLEAR SILENT GRAPH <foo>",
-              m::Clear(TripleComponent::Iri::fromIriref("<foo>")));
+  expectClear("CLEAR SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
   expectClear("CLEAR NAMED", m::Clear(Variable("?g"),
                                       "?g != "
                                       "<http://qlever.cs.uni-freiburg.de/"
                                       "builtin-functions/default-graph>"));
-  expectClear("CLEAR DEFAULT", m::Clear(std::monostate{}));
+  expectClear("CLEAR DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
 TEST(SparqlParser, Drop) {
@@ -2485,42 +2483,42 @@ TEST(SparqlParser, Drop) {
   // graph existence)
   auto expectDrop = ExpectCompleteParse<&Parser::drop>{defaultPrefixMap};
   auto expectDropFails = ExpectParseFails<&Parser::drop>{defaultPrefixMap};
+  auto Iri = TripleComponent::Iri::fromIriref;
 
   expectDrop("DROP ALL", m::Clear(Variable("?g")));
-  expectDrop("DROP SILENT GRAPH <foo>",
-             m::Clear(TripleComponent::Iri::fromIriref("<foo>")));
+  expectDrop("DROP SILENT GRAPH <foo>", m::Clear(Iri("<foo>")));
   expectDrop("DROP NAMED", m::Clear(Variable("?g"),
                                     "?g != "
                                     "<http://qlever.cs.uni-freiburg.de/"
                                     "builtin-functions/default-graph>"));
-  expectDrop("DROP DEFAULT", m::Clear(std::monostate{}));
+  expectDrop("DROP DEFAULT", m::Clear(Iri(DEFAULT_GRAPH_IRI)));
 }
 
 TEST(SparqlParser, Move) {
   auto expectMove = ExpectCompleteParse<&Parser::move>{defaultPrefixMap};
   auto expectMoveFails = ExpectParseFails<&Parser::move>{defaultPrefixMap};
+  auto Iri = TripleComponent::Iri::fromIriref;
 
   // Moving a graph onto itself changes nothing
   expectMove("MOVE SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
   expectMove("MOVE GRAPH <foo> TO <foo>", testing::IsEmpty());
   expectMove("MOVE GRAPH <foo> TO DEFAULT",
-             ElementsAre(m::Clear(std::monostate{}),
-                         m::AddAll(TripleComponent::Iri::fromIriref("<foo>"),
-                                   std::monostate{}),
-                         m::Clear(TripleComponent::Iri::fromIriref("<foo>"))));
+             ElementsAre(m::Clear(Iri(DEFAULT_GRAPH_IRI)),
+                         m::AddAll(Iri("<foo>"), Iri(DEFAULT_GRAPH_IRI)),
+                         m::Clear(Iri("<foo>"))));
 }
 
 TEST(SparqlParser, Copy) {
   auto expectCopy = ExpectCompleteParse<&Parser::copy>{defaultPrefixMap};
   auto expectCopyFails = ExpectParseFails<&Parser::copy>{defaultPrefixMap};
+  auto Iri = TripleComponent::Iri::fromIriref;
 
   // Copying a graph onto itself changes nothing
   expectCopy("COPY SILENT DEFAULT TO DEFAULT", testing::IsEmpty());
   expectCopy("COPY GRAPH <foo> TO <foo>", testing::IsEmpty());
   expectCopy("COPY DEFAULT TO GRAPH <foo>",
-             ElementsAre(m::Clear(TripleComponent::Iri::fromIriref("<foo>")),
-                         m::AddAll(std::monostate{},
-                                   TripleComponent::Iri::fromIriref("<foo>"))));
+             ElementsAre(m::Clear(Iri("<foo>")),
+                         m::AddAll(Iri(DEFAULT_GRAPH_IRI), Iri("<foo>"))));
 }
 
 TEST(SparqlParser, Load) {

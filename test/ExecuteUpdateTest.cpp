@@ -167,31 +167,27 @@ TEST(ExecuteUpdate, executeUpdate) {
     // That the DEFAULT graph is the union graph again causes some problems.
     expectExecuteUpdate("CLEAR SILENT GRAPH <q>", NumTriples(0, 3, 3));
     expectExecuteUpdate("CLEAR GRAPH <a>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 7, 7));
+    expectExecuteUpdate("CLEAR DEFAULT", NumTriples(0, 1, 1));
     expectExecuteUpdate("CLEAR SILENT NAMED", NumTriples(0, 6, 6));
     expectExecuteUpdate("CLEAR ALL", NumTriples(0, 7, 7));
     expectExecuteUpdate("DROP GRAPH <q>", NumTriples(0, 3, 3));
     expectExecuteUpdate("DROP SILENT GRAPH <a>", NumTriples(0, 0, 0));
-    expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 7, 7));
+    expectExecuteUpdate("DROP SILENT DEFAULT", NumTriples(0, 1, 1));
     expectExecuteUpdate("DROP NAMED", NumTriples(0, 6, 6));
     expectExecuteUpdate("DROP SILENT ALL", NumTriples(0, 7, 7));
     expectExecuteUpdate("ADD <q> TO <q>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD <a> TO <q>", NumTriples(0, 0, 0));
     expectExecuteUpdate("ADD SILENT <q> TO DEFAULT", NumTriples(3, 0, 3));
-    expectExecuteUpdate("ADD DEFAULT TO <q>", NumTriples(7, 0, 7));
+    expectExecuteUpdate("ADD DEFAULT TO <q>", NumTriples(1, 0, 1));
     expectExecuteUpdate("ADD SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE SILENT DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
     expectExecuteUpdate("MOVE GRAPH <q> TO <t>", NumTriples(3, 3, 6));
-    // TODO
-    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 7, 10));
-    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <t>", NumTriples(7, 7, 14));
-    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <q>", NumTriples(4, 7, 11));
-    // TODO: <q> is dropped first then default (now without <q>) is added to
-    // <q>.
-    expectExecuteUpdate("COPY DEFAULT TO <q>", NumTriples(4, 3, 7));
+    expectExecuteUpdate("MOVE <q> TO DEFAULT", NumTriples(3, 4, 7));
+    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <t>", NumTriples(1, 1, 2));
+    expectExecuteUpdate("MOVE DEFAULT TO GRAPH <q>", NumTriples(1, 4, 5));
+    expectExecuteUpdate("COPY DEFAULT TO <q>", NumTriples(1, 3, 4));
     expectExecuteUpdate("COPY DEFAULT TO DEFAULT", NumTriples(0, 0, 0));
-    // TODO
-    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 4, 7));
+    expectExecuteUpdate("COPY <q> TO DEFAULT", NumTriples(3, 1, 4));
     expectExecuteUpdate("CREATE SILENT GRAPH <x>", NumTriples(0, 0, 0));
     expectExecuteUpdate("CREATE GRAPH <y>", NumTriples(0, 0, 0));
   }
