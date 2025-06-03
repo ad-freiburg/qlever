@@ -14,7 +14,10 @@
 
 namespace sparqlExpression::detail {
 
-// _____________________________________________________________________________
+// Merge the language tag of the source literal into the target aggregate. If
+// one of the arguments doesn't hold a language tag or the language tags
+// mismatch then `target` will be set to `std::nullopt`. Otherwise, the language
+// tag of `target` will remain unchanged.
 inline void mergeLanguageTags(
     std::optional<std::string>& target,
     const ad_utility::triple_component::Literal& source) {
@@ -27,7 +30,10 @@ inline void mergeLanguageTags(
   }
 }
 
-// _____________________________________________________________________________
+// Write the potential language tag of the source literal into the target. If
+// the source literal doesn't have a language tag, then `target` will remain
+// unchanged. It is assumed that this function is only called if `target` is not
+// already set.
 inline void pushLanguageTag(
     std::optional<std::string>& target,
     const std::optional<ad_utility::triple_component::Literal>& source) {
@@ -37,7 +43,7 @@ inline void pushLanguageTag(
   }
 }
 
-// _____________________________________________________________________________
+// Combine a string and an optional language tag into a `LiteralOrIri` object.
 inline LiteralOrIri stringWithOptionalLangTagToLiteral(
     const std::string& result, std::optional<std::string> langTag) {
   return ad_utility::triple_component::LiteralOrIri{
