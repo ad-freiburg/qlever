@@ -389,11 +389,11 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 
     return Result::IdTableLoopControl::yieldAll(
         ad_utility::InputRangeTypeErased{
-            self->produceTablesLazily(
+            ad_utility::OwningView{self->produceTablesLazily(
                 std::move(localVocab),
                 ql::views::transform(idTables,
                                      ad_utility::staticCast<const IdTable&>),
-                offset, limit, lastTableOffset) |
+                offset, limit, lastTableOffset)} |
             ql::views::transform([&producedTableSize](auto& tableAndVocab) {
               producedTableSize += tableAndVocab.idTable_.size();
               return std::move(tableAndVocab);
