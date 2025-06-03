@@ -256,15 +256,18 @@ class ValueId {
     return IntegerType::fromNBit(_bits);
   }
 
-  /// Create a `ValueId` for a boolean value.
-  static constexpr ValueId makeFromBool(bool b) noexcept {
+  /// Create a `ValueId` for a boolean value. If `binaryLiteral` is true, this
+  /// will store it as 0/1 instead of false/true.
+  static constexpr ValueId makeFromBool(bool b,
+                                        bool binaryLiteral = false) noexcept {
     auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(binaryLiteral) << 1;
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
   // Obtain the boolean value.
   [[nodiscard]] bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits));
+    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
   }
 
   /// Create a `ValueId` for an unsigned index of type

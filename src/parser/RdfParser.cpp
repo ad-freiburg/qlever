@@ -540,6 +540,10 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
         parser->lastParseResult_ = true;
       } else if (normalizedLiteralContent == "false") {
         parser->lastParseResult_ = false;
+      } else if (normalizedLiteralContent == "1") {
+        parser->lastParseResult_ = Id::makeFromBool(true, true);
+      } else if (normalizedLiteralContent == "0") {
+        parser->lastParseResult_ = Id::makeFromBool(false, true);
       } else {
         makeNormalLiteral();
       }
