@@ -82,7 +82,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
   IdTable idTable{allocator};
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
-    idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
+    idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
   const auto& tbmd = optionalTbmd.value().tbmd_;
