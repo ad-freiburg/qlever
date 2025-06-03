@@ -3,11 +3,11 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
-
-#include "engine/sparqlExpressions/NaryExpression.h"
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -59,8 +59,7 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
-  // TODO<ullingerc> After merge of #1938 handle distance unit and
-  // metricDistance function
+  // TODO<ullingerc> handle distance unit and metricDistance function
 
   // Currently only DistExpression
   auto distExpr = dynamic_cast<const DistExpression*>(&expr);
