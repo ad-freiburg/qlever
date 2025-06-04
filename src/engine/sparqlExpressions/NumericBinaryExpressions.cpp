@@ -13,17 +13,22 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 
 // Division.
 //
-// TODO<joka921> If `b == 0` this is technically undefined behavior and
-// should lead to an expression error in SPARQL. Fix this as soon as we
-// introduce the proper semantics for expression errors.
-// Update: I checked it, and the standard differentiates between `xsd:decimal`
-// (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
-// currently implement the latter behavior. Note: The result of a division in
+// TODO<joka921> If `b == 0` the the behavior of the division depends on whether
+// the inputs are `xsd:decimal` or `xsd:double` (`double`s have special values
+// like `NaN` or `infinity`, decimals don't). As we currently make no difference
+// between those two types, we have to choose one of the behaviors. We make the
+// result `UNDEF` in this case to pass the sparql conformance tests that rely on
+// this behavior.
+// Note: The result of a division in
 // SPARQL is always a decimal number, so there is no integer division.
 [[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
+  if (y == 0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   return static_cast<double>(x) / static_cast<double>(y);
 };
-inline auto divide = makeNumericExpression<decltype(divideImpl)>();
+
+inline auto divide = makeNumericExpression<decltype(divideImpl), true>();
 NARY_EXPRESSION(DivideExpression, 2, FV<decltype(divide), NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.
