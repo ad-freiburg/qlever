@@ -766,7 +766,6 @@ auto QueryPlanner::seedWithScansAndText(
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-      newIdPlan._idsOfIncludedFilters = 0;
       newIdPlan.idsOfIncludedTextLimits_ = 0;
       seeds.emplace_back(newIdPlan);
     }
@@ -2080,13 +2079,17 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // further into the query that optional should be resolved by now.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::MINUS) {
-    return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
+    SubtreePlan plan = makeSubtreePlan<Minus>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    return {std::move(plan)};
   }
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+    SubtreePlan plan = makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    return {std::move(plan)};
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -2100,7 +2103,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     try {
       SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
       mergeSubtreePlanIds(plan, a, b);
-      return {plan};
+      return {std::move(plan)};
     } catch (const std::exception& e) {
       return {};
     }
