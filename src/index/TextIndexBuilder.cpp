@@ -111,8 +111,8 @@ void TextIndexBuilder::processWordsForInvertedLists(
     entitiesInContext.clear();
   };
 
-  auto processLine = [&currentContext, &nofContexts, &vec, &wordsInContext,
-                      &entitiesInContext, &nofEntityPostings, &nofLiterals,
+  auto processLine = [&currentContext, &wordsInContext, &entitiesInContext,
+                      &nofEntityPostings, &nofLiterals,
                       &entityNotFoundErrorMsgCount, &nofWordPostings,
                       &nextContext, this](const WordsFileLine& line) {
     if (line.contextId_ != currentContext) {
