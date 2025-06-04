@@ -616,9 +616,12 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
   auto iri = visit(ctx->iri());
-  pattern._graphPatterns.emplace_back(parsedQuery::Load{
-      ad_utility::httpUtils::Url(asStringViewUnsafe(iri.getContent())),
-      static_cast<bool>(ctx->SILENT())});
+  // The `LOAD` Update operation is translated into something like
+  // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
+  // an internal operation that binds the result of parsing the given RDF
+  // document into the variables `?s`, `?p`, and `?o`.
+  pattern._graphPatterns.emplace_back(
+      parsedQuery::Load{iri, static_cast<bool>(ctx->SILENT())});
   parsedQuery_._rootGraphPattern = std::move(pattern);
   addVisibleVariable(Variable("?s"));
   addVisibleVariable(Variable("?p"));

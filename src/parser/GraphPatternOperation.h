@@ -72,7 +72,7 @@ struct Service {
 /// An internal pattern used in the `LOAD` update operation.
 struct Load {
  public:
-  ad_utility::httpUtils::Url url_;
+  TripleComponent::Iri iri_;
   bool silent_;
 };
 
