@@ -94,12 +94,17 @@ class Permutation {
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
   // - The result is returned as a lazy generator of blocks.
-  // - The block metadata must be given manually. It can be obtained via the
-  // `getMetadataAndBlocks` function below
+  // - The join-specific prefiltered block metadata must be given manually. It
+  //   can be obtained via the `getMetadataAndBlocks` function below
   //   and then be prefiltered. The blocks must be given in ascending order
   //   and must only contain blocks that contain the given `col0Id` (combined
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
+  // - In all other cases, the block metadata (optionally generally prefiltered
+  //   via `PrefilterExpression`) is already contained as `BlockMetadataRanges`
+  //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
+  //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
+  //   join-specific prefiltered block metadata.
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
@@ -118,11 +123,6 @@ class Permutation {
 
   std::optional<CompressedRelationMetadata> getMetadata(
       Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
-
-  // Returns `true` if `.getFirstAndLastTriple()` yields a value.
-  bool hasFirstAndLastTriple(
-      const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this

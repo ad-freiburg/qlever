@@ -190,6 +190,11 @@ class IndexScan final : public Operation {
 
   std::string getCacheKeyImpl() const override;
 
+  // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
+  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
+  // `false` if prefilterd `BlockMetadataRanges` are contained.
+  bool canResultBeCachedImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return an updated QueryExecutionTree containing the new IndexScan which is
@@ -213,7 +218,7 @@ class IndexScan final : public Operation {
 
   // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
   // `Permutation` class.
-  Permutation::ScanSpecAndBlocks getScanSpecAndBlocks() const;
+  ScanSpecAndBlocks getScanSpecAndBlocks() const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

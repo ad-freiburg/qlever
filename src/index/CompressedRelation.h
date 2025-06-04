@@ -503,13 +503,19 @@ class CompressedRelationReader {
   // (4) Perform an invariant check. The `CompressedBlockMetadata` values must
   // be unique, sorted in ascending order, and have consistent column values up
   // to the first free column defined by `scanSpec_`.
+  // (5) The Boolean flag `blockMetadataIsPrefiltered_` indicates wheter the
+  // contained `blockMetadata_` is prefiltered. This flag should be set to
+  // `true` if custom prefiltered `BlockMetadataRanges` are added, as it is
+  // currently of relevance for the `IndexScan`.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     BlockMetadataRanges blockMetadata_;
     size_t sizeBlockMetadata_;
+    bool blockMetadataIsPrefiltered_;
 
     ScanSpecAndBlocks(ScanSpecification scanSpec,
-                      const BlockMetadataRanges& blockMetadataRanges);
+                      const BlockMetadataRanges& blockMetadataRanges,
+                      bool blockMetadataIsPrefiltered = false);
 
     // Direct view access via `ql::views::join` over all
     // `CompressedBlockMetadata` values contained in `BlockMetadatatRanges

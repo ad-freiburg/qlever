@@ -24,7 +24,8 @@ CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
   return {scanSpec,
           BlockMetadataRanges(
               getActualPermutation(scanSpec).getAugmentedMetadataForPermutation(
-                  locatedTriplesSnapshot))};
+                  locatedTriplesSnapshot)),
+          false};
 }
 
 // _____________________________________________________________________
@@ -180,18 +181,6 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesSnapshot),
       col0Id, p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
-}
-
-// _____________________________________________________________________
-bool Permutation::hasFirstAndLastTriple(
-    const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  const auto& p = getActualPermutation(scanSpecAndBlocks.scanSpec_);
-  return p.reader()
-      .getFirstAndLastTriple(
-          scanSpecAndBlocks,
-          p.getLocatedTriplesForPermutation(locatedTriplesSnapshot))
-      .has_value();
 }
 
 // _____________________________________________________________________

@@ -381,7 +381,6 @@ using OrExpression = prefilterExpressions::LogicalExpression<
 namespace detail {
 //______________________________________________________________________________
 namespace logicalOps {
-// `This internal helper function is only exposed for unit tests!`
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
 // (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
 // (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`

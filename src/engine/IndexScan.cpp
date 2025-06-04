@@ -121,6 +121,11 @@ string IndexScan::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
+bool IndexScan::canResultBeCachedImpl() const {
+  return !scanSpecAndBlocks_.blockMetadataIsPrefiltered_;
+};
+
+// _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
   return "IndexScan " + subject_.toString() + " " + predicate_.toString() +
          " " + object_.toString();
@@ -150,7 +155,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
   if (!getLimitOffset().isUnconstrained() ||
-      scanSpecAndBlocks_.blockMetadata_.size() != 1) {
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
     return std::nullopt;
   }
 
@@ -164,11 +169,23 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
+    const auto& vocab = getIndex().getVocab();
+    // If the `BlockMetadataRanges` were previously prefiltered, AND-merge
+    // the previous `BlockMetadataRanges` with the `BlockMetadataRanges`
+    // retrieved via the newly passed prefilter. This correponds logically to a
+    // conjunction over the prefilters applied for this `IndexScan`.
+    const auto& blockMetadataRanges =
+        scanSpecAndBlocks_.blockMetadataIsPrefiltered_
+            ? prefilterExpressions::detail::logicalOps::
+                  mergeRelevantBlockItRanges<false>(
+                      it->first->evaluate(
+                          vocab, getScanSpecAndBlocks().getBlockMetadataSpan(),
+                          colIdx),
+                      scanSpecAndBlocks_.blockMetadata_)
+            : it->first->evaluate(
+                  vocab, scanSpecAndBlocks_.getBlockMetadataSpan(), colIdx);
     return makeCopyWithAddedPrefilters(ScanSpecAndBlocks(
-        scanSpecAndBlocks_.scanSpec_,
-        it->first->evaluate(getIndex().getVocab(),
-                            scanSpecAndBlocks_.getBlockMetadataSpan(),
-                            colIdx)));
+        scanSpecAndBlocks_.scanSpec_, blockMetadataRanges, true));
   }
   return std::nullopt;
 }
@@ -203,8 +220,7 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 
 // _____________________________________________________________________________
 Result::Generator IndexScan::chunkedIndexScan() const {
-  if (!getScanPermutation().hasFirstAndLastTriple(scanSpecAndBlocks_,
-                                                  locatedTriplesSnapshot())) {
+  if (scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
     co_return;
   }
   for (IdTable& idTable : getLazyScan()) {
