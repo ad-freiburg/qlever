@@ -258,8 +258,11 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 std::string TransitivePathBase::getDescriptor() const {
   std::ostringstream os;
-  os << "TransitivePath "
-     << "{" << minDist_ << ", " << maxDist_ << "} ";
+  os << "TransitivePath ";
+  // If not full transitive hull, show interval as [min, max].
+  if (minDist_ > 1 || maxDist_ < std::numeric_limits<size_t>::max()) {
+    os << "[" << minDist_ << ", " << maxDist_ << "] ";
+  }
   // Left variable or entity name.
   os << lhs_.value_;
   // The predicate.
