@@ -258,7 +258,8 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 std::string TransitivePathBase::getDescriptor() const {
   std::ostringstream os;
-  os << "TransitivePath " << "{" << minDist_ << ", " << maxDist_ << "} ";
+  os << "TransitivePath "
+     << "{" << minDist_ << ", " << maxDist_ << "} ";
   // Left variable or entity name.
   os << lhs_.value_;
   // The predicate.
