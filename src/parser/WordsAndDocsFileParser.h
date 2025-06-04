@@ -202,7 +202,7 @@ inline auto getWordsLineFromDocsFile(DocsFileParser& parser,
          ql::views::transform([&localeManager](const DocsFileLine& line) {
            return ad_utility::OwningView{tokenizeAndNormalizeText(
                       line.docContent_, localeManager)} |
-                  ql::views::transform([&](const std::string& word) {
+                  ql::views::transform([&line](const std::string& word) {
                     return WordsFileLine{
                         word, false, TextRecordIndex::make(line.docId_.get()),
                         0, false};

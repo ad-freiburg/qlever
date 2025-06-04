@@ -102,17 +102,21 @@ void TextIndexBuilder::processWordsForInvertedLists(
   size_t entityNotFoundErrorMsgCount = 0;
   size_t nofLiterals = 0;
 
+  auto nextContext = [&currentContext, &wordsInContext, &entitiesInContext,
+                      &nofContexts, &vec, this](const WordsFileLine& line) {
+    ++nofContexts;
+    addContextToVector(vec, currentContext, wordsInContext, entitiesInContext);
+    currentContext = line.contextId_;
+    wordsInContext.clear();
+    entitiesInContext.clear();
+  };
+
   auto processLine = [&currentContext, &nofContexts, &vec, &wordsInContext,
                       &entitiesInContext, &nofEntityPostings, &nofLiterals,
                       &entityNotFoundErrorMsgCount, &nofWordPostings,
-                      this](const WordsFileLine& line) {
+                      &nextContext, this](const WordsFileLine& line) {
     if (line.contextId_ != currentContext) {
-      ++nofContexts;
-      addContextToVector(vec, currentContext, wordsInContext,
-                         entitiesInContext);
-      currentContext = line.contextId_;
-      wordsInContext.clear();
-      entitiesInContext.clear();
+      nextContext(line);
     }
     if (line.isEntity_) {
       ++nofEntityPostings;
