@@ -503,7 +503,7 @@ class CompressedRelationReader {
   // (4) Perform an invariant check. The `CompressedBlockMetadata` values must
   // be unique, sorted in ascending order, and have consistent column values up
   // to the first free column defined by `scanSpec_`.
-  // (5) The Boolean flag `blockMetadataIsPrefiltered_` indicates wheter the
+  // (5) The Boolean flag `blockMetadataIsPrefiltered_` indicates whether the
   // contained `blockMetadata_` is prefiltered. This flag should be set to
   // `true` if custom prefiltered `BlockMetadataRanges` are added, as it is
   // currently of relevance for the `IndexScan`.

@@ -172,7 +172,7 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     const auto& vocab = getIndex().getVocab();
     // If the `BlockMetadataRanges` were previously prefiltered, AND-merge
     // the previous `BlockMetadataRanges` with the `BlockMetadataRanges`
-    // retrieved via the newly passed prefilter. This correponds logically to a
+    // retrieved via the newly passed prefilter. This corresponds logically to a
     // conjunction over the prefilters applied for this `IndexScan`.
     const auto& blockMetadataRanges =
         scanSpecAndBlocks_.blockMetadataIsPrefiltered_
