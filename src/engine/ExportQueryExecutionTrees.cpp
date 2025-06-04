@@ -337,8 +337,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
-                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+      if (id.getBits() & 0b10) {
+        return std::pair{id.getBool() ? "1" : "0", XSD_BOOLEAN_TYPE};
+      } else {
+        return std::pair{id.getBool() ? "true" : "false", XSD_BOOLEAN_TYPE};
+      }
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
