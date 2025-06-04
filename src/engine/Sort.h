@@ -33,6 +33,10 @@ class Sort : public Operation {
     return sortColumnIndices_;
   }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      const Prefilters& prefilterVariablePairs) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
