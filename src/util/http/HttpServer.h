@@ -9,7 +9,6 @@
 #include <cstdlib>
 #include <future>
 
-#include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"

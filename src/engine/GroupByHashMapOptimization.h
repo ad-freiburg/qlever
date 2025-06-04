@@ -9,6 +9,7 @@
 #define QLEVER_SRC_ENGINE_GROUPBYHASHMAPOPTIMIZATION_H
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatHelper.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -137,30 +138,34 @@ struct SumAggregationData {
 
 // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
 struct GroupConcatAggregationData {
-  using ValueGetter = sparqlExpression::detail::StringValueGetter;
+  using ValueGetter =
+      sparqlExpression::detail::LiteralValueGetterWithoutStrFunction;
+  bool undefined_ = false;
+  bool first_ = true;
   std::string currentValue_;
   std::string_view separator_;
+  std::optional<std::string> langTag_;
 
   // _____________________________________________________________________________
   template <typename T>
   void addValue(T&& value, const sparqlExpression::EvaluationContext* ctx) {
-    auto val = ValueGetter{}(AD_FWD(value), ctx);
-    if (val.has_value()) {
-      if (!currentValue_.empty()) currentValue_.append(separator_);
-      currentValue_.append(val.value());
+    // No need to compute anything in this case.
+    if (undefined_) {
+      return;
     }
+    auto val = ValueGetter{}(AD_FWD(value), ctx);
+    addValueImpl(val);
   }
 
-  // _____________________________________________________________________________
+  // Actual implementation of `addValue`, but without template parameters.
+  void addValueImpl(
+      const std::optional<ad_utility::triple_component::Literal>& value);
+
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
 
-  // _____________________________________________________________________________
-  explicit GroupConcatAggregationData(std::string_view separator)
-      : separator_{separator} {
-    currentValue_.reserve(20000);
-  }
+  explicit GroupConcatAggregationData(std::string_view separator);
 
-  void reset() { currentValue_.clear(); }
+  void reset();
 };
 
 // Data to perform SAMPLE aggregation using the HashMap optimization.

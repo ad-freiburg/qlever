@@ -412,18 +412,12 @@ static auto fourLetterPrefixes() {
   static_assert(
       MIN_WORD_PREFIX_SIZE == 4,
       "If you need this to be changed, please contact the developers");
-  return ql::views::join(ql::views::join(ql::views::join(
-      ql::views::transform(ql::views::iota('a', 'z' + 1), [](char a) {
-        return ql::views::transform(ql::views::iota('a', 'z' + 1), [a](char b) {
-          return ql::views::transform(
-              ql::views::iota('a', 'z' + 1), [a, b](char c) {
-                return ql::views::transform(ql::views::iota('a', 'z' + 1),
-                                            [a, b, c](char d) {
-                                              return std::string{a, b, c, d};
-                                            });
-              });
-        });
-      }))));
+  auto aToZ = ::ranges::views::iota(char{'a'}, char{'z' + 1});
+  return ::ranges::views::cartesian_product(aToZ, aToZ, aToZ, aToZ) |
+         ::ranges::views::transform([](const auto& x) {
+           auto [a, b, c, d] = x;
+           return std::string{a, b, c, d};
+         });
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`

@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -63,7 +64,7 @@ class Operation {
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
   // future.
-  LimitOffsetClause _limit;
+  LimitOffsetClause limitOffset_;
 
   // Mutex that protects the `variableToColumnMap_` below.
   mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
@@ -173,13 +174,20 @@ class Operation {
   // actual result because it has been constrained by a parent operation (e.g.
   // an IndexScan that has been prefiltered by another operation which it is
   // joined with).
-  virtual bool canResultBeCached() const { return canResultBeCached_; }
+  virtual bool canResultBeCached() const final {
+    return canResultBeCachedImpl() && canResultBeCached_;
+  }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
   // above for details).
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
+  // Return if the result of this `Operation` can be cached at all. Caching can
+  // still be disabled for other reason external to this operation with
+  // `disableStoringInCache()`.
+  virtual bool canResultBeCachedImpl() const { return true; }
+
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
   virtual string getCacheKeyImpl() const = 0;
@@ -280,13 +288,24 @@ class Operation {
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    _limit = limitOffsetClause;
+ private:
+  // This function is called each time `applyLimit` is called. It can be
+  // overridden by subclasses to e.g. implement the LIMIT in a more efficient
+  // way
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
+    // If `supportsLimitOffset()` returns `false`, this function has to be
+    // no-op.
   }
+
+ public:
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation. If a `LIMIT`/`OFFSET` was previously set, this
+  // `LIMIT`/`OFFSET` will not be replaced, but the new `LIMIT`/`OFFSET` will be
+  // applied additionally after the previous `LIMIT`s/`OFFSET`s. This might
+  // happen e.g. for nested subqueries.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -315,7 +334,7 @@ class Operation {
     return computeResult(requestLaziness);
   }
 
-  const auto& getLimit() const { return _limit; }
+  const auto& getLimitOffset() const { return limitOffset_; }
 
  private:
   // Actual implementation of `clone()` without extra checks.
@@ -376,6 +395,13 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Helper function to allow dynamic modification of LIMIT/OFFSET from child
+  // operations. It returns an object that restores the original LIMIT + OFFSET
+  // the child operations haven when calling this function on destruction.
+  [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
+                                      std::function<void()>>
+  resetChildLimitsAndOffsetOnDestruction() final;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -476,6 +502,7 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
+  FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H
