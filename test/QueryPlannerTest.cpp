@@ -1849,6 +1849,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
                      std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+
+  // Floating point as maximum distance
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 0.5 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(0.5, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+                     std::nullopt, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
 }
 
 TEST(QueryPlanner, SpatialJoinServicePayloadVars) {

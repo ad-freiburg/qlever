@@ -27,7 +27,7 @@ struct SpatialQuery : MagicServiceQuery {
 
   // The spatial join task definition: maximum distance and number of results.
   // One of both - or both - must be provided.
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
 
   // Optional further argument: a variable to which the distance between spatial
