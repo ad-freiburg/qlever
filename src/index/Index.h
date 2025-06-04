@@ -201,6 +201,8 @@ class Index {
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
+  const vector<uint64_t>& getTextIndexIndices() const;
+
   const std::string& getTextName() const;
   const std::string& getKbName() const;
   const std::string& getOnDiskBase() const;

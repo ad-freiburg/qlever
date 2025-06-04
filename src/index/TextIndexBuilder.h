@@ -12,8 +12,9 @@
 class TextIndexBuilder : public IndexImpl {
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
-                            const std::string& onDiskBase)
-      : IndexImpl(allocator) {
+                            const std::string& onDiskBase,
+                            const vector<uint64_t>& literalsToAdd)
+      : IndexImpl(allocator), textIndexIndicesRef_(literalsToAdd) {
     setOnDiskBase(onDiskBase);
   }
 
@@ -33,6 +34,8 @@ class TextIndexBuilder : public IndexImpl {
   void buildDocsDB(const string& docsFile) const;
 
  private:
+  const vector<uint64_t>& textIndexIndicesRef_;
+
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
 

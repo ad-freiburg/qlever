@@ -186,8 +186,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                         std::nullopt};
     index.createFromFiles({spec});
     if (c.createTextIndex) {
-      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
-          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+      TextIndexBuilder textIndexBuilder =
+          TextIndexBuilder(ad_utility::makeUnlimitedAllocator<Id>(),
+                           index.getOnDiskBase(), index.getTextIndexIndices());
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
