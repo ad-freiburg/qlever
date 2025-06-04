@@ -623,7 +623,7 @@ class IdTable {
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     ql::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
-    AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
+    AD_CONTRACT_CHECK(subset.empty() || subset.back() < numColumns());
 
     AD_CONTRACT_CHECK(
         isDynamic || subset.size() == NumColumns,
