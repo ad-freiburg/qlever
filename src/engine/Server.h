@@ -9,8 +9,6 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <util/http/websocket/MessageSender.h>
-
 #include <string>
 #include <vector>
 
@@ -20,13 +18,13 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/Index.h"
-#include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
+#include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 

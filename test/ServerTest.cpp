@@ -2,13 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#include <engine/QueryPlanner.h>
-#include <engine/Server.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <boost/beast/http.hpp>
 
+#include "engine/QueryPlanner.h"
+#include "engine/Server.h"
+#include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/IndexTestHelpers.h"

@@ -21,9 +21,11 @@ using namespace sparqlExpression::detail;
             std::is_rvalue_reference_v<decltype(e)&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
-  } else {
+  } else if (condition == EffectiveBooleanValueGetter::Result::False) {
     return AD_FWD(e);
   }
+  AD_CORRECTNESS_CHECK(condition == EffectiveBooleanValueGetter::Result::Undef);
+  return IdOrLiteralOrIri{Id::makeUndefined()};
 };
 NARY_EXPRESSION(IfExpression, 3,
                 FV<decltype(ifImpl), EffectiveBooleanValueGetter,

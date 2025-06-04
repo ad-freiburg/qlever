@@ -7,14 +7,11 @@
 #ifndef QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 #define QLEVER_SRC_PARSER_GRAPHPATTERNOPERATION_H
 
-#include <util/TransparentFunctors.h>
-
 #include <limits>
 #include <memory>
 #include <vector>
 
 #include "engine/PathSearch.h"
-#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
@@ -23,7 +20,7 @@
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
-#include "util/Algorithm.h"
+#include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 #include "util/http/HttpUtils.h"
 
