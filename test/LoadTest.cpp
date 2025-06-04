@@ -18,7 +18,9 @@
 namespace {
 
 auto pqLoad = [](std::string url, bool silent = false) {
-  return parsedQuery::Load{ad_utility::httpUtils::Url{url}, silent};
+  return parsedQuery::Load{ad_utility::triple_component::Iri::fromIriref(
+                               absl::StrCat("<", url, ">")),
+                           silent};
 };
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -57,8 +59,7 @@ TEST_F(LoadTest, basicMethods) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
 
   // Test the basic methods.
-  EXPECT_THAT(load.getDescriptor(),
-              testing::Eq("LOAD https://mundhahs.dev:443/"));
+  EXPECT_THAT(load.getDescriptor(), testing::Eq("LOAD <https://mundhahs.dev>"));
   EXPECT_THAT(load.getCacheKey(), testing::StartsWith("LOAD"));
   EXPECT_THAT(load.getResultWidth(), testing::Eq(3));
   EXPECT_THAT(load.getMultiplicity(0), testing::Eq(1));
@@ -222,9 +223,9 @@ TEST_F(LoadTest, getCacheKey) {
     EXPECT_THAT(load1.getCacheKey(),
                 testing::Not(testing::Eq(load3.getCacheKey())));
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Eq("LOAD https://mundhahs.dev:443/"));
+                testing::Eq("LOAD <https://mundhahs.dev>"));
     EXPECT_THAT(load3.getCacheKey(),
-                testing::Eq("LOAD https://mundhahs.dev:443/ SILENT"));
+                testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
     auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);

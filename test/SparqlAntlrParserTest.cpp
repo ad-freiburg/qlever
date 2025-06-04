@@ -2387,8 +2387,7 @@ TEST(SparqlParser, Update) {
                          {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
                                                       Var("?o"), noGraph}},
                          std::nullopt),
-          m::GraphPattern(m::Load(
-              ad_utility::httpUtils::Url("https://example.com"), false))));
+          m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
   expectUpdate(
       "LOAD SILENT <https://example.com> into GRAPH <bar>",
       m::UpdateClause(
@@ -2396,8 +2395,7 @@ TEST(SparqlParser, Update) {
                          {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
                                                       Var("?o"), Iri("<bar>")}},
                          std::nullopt),
-          m::GraphPattern(m::Load(
-              ad_utility::httpUtils::Url("https://example.com"), true))));
+          m::GraphPattern(m::Load(Iri("<https://example.com>"), true))));
   expectUpdate("CLEAR NAMED",
                m::UpdateClause(m::Clear(false, NAMED{}), m::GraphPattern()));
   expectUpdate(

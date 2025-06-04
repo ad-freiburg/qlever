@@ -716,10 +716,10 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
-inline auto Load = [](const ad_utility::httpUtils::Url& url,
+inline auto Load = [](const TripleComponent::Iri& iri,
                       bool silent) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Load>(
-      testing::AllOf(AD_FIELD(p::Load, url_, testing::Eq(url)),
+      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
                      AD_FIELD(p::Load, silent_, testing::Eq(silent))));
 };
 
