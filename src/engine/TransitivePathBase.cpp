@@ -258,11 +258,7 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
 // _____________________________________________________________________________
 std::string TransitivePathBase::getDescriptor() const {
   std::ostringstream os;
-  os << "TransitivePath ";
-  // If not full transitive hull, show interval as [min, max].
-  if (minDist_ > 1 || maxDist_ < std::numeric_limits<size_t>::max()) {
-    os << "[" << minDist_ << ", " << maxDist_ << "] ";
-  }
+  os << "TransitivePath " << "{" << minDist_ << ", " << maxDist_ << "} ";
   // Left variable or entity name.
   os << lhs_.value_;
   // The predicate.
@@ -301,7 +297,12 @@ VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 bool TransitivePathBase::knownEmptyResult() {
-  return subtree_->knownEmptyResult();
+  auto sideTreeHasKnownEmptyResult = [this]() {
+    auto sideTree = decideDirection().first.treeAndCol_;
+    return sideTree.has_value() && sideTree.value().first->knownEmptyResult();
+  };
+  return subtree_->knownEmptyResult() &&
+         (minDist_ > 0 || sideTreeHasKnownEmptyResult());
 }
 
 // _____________________________________________________________________________
