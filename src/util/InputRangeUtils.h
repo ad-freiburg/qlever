@@ -211,7 +211,7 @@ CPP_class_template(typename F)(
  private:
   using T = detail::ResFromFunction<F>;
   F getFunction_;
-  std::optional<InputRangeTypeErased<T>> innerRange;
+  std::optional<InputRangeTypeErased<T>> innerRange_;
   using Res = detail::ResFromFunction<F>;
   static_assert(std::is_object_v<Res>,
                 "The functor of `InputRangeFromLoopControlGet` must yield an "
@@ -234,10 +234,10 @@ CPP_class_template(typename F)(
     // This loop is executed exactly once unless there is a `continue`
     // statement.
     while (true) {
-      if (innerRange.has_value()) {
-        auto res = innerRange.value().get();
+      if (innerRange_.has_value()) {
+        auto res = innerRange_.value().get();
         if (!res.has_value()) {
-          innerRange.reset();
+          innerRange_.reset();
         } else {
           return res;
         }
@@ -250,8 +250,8 @@ CPP_class_template(typename F)(
         receivedBreak_ = true;
       }
 
-      innerRange = loopControl.moveRangeIfPresent();
-      if (innerRange.has_value()) {
+      innerRange_ = loopControl.moveRangeIfPresent();
+      if (innerRange_.has_value()) {
         continue;
       }
       return loopControl.moveValueIfPresent();

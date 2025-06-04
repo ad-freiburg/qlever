@@ -125,7 +125,7 @@ class CartesianProductJoin : public Operation {
   // Similar to `produceTablesLazily` but can handle a single lazy result.
   Result::LazyResult createLazyConsumer(
       LocalVocab staticMergedVocab,
-      std::vector<std::shared_ptr<const Result>> subresults,
+      ql::span<std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
 
