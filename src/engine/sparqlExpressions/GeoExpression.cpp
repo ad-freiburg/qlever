@@ -3,10 +3,13 @@
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include "engine/SpatialJoin.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -32,15 +35,26 @@ NARY_EXPRESSION(
 }  // namespace detail
 
 using namespace detail;
+
+SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LatitudeExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<LongitudeExpression>(std::move(child));
+}
+
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
 }
+
 SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2) {
   return std::make_unique<MetricDistExpression>(std::move(child1),
                                                 std::move(child2));
 }
+
 SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3) {
@@ -54,11 +68,24 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
-SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LatitudeExpression>(std::move(child));
-}
-SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
-  return std::make_unique<LongitudeExpression>(std::move(child));
+std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr) {
+  // TODO<ullingerc> handle distance unit and metricDistance function
+
+  // Currently only DistExpression
+  auto distExpr = dynamic_cast<const DistExpression*>(&expr);
+  if (distExpr == nullptr) {
+    return std::nullopt;
+  }
+  auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+  return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1.value(), p2.value()};
 }
 
 }  // namespace sparqlExpression
