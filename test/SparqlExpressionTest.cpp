@@ -1339,8 +1339,8 @@ TEST(SparqlExpression, ifAndCoalesce) {
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
 
-  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), "vier", "fünf"}),
-          // UNDEF and the empty string are considered to be `false`.
+  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), U, "fünf"}),
+          // The empty string is considered to be `false`.
           std::tuple{idOrLitOrStringVec({T, F, T, "true", U, ""}),
                      Ids{I(0), I(1), I(2), I(3), I(4), I(5)},
                      idOrLitOrStringVec(
