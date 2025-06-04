@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 #define QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPE_H
 
+#include <absl/strings/str_join.h>
+
 #include <array>
 #include <string_view>
 

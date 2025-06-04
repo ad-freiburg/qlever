@@ -3,6 +3,7 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
+#include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
