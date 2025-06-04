@@ -690,7 +690,7 @@ ParsedQuery Visitor::makeClear(SparqlTripleSimpleWithGraph::Graph graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplate(graph)}}};
+      GraphUpdate{{}, {makeAllTripleTemplate(std::move(graph))}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -738,7 +738,7 @@ ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<ParsedQuery> Visitor::visit(Parser::CreateContext*) {
+std::vector<ParsedQuery> Visitor::visit(const Parser::CreateContext*) {
   // Create is a no-op because we don't explicitly record the existence of empty
   // graphs.
   return {};
@@ -757,8 +757,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
   return {makeAdd(from, to)};
 }
 
-std::vector<ParsedQuery> Visitor::makeCopy(GraphOrDefault from,
-                                           GraphOrDefault to) {
+// _____________________________________________________________________________
+std::vector<ParsedQuery> Visitor::makeCopy(const GraphOrDefault& from,
+                                           const GraphOrDefault& to) {
   std::vector<ParsedQuery> updates{makeClear(transformGraph(to))};
   resetStateForMultipleUpdates();
   updates.push_back(makeAdd(from, to));

@@ -222,7 +222,7 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::DropContext* ctx);
 
-  std::vector<ParsedQuery> visit(Parser::CreateContext* ctx);
+  static std::vector<ParsedQuery> visit(const Parser::CreateContext* ctx);
 
   // Although only 0 or 1 ParsedQuery are ever returned, the vector makes the
   // interface much simpler.
@@ -657,7 +657,8 @@ class SparqlQleverVisitor {
 
   // Construct `ParsedQuery`s that clear the target graph and then copy all
   // triples from the source graph to the target graph.
-  std::vector<ParsedQuery> makeCopy(GraphOrDefault from, GraphOrDefault to);
+  std::vector<ParsedQuery> makeCopy(const GraphOrDefault& from,
+                                    const GraphOrDefault& to);
 
   // Check that there are exactly 2 sub-clauses and returned the result from
   // visiting them.
