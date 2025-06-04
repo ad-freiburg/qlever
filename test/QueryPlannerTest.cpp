@@ -4250,3 +4250,12 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, filtersWithUnboundVariables) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect("SELECT * { ?a ?b ?c FILTER(?c = ?d) }",
+            h::Filter("?c = ?d", scan("?a", "?b", "?c")));
+  h::expect("SELECT * { FILTER(?c = 1) }",
+            h::Filter("?c = 1", h::NeutralElement()));
+}
