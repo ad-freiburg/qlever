@@ -109,12 +109,16 @@ IdTable IndexImpl::getEntityMentionsForWord(
 // _____________________________________________________________________________
 template <typename Reader>
 IdTable IndexImpl::mergeIdTables(
-    Reader reader,
-    std::optional<std::vector<TextBlockMetadataAndWordInfo>> tbmds,
+    Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  auto tableToRowView = [](const IdTable& table) {
-    return ranges::views::zip(table.getColumn(0), table.getColumn(1),
-                              table.getColumn(2));
+  auto columnToUint64 = [](const auto& column) {
+    return ql::views::transform(
+        column, [](const ValueId& value) { return value.getBits(); });
+  };
+  auto tableToRowView = [&columnToUint64](const IdTable& table) {
+    return ranges::views::zip(columnToUint64(table.getColumn(0)),
+                              columnToUint64(table.getColumn(1)),
+                              columnToUint64(table.getColumn(2)));
   };
 
   // Sort by TextRecordId then WordId and then score.
@@ -131,20 +135,21 @@ IdTable IndexImpl::mergeIdTables(
     }
   }
 
-  std::vector<auto> tableRanges;
+  std::vector<decltype(tableToRowView(std::declval<IdTable>()))> tableRanges;
   for (const auto& partialResult : partialResults) {
     tableRanges.push_back(tableToRowView(partialResult));
   }
 
   // Merge
-  auto mergedRows =
-      ad_utility::parallelMultiwayMerge<std::tuple<ValueId, ValueId, ValueId>,
-                                        false>(
-          memoryLimitIndexBuilding(), std::move(tableRanges), rowComparator);
+  auto mergedRows = ad_utility::parallelMultiwayMerge<
+      std::tuple<uint64_t, uint64_t, uint64_t>, false>(
+      memoryLimitIndexBuilding(), std::move(tableRanges), rowComparator);
   IdTable output{allocator};
 
   for (const auto& row : mergedRows) {
-    output.push_back(row);
+    std::vector<ValueId> rowAsVector = {
+        ValueId::fromBits(1), ValueId::fromBits(2), ValueId::fromBits(3)};
+    output.push_back(rowAsVector);
   }
   return output;
 }
@@ -245,7 +250,7 @@ void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
-    const -> std::optional<TextBlockMetadataAndWordInfo> {
+    const -> std::optional<std::vector<TextBlockMetadataAndWordInfo>> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
   if (word.ends_with(PREFIX_CHAR)) {

@@ -577,8 +577,7 @@ class IndexImpl {
 
   template <typename Reader>
   IdTable mergeIdTables(
-      Reader reader,
-      std::optional<std::vector<TextBlockMetadataAndWordInfo>> tbmds,
+      Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
