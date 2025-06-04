@@ -120,7 +120,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // pairs of (string-like, ID). Used as the common implementation for
   // the `buildFrom...` methods.
   template <class Iterable>
-  void buildFromIterable(Iterable&& iterable, const string& filename);
+  void buildFromIterable(Iterable&& iterable, const std::string& filename);
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARYONDISK_H

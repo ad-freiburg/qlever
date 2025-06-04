@@ -12,7 +12,6 @@
 #include <condition_variable>
 #include <shared_mutex>
 
-#include "absl/cleanup/cleanup.h"
 #include "util/Forward.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 

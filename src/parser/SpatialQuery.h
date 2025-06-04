@@ -6,7 +6,7 @@
 #ifndef QLEVER_SRC_PARSER_SPATIALQUERY_H
 #define QLEVER_SRC_PARSER_SPATIALQUERY_H
 
-#include "parser/GraphPattern.h"
+#include "engine/SpatialJoin.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
