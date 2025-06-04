@@ -428,7 +428,8 @@ class QueryPlanner {
   string getPruningKey(const SubtreePlan& plan,
                        const vector<ColumnIndex>& orderedOnColumns) const;
 
-  template <bool replaceInsteadOfAddPlans>
+  template <bool replaceInsteadOfAddPlans,
+            bool alsoAddFiltersWithMissingVariables = false>
   void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
                               const std::vector<SparqlFilter>& filters) const;
 
