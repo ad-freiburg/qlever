@@ -11,6 +11,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -402,8 +403,10 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
-  V<Id> bByD{{D(1.0), D(-0.0), D(naN), D(inf)}, alloc};
-  V<Id> dByB{{D(1.0), D(negInf), D(naN), D(0)}, alloc};
+  // Division by zero is `UNDEF`, to change this behavior a runtime parameter
+  // can be set. This is tested explicitly below.
+  V<Id> bByD{{D(1.0), D(-0.0), U, U}, alloc};
+  V<Id> dByB{{D(1.0), U, U, D(0)}, alloc};
 
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
@@ -443,6 +446,24 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(by2, mixed, D(2));
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
+
+  // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
+  // runtime parameter.
+  V<Id> undef{{U, U, U, U}, alloc};
+  V<Id> nanAndInf{{D(naN), D(naN), D(inf), D(negInf)}, alloc};
+  V<Id> divByZeroInputsDouble{{D(-0.0), D(0), D(1.3), D(-1.2)}, alloc};
+  V<Id> divByZeroInputsInt{{I(0), I(0), I(1), I(-1)}, alloc};
+
+  testDivide(undef, divByZeroInputsDouble, I(0));
+  testDivide(undef, divByZeroInputsInt, I(0));
+  testDivide(undef, divByZeroInputsDouble, D(0));
+  testDivide(undef, divByZeroInputsInt, D(0));
+
+  auto cleanup = setRuntimeParameterForTest<"division-by-zero-is-undef">(false);
+  testDivide(nanAndInf, divByZeroInputsDouble, I(0));
+  testDivide(nanAndInf, divByZeroInputsInt, I(0));
+  testDivide(nanAndInf, divByZeroInputsDouble, D(0));
+  testDivide(nanAndInf, divByZeroInputsInt, D(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
