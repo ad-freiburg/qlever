@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 
 // A word and its index in the vocabulary from which it was obtained. Also
 // contains a special state `end()` which can be queried by the `isEnd()`
@@ -61,6 +62,58 @@ class WordAndIndex {
       : wordAndIndex_{std::in_place, std::move(word), index} {}
   WordAndIndex(std::string_view word, uint64_t index)
       : wordAndIndex_{std::in_place, std::string{word}, index} {}
+};
+
+// A common base class for the `WordWriter` types of different vocabulary
+// implementations. It has to be called for each of the words (in the correct
+// order).
+class WordWriterBase {
+ private:
+  std::string readableName_;
+  bool finishWasCalled_ = false;
+
+ public:
+  // Write the next word. The `isExternal` flag is ignored for all the
+  // vocabulary implementations but the `VocabularyInternalExternal`. Return the
+  // index that was assigned to the word.
+  virtual uint64_t operator()(std::string_view word, bool isExternal) = 0;
+
+  // Destructor. If `finish` hasn't been called, the program is terminated.
+  // Derived classes have to make sure that their destructors call `finish` if
+  // necessary. Note: It is unfortunately not possible to call the virtual
+  // function `finish` directly from this base class destructor, as at that
+  // point the derived class is already destroyed.
+  virtual ~WordWriterBase() {
+    ad_utility::terminateIfThrows(
+        [this]() {
+          if (!finishWasCalled_) {
+            throw std::runtime_error{"no call to finish before destructor"};
+          }
+        },
+        " `finish` was not called before destroying a `WordWriter` that "
+        "inherits from `WordWriterBase`. This is a bug, please report it.");
+  };
+
+  // Calling this function will signal that the last word has been pushed.
+  // Implementations might e.g. flush all buffers to disk and close underlying
+  // files. After calling `finish`, no more calls to `operator()` are allowed.
+  // The destructor also calls `finish` if it wasn't called manually.
+  virtual void finish() final {
+    if (std::exchange(finishWasCalled_, true)) {
+      return;
+    }
+    finishImpl();
+  }
+
+  bool finishWasCalled() const { return finishWasCalled_; }
+
+  // Access to a `readableName` of the vocabulary that is written. Some
+  // implementations use it to customize log messages.
+  virtual std::string& readableName() { return readableName_; }
+
+ private:
+  // The base classes have to implement the actual logic for `finish` here.
+  virtual void finishImpl() = 0;
 };
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

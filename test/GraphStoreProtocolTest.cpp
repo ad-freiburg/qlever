@@ -3,14 +3,13 @@
 // Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
-#include <parser/SparqlParserHelpers.h>
 
 #include "./util/GTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
+#include "parser/SparqlParserHelpers.h"
 
 namespace m = matchers;
 using namespace ad_utility::testing;

@@ -6,18 +6,16 @@
 #ifndef QLEVER_SRC_UTIL_EXCEPTION_H
 #define QLEVER_SRC_UTIL_EXCEPTION_H
 
+#include <absl/strings/str_cat.h>
+
 #include <exception>
 #include <functional>
 #include <sstream>
 #include <string>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
 #include "backports/concepts.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
-
-using std::string;
 
 // -------------------------------------------
 // Exception class code
@@ -29,7 +27,7 @@ namespace ad_utility {
 // message just in case
 class AbortException : public std::exception {
  private:
-  string what_;
+  std::string what_;
 
  public:
   explicit AbortException(const std::exception& original)
