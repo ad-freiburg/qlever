@@ -172,3 +172,8 @@ void Load::throwErrorWithContext(std::string_view msg,
 
 // _____________________________________________________________________________
 bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+
+// _____________________________________________________________________________
+void Load::resetGetResultFunctionForTesting(SendRequestType func) {
+  getResultFunction_ = std::move(func);
+}

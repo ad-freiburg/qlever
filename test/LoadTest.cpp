@@ -7,7 +7,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "DeltaTriplesTestHelpers.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/Load.h"
+#include "engine/QueryPlanner.h"
+#include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -263,6 +267,26 @@ TEST_F(LoadTest, clone) {
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
     EXPECT_THAT(*clone, IsDeepCopy(load));
   }
+}
+
+TEST_F(LoadTest, Integration) {
+  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
+  auto qec =
+      ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp(qec, cancellationHandle);
+  auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
+  Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
+  ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
+  load->resetGetResultFunctionForTesting(
+      getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
+                               boost::beast::http::status::ok, "text/turtle"));
+  DeltaTriples deltaTriples{qec->getIndex()};
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+                               deltaTriples, cancellationHandle);
+  EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
 }
 
 }  // namespace
