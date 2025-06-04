@@ -320,6 +320,13 @@ template <bool isStrAfter>
   if (!optPattern.has_value() || !literal.has_value()) {
     return Id::makeUndefined();
   }
+  const auto& patternLit = optPattern.value();
+  // Check if arguments are compatible with their language tags.
+  if (patternLit.hasLanguageTag() &&
+      (!literal.value().hasLanguageTag() ||
+       literal.value().getLanguageTag() != patternLit.getLanguageTag())) {
+    return Id::makeUndefined();
+  }
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
   //  Required by the SPARQL standard.
   if (pattern.empty()) {
