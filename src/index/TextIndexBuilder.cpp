@@ -414,11 +414,11 @@ static auto fourLetterPrefixes() {
       "If you need this to be changed, please contact the developers");
   return ql::views::join(ql::views::join(ql::views::join(
       ql::views::transform(ql::views::iota('a', 'z' + 1), [](char a) {
-        return ql::views::transform(ql::views::iota('a', 'z' + 1), [=](char b) {
+        return ql::views::transform(ql::views::iota('a', 'z' + 1), [a](char b) {
           return ql::views::transform(
-              ql::views::iota('a', 'z' + 1), [=](char c) {
+              ql::views::iota('a', 'z' + 1), [a, b](char c) {
                 return ql::views::transform(ql::views::iota('a', 'z' + 1),
-                                            [=](char d) {
+                                            [a, b, c](char d) {
                                               return std::string{a, b, c, d};
                                             });
               });
