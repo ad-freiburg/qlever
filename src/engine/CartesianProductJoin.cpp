@@ -354,7 +354,7 @@ CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
 // _____________________________________________________________________________
 Result::LazyResult CartesianProductJoin::createLazyConsumer(
     LocalVocab staticMergedVocab,
-    ql::span<std::shared_ptr<const Result>> subresults,
+    ql::span<const std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
   std::vector<std::reference_wrapper<const IdTable>> idTables;
