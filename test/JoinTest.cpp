@@ -255,8 +255,7 @@ void testJoinOperation(Join& join, const ExpectedColumns& expected,
   IdTable table =
       res->isFullyMaterialized()
           ? res->idTable().clone()
-          : aggregateTables(std::move(res->idTables()), join.getResultWidth())
-                .first;
+          : aggregateTables(res->idTables(), join.getResultWidth()).first;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
     const auto& [colIndex, undefStatus] = varToCols.at(var);
@@ -779,7 +778,7 @@ TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
   auto result = join.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
 
-  auto& idTables = result->idTables();
+  auto idTables = result->idTables();
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(idTables.begin(),
                                         testing::StrEq("AlwaysFailOperation"),
                                         std::runtime_error);

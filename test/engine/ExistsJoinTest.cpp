@@ -184,7 +184,7 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsTrueCase) {
   auto result = existsJoin.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  auto& idTables = result.idTables();
+  auto idTables = result.idTables();
   auto it = idTables.begin();
   ASSERT_NE(it, idTables.end());
   EXPECT_EQ(it->idTable_,
@@ -210,7 +210,7 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
   auto result = existsJoin.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  auto& idTables = result.idTables();
+  auto idTables = result.idTables();
   auto it = idTables.begin();
   ASSERT_NE(it, idTables.end());
   EXPECT_EQ(it->idTable_,
