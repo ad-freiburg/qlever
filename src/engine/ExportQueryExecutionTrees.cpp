@@ -337,11 +337,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      if (id.getBits() & 0b10) {
-        return std::pair{id.getBool() ? "1" : "0", XSD_BOOLEAN_TYPE};
-      } else {
-        return std::pair{id.getBool() ? "true" : "false", XSD_BOOLEAN_TYPE};
-      }
+      return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
@@ -768,9 +764,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
           const auto& val = selectedColumnIndices[j].value();
           Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
-              idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, pair.localVocab_,
-                  escapeFunction);
+              idToStringAndType < format ==
+              MediaType::csv > (qet.getQec()->getIndex(), id, pair.localVocab_,
+                                escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
           }

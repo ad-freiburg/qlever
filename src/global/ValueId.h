@@ -275,6 +275,15 @@ class ValueId {
     return static_cast<bool>(removeDatatypeBits(_bits) & 1);
   }
 
+  // Obtain the boolean value as a string view.
+  std::string_view getBoolLiteral() const noexcept {
+    bool value = getBool();
+    if (removeDatatypeBits(_bits) & 0b10) {
+      return value ? "1" : "0";
+    }
+    return value ? "true" : "false";
+  }
+
   /// Create a `ValueId` for an unsigned index of type
   /// `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
   /// represent values in the range [0, 2^60]. When `index` is outside of this
@@ -421,7 +430,7 @@ class ValueId {
       return ostr << id.getBits();
     }
 
-    auto visitor = [&ostr, id](auto&& value) {
+    auto visitor = [&ostr](auto&& value) {
       using T = decltype(value);
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
@@ -430,12 +439,7 @@ class ValueId {
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
-        if (removeDatatypeBits(id._bits) & 0b10) {
-          ostr << '"' << (value ? '1' : '0') << "\"^^<" << XSD_BOOLEAN_TYPE
-               << '>';
-        } else {
-          ostr << (value ? "true" : "false");
-        }
+        ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
