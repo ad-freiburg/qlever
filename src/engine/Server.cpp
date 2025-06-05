@@ -937,14 +937,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
        &plannedUpdate]() {
         json results = json::array();
         for (ParsedQuery& update : updates) {
-          plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
-                                    qec, cancellationHandle);
           // TODO<qup42>: optimize the case of chained updates
           // As we have an exclusive lock on the DeltaTriples we the
           // execution could happen directly against the DeltaTriples
           // instead of the snapshot that has to be refreshed after each
           // step.
           qec.updateLocatedTriplesSnapshot();
+          plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
+                                    qec, cancellationHandle);
           // Update the delta triples.
           results.push_back(index_.deltaTriplesManager().modify<nlohmann::json>(
               [this, &requestTimer, &cancellationHandle,

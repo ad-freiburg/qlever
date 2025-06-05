@@ -169,9 +169,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
-    AD_CORRECTNESS_CHECK(result.idTable().empty() || !knownEmptyResult(),
-                         "Operation returned non-empty result, but "
-                         "knownEmptyResult() returned true");
+    AD_CORRECTNESS_CHECK(
+        result.idTable().empty() || !knownEmptyResult(), [&]() {
+          return absl::StrCat("Operation ", getDescriptor(),
+                              "returned non-empty result, but "
+                              "knownEmptyResult() returned true");
+        });
   } else {
     auto& rti = runtimeInfo();
     rti.status_ = RuntimeInformation::lazilyMaterialized;
