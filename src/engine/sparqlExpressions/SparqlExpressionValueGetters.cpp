@@ -402,8 +402,15 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
       // For literals without language tag, we return an empty string per
       // standard.
       return {""};
-    default:
+    case Undefined:
+    case VocabIndex:
+    case LocalVocabIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
+    default:
+      AD_FAIL();
   }
 }
 
