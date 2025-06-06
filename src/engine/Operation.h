@@ -472,6 +472,19 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
+  // Return true if all values that the `variable` will be bound to by this
+  // expression are guaranteed to be contained in the underlying knowledge
+  // graph. This is e.g. true for results of `IndexScan`s, but not for `VALUES`
+  // clauses or expression results. This information is used to skip potentially
+  // expensive checks in the `TransitivePath` implementation.
+  // The default implementation is very conservative and assume all operations
+  // are just creating values from thin air, or intersect them from their
+  // children.
+  // So unless you implement an operation that consumes a column from its child
+  // and just adds arbitrary values to this column, this implementation is never
+  // wrong, just potentially inefficient.
+  virtual bool columnOriginatesFromGraph(const Variable& variable) const;
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
