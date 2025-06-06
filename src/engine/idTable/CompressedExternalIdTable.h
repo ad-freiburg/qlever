@@ -213,6 +213,24 @@ class CompressedExternalIdTableWriter {
   }
 
   template <size_t NumCols = 0>
+  InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
+      size_t index) {
+    size_t lastBlock_{index + 1 < startOfSingleIdTables_.size()
+                          ? startOfSingleIdTables_.at(index + 1)
+                          : blocksPerColumn_.at(0).size()};
+    auto readBlocks = ql::views::iota(index, lastBlock_) |
+                      ql::views::transform([this](auto blockIdx) {
+                        return this->template readBlock<NumCols>(blockIdx);
+                      });
+    auto async = ad_utility::bufferedAsyncView(std::move(readBlocks), 1);
+    auto generator =
+        std::make_shared<TableBlockGenerator<NumCols>>(this, index);
+    return InputRangeTypeErased<IdTableStatic<NumCols>>{
+        InputRangeFromGetCallable{
+            [g = std::move(generator)]() mutable { return (*g)(); }}};
+  }
+
+  template <size_t NumCols = 0>
   struct TableBlockGenerator {
     CompressedExternalIdTableWriter* writer_;
     size_t index_;
@@ -265,16 +283,6 @@ class CompressedExternalIdTableWriter {
       return table;
     }
   };
-
-  template <size_t NumCols = 0>
-  InputRangeTypeErased<IdTableStatic<NumCols>> makeGeneratorForIdTable(
-      size_t index) {
-    auto generator =
-        std::make_shared<TableBlockGenerator<NumCols>>(this, index);
-    return InputRangeTypeErased<IdTableStatic<NumCols>>{
-        InputRangeFromGetCallable{
-            [g = std::move(generator)]() mutable { return (*g)(); }}};
-  }
 
   // Decompresses the block at the given `blockIdx`. The
   // individual columns are decompressed concurrently.
@@ -781,11 +789,35 @@ class CompressedExternalIdTableSorter
   ad_utility::InputRangeTypeErased<IdTableStatic<N>> sortedBlocks(
       std::optional<size_t> blocksize = std::nullopt) {
     if (!this->transformAndPushLastBlock()) {
+      auto& block = this->currentBlock_;
+      auto chunked =
+          ::ranges::views::chunk(
+              ::ranges::views::iota(size_t{0}, block.numRows()),
+              blocksize.value_or(block.numRows())) |
+          ::ranges::views::transform([&](const auto& chunk) {
+            auto beg = chunk.begin();
+            auto end = chunk.end();
+            auto dist = static_cast<size_t>(::ranges::distance(beg, end));
+            auto curBlock = IdTableStatic<NumStaticCols>(
+                this->numColumns_, this->writer_.allocator());
+            curBlock.reserve(dist);
+            curBlock.insertAtEnd(block, *beg, *beg + (dist));
+            return IdTableStatic<N>(std::move(curBlock).template toStatic<N>());
+          });
+      using R = decltype(chunked);
+      static_assert(::ranges::range<R>);
+      static_assert(ql::ranges::range<R>);
+      static_assert(
+          std::same_as<ql::ranges::range_value_t<R>, IdTableStatic<N>>);
+      return ad_utility::InputRangeTypeErased<IdTableStatic<N>>(
+          std::move(chunked));
+      /*
       return ad_utility::InputRangeTypeErased<IdTableStatic<N>>(
           ad_utility::InputRangeFromGetCallable(
               [chunker = CurrentBlockChunker<N>(this), blocksize]() mutable {
                 return chunker.next(blocksize);
               }));
+              */
     }
 
     auto rowGenerators =
