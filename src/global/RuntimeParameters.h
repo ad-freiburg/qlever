@@ -49,6 +49,11 @@ inline auto& RuntimeParameters() {
         Bool<"use-binsearch-transitive-path">{true},
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
+        // Sampling-based hybrid GROUP BY thresholds
+        Double<"group-by-sample-percent">{0.01},      // percent of rows to sample (1%)
+        SizeT<"group-by-sample-max-rows">{50000},     // cap on sample size
+        SizeT<"group-by-sample-group-threshold">{1000000},    // switch to sort if estimated groups exceed this
+        SizeT<"group-by-hash-map-group-threshold">{1000000}, // max groups for hash-map optimization
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},
