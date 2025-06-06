@@ -946,57 +946,6 @@ inline auto Load = [](bool silent,
                      AD_FIELD(Load, target_, testing::Eq(target))));
 };
 
-inline auto Clear =
-    [](bool silent,
-       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Clear>(
-      testing::AllOf(AD_FIELD(Clear, silent_, testing::Eq(silent)),
-                     AD_FIELD(Clear, target_, testing::Eq(target))));
-};
-
-inline auto Drop =
-    [](bool silent,
-       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Drop>(
-      testing::AllOf(AD_FIELD(Drop, silent_, testing::Eq(silent)),
-                     AD_FIELD(Drop, target_, testing::Eq(target))));
-};
-
-inline auto Create =
-    [](bool silent,
-       const GraphRef& target) -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Create>(
-      testing::AllOf(AD_FIELD(Create, silent_, testing::Eq(silent)),
-                     AD_FIELD(Create, target_, testing::Eq(target))));
-};
-
-inline auto Add = [](bool silent, const GraphOrDefault& source,
-                     const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Add>(
-      testing::AllOf(AD_FIELD(Add, silent_, testing::Eq(silent)),
-                     AD_FIELD(Add, source_, testing::Eq(source)),
-                     AD_FIELD(Add, target_, testing::Eq(target))));
-};
-
-inline auto Move = [](bool silent, const GraphOrDefault& source,
-                      const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Move>(
-      testing::AllOf(AD_FIELD(Move, silent_, testing::Eq(silent)),
-                     AD_FIELD(Move, source_, testing::Eq(source)),
-                     AD_FIELD(Move, target_, testing::Eq(target))));
-};
-
-inline auto Copy = [](bool silent, const GraphOrDefault& source,
-                      const GraphOrDefault& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Copy>(
-      testing::AllOf(AD_FIELD(Copy, silent_, testing::Eq(silent)),
-                     AD_FIELD(Copy, source_, testing::Eq(source)),
-                     AD_FIELD(Copy, target_, testing::Eq(target))));
-};
-
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
        const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
@@ -1186,6 +1135,41 @@ inline auto ExistsFilter =
                   AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getPimpl,
                               Exists(SelectQuery(VariablesSelect({}), m,
                                                  defaultGraphs, namedGraphs))));
+};
+
+// A helper matcher for a graph pattern that targets all triples in `graph`.
+inline auto SelectAllPattern =
+    [](parsedQuery::GroupGraphPattern::GraphSpec graph,
+       std::optional<std::string>&& filter =
+           std::nullopt) -> Matcher<const parsedQuery::GraphPattern&> {
+  return GraphPattern(
+      false, filter ? std::vector{filter.value()} : std::vector<std::string>{},
+      Group(GraphPattern(Triples(
+                {{{::Variable("?s"), ::Variable("?p"), ::Variable("?o")}}})),
+            std::move(graph)));
+};
+
+// Matcher for a `ParsedQuery` with a clear of `graph`.
+inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
+                       std::optional<std::string>&& filter = std::nullopt) {
+  // The `GraphSpec` type is the same variant as
+  // `SparqlTripleSimpleWithGraph::Graph` so it can be used for both.
+  return UpdateClause(
+      GraphUpdate(
+          {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
+          {}, std::nullopt),
+      SelectAllPattern(graph, AD_FWD(filter)));
+};
+
+// Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
+inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
+                        const SparqlTripleSimpleWithGraph::Graph& to) {
+  return UpdateClause(GraphUpdate({},
+                                  {SparqlTripleSimpleWithGraph(
+                                      ::Variable("?s"), ::Variable("?p"),
+                                      ::Variable("?o"), to)},
+                                  std::nullopt),
+                      SelectAllPattern(from));
 };
 
 }  // namespace matchers
