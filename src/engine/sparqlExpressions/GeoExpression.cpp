@@ -85,12 +85,11 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 // problems
 using Ptr = sparqlExpression::SparqlExpression::Ptr;
 
-#ifndef QL_INSTANTIATE_GEO_RELATION_EXPR
+#undef QL_INSTANTIATE_GEO_RELATION_EXPR
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
   template Ptr                                                                \
       sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
           Ptr, Ptr);
-#endif  // QL_INSTANTIATE_GEO_RELATION_EXPR
 
 QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
