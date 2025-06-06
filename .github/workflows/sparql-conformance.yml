@@ -49,7 +49,7 @@ jobs:
       - name: Create build directory
         run: mkdir ${{github.workspace}}/qlever-code/build
       - name: Configure CMake
-        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
       - name: Build IndexBuilderMain
         run: cmake --build ${{github.workspace}}/qlever-code/build --target IndexBuilderMain --config ${{env.build-type}} -- -j $(nproc)
       - name: Build ServerMain

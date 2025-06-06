@@ -258,7 +258,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Double ||
           (maxDist.has_value() &&
-           (dist.getDouble() * 1000) > static_cast<double>(maxDist.value()))) {
+           (dist.getDouble() * 1000) > maxDist.value())) {
         continue;
       }
 
@@ -508,23 +508,19 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
   auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
 
   // safety buffer for numerical inaccuracies
-  double maxDistInMetersBuffer =
-      static_cast<double>(maxDist.value()) + additionalDist;
+  double maxDistInMetersBuffer = maxDist.value() + additionalDist;
   if (maxDistInMetersBuffer < 10) {
     maxDistInMetersBuffer = 10;
-  } else if (static_cast<double>(maxDist.value()) <
-             static_cast<double>(std::numeric_limits<long long>::max()) /
-                 1.02) {
+  } else if (maxDist.value() < std::numeric_limits<double>::max() / 1.02) {
     maxDistInMetersBuffer = 1.01 * maxDistInMetersBuffer;
   } else {
-    maxDistInMetersBuffer =
-        static_cast<double>(std::numeric_limits<long long>::max());
+    maxDistInMetersBuffer = std::numeric_limits<double>::max();
   }
 
   // for large distances, where the lower calculation would just result in
   // a single bounding box for the whole planet, do an optimized version
-  if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
-      static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
+  if (maxDist.value() > circumferenceMax_ / 4.0 &&
+      maxDist.value() < circumferenceMax_ / 2.01) {
     return computeQueryBoxForLargeDistances(startPoint);
   }
 
@@ -594,8 +590,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
   // for an explanation of the formula see the master thesis. Divide by two two
   // only consider the distance from the point to the antiPoint, subtract
   // maxDist and a safety margine from that
-  double antiDist =
-      (circumferenceMin_ / 2.0) - static_cast<double>(maxDist.value()) * 1.01;
+  double antiDist = (circumferenceMin_ / 2.0) - maxDist.value() * 1.01;
   // use the bigger circumference as an additional safety margin, use 2.01
   // instead of 2.0 because of rounding inaccuracies in floating point
   // operations
@@ -837,7 +832,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       }
       auto distance = computeDist(res.second, entry.value());
       AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
-      if (distance.getDouble() * 1000 <= static_cast<double>(maxDist.value())) {
+      if (distance.getDouble() * 1000 <= maxDist.value()) {
         // make sure, that no duplicate elements are inserted in the result
         // table. As duplicates can only occur, when areas are not approximated
         // as midpoints, the additional runtime can be saved in that case

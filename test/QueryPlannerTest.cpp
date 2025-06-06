@@ -1849,6 +1849,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
                      std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+
+  // Floating point as maximum distance
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 0.5 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(0.5, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+                     std::nullopt, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
 }
 
 TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
@@ -3915,6 +3930,42 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
             h::CartesianProductJoin(
                 h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")),
                 h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
+  auto hasLimit = [](const LimitOffsetClause& limit) {
+    return queryPlannerTestHelpers::RootOperationBase(
+        AD_PROPERTY(Operation, getLimitOffset, ::testing::Eq(limit)));
+  };
+
+  h::expect("SELECT * { SELECT ?a { ?a ?b ?c } LIMIT 1 }",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  h::expect(
+      "SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } } LIMIT 1 }",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 1"),
+            hasLimit({1})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } OFFSET 2 } OFFSET 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
+                  hasLimit({std::nullopt, 3})));
+  // Last offset should only be applied by exporter since VALUES does not
+  // support OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} OFFSET 1 } OFFSET 2 } OFFSET 5",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } OFFSET 3"),
+            hasLimit({std::nullopt, 3})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  // Last limit should only be applied by exporter since VALUES does not support
+  // OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} LIMIT 3 } LIMIT 2 } LIMIT 1",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 2"),
+            hasLimit({2})));
 }
 
 // _____________________________________________________________________________

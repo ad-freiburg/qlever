@@ -23,11 +23,10 @@
 #include "engine/SPARQLProtocol.h"
 #include "global/RuntimeParameters.h"
 #include "index/IndexImpl.h"
+#include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
-#include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -1124,13 +1123,4 @@ void Server::adjustParsedQueryLimitOffset(
   if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
     exportLimit = std::stoul(sendParameter.value());
   }
-
-  // Make sure that the offset is not applied again when exporting the
-  // result (it is already applied by the root operation in the query
-  // execution tree). Note that we don't need this for the limit because
-  // applying a fixed limit is idempotent.
-  const auto& qet = plannedQuery.queryExecutionTree_;
-  AD_CORRECTNESS_CHECK(limitOffset._offset >=
-                       qet.getRootOperation()->getLimit()._offset);
-  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 }

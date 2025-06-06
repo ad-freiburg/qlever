@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 #define QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
 
-#include <engine/Operation.h>
+#include "engine/Operation.h"
 
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
 /// variables (which means it has 0 columns).
