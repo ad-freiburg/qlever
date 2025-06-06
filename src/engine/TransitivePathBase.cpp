@@ -301,7 +301,12 @@ VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 bool TransitivePathBase::knownEmptyResult() {
-  return subtree_->knownEmptyResult();
+  auto sideHasKnownEmptyResult = [this]() {
+    auto tree = decideDirection().first.treeAndCol_;
+    return tree.has_value() && tree.value().first->knownEmptyResult();
+  };
+  return (subtree_->knownEmptyResult() && minDist_ > 0) ||
+         sideHasKnownEmptyResult();
 }
 
 // _____________________________________________________________________________
