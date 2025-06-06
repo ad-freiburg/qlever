@@ -67,6 +67,7 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
     AD_CASE(OnDiskUncompressed);
     AD_CASE(InMemoryCompressed);
     AD_CASE(OnDiskCompressed);
+    AD_CASE(OnDiskCompressedGeoSplit);
     default:
       AD_FAIL();
   }

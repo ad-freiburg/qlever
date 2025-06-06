@@ -155,6 +155,8 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline char GEO_WKT_LITERAL[] =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+static constexpr std::string_view GEO_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<"\"^^<", GEO_WKT_LITERAL, ">">();
 
 enum class UnitOfMeasurement { METERS, KILOMETERS, MILES, UNKNOWN };
 constexpr inline std::string_view UNIT_PREFIX = "http://qudt.org/vocab/unit/";
