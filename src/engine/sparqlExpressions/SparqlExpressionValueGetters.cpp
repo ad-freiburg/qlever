@@ -409,9 +409,8 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case WordVocabIndex:
     case BlankNodeIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
-    default:
-      AD_FAIL();
   }
+  AD_FAIL();
 }
 
 //______________________________________________________________________________
