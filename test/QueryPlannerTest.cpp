@@ -4323,3 +4323,26 @@ TEST(QueryPlanner, emptyPathWithJoinOptimization) {
                                   "?_QLever_internal_variable_qp_1")),
       qec);
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimizationAndUndefFilter) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { UNDEF } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::Filter("?var != UNDEF",
+                                h::ValuesClause("VALUES (?var) { (UNDEF) }")))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}

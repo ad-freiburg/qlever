@@ -14,12 +14,15 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/Distinct.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -412,13 +415,37 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
-    std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-    bool isLeft) const {
-  auto originalVar =
-      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
-  if (boundVariableIsForEmptyPath_ &&
-      !leftOrRightOp->getRootOperation()->columnOriginatesFromGraph(
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
+    size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
+  auto [originalVar, info] =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
+
+  // If we're not explicitly handling the empty path, the first step will
+  // already filter out non-matching values.
+  if (minDist_ > 0) {
+    return leftOrRightOp;
+  }
+
+  // Remove undef values, these are definitely not in the graph, and are
+  // problematic when joining.
+  if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
+    using namespace sparqlExpression;
+    SparqlExpressionPimpl pimpl{
+        std::make_shared<NotEqualExpression>(
+            std::array<SparqlExpression::Ptr, 2>{
+                std::make_unique<VariableExpression>(originalVar),
+                std::make_unique<IdExpression>(Id::makeUndefined())}),
+        absl::StrCat(originalVar.name(), " != UNDEF")};
+    leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
+        getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
+    AD_CORRECTNESS_CHECK(
+        inputCol == leftOrRightOp->getVariableColumn(originalVar),
+        "The column index should not change when applying a filter.");
+  }
+
+  // If we cannot guarantee the values are part of the graph, we have to join
+  // with it first.
+  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraph(
           originalVar)) {
     leftOrRightOp = ad_utility::makeExecutionTree<Join>(
         getExecutionContext(), std::move(leftOrRightOp),
@@ -426,6 +453,14 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
         inputCol, 0);
     inputCol = leftOrRightOp->getVariableColumn(originalVar);
   }
+  return leftOrRightOp;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
+    std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
+    bool isLeft) const {
+  leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
   // Enforce required sorting of `leftOrRightOp`.
   leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
                                                        {inputCol});

@@ -269,6 +269,12 @@ class TransitivePathBase : public Operation {
       QueryExecutionContext* qec, Graphs activeGraphs,
       std::optional<Variable> variable = std::nullopt);
 
+  // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
+  // found in the knowledge graph.
+  std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
+      size_t& inputCol,
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
+
  public:
   size_t getCostEstimate() override;
 
