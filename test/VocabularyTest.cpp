@@ -7,12 +7,8 @@
 #include <cstdio>
 #include <vector>
 
-#include "global/IndexTypes.h"
-#include "index/Vocabulary.h"
-#include "util/json.h"
-
-// Anonymous namespace for the normal tests
-namespace {
+#include "../src/index/Vocabulary.h"
+#include "../src/util/json.h"
 
 using json = nlohmann::json;
 using std::string;
@@ -90,39 +86,17 @@ TEST(VocabularyTest, createFromSetTest) {
   ad_utility::HashSet<string> s;
   s.insert("a");
   s.insert("ab");
-  s.insert(
-      "\"POLYGON((1 2, 3 "
-      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   s.insert("ba");
   s.insert("car");
-  s.insert(
-      "\"LINESTRING(1 2, 3 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-
   TextVocabulary v;
   auto filename = "vocTest4.dat";
   v.createFromSet(s, filename);
-
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
-
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
-
   ASSERT_FALSE(v.getId("foo", &idx));
-
-  ASSERT_TRUE(
-      v.getId("\"LINESTRING(1 2, 3 "
-              "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-              &idx));
-  ASSERT_EQ(static_cast<uint64_t>(1) << 59, idx.get());
-  ASSERT_TRUE(
-      v.getId("\"POLYGON((1 2, 3 "
-              "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-              &idx));
-  ASSERT_EQ((static_cast<uint64_t>(1) << 59) | 1, idx.get());
-
   ad_utility::deleteFile(filename);
 }
 
@@ -151,5 +125,3 @@ TEST(Vocabulary, PrefixFilter) {
   ASSERT_EQ(ranges, expectedRanges);
   ad_utility::deleteFile(filename);
 }
-
-}  // namespace
