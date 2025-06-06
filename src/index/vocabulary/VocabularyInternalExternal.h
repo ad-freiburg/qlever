@@ -95,13 +95,12 @@ class VocabularyInternalExternal {
 
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first.
-  struct WordWriter {
+  struct WordWriter : public WordWriterBase {
     VocabularyInMemoryBinSearch::WordWriter internalWriter_;
     VocabularyOnDisk::WordWriter externalWriter_;
     uint64_t idx_ = 0;
     size_t milestoneDistance_;
     size_t sinceMilestone_ = 0;
-    std::string readableName_ = "";
 
     // Construct from the `filename` to which the vocabulary will be serialized.
     // At least every `milestoneDistance`-th word will be cached in RAM.
@@ -110,12 +109,12 @@ class VocabularyInternalExternal {
 
     // Add the next word. If `isExternal` is true, then the word will only be
     // stored on disk, and not be cached in RAM.
-    uint64_t operator()(std::string_view word, bool isExternal = true);
+    uint64_t operator()(std::string_view word, bool isExternal) override;
+
+    ~WordWriter() override;
 
     // Finish writing.
-    void finish();
-
-    std::string& readableName() { return readableName_; }
+    void finishImpl() override;
   };
 
   // Return a `unique_ptr<WordWriter>` that writes to the given `filename`.

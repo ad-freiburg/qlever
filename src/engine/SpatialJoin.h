@@ -26,7 +26,7 @@ struct PreparedSpatialJoinParams {
   ColumnIndex rightJoinCol_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
 };
@@ -89,7 +89,7 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<size_t> getMaxDist() const;
+  std::optional<double> getMaxDist() const;
 
   // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
@@ -106,8 +106,8 @@ class SpatialJoin : public Operation {
   }
 
   // Helper functions for unit tests
-  std::pair<size_t, size_t> onlyForTestingGetTask() const {
-    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  std::pair<double, size_t> onlyForTestingGetTask() const {
+    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {

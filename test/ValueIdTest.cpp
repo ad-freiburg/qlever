@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/hash/hash_testing.h>
 #include <gtest/gtest.h>
 
 #include <bitset>
@@ -9,7 +10,6 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
-#include "absl/hash/hash_testing.h"
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/Random.h"

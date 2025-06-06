@@ -4,10 +4,11 @@
 //   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
-#include <util/TransparentFunctors.h>
 
 #include <string>
 #include <vector>
+
+#include "util/TransparentFunctors.h"
 
 TEST(TransparentFunctors, FirstOfPair) {
   std::pair<std::string, std::vector<int>> pair{"hello", {2}};

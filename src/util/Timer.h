@@ -5,17 +5,10 @@
 #ifndef QLEVER_SRC_UTIL_TIMER_H
 #define QLEVER_SRC_UTIL_TIMER_H
 
-#include <sys/time.h>
-#include <sys/types.h>
-
+#include <atomic>
 #include <chrono>
-#include <iomanip>
-#include <memory>
-#include <sstream>
 
-#include "absl/strings/str_cat.h"
 #include "util/Log.h"
-#include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
 namespace ad_utility {

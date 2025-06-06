@@ -4,10 +4,9 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <engine/ParsedRequestBuilder.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
+#include "engine/ParsedRequestBuilder.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
 #include "util/TypeIdentity.h"
