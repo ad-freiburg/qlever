@@ -223,66 +223,13 @@ class CompressedExternalIdTableWriter {
                         return this->template readBlock<NumCols>(blockIdx);
                       });
     auto async = ad_utility::bufferedAsyncView(std::move(readBlocks), 1);
-    auto generator =
-        std::make_shared<TableBlockGenerator<NumCols>>(this, index);
+    ++numActiveGenerators_;
+    auto callback = [this]() { --numActiveGenerators_; };
+    auto callbackView =
+        ad_utility::CallbackOnEndView(std::move(async), callback);
     return InputRangeTypeErased<IdTableStatic<NumCols>>{
-        InputRangeFromGetCallable{
-            [g = std::move(generator)]() mutable { return (*g)(); }}};
+        std::move(callbackView)};
   }
-
-  template <size_t NumCols = 0>
-  struct TableBlockGenerator {
-    CompressedExternalIdTableWriter* writer_;
-    size_t index_;
-    std::future<IdTableStatic<NumCols>> fut_;
-    size_t firstBlock_{writer_->startOfSingleIdTables_.at(index_)};
-    size_t lastBlock_{index_ + 1 < writer_->startOfSingleIdTables_.size()
-                          ? writer_->startOfSingleIdTables_.at(index_ + 1)
-                          : writer_->blocksPerColumn_.at(0).size()};
-    size_t blockIdx_{firstBlock_};
-    bool hasDecremented_{false};
-    bool isFirstCall_{true};
-
-    TableBlockGenerator(CompressedExternalIdTableWriter* writer, size_t index)
-        : writer_(writer), index_(index) {
-      ++writer_->numActiveGenerators_;
-    }
-    ~TableBlockGenerator() { decrementActiveGeneratorsCount(); }
-
-    void decrementActiveGeneratorsCount() {
-      if (!std::exchange(hasDecremented_, true)) {
-        --writer_->numActiveGenerators_;
-      }
-    }
-
-    void getNextBlockAsync() {
-      fut_ = std::async(std::launch::async, [this]() {
-        return this->writer_->template readBlock<NumCols>(blockIdx_++);
-      });
-    }
-
-    std::optional<IdTableStatic<NumCols>> operator()() {
-      if (blockIdx_ >= lastBlock_) {
-        decrementActiveGeneratorsCount();
-        return std::nullopt;
-      }
-
-      if (std::exchange(isFirstCall_, false)) {
-        getNextBlockAsync();
-        AD_CONTRACT_CHECK(
-            fut_.valid(),
-            "Future initialization failed in TableBlockGenerator");
-      }
-
-      auto table = fut_.get();
-
-      if (blockIdx_ < lastBlock_) {
-        getNextBlockAsync();
-      }
-
-      return table;
-    }
-  };
 
   // Decompresses the block at the given `blockIdx`. The
   // individual columns are decompressed concurrently.

@@ -210,6 +210,73 @@ constexpr auto allView(Range&& range) {
 template <typename Range>
 using all_t = decltype(allView(std::declval<Range>()));
 
+// TODO<joka921> Comment
+CPP_template(typename V, typename F)(
+    requires ql::ranges::input_range<V> CPP_and
+        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
+    : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
+ private:
+  V base_;
+  F callback_;
+  ad_utility::ResetWhenMoved<bool, true> called_ = false;
+
+  void maybe_invoke() {
+    if (!std::exchange(called_, true)) {
+      callback_();
+    }
+  }
+
+  class iterator {
+   private:
+    ql::ranges::iterator_t<V> current_;
+    CallbackOnEndView* parent_ = nullptr;
+
+   public:
+    using iterator_concept = std::input_iterator_tag;
+    using difference_type = ql::ranges::range_difference_t<V>;
+    using value_type = ql::ranges::range_value_t<V>;
+
+    iterator() = default;
+    iterator(ql::ranges::iterator_t<V> current, CallbackOnEndView* parent)
+        : current_(current), parent_(parent) {}
+
+    decltype(auto) operator*() const { return *current_; }
+
+    iterator& operator++() {
+      ++current_;
+      if (current_ == ql::ranges::end(parent_->base_)) {
+        parent_->maybe_invoke();
+      }
+      return *this;
+    }
+
+    void operator++(int) { ++(*this); }
+
+    bool operator==(ql::ranges::sentinel_t<V> s) const { return current_ == s; }
+  };
+
+ public:
+  CallbackOnEndView() = default;
+  CallbackOnEndView(V base, F callback)
+      : base_(std::move(base)), callback_(std::move(callback)) {}
+
+  CallbackOnEndView(const CallbackOnEndView&) = delete;
+  CallbackOnEndView& operator=(const CallbackOnEndView&) = delete;
+
+  CallbackOnEndView(CallbackOnEndView&&) = default;
+  CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
+
+  ~CallbackOnEndView() { maybe_invoke(); }
+
+  auto begin() { return iterator{ql::ranges::begin(base_), this}; }
+
+  auto end() { return ql::ranges::end(base_); }
+};
+
+// Deduction guide
+template <class R, class F>
+CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
+
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
 // in blocks.
