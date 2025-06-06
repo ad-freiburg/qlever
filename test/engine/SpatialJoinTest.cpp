@@ -798,7 +798,7 @@ TEST(SpatialJoin, getDescriptor) {
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   auto description = spatialJoin->getDescriptor();
-  ASSERT_THAT(description, ::testing::HasSubstr(std::to_string(
+  ASSERT_THAT(description, ::testing::HasSubstr(absl::StrCat(
                                spatialJoin->getMaxDist().value_or(-1))));
   ASSERT_TRUE(description.find("?subject") != std::string::npos);
   ASSERT_TRUE(description.find("?object") != std::string::npos);
@@ -840,7 +840,7 @@ TEST(SpatialJoin, getCacheKeyImpl) {
       spatialJoin->onlyForTestingGetRightChild()->getCacheKey();
 
   ASSERT_TRUE(cacheKeyString.find(
-                  std::to_string(spatialJoin->getMaxDist().value_or(-1))) !=
+                  absl::StrCat(spatialJoin->getMaxDist().value_or(-1))) !=
               std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);

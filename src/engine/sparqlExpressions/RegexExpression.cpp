@@ -279,6 +279,26 @@ void PrefixRegexExpression::checkCancellation(
 }
 
 // _____________________________________________________________________________
+std::vector<PrefilterExprVariablePair>
+PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  // It is currently not possible to prefilter PREFIX expressions involving
+  // STR(?var), since we not only have to match "Bob", but also "Bob"@en,
+  // "Bob"^^<iri>, and so on. The current prefilter expressions do not consider
+  // this matching logic.
+  if (childIsStrExpression_) {
+    return {};
+  }
+  std::vector<PrefilterExprVariablePair> prefilterVec;
+  prefilterVec.emplace_back(
+      std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+          TripleComponent::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(prefixRegex_))),
+      variable_);
+  return prefilterVec;
+}
+
+// _____________________________________________________________________________
 std::optional<PrefixRegexExpression>
 PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
     Ptr& string, const SparqlExpression& regex) {

@@ -6,12 +6,12 @@
 
 #include "parser/GraphPatternOperation.h"
 
-#include <optional>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
+
 #include <string_view>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_join.h"
 #include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
