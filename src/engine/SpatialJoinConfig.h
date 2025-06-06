@@ -31,19 +31,19 @@ enum class SpatialJoinType {
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
-  std::optional<size_t> maxDist_ = std::nullopt;
+  std::optional<double> maxDist_ = std::nullopt;
 };
 
 // A spatial search limited only by a maximum distance.
 struct MaxDistanceConfig {
-  size_t maxDist_;
+  double maxDist_;
 };
 
 // Spatial join using one of the join types above. The maximal distance is
 // relevant only for the `WITHIN_DIST` join type.
 struct SpatialJoinConfig {
   SpatialJoinType joinType_;
-  std::optional<size_t> maxDist_ = std::nullopt;
+  std::optional<double> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
