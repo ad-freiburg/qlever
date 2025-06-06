@@ -38,14 +38,12 @@ class UnicodeVocabulary {
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T, typename... Args>
-  WordAndIndex lower_bound(const T& word, SortLevel level,
-                           Args&&... args) const {
+  template <typename T>
+  WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.lower_bound(word, actualComparator,
-                                             AD_FWD(args)...);
+    return _underlyingVocabulary.lower_bound(word, actualComparator);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -54,14 +52,12 @@ class UnicodeVocabulary {
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T, typename... Args>
-  WordAndIndex upper_bound(const T& word, SortLevel level,
-                           Args&&... args) const {
+  template <typename T>
+  WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.upper_bound(word, actualComparator,
-                                             AD_FWD(args)...);
+    return _underlyingVocabulary.upper_bound(word, actualComparator);
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the

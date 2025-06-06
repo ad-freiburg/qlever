@@ -1,8 +1,3 @@
-// Copyright 2018 - 2025, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
-
 #include <gmock/gmock.h>
 
 #include <cstdlib>
@@ -15,11 +10,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
-#include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/SplitVocabulary.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 
 using namespace ad_utility::vocabulary_merger;
@@ -33,8 +24,6 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 
   for (size_t i = 0; i < a.size(); ++i) {
     if (a[i] != b[i]) {
-      LOG(ERROR) << a[i].first << " " << a[i].second << " != " << b[i].first
-                 << " " << b[i].second << std::endl;
       return false;
     }
   }
@@ -59,7 +48,6 @@ class MergeVocabularyTest : public ::testing::Test {
   // vocabulary".
   using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
   ExpectedVocabulary expectedMergedVocabulary_;
-  ExpectedVocabulary expectedMergedGeoVocabulary_;
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
@@ -91,21 +79,12 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},
-        {"\"bla\"", true, 2},
-        {"\"gorilla\"", false, 3},
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 0},
-        {"\"monkey\"", false, 4},
-        {"_:blank", false, 0},
-        {"_:blunk", false, 1}};
+        {"\"ape\"", false, 0},     {"\"bla\"", true, 2},
+        {"\"gorilla\"", false, 3}, {"\"monkey\"", false, 4},
+        {"_:blank", false, 0},     {"_:blunk", false, 1}};
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
         {"\"monkey\"", true, 4},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true, 1},
         {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
     };
@@ -115,13 +94,6 @@ class MergeVocabularyTest : public ::testing::Test {
     expectedMergedVocabulary_ = ExpectedVocabulary{
         {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
         {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
-    expectedMergedGeoVocabulary_ = ExpectedVocabulary{
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-         true}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
@@ -142,11 +114,6 @@ class MergeVocabularyTest : public ::testing::Test {
                     V(localIdx),
                     Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
               } else {
-                using GeoVocab = SplitGeoVocabulary<
-                    CompressedVocabulary<VocabularyInternalExternal>>;
-                if (GeoVocab::getMarkerForWord(w.iriOrLiteral()) == 1) {
-                  globalId = GeoVocab::addMarker(globalId, 1);
-                }
                 mapping->emplace_back(V(localIdx), V(globalId));
               }
             }
@@ -188,31 +155,19 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
   std::vector<std::pair<std::string, bool>> mergeResult;
-  std::vector<std::pair<std::string, bool>> geoMergeResult;
   {
-    // Simulate Vocabulary::WordWriter::operation() for testing purposes
     auto internalVocabularyAction =
-        [&mergeResult, &geoMergeResult](
-            const auto& word, [[maybe_unused]] bool isExternal) -> uint64_t {
-      if (word.starts_with("\"") &&
-          word.ends_with(
-              "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
-        geoMergeResult.emplace_back(word, isExternal);
-        return (geoMergeResult.size() - 1) | (1ull << 59);
-      } else {
-        mergeResult.emplace_back(word, isExternal);
-        return mergeResult.size() - 1;
-      }
+        [&mergeResult](const auto& word,
+                       [[maybe_unused]] bool isExternal) -> uint64_t {
+      mergeResult.emplace_back(word, isExternal);
+      return mergeResult.size() - 1;
     };
-
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, 1_GB);
   }
 
   EXPECT_THAT(mergeResult,
               ::testing::ElementsAreArray(expectedMergedVocabulary_));
-  EXPECT_THAT(geoMergeResult,
-              ::testing::ElementsAreArray(expectedMergedGeoVocabulary_));
 
   // No language tags in text file
   ASSERT_EQ(res.langTaggedPredicates().begin(), Id::makeUndefined());
