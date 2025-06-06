@@ -241,5 +241,8 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 // _____________________________________________________________________________
 bool ExistsJoin::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable == existsVariable_) {
+    return false;
+  }
   return left_->getRootOperation()->columnOriginatesFromGraph(variable);
 }
