@@ -20,6 +20,7 @@
 
 namespace {
 using namespace sparqlParserHelpers;
+using namespace sparqlParserTestHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;

@@ -1191,7 +1191,8 @@ inline auto ExistsFilter =
 
 }  // namespace matchers
 
-namespace {
+namespace sparqlParserTestHelpers {
+
 using namespace sparqlParserHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
@@ -1216,23 +1217,23 @@ auto parse =
       return p.parseTypesafe(F);
     };
 
-auto parseBlankNode = parse<&Parser::blankNode>;
-auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
-auto parseCollection = parse<&Parser::collection>;
-auto parseCollectionConstruct = parse<&Parser::collection, true>;
-auto parseConstructTriples = parse<&Parser::constructTriples>;
-auto parseGraphNode = parse<&Parser::graphNode>;
-auto parseGraphNodeConstruct = parse<&Parser::graphNode, true>;
-auto parseObjectList = parse<&Parser::objectList>;
-auto parsePropertyList = parse<&Parser::propertyList>;
-auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
-auto parseSelectClause = parse<&Parser::selectClause>;
-auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
-auto parseTriplesSameSubjectConstruct =
+const auto parseBlankNode = parse<&Parser::blankNode>;
+const auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
+const auto parseCollection = parse<&Parser::collection>;
+const auto parseCollectionConstruct = parse<&Parser::collection, true>;
+const auto parseConstructTriples = parse<&Parser::constructTriples>;
+const auto parseGraphNode = parse<&Parser::graphNode>;
+const auto parseGraphNodeConstruct = parse<&Parser::graphNode, true>;
+const auto parseObjectList = parse<&Parser::objectList>;
+const auto parsePropertyList = parse<&Parser::propertyList>;
+const auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
+const auto parseSelectClause = parse<&Parser::selectClause>;
+const auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
+const auto parseTriplesSameSubjectConstruct =
     parse<&Parser::triplesSameSubject, true>;
-auto parseVariable = parse<&Parser::var>;
-auto parseVarOrTerm = parse<&Parser::varOrTerm>;
-auto parseVerb = parse<&Parser::verb>;
+const auto parseVariable = parse<&Parser::var>;
+const auto parseVarOrTerm = parse<&Parser::varOrTerm>;
+const auto parseVerb = parse<&Parser::verb>;
 
 template <auto Clause, bool parseInsideConstructTemplate = false,
           typename Value = decltype(parse<Clause>("").resultOfParse_)>
@@ -1317,10 +1318,10 @@ struct ExpectParseFails {
 // TODO: make function that creates both the complete and fails parser. and use
 // them with structured binding.
 
-auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
-auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
-auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
-auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+const auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+const auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+const auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+const auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -1328,6 +1329,6 @@ using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::StrEq;
-}  // namespace
+}  // namespace sparqlParserTestHelpers
 
 #endif  // QLEVER_TEST_SPARQLANTLRPARSERTESTHELPERS_H

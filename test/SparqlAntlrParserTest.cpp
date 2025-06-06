@@ -25,6 +25,8 @@
 #include "util/SourceLocation.h"
 
 namespace {
+using namespace sparqlParserTestHelpers;
+
 auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
