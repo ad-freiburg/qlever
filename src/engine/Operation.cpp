@@ -737,7 +737,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
   return std::nullopt;
 }
 
-// _____________________________________________________________________________
+// Fallback implementation, this function covers most operations that make sense
+// without producing an incorrect result. So unless you
 bool Operation::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   // If the column contains UNDEF, it cannot possibly be guaranteed to originate

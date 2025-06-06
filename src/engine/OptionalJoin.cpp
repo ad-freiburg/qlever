@@ -290,10 +290,15 @@ auto OptionalJoin::computeImplementationFromIdTables(
 // _____________________________________________________________________________
 bool OptionalJoin::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join columns, we only need to look at the left side of the tree for
+  // this check.
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
     return _left->getRootOperation()->columnOriginatesFromGraph(variable);
   }
+  // For all other columns, we just delegate to the default implementation which
+  // will return false for all columns on the right side since these columns may
+  // be filled with UNDEF values.
   return Operation::columnOriginatesFromGraph(variable);
 }
 

@@ -232,9 +232,5 @@ std::unique_ptr<Operation> Minus::cloneImpl() const {
 // _____________________________________________________________________________
 bool Minus::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  if (_left->getVariableColumnOrNullopt(variable).has_value() &&
-      _right->getVariableColumnOrNullopt(variable).has_value()) {
-    return _left->getRootOperation()->columnOriginatesFromGraph(variable);
-  }
-  return Operation::columnOriginatesFromGraph(variable);
+  return _left->getRootOperation()->columnOriginatesFromGraph(variable);
 }

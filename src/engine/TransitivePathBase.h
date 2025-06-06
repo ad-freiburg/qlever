@@ -262,7 +262,9 @@ class TransitivePathBase : public Operation {
       const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
-  // used as a starting point for evaluating the empty path.
+  // used as a starting point for evaluating the empty path. The optional
+  // parameter `variable` can be set to explictly define the name of the column
+  // this produces (useful for subsequent joins).
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
       QueryExecutionContext* qec, Graphs activeGraphs,
       std::optional<Variable> variable = std::nullopt);
