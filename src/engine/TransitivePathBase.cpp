@@ -301,13 +301,12 @@ VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 bool TransitivePathBase::knownEmptyResult() {
-  // When minDist_ == 0, then there always needs to be a starting tree bound for
-  // correct results, so it is safe to call `std::optional<>::value()` without a
-  // prior check.
-  return subtree_->knownEmptyResult() &&
-         (minDist_ > 0 || decideDirection()
-                              .first.treeAndCol_.value()
-                              .first->knownEmptyResult());
+  auto sideHasKnownEmptyResult = [this]() {
+    auto tree = decideDirection().first.treeAndCol_;
+    return tree.has_value() && tree.value().first->knownEmptyResult();
+  };
+  return (subtree_->knownEmptyResult() && minDist_ > 0) ||
+         sideHasKnownEmptyResult();
 }
 
 // _____________________________________________________________________________

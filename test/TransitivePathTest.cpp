@@ -212,7 +212,7 @@ TEST_P(TransitivePathTest, knownEmptyResult) {
                              emptySub.clone(), 0, vars, left, right, 0,
                              std::numeric_limits<size_t>::max());
       EXPECT_TRUE(T->isBoundOrId());
-      EXPECT_FALSE(T->knownEmptyResult());
+      EXPECT_TRUE(T->knownEmptyResult());
     }
   }
 }
