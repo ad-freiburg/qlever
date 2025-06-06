@@ -1,6 +1,6 @@
-// Copyright 2011 - 2025, University of Freiburg,
+// Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>
+// Author: Björn Buchhold <buchholb>
 
 #include <gtest/gtest.h>
 
