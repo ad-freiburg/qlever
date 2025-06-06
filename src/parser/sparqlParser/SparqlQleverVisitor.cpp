@@ -185,6 +185,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
   // Geo functions.
   using enum SpatialJoinType;
   BinaryFuncTable geoFuncs{
+      {"metricDistance", &makeMetricDistExpression},
+      // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
@@ -195,8 +197,6 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
-    } else if (functionName == "metricDistance") {
-      return createBinary(&makeMetricDistExpression);
     } else if (functionName == "longitude") {
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
