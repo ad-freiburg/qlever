@@ -1777,7 +1777,8 @@ static void checkBlockMetadataInvariantBlockConsistencyImpl(
 
 // _____________________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
-    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges)
+    ScanSpecification scanSpec, const BlockMetadataRanges& blockMetadataRanges,
+    bool blockMetadataIsPrefiltered)
     : scanSpec_(std::move(scanSpec)) {
   const auto& blockRangeView = blockMetadataRanges | ql::views::join;
   checkBlockMetadataInvariantOrderAndUniquenessImpl(blockRangeView);
@@ -1785,6 +1786,7 @@ CompressedRelationReader::ScanSpecAndBlocks::ScanSpecAndBlocks(
   checkBlockMetadataInvariantBlockConsistencyImpl(
       getBlockMetadataView(), scanSpec_.firstFreeColIndex());
   sizeBlockMetadata_ = getNumberOfBlockMetadataValues(blockMetadata_);
+  blockMetadataIsPrefiltered_ = blockMetadataIsPrefiltered;
 }
 
 // _____________________________________________________________________________
