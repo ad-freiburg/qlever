@@ -262,9 +262,26 @@ class ValueId {
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
+  /// Create a `ValueId` for a boolean value, represented as 0/1 instead of
+  /// false/true.
+  static constexpr ValueId makeFromBinaryBool(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(true) << 1;
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
   // Obtain the boolean value.
   [[nodiscard]] bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits));
+    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+  }
+
+  // Obtain the boolean value as a string view.
+  std::string_view getBoolLiteral() const noexcept {
+    bool value = getBool();
+    if (removeDatatypeBits(_bits) & 0b10) {
+      return value ? "1" : "0";
+    }
+    return value ? "true" : "false";
   }
 
   /// Create a `ValueId` for an unsigned index of type
@@ -415,7 +432,7 @@ class ValueId {
 
     auto visitor = [&ostr](auto&& value) {
       using T = decltype(value);
-      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
+      if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||

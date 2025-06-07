@@ -82,6 +82,10 @@ auto EffectiveBooleanValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::Bool) {
+    // Always use canonical representation when converting to string.
+    return id.getBool() ? "true" : "false";
+  }
   // `true` means that we remove the quotes and angle brackets.
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
