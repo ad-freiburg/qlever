@@ -498,24 +498,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   };
   auto visitGraphStore = [&request, &visitOperation, &requireValidAccessToken](
                              GraphStoreOperation operation) -> Awaitable<void> {
-    ParsedQuery parsedOperation =
+    std::vector<ParsedQuery> parsedOperations =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request);
 
-    if (parsedOperation.hasUpdateClause()) {
+    if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::all_of(parsedOperations, &ParsedQuery::hasUpdateClause));
       requireValidAccessToken("Update from Graph Store Protocol");
     }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
     auto trueFunc = [](const ParsedQuery&) { return true; };
-    std::string_view operationType =
-        parsedOperation.hasUpdateClause() ? "Update" : "Query";
-    std::string operationString = parsedOperation._originalString;
-    return visitOperation({std::move(parsedOperation)},
-                          absl::StrCat("Graph Store (", operationType, ")"),
-                          std::move(operationString), trueFunc,
-                          "Unused dummy message");
+    std::string operationString = parsedOperations[0]._originalString;
+    return visitOperation(
+        std::move(parsedOperations),
+        absl::StrCat("Graph Store (", string_view{request.method_string()},
+                     ")"),
+        std::move(operationString), trueFunc, "Unused dummy message");
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before

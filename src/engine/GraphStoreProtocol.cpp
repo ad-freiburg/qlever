@@ -4,7 +4,6 @@
 
 #include "engine/GraphStoreProtocol.h"
 
-#include "parser/SparqlParser.h"
 #include "parser/Tokenizer.h"
 #include "util/http/beast.h"
 
@@ -20,7 +19,7 @@ void GraphStoreProtocol::throwUnsupportedMediatype(
 }
 
 // ____________________________________________________________________________
-void GraphStoreProtocol::throwUnsupportedHTTPMethod(
+void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
     const std::string_view& method) {
   throw std::runtime_error(absl::StrCat(
       method,
@@ -77,4 +76,20 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
   return SparqlParser::parseQuery(query);
+}
+
+// ____________________________________________________________________________
+ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph) {
+  // Construct the parsed update from its short equivalent SPARQL Update string.
+  // This is easier and also provides e.g. the `_originalString` field.
+  std::string update;
+  if (const auto* iri =
+          std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+    update = absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
+  } else {
+    update = "DROP DEFAULT";
+  }
+  auto updates = SparqlParser::parseUpdate(update);
+  AD_CORRECTNESS_CHECK(updates.size() == 1);
+  return std::move(updates[0]);
 }

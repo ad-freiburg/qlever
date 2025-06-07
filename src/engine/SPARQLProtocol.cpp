@@ -152,6 +152,19 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
       "\" or a valid graph store protocol POST request)"));
 }
 
+ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
+    const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  if (!parsedRequestBuilder.isGraphStoreOperation()) {
+    throw std::runtime_error(
+        "Expecting a Graph Store Protocol request, but missing query "
+        "parameters \"graph\" or \"default\" in request");
+  }
+  parsedRequestBuilder.extractGraphStoreOperation();
+  return std::move(parsedRequestBuilder).build();
+}
+
 // ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
     const RequestType& request) {
@@ -161,10 +174,14 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
-  std::ostringstream requestMethodName;
-  requestMethodName << request.method();
+  if (request.method() == http::verb::put ||
+      request.method() == http::verb::delete_ ||
+      request.method() == http::verb::post ||
+      request.method_string() == "TSOP") {
+    return parseGraphStoreProtocol(request);
+  }
   throw std::runtime_error(absl::StrCat(
-      "Request method \"", requestMethodName.str(),
-      "\" not supported (only GET and POST are supported; PUT, DELETE, HEAD "
+      "Request method \"", string_view{request.method_string()},
+      "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; HEAD "
       "and PATCH for graph store protocol are not yet supported)"));
 }
