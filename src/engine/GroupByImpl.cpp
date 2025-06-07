@@ -397,7 +397,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
           std::array{std::pair{std::cref(subresult->idTable()),
                                std::cref(subresult->localVocab())}});
     } else {
-      return computeWithHashMap(std::move(subresult->idTables()));
+      return computeWithHashMap(subresult->idTables());
     }
   }
 

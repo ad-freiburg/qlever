@@ -216,7 +216,7 @@ TEST(Distinct, lazyWithLazyInputs) {
   auto m = matchesIdTable;
   using ::testing::ElementsAre;
   EXPECT_THAT(
-      toVector(std::move(result->idTables())),
+      toVector(result->idTables()),
       ElementsAre(
           m(makeIdTableFromVector({{1, 1, 3, 7}})),
           m(makeIdTableFromVector({{2, 2, 3, 5}, {3, 6, 5, 4}})),

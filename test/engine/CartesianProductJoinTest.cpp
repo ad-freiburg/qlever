@@ -466,7 +466,7 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
       {1, 11, 102, 1000, 10001, 100001},
   });
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 6);
+  auto materializedResult = aggregateTables(result.idTables(), 6);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -514,7 +514,7 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   fillWithVocabValue(2, 12);
   reference.insertAtEnd(bigTable);
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 4);
+  auto materializedResult = aggregateTables(result.idTables(), 4);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -591,7 +591,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 
@@ -614,7 +614,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 

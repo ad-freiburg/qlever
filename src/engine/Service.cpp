@@ -596,8 +596,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // result with subsequent calls to get(). Therefore, we do not need to
   // keep and pass an iterator to the sibling result if the max row threshold
   // is exceeded
-  auto generator =
-      moveToCachingInputRange(std::move(siblingResult->idTables()));
+  auto generator = moveToCachingInputRange(siblingResult->idTables());
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
   while (auto pairOpt = generator.get()) {

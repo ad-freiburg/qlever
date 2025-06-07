@@ -521,7 +521,7 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
 
     ASSERT_FALSE(result.isFullyMaterialized());
 
-    auto& lazyResult = result.idTables();
+    auto lazyResult = result.idTables();
     auto it = lazyResult.begin();
     ASSERT_NE(it, lazyResult.end());
 
@@ -551,7 +551,7 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
 
     ASSERT_FALSE(result.isFullyMaterialized());
 
-    auto& lazyResult = result.idTables();
+    auto lazyResult = result.idTables();
     auto it = lazyResult.begin();
     ASSERT_NE(it, lazyResult.end());
 

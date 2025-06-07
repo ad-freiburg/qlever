@@ -105,7 +105,7 @@ class TransitivePathTest
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
     if (requestLaziness()) {
       const auto& [idTable, localVocab] =
-          aggregateTables(std::move(result.idTables()), expected.numColumns());
+          aggregateTables(result.idTables(), expected.numColumns());
       EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
       EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));

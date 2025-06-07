@@ -2294,7 +2294,7 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto i = IntId;
 
   if (GetParam()) {
-    auto& generator = result.idTables();
+    auto generator = result.idTables();
 
     auto iterator = generator.begin();
     ASSERT_NE(iterator, generator.end());
