@@ -153,7 +153,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
     UpdateMetadata metadata;
-    return ExecuteUpdate::computeGraphUpdateQuads(qec->getIndex(), pq, qet,
+    auto result = qet.getResult(false);
+    return ExecuteUpdate::computeGraphUpdateQuads(qec->getIndex(), pq, *result,
+                                                  qet.getVariableColumns(),
                                                   sharedHandle, metadata);
   };
   auto expectComputeGraphUpdateQuads =

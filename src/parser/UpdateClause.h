@@ -12,12 +12,6 @@
 #include "parser/data/Types.h"
 
 namespace updateClause {
-struct Load {
-  bool silent_;
-  ad_utility::triple_component::Iri source_;
-  std::optional<GraphRef> target_;
-};
-
 struct Clear {
   bool silent_;
   GraphRefAll target_;
@@ -54,7 +48,7 @@ struct Copy {
 // A Graph Update is an Update operation that inserts or deletes some triples.
 // These triples can contain variables that are bound the result of the
 // ParsedQueries GraphPattern. This used for `INSERT DATA`, `DELETE DATA`,
-// `DELETE WHERE {...}` and `DELETE/INSERT {..} WHERE {...}`.
+// `DELETE WHERE {...}`, `DELETE/INSERT {..} WHERE {...}` and `LOAD`.
 struct GraphUpdate {
   std::vector<SparqlTripleSimpleWithGraph> toInsert_;
   std::vector<SparqlTripleSimpleWithGraph> toDelete_;
@@ -68,7 +62,7 @@ struct GraphUpdate {
 
 // All the available update operations.
 using Operation =
-    std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy>;
+    std::variant<GraphUpdate, Clear, Drop, Create, Add, Move, Copy>;
 }  // namespace updateClause
 
 namespace parsedQuery {

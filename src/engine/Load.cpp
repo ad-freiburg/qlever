@@ -21,7 +21,7 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
 // _____________________________________________________________________________
 string Load::getCacheKeyImpl() const {
   if (RuntimeParameters().get<"cache-load-results">()) {
-    return absl::StrCat("LOAD ", loadClause_.url_.asString(),
+    return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
                         loadClause_.silent_ ? " SILENT" : "");
   }
   return absl::StrCat("LOAD ", cacheBreaker_);
@@ -29,7 +29,7 @@ string Load::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 string Load::getDescriptor() const {
-  return absl::StrCat("LOAD ", loadClause_.url_.asString());
+  return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation());
 }
 
 // _____________________________________________________________________________
@@ -91,11 +91,11 @@ Result Load::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // TODO<qup42> implement lazy loading; requires modifications to the parser
-  LOG(INFO) << "Loading RDF dataset from " << loadClause_.url_.asString()
-            << std::endl;
-  HttpOrHttpsResponse response =
-      getResultFunction_(loadClause_.url_, cancellationHandle_,
-                         boost::beast::http::verb::get, "", "", "");
+  ad_utility::httpUtils::Url url{
+      asStringViewUnsafe(loadClause_.iri_.getContent())};
+  LOG(INFO) << "Loading RDF dataset from " << url.asString() << std::endl;
+  HttpOrHttpsResponse response = getResultFunction_(
+      url, cancellationHandle_, boost::beast::http::verb::get, "", "", "");
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -163,11 +163,17 @@ void Load::throwErrorWithContext(std::string_view msg,
                                  std::string_view first100,
                                  std::string_view last100) const {
   throw std::runtime_error(absl::StrCat(
-      "Error while executing a Load request to <", loadClause_.url_.asString(),
-      ">: ", msg, ". First 100 bytes of the response: '", first100,
+      "Error while executing a Load request to <",
+      loadClause_.iri_.toStringRepresentation(), ">: ", msg,
+      ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }
 
 // _____________________________________________________________________________
 bool Load::canResultBeCachedImpl() const { return loadResultCachingEnabled_; }
+
+// _____________________________________________________________________________
+void Load::resetGetResultFunctionForTesting(SendRequestType func) {
+  getResultFunction_ = std::move(func);
+}

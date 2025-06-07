@@ -716,6 +716,13 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+inline auto Load = [](const TripleComponent::Iri& iri,
+                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Load>(
+      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
+                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
+};
+
 inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
@@ -935,16 +942,6 @@ inline auto VisibleVariables =
 };
 
 using namespace updateClause;
-
-inline auto Load = [](bool silent,
-                      const ad_utility::triple_component::Iri& source,
-                      const std::optional<GraphRef>& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Load>(
-      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
-                     AD_FIELD(Load, source_, testing::Eq(source)),
-                     AD_FIELD(Load, target_, testing::Eq(target))));
-};
 
 inline auto Clear =
     [](bool silent,

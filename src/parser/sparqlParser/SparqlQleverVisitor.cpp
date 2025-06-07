@@ -598,12 +598,13 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  if (ctx->deleteWhere() || ctx->modify()) {
-    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify());
+  if (ctx->deleteWhere() || ctx->modify() || ctx->load()) {
+    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify(),
+                                         ctx->load());
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-        ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
-        ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+        ctx->clear(), ctx->drop(), ctx->create(), ctx->add(), ctx->move(),
+        ctx->copy(), ctx->insertData(), ctx->deleteData());
     parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   }
 
@@ -611,10 +612,29 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
 }
 
 // ____________________________________________________________________________________
-Load Visitor::visit(Parser::LoadContext* ctx) {
-  return Load{
-      static_cast<bool>(ctx->SILENT()), visit(ctx->iri()),
-      ctx->graphRef() ? visit(ctx->graphRef()) : std::optional<GraphRef>{}};
+ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  GraphPattern pattern;
+  auto iri = visit(ctx->iri());
+  // The `LOAD` Update operation is translated into something like
+  // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
+  // an internal operation that binds the result of parsing the given RDF
+  // document into the variables `?s`, `?p`, and `?o`.
+  pattern._graphPatterns.emplace_back(
+      parsedQuery::Load{iri, static_cast<bool>(ctx->SILENT())});
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  addVisibleVariable(Variable("?s"));
+  addVisibleVariable(Variable("?p"));
+  addVisibleVariable(Variable("?o"));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
+  using Quad = SparqlTripleSimpleWithGraph;
+  std::vector<Quad> toInsert{
+      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                           : Quad::Graph(std::monostate{})}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{toInsert, {}}};
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________

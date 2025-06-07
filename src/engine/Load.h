@@ -83,6 +83,10 @@ class Load final : public Operation {
   [[noreturn]] void throwErrorWithContext(
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
+
+ public:
+  // Allows overriding the `getResultFunction_` for testing purposes.
+  void resetGetResultFunctionForTesting(SendRequestType func);
 };
 
 #endif  // QLEVER_LOAD_H
