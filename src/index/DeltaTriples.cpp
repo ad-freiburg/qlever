@@ -35,8 +35,8 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(
-    CancellationHandle cancellationHandle,
-    ql::span<const IdTriple<0>> triples, bool insertOrDelete,
+    CancellationHandle cancellationHandle, ql::span<const IdTriple<0>> triples,
+    bool insertOrDelete,
     std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
         tracer) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>

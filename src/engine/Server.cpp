@@ -830,15 +830,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 }
 
 ordered_json Server::createResponseMetadataForUpdate(
-    const ad_utility::Timer& requestTimer, const Index& index,
-    SharedLocatedTriplesSnapshot snapshot, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet, const UpdateMetadata& updateMetadata,
-    const DeltaTriplesModifyTimings& timings,
+    const Index& index, SharedLocatedTriplesSnapshot snapshot,
+    const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+    const UpdateMetadata& updateMetadata,
     const ad_utility::timer::TimeTracer& tracer) {
-  auto formatTime = [](std::chrono::milliseconds time) {
-    return absl::StrCat(time.count(), "ms");
-  };
-
   ordered_json response;
   response["update"] = ad_utility::truncateOperationString(
       plannedQuery.parsedQuery_._originalString);
@@ -880,6 +875,7 @@ ordered_json Server::createResponseMetadataForUpdate(
   }
   return response;
 }
+
 // ____________________________________________________________________________
 UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
@@ -980,9 +976,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // successful update request is implementation defined."
   // TODO: display timings for all operations
   auto response = createResponseMetadataForUpdate(
-      requestTimer, index_, index_.deltaTriplesManager().getCurrentSnapshot(),
-      *plannedUpdate, plannedUpdate->queryExecutionTree_, updateMetadata[0],
-      timings[0], tracer);
+      index_, index_.deltaTriplesManager().getCurrentSnapshot(), *plannedUpdate,
+      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer);
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;

@@ -161,11 +161,9 @@ class Server {
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static ordered_json createResponseMetadataForUpdate(
-      const ad_utility::Timer& requestTimer, const Index& index,
-      SharedLocatedTriplesSnapshot deltaTriples,
+      const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
       const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesModifyTimings& timings,
       const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
