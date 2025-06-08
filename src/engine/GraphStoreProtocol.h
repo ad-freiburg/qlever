@@ -95,7 +95,7 @@ class GraphStoreProtocol {
                      ad_utility::truncateOperationString(rawRequest.body()));
     return res;
   }
-  FRIEND_TEST(GraphStoreProtocolTest, transformPost);
+  FRIEND_TEST(GraphStoreProtocolTest, transformPostAndTsop);
 
   // Transform a SPARQL Graph Store Protocol TSOP to an equivalent ParsedQuery
   // which is an SPARQL Update.
@@ -115,7 +115,6 @@ class GraphStoreProtocol {
                      ad_utility::truncateOperationString(rawRequest.body()));
     return res;
   }
-  FRIEND_TEST(GraphStoreProtocolTest, transformTsop);
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.
