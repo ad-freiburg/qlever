@@ -497,7 +497,8 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
   // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
-      testing::StrEq("Request method \"PATCH\" not supported (GET, POST, TSOP, "
+      testing::StrEq("Method Not Allowed: Request method \"PATCH\" not "
+                     "supported (GET, POST, TSOP, "
                      "PUT and DELETE are supported; HEAD and PATCH for graph "
                      "store protocol are not yet supported)"));
 }

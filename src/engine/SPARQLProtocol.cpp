@@ -4,6 +4,8 @@
 
 #include "engine/SPARQLProtocol.h"
 
+#include "engine/HttpError.h"
+
 using namespace ad_utility::url_parser::sparqlOperation;
 namespace http = boost::beast::http;
 
@@ -180,8 +182,10 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
       request.method_string() == "TSOP") {
     return parseGraphStoreProtocol(request);
   }
-  throw std::runtime_error(absl::StrCat(
-      "Request method \"", string_view{request.method_string()},
-      "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; HEAD "
-      "and PATCH for graph store protocol are not yet supported)"));
+  throw HttpError(
+      boost::beast::http::status::method_not_allowed,
+      absl::StrCat(
+          "Request method \"", string_view{request.method_string()},
+          "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
+          "HEAD and PATCH for graph store protocol are not yet supported)"));
 }

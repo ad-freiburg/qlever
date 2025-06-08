@@ -19,6 +19,7 @@
 #include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/HttpError.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SPARQLProtocol.h"
 #include "global/RuntimeParameters.h"
@@ -130,10 +131,20 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
+    std::optional<boost::beast::http::status> httpResponseStatus;
     try {
       co_await process(request, sendWithAccessControlHeaders);
+    } catch (const HttpError& e) {
+      httpResponseStatus = e.status();
+      exceptionErrorMsg = e.what();
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
+    }
+    if (httpResponseStatus && exceptionErrorMsg) {
+      auto response = createHttpResponseFromString(
+          exceptionErrorMsg.value(), httpResponseStatus.value(), request,
+          MediaType::textPlain);
+      co_return co_await sendWithAccessControlHeaders(std::move(response));
     }
     if (exceptionErrorMsg) {
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
@@ -743,7 +754,14 @@ CPP_template_def(typename RequestT)(
   std::string_view acceptHeader = request.base()[http::field::accept];
 
   if (!mediaType.has_value()) {
-    mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+    try {
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+    } catch (const std::exception& e) {
+      throw HttpError(http::status::not_acceptable, e.what());
+    }
+  }
+  if (!mediaType) {
+    throw HttpError(http::status::not_acceptable);
   }
   AD_CORRECTNESS_CHECK(mediaType.has_value());
 
@@ -1007,6 +1025,9 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   std::optional<ExceptionMetadata> metadata;
   try {
     co_return co_await std::visit(visitor, std::move(operation));
+  } catch (const HttpError& e) {
+    responseStatus = e.status();
+    exceptionErrorMsg = e.what();
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();

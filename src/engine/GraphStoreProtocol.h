@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -45,10 +46,16 @@ class GraphStoreProtocol {
       // If the mediatype is not given, return an error.
       // Note: The specs also allow to try to determine the media type from the
       // content.
-      throw UnknownMediatypeError("Mediatype empty or not set.");
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      "Mediatype empty or not set.");
     }
-    const auto mediatype =
-        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    std::optional<ad_utility::MediaType> mediatype;
+    try {
+      mediatype = ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    } catch (const std::exception& e) {
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      e.what());
+    }
     // A media type is set but not one of the supported ones as per the QLever
     // MediaType code.
     if (!mediatype.has_value()) {
