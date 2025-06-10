@@ -595,6 +595,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   serializer << textIndexIndices_;
   textLiteralsIndexFile = std::move(serializer).file();
   textLiteralsIndexFile.close();
+  textIndexIndices_.clear();
 
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
