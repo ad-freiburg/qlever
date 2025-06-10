@@ -30,6 +30,15 @@ constexpr inline uint64_t bitMaskForHigherBits(uint64_t numBits) {
   return ~bitMaskForLowerBits(64 - numBits);
 }
 
+// A constexpr function to determine how many bits are required in order to
+// represent an unsigned integer with a given maximum value (inclusive).
+constexpr int bitMaskSizeForValue(uint64_t maxValue) {
+  if (maxValue == 0) {
+    return 0;
+  }
+  return bitMaskSizeForValue(maxValue >> 1) + 1;
+}
+
 namespace detail {
 
 // Return any value, the type of which is the smallest unsigned integer type

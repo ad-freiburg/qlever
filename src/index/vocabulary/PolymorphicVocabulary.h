@@ -11,6 +11,7 @@
 #include <variant>
 
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -36,8 +37,10 @@ class PolymorphicVocabulary {
   using OnDiskUncompressed = VocabularyInternalExternal;
   using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
   using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
-  using Variant = std::variant<InMemoryUncompressed, OnDiskUncompressed,
-                               OnDiskCompressed, InMemoryCompressed>;
+  using OnDiskCompressedGeoSplit = SplitGeoVocabulary<OnDiskCompressed>;
+  using Variant =
+      std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
+                   InMemoryCompressed, OnDiskCompressedGeoSplit>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;

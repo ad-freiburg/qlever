@@ -14,10 +14,10 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
   using SortLevel = Index::Vocab::SortLevel;
-  positionInVocab.lowerBound_ =
-      vocab.lower_bound(toStringRepresentation(), SortLevel::TOTAL);
-  positionInVocab.upperBound_ =
-      vocab.upper_bound(toStringRepresentation(), SortLevel::TOTAL);
+  auto [lower, upper] =
+      vocab.getPositionOfWord(toStringRepresentation(), SortLevel::TOTAL);
+  positionInVocab.lowerBound_ = lower;
+  positionInVocab.upperBound_ = upper;
   AD_CORRECTNESS_CHECK(positionInVocab.upperBound_.get() -
                            positionInVocab.lowerBound_.get() <=
                        1);
