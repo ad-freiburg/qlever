@@ -331,7 +331,7 @@ TEST(Serializer, ManyTrivialDatatypes) {
 
 TEST(Serializer, StringAndHashMap) {
   auto testFunction = [](auto&& writer, auto makeReaderFromWriter) {
-    ad_utility::HashMap<string, int> m;
+    ad_utility::HashMap<std::string, int> m;
     m["hallo"] = 42;
     m["tschüss"] = 84;
 
@@ -342,7 +342,7 @@ TEST(Serializer, StringAndHashMap) {
     writer | m;
 
     auto reader = makeReaderFromWriter();
-    ad_utility::HashMap<string, int> n;
+    ad_utility::HashMap<std::string, int> n;
     reader | n;
     ASSERT_EQ(m, n);
   };

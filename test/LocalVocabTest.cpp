@@ -3,11 +3,11 @@
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <sstream>
 #include <string>
 
+#include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
@@ -44,6 +44,11 @@ TestWords getTestCollectionOfWords(size_t size) {
         LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)));
   }
   return testCollectionOfWords;
+}
+
+// _____________________________________________________________________________
+auto lit(std::string_view s) {
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(s);
 }
 }  // namespace
 
@@ -209,7 +214,10 @@ TEST(LocalVocab, propagation) {
   // not `const`.
   auto checkLocalVocab =
       [&](Operation& operation,
-          const std::vector<std::string>& expectedWordsAsStrings) -> void {
+          const std::vector<std::string>& expectedWordsAsStrings,
+          ad_utility::source_location loc =
+              ad_utility::source_location::current()) -> void {
+    auto t = generateLocationTrace(loc);
     TestWords expectedWords;
     auto toLitOrIri = [](const auto& word) {
       using namespace ad_utility::triple_component;
@@ -331,12 +339,16 @@ TEST(LocalVocab, propagation) {
                 separator),
             "GROUP_CONCAT"};
   };
+  Values values1b(
+      testQec, {{Variable{"?x"}, Variable{"?y"}},
+                {{TripleComponent{lit("xN1")}, TripleComponent{lit("yN1")}},
+                 {TripleComponent{lit("xN1")}, TripleComponent{lit("yN2")}}}});
   GroupBy groupBy(
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
-      qet(values1));
-  checkLocalVocab(
-      groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>", "yN1|yN2"});
+      qet(values1b));
+  checkLocalVocab(groupBy,
+                  std::vector<std::string>{"xN1", "yN1", "yN2", "yN1|yN2"});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
