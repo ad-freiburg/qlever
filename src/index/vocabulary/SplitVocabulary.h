@@ -47,7 +47,9 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
         sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
-  // vocabularies.
+  // vocabularies. Note that this limit is very large and there should not be a
+  // need for this many vocabularies. Two or three should suffice for reasonable
+  // use cases.
   static_assert(sizeof...(UnderlyingVocabularies) >= 2 &&
                 sizeof...(UnderlyingVocabularies) <= 255);
   static constexpr uint8_t numberOfVocabs =
@@ -156,8 +158,6 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   // Perform a search for upper or lower bound on the underlying vocabulary
   // given by the marker parameter. By default this is the "main" vocabulary
   // (first).
-  // Note: This function needs to be declared in the header to avoid linker
-  // problems.
   template <typename InternalStringType, typename Comparator,
             bool getUpperBound>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
