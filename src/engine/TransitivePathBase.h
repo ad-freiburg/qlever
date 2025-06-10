@@ -84,17 +84,17 @@ struct NodeWithTargets {
   Id node_;
   Set targets_;
   LocalVocab localVocab_;
-  const IdTable* idTable_;
+  std::optional<IdTableView<0>> idTable_;
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  const IdTable* idTable, size_t row)
+                  std::optional<IdTableView<0>> idTable, size_t row)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
-        idTable_{idTable},
+        idTable_{std::move(idTable)},
         row_{row} {}
 };
 
@@ -244,7 +244,7 @@ class TransitivePathBase : public Operation {
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
                                           size_t targetSideCol, bool yieldOnce,
-                                          size_t skipCol = 0) const;
+                                          size_t skipCol) const;
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // of the subjects or objects in the knowledge graph, so if the graph does not

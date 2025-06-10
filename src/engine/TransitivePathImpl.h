@@ -19,15 +19,17 @@ namespace detail {
 // the correct lifetime).
 template <typename ColumnType>
 struct TableColumnWithVocab {
-  const IdTable* table_;
+  std::optional<IdTableView<0>> table_;
   ColumnType column_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(const IdTable* table, ColumnType column,
+  TableColumnWithVocab(std::optional<IdTableView<0>> table, ColumnType column,
                        LocalVocab vocab)
-      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {}
+      : table_{std::move(table)},
+        column_{std::move(column)},
+        vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
 
@@ -71,7 +73,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
     // constant overhead, which should be safe to ignore.
-    runtimeInfo().addDetail("Initialization time", timer.msecs().count());
+    runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
@@ -112,7 +114,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
-    detail::TableColumnWithVocab<const Set&> tableInfo{nullptr, nodes,
+    detail::TableColumnWithVocab<const Set&> tableInfo{std::nullopt, nodes,
                                                        LocalVocab{}};
 
     NodeGenerator hull =
@@ -176,9 +178,8 @@ class TransitivePathImpl : public TransitivePathBase {
   Set findConnectedNodes(const T& edges, Id startNode,
                          const std::optional<Id>& target) const {
     std::vector<std::pair<Id, size_t>> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{
-        getExecutionContext()->getAllocator()};
-    Set connectedNodes{getExecutionContext()->getAllocator()};
+    ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
+    Set connectedNodes{allocator()};
     stack.emplace_back(startNode, 0);
 
     while (!stack.empty()) {
@@ -313,14 +314,15 @@ class TransitivePathImpl : public TransitivePathBase {
       // Bound -> var|id
       ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
           startSide.treeAndCol_.value().second);
-      co_yield TableColumnWithVocab{&startSideResult->idTable(), startNodes,
-                                    startSideResult->getCopyOfLocalVocab()};
+      co_yield TableColumnWithVocab{
+          startSideResult->idTable().asStaticView<0>(), startNodes,
+          startSideResult->getCopyOfLocalVocab()};
     } else {
       for (auto& [idTable, localVocab] : startSideResult->idTables()) {
         // Bound -> var|id
         ql::span<const Id> startNodes =
             idTable.getColumn(startSide.treeAndCol_.value().second);
-        co_yield TableColumnWithVocab{&idTable, startNodes,
+        co_yield TableColumnWithVocab{idTable.asStaticView<0>(), startNodes,
                                       std::move(localVocab)};
       }
     }
