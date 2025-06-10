@@ -104,8 +104,7 @@ class GroupByTest : public ::testing::Test {
     _index.createFromFiles(
         {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
     TextIndexBuilder textIndexBuilder{ad_utility::makeUnlimitedAllocator<Id>(),
-                                      _index.getOnDiskBase(),
-                                      _index.getTextIndexIndices()};
+                                      _index.getOnDiskBase()};
     textIndexBuilder.buildTextIndexFile(
         std::pair<std::string, std::string>{"group_by_test.words",
                                             "group_by_test.documents"},

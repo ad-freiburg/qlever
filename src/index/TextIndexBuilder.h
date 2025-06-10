@@ -12,10 +12,12 @@
 class TextIndexBuilder : public IndexImpl {
  public:
   explicit TextIndexBuilder(ad_utility::AllocatorWithLimit<Id> allocator,
-                            const std::string& onDiskBase,
-                            const vector<uint64_t>& literalsToAdd)
-      : IndexImpl(allocator), textIndexIndicesRef_(literalsToAdd) {
+                            const std::string& onDiskBase)
+      : IndexImpl(allocator) {
     setOnDiskBase(onDiskBase);
+    ad_utility::serialization::FileReadSerializer reader{
+        onDiskBase_ + TEXT_INDEX_LITERAL_IDS};
+    reader >> textIndexIndices_;
   }
 
   // Adds a text index to a complete KB index. Reads words from the given
@@ -34,8 +36,6 @@ class TextIndexBuilder : public IndexImpl {
   void buildDocsDB(const string& docsFile) const;
 
  private:
-  const vector<uint64_t>& textIndexIndicesRef_;
-
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
 

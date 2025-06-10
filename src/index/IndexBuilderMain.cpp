@@ -333,9 +333,8 @@ int main(int argc, char** argv) {
           "text index. If none are given the option to add words from literals "
           "has to be true. For details see --help."));
     }
-    auto textIndexBuilder =
-        TextIndexBuilder(ad_utility::makeUnlimitedAllocator<Id>(),
-                         index.getOnDiskBase(), index.getTextIndexIndices());
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
 
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
       textIndexBuilder.buildTextIndexFile(

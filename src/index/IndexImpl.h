@@ -134,7 +134,7 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
-  vector<uint64_t> textIndexIndices_;
+  vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
 
@@ -419,7 +419,7 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  const vector<uint64_t>& getTextIndexIndices() const {
+  const vector<TextLiteralsIndex>& getTextIndexIndices() const {
     return textIndexIndices_;
   };
 

@@ -587,6 +587,15 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
+
+  ad_utility::File textLiteralsIndexFile(onDiskBase_ + TEXT_INDEX_LITERAL_IDS,
+                                         "w");
+  ad_utility::serialization::FileWriteSerializer serializer{
+      std::move(textLiteralsIndexFile)};
+  serializer << textIndexIndices_;
+  textLiteralsIndexFile = std::move(serializer).file();
+  textLiteralsIndexFile.close();
+
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
