@@ -118,14 +118,14 @@ class CartesianProductJoin : public Operation {
   // `lastTableOffset` is the offset of the last table in the range. This is
   // used to handle `IdTable`s yielded by generators where the range of indices
   // they represent do not cover the whole result.
-  CPP_template(typename R)(requires ql::ranges::range<R>) Result::Generator
+  CPP_template(typename R)(requires ql::ranges::range<R>) Result::LazyResult
       produceTablesLazily(LocalVocab mergedVocab, R idTables, size_t offset,
                           size_t limit, size_t lastTableOffset = 0) const;
 
   // Similar to `produceTablesLazily` but can handle a single lazy result.
-  Result::Generator createLazyConsumer(
+  Result::LazyResult createLazyConsumer(
       LocalVocab staticMergedVocab,
-      std::vector<std::shared_ptr<const Result>> subresults,
+      ql::span<const std::shared_ptr<const Result>> subresults,
       std::shared_ptr<const Result> lazyResult) const;
 };
 
