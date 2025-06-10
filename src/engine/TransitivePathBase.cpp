@@ -179,7 +179,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         bool yieldOnce) const {
   return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
     return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
-                                           targetSideCol, yieldOnce);
+                                           targetSideCol, yieldOnce, 0);
   });
 }
 
@@ -201,7 +201,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       table.reserve(linkedNodes.size());
     }
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable != nullptr) {
+    if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
     for (Id linkedNode : linkedNodes) {
