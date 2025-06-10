@@ -3,25 +3,22 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
+
+#include <absl/strings/str_join.h>
 
 #include <cstdio>
 #include <future>
 #include <numeric>
 #include <optional>
-#include <unordered_map>
 
 #include "CompilationInfo.h"
-#include "Index.h"
-#include "absl/strings/str_join.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
+#include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
