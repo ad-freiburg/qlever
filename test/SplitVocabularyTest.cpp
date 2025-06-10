@@ -18,7 +18,7 @@ using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
-// TODO<ullingerc> Readd ItemAt and SplitWordWriter tests after integration of
+// TODO<ullingerc> Re-add ItemAt and SplitWordWriter tests after integration of
 // SplitVocabulary in Vocabulary
 
 TEST(Vocabulary, SplitGeoVocab) {
