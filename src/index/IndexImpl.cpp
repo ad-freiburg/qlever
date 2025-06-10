@@ -571,14 +571,32 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     };
     auto wordCallbackPtr = vocab_.makeWordWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     auto& wordCallback = *wordCallbackPtr;
+    auto extendedCallback = [&](string_view word, bool external,
+                                bool inTextIndex) {
+      const auto idx = wordCallback(word, external);
+      if (inTextIndex) {
+        textIndexIndices_.push_back(idx);
+      }
+      return idx;
+    };
     wordCallback.readableName() = "internal vocabulary";
     auto mergedVocabMeta = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, wordCallback,
+        onDiskBase_, numFiles, sortPred, extendedCallback,
         memoryLimitIndexBuilding());
     wordCallback.finish();
     return mergedVocabMeta;
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
+
+  ad_utility::File textLiteralsIndexFile(onDiskBase_ + TEXT_INDEX_LITERAL_IDS,
+                                         "w");
+  ad_utility::serialization::FileWriteSerializer serializer{
+      std::move(textLiteralsIndexFile)};
+  serializer << textIndexIndices_;
+  textLiteralsIndexFile = std::move(serializer).file();
+  textLiteralsIndexFile.close();
+  textIndexIndices_.clear();
+
   IndexBuilderDataAsExternalVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
@@ -1230,6 +1248,11 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+
+    // Here changes can be made whether literals should be in the text index
+    if (vocab_.stringIsLiteral(iriOrLiteral.toString())) {
+      component.inTextIndex_ = true;
+    }
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }
