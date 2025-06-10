@@ -47,7 +47,9 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
         sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
-  // vocabularies.
+  // vocabularies. Note that this limit is very large and there should not be a
+  // need for this many vocabularies. Two or three should suffice for reasonable
+  // use cases.
   static_assert(sizeof...(UnderlyingVocabularies) >= 2 &&
                 sizeof...(UnderlyingVocabularies) <= 255);
   static constexpr uint8_t numberOfVocabs =
