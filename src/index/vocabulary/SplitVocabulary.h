@@ -156,8 +156,6 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   // Perform a search for upper or lower bound on the underlying vocabulary
   // given by the marker parameter. By default this is the "main" vocabulary
   // (first).
-  // Note: This function needs to be declared in the header to avoid linker
-  // problems.
   template <typename InternalStringType, typename Comparator,
             bool getUpperBound>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
