@@ -70,13 +70,10 @@ struct TransitivePathSide {
   }
 };
 
-// We deliberately use the `std::` variants of a hash set and hash map because
-// `absl`s types are not exception safe.
+// We deliberately use the `std::` variants of a hash set because `absl`s types
+// are not exception safe.
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-using Map = std::unordered_map<
-    Id, Set, absl::Hash<Id>, std::equal_to<Id>,
-    ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
@@ -228,11 +225,6 @@ class TransitivePathBase : public Operation {
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
                           size_t inputRow, size_t outputRow, size_t skipCol);
-
-  // A small helper function: Insert the `value` to the set at `map[key]`.
-  // As the sets all have an allocator with memory limit, this construction is a
-  // little bit more involved, so this can be a separate helper function.
-  void insertIntoMap(Map& map, Id key, Id value) const;
 
  public:
   std::string getDescriptor() const override;

@@ -556,12 +556,6 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
-  auto [it, success] = map.try_emplace(key, allocator());
-  it->second.insert(value);
-}
-
-// _____________________________________________________________________________
 bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
