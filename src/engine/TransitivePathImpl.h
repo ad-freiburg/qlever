@@ -106,19 +106,14 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto nodesWithDuplicates =
-        setupNodes(sub->idTable(), startSide, targetSide, edges);
-    Set nodesWithoutDuplicates{allocator()};
-    for (const auto& span : nodesWithDuplicates) {
-      nodesWithoutDuplicates.insert(span.begin(), span.end());
-    }
+    auto nodes = setupNodes(sub->idTable(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
-    detail::TableColumnWithVocab<const Set&> tableInfo{
-        nullptr, nodesWithoutDuplicates, LocalVocab{}};
+    detail::TableColumnWithVocab<const Set&> tableInfo{nullptr, nodes,
+                                                       LocalVocab{}};
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(),
@@ -273,39 +268,31 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @param sub The sub table result
    * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::vector<ql::span<const Id>> An vector of spans of (nodes)
-   * for the transitive hull computation
+   * @param edges Templated datastructure representing the edges of the graph
+   * @return Set A set of starting nodes for the transitive hull computation
    */
-  std::vector<ql::span<const Id>> setupNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide, const T& edges) const {
-    std::vector<ql::span<const Id>> result;
-
-    // id -> var|id
-    if (!startSide.isVariable()) {
-      AD_CORRECTNESS_CHECK(minDist_ != 0,
-                           "If minDist_ is 0 with a hardcoded side, we should "
-                           "call the overload for a bound transitive path.");
-      LocalVocab helperVocab;
-      Id startId = TripleComponent{startSide.value_}.toValueId(
-          _executionContext->getIndex().getVocab(), helperVocab);
-      // Make sure we retrieve the Id from an IndexScan, so we don't have to
-      // pass this LocalVocab around. If it's not present then no result needs
-      // to be returned anyways.
-      if (const Id* id = edges.getEquivalentId(startId)) {
-        result.emplace_back(id, 1);
-      }
-      // var -> var
-    } else {
-      ql::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
-      result.emplace_back(startNodes);
-      if (minDist_ == 0) {
-        ql::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
-        result.emplace_back(targetNodes);
-      }
+  Set setupNodes(const IdTable& sub, const TransitivePathSide& startSide,
+                 const T& edges) const {
+    AD_CORRECTNESS_CHECK(minDist_ != 0,
+                         "If minDist_ is 0 with a hardcoded side, we should "
+                         "call the overload for a bound transitive path.");
+    Set result{allocator()};
+    // var -> var
+    if (startSide.isVariable()) {
+      auto col = sub.getColumn(startSide.subCol_);
+      result.insert(col.begin(), col.end());
+      return result;
     }
-
+    // id -> var|id
+    LocalVocab helperVocab;
+    Id startId = TripleComponent{startSide.value_}.toValueId(
+        _executionContext->getIndex().getVocab(), helperVocab);
+    // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
+    // this LocalVocab around. If it's not present then no result needs to be
+    // returned anyways.
+    if (const Id* id = edges.getEquivalentId(startId)) {
+      result.insert(*id);
+    }
     return result;
   }
 
