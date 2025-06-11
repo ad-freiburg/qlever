@@ -15,6 +15,7 @@
 
 #include "backports/algorithm.h"
 #include "index/FTSAlgorithms.h"
+#include "index/SortedIdTableMerge.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
@@ -86,8 +87,8 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
 
-  IdTable output = mergeIdTables(textIndexReadWrite::readWordCl,
-                                 optionalTbmd.value(), allocator);
+  IdTable output = mergeTextBlockResults(textIndexReadWrite::readWordCl,
+                                         optionalTbmd.value(), allocator);
 
   LOG(DEBUG) << "Word postings for term: " << term
              << ": cids: " << output.getColumn(0).size() << '\n';
@@ -102,27 +103,15 @@ IdTable IndexImpl::getEntityMentionsForWord(
   if (!optTbmd.has_value()) {
     return IdTable{allocator};
   }
-  return mergeIdTables(textIndexReadWrite::readWordEntityCl, optTbmd.value(),
-                       allocator);
+  return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl,
+                               optTbmd.value(), allocator);
 }
 
 // _____________________________________________________________________________
 template <typename Reader>
-IdTable IndexImpl::mergeIdTables(
+IdTable IndexImpl::mergeTextBlockResults(
     Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  std::vector<cppcoro::generator<columnBasedIdTable::Row<ValueId>>> generators;
-  auto makeGenerator = [](const IdTable& table)
-      -> cppcoro::generator<columnBasedIdTable::Row<ValueId>> {
-    for (auto it = table.begin(); it != table.end(); ++it) {
-      co_yield *it;
-    }
-  };
-
-  auto sizeGetter = [](const columnBasedIdTable::Row<ValueId>& row) {
-    return ad_utility::MemorySize::bytes(sizeof(row));
-  };
-
   // Sort by TextRecordId then WordId and then score.
   auto rowComparator = [](const columnBasedIdTable::Row<ValueId>& a,
                           const columnBasedIdTable::Row<ValueId>& b) {
@@ -139,6 +128,7 @@ IdTable IndexImpl::mergeIdTables(
     return true;
   };
 
+  // Collect all blocks as IdTables
   vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
     IdTable partialResult{allocator};
@@ -150,24 +140,9 @@ IdTable IndexImpl::mergeIdTables(
     }
     partialResults.push_back(std::move(partialResult));
   }
-
-  generators.reserve(partialResults.size());
-  for (const auto& partialResult : partialResults) {
-    generators.push_back(makeGenerator(partialResult));
-  }
-
-  // Merge
-  auto mergedRows =
-      ad_utility::parallelMultiwayMerge<columnBasedIdTable::Row<ValueId>, true,
-                                        decltype(sizeGetter)>(
-          memoryLimitIndexBuilding(), std::move(generators), rowComparator);
-  IdTable output{allocator};
-  output.setNumColumns(3);
-
-  for (const auto& row : ql::views::join(mergedRows)) {
-    output.push_back(row);
-  }
-  return output;
+  return SortedIdTableMerge::mergeIdTables(std::move(partialResults), allocator,
+                                           rowComparator,
+                                           memoryLimitIndexBuilding());
 }
 
 // _____________________________________________________________________________

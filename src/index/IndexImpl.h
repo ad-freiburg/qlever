@@ -576,7 +576,7 @@ class IndexImpl {
   getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
 
   template <typename Reader>
-  IdTable mergeIdTables(
+  IdTable mergeTextBlockResults(
       Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
