@@ -13,7 +13,7 @@
 #include "util/Log.h"
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN, class... S)(
+CPP_template(typename SF, typename SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
         SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::
     readFromFile(const string& filename) {
@@ -37,7 +37,7 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
   };
 
   // Make filenames and read each underlying vocabulary
-  auto vocabFilenames = SFN(filename);
+  auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { readSingle(vocab, vocabFilenames[i]); },
                underlying_[i]);
@@ -45,12 +45,12 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
 }
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN, class... S)(
+CPP_template(typename SF, typename SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
         SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN,
                                                  S...>::open(const string&
                                                                  filename) {
-  auto vocabFilenames = SFN(filename);
+  auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },
                underlying_[i]);
@@ -58,14 +58,14 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
 }
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN,
+CPP_template(typename SF, typename SFN,
              class... S)(requires SplitFunctionT<SF> CPP_and
                              SplitFilenameFunctionT<SFN, sizeof...(S)>)
     SplitVocabulary<SF, SFN, S...>::WordWriter::WordWriter(
         const UnderlyingVocabsArray& underlyingVocabularies,
         const std::string& filename) {
   // Init all underlying word writers
-  auto vocabFilenames = SFN(filename);
+  auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     underlyingWordWriters_[i] = std::visit(
         [&](auto& vocab) -> AnyUnderlyingWordWriterPtr {
@@ -76,7 +76,7 @@ CPP_template(const auto& SF, const auto& SFN,
 };
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN,
+CPP_template(typename SF, typename SFN,
              class... S)(requires SplitFunctionT<SF> CPP_and
                              SplitFilenameFunctionT<SFN, sizeof...(S)>) uint64_t
     SplitVocabulary<SF, SFN, S...>::WordWriter::operator()(
@@ -84,13 +84,13 @@ CPP_template(const auto& SF, const auto& SFN,
   // The word will be stored in the vocabulary selected by the split
   // function. Therefore the word's index needs the marker bit(s) set
   // accordingly.
-  auto splitIdx = SF(word);
+  auto splitIdx = splitFunction_(word);
   return addMarker((*underlyingWordWriters_[splitIdx])(word, isExternal),
                    splitIdx);
 }
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN, class... S)(
+CPP_template(typename SF, typename SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
         SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::WordWriter::
     finishImpl() {
@@ -100,7 +100,7 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
 }
 
 // _____________________________________________________________________________
-CPP_template(const auto& SF, const auto& SFN, class... S)(
+CPP_template(typename SF, typename SFN, class... S)(
     requires SplitFunctionT<SF> CPP_and SplitFilenameFunctionT<
         SFN, sizeof...(S)>) void SplitVocabulary<SF, SFN, S...>::close() {
   for (auto& vocab : underlying_) {
@@ -110,8 +110,9 @@ CPP_template(const auto& SF, const auto& SFN, class... S)(
 
 // Explicit template instantiations
 template class SplitVocabulary<
-    geoSplitFunc, geoFilenameFunc,
+    decltype(geoSplitFunc), decltype(geoFilenameFunc),
     CompressedVocabulary<VocabularyInternalExternal>,
     CompressedVocabulary<VocabularyInternalExternal>>;
-template class SplitVocabulary<geoSplitFunc, geoFilenameFunc,
-                               VocabularyInMemory, VocabularyInMemory>;
+template class SplitVocabulary<decltype(geoSplitFunc),
+                               decltype(geoFilenameFunc), VocabularyInMemory,
+                               VocabularyInMemory>;
