@@ -80,9 +80,8 @@ class TransitivePathImpl : public TransitivePathBase {
                        targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(
-        std::move(hull), startSide.outputCol_, targetSide.outputCol_,
-        startSide.treeAndCol_.value().second, yieldOnce,
-        startSide.treeAndCol_.value().first->getResultWidth());
+        std::move(hull), startSide.outputCol_, targetSide.outputCol_, yieldOnce,
+        startSide.treeAndCol_.value().first->getResultWidth() - 1);
 
     // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
@@ -310,20 +309,25 @@ class TransitivePathImpl : public TransitivePathBase {
   static cppcoro::generator<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
+    ColumnIndex joinColumn = startSide.treeAndCol_.value().second;
+    size_t cols = startSide.treeAndCol_.value().first->getResultWidth();
+    std::vector<ColumnIndex> columnsWithoutJoinColumn =
+        computeColumnsWithoutJoinColumn(joinColumn, cols);
     if (startSideResult->isFullyMaterialized()) {
       // Bound -> var|id
-      ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
-          startSide.treeAndCol_.value().second);
+      ql::span<const Id> startNodes =
+          startSideResult->idTable().getColumn(joinColumn);
       co_yield TableColumnWithVocab{
-          startSideResult->idTable().asStaticView<0>(), startNodes,
-          startSideResult->getCopyOfLocalVocab()};
+          startSideResult->idTable().asColumnSubsetView(
+              columnsWithoutJoinColumn),
+          startNodes, startSideResult->getCopyOfLocalVocab()};
     } else {
       for (auto& [idTable, localVocab] : startSideResult->idTables()) {
         // Bound -> var|id
-        ql::span<const Id> startNodes =
-            idTable.getColumn(startSide.treeAndCol_.value().second);
-        co_yield TableColumnWithVocab{idTable.asStaticView<0>(), startNodes,
-                                      std::move(localVocab)};
+        ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
+        co_yield TableColumnWithVocab{
+            idTable.asColumnSubsetView(columnsWithoutJoinColumn), startNodes,
+            std::move(localVocab)};
       }
     }
   }
@@ -331,6 +335,23 @@ class TransitivePathImpl : public TransitivePathBase {
   virtual T setupEdgesMap(const IdTable& dynSub,
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
+
+ private:
+  // Helper function to filter the join column to not add it twice to the
+  // result.
+  static std::vector<ColumnIndex> computeColumnsWithoutJoinColumn(
+      ColumnIndex joinColumn, size_t totalColumns) {
+    std::vector<ColumnIndex> columnsWithoutJoinColumn;
+    AD_CORRECTNESS_CHECK(totalColumns > 0);
+    columnsWithoutJoinColumn.reserve(totalColumns - 1);
+    for (ColumnIndex i = 0; i < totalColumns; ++i) {
+      if (i == joinColumn) {
+        continue;
+      }
+      columnsWithoutJoinColumn.push_back(i);
+    }
+    return columnsWithoutJoinColumn;
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
