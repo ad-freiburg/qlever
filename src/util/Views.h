@@ -15,6 +15,7 @@
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/ResetWhenMoved.h"
 
 namespace ad_utility {
 
