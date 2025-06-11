@@ -72,3 +72,11 @@ void PolymorphicVocabulary::resetToType(VocabularyType type) {
       AD_FAIL();
   }
 }
+
+// // Explicit template instantiations
+template class SplitVocabulary<
+    geoSplitFunc, geoFilenameFunc,
+    CompressedVocabulary<VocabularyInternalExternal>,
+    CompressedVocabulary<VocabularyInternalExternal>>;
+template class SplitVocabulary<geoSplitFunc, geoFilenameFunc,
+                               VocabularyInMemory, VocabularyInMemory>;
