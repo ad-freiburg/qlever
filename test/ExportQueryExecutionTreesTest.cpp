@@ -458,25 +458,29 @@ TEST(ExportQueryExecutionTrees, Bool) {
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 4, 4,
       // TSV
       "<s>\t<p>\tfalse\n"
-      "<s2>\t<p2>\t0\n"
+      "<s2>\t<p2>\t\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n"
       "<s>\t<p>\ttrue\n"
-      "<s2>\t<p2>\t1\n",
+      "<s2>\t<p2>\t\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n",
       // CSV
       "<s>,<p>,false\n"
-      "<s2>,<p2>,0\n"
+      "<s2>,<p2>,\"\"\"0\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n"
       "<s>,<p>,true\n"
-      "<s2>,<p2>,1\n",
+      "<s2>,<p2>,\"\"\"1\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n",
       // Turtle
       "<s> <p> false .\n"
-      "<s2> <p2> 0 .\n"
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
       "<s> <p> true .\n"
-      "<s2> <p2> 1 .\n",
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
-        j.push_back(std::vector{"<s2>"s, "<p2>"s, "0"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "true"s});
-        j.push_back(std::vector{"<s2>"s, "<p2>"s, "1"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
