@@ -140,18 +140,12 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
  *        file.
  * @param out The file to write to.
  * @param postings The vector of postings to write.
- * @param skipWordlistIfAllTheSame If true, the wordlist is not written to file.
- *                                 This can be done because the WordIndex for
- *                                 the first and last word in a block are saved
- *                                 in the TextBlockMetaData. Always should be
- *                                 false for the entity postings.
  * @param currentOffset The current offset in the file which gets passed by
  *                      reference because it gets updated.
  *
  */
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
-                                  bool skipWordlistIfAllTheSame,
                                   off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>

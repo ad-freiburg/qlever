@@ -267,6 +267,50 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
             h::getScoreFromResultTable(qec, scoreResultBM25, 7, true, false));
 }
 
+TEST(TextIndexScanForWord, WordScanShortPrefix) {
+  auto qec = getQecWithTextIndex();
+
+  TextIndexScanForWord s1{qec, Variable{"?text1"}, "a*"};
+  // Test if size calculations are right
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 10);
+
+  // Check if word and text are correctly retrieved
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomer"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 0),
+                               h::getWordFromResultTable(qec, result, 0)));
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomy"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 1),
+                               h::getWordFromResultTable(qec, result, 1)));
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomer"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 2),
+                               h::getWordFromResultTable(qec, result, 2)));
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomy"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 3),
+                               h::getWordFromResultTable(qec, result, 3)));
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomy"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 4),
+                               h::getWordFromResultTable(qec, result, 4)));
+  ASSERT_EQ(h::combineToString(firstDocText, "astronomy"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 5),
+                               h::getWordFromResultTable(qec, result, 5)));
+  ASSERT_EQ(h::combineToString(secondDocText, "although"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 6),
+                               h::getWordFromResultTable(qec, result, 6)));
+  ASSERT_EQ(h::combineToString(secondDocText, "astronomer"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 7),
+                               h::getWordFromResultTable(qec, result, 7)));
+  ASSERT_EQ(h::combineToString(secondDocText, "although"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 8),
+                               h::getWordFromResultTable(qec, result, 8)));
+  ASSERT_EQ(h::combineToString(secondDocText, "astronomer"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 9),
+                               h::getWordFromResultTable(qec, result, 9)));
+}
+
 TEST(TextIndexScanForWord, WordScanBasic) {
   auto qec = getQecWithTextIndex();
 

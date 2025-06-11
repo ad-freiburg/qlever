@@ -37,14 +37,14 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
 
   // Use the info to retrieve an index.
   vector<std::reference_wrapper<const TextBlockMetaData>> output;
-  size_t index;
+  size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
+  assert(lower >= _blocks[index]._firstWordId);
   while (it <= upperIt && it != _blockUpperBoundWordIds.end()) {
     index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
-    assert(lower <= _blocks[index]._lastWordId);
-    assert(lower >= _blocks[index]._firstWordId);
     output.push_back(std::cref(_blocks[index]));
     ++it;
   }
+  assert(lower <= _blocks[index]._lastWordId);
   return output;
 }
 
