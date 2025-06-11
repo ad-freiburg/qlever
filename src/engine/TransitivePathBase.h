@@ -195,15 +195,13 @@ class TransitivePathBase : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param skipCol This column contains the Ids of the start side in the
-   * startSideTable and will be skipped.
    * @param yieldOnce If true, the generator will yield only a single time.
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, size_t skipCol,
-                                      bool yieldOnce, size_t inputWidth) const;
+                                      size_t targetSideCol, bool yieldOnce,
+                                      size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -224,7 +222,7 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow, size_t skipCol);
+                          size_t inputRow, size_t outputRow);
 
  public:
   std::string getDescriptor() const override;
@@ -243,8 +241,8 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
-                                          size_t targetSideCol, bool yieldOnce,
-                                          size_t skipCol) const;
+                                          size_t targetSideCol,
+                                          bool yieldOnce) const;
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // of the subjects or objects in the knowledge graph, so if the graph does not
