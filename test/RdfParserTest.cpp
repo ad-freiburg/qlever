@@ -723,9 +723,9 @@ TEST(RdfParserTest, booleanLiteralLongForm) {
     ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
     ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
     ruleChecker("\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-                Id::makeFromBinaryBool(true));
+                Id::makeBoolFromZeroOrOne(true));
     ruleChecker("\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-                Id::makeFromBinaryBool(false));
+                Id::makeBoolFromZeroOrOne(false));
     EXPECT_THROW(
         ruleChecker("\"maybe\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
                     Id::makeUndefined()),

@@ -262,9 +262,9 @@ class ValueId {
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
-  /// Create a `ValueId` for a boolean value, represented as 0/1 instead of
-  /// false/true.
-  static constexpr ValueId makeFromBinaryBool(bool b) noexcept {
+  /// Create a `ValueId` for a boolean value, represented as "0" or "1" instead
+  /// of "false" or "true".
+  static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
     auto bits = static_cast<T>(b);
     bits |= static_cast<T>(true) << 1;
     return addDatatypeBits(bits, Datatype::Bool);
@@ -275,10 +275,12 @@ class ValueId {
     return static_cast<bool>(removeDatatypeBits(_bits) & 1);
   }
 
-  // Obtain the boolean value as a string view.
+  // Obtain the boolean value as a string view. In particular, return either
+  // `true`, `false`, `0` , or `1`, depending on whether the value was created
+  // via `makeFromBool` or `makeBoolFromZeroOrOne` (see above).
   std::string_view getBoolLiteral() const noexcept {
     bool value = getBool();
-    if (removeDatatypeBits(_bits) & 0b10) {
+    if (_bits & 0b10) {
       return value ? "1" : "0";
     }
     return value ? "true" : "false";

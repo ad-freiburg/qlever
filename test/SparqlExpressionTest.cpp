@@ -610,8 +610,8 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
   checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
            IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
-  checkStr(Ids{B(true), B(false), Id::makeFromBinaryBool(true),
-               Id::makeFromBinaryBool(false)},
+  checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
+               Id::makeBoolFromZeroOrOne(false)},
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
                                lit("false")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},

@@ -540,9 +540,9 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       } else if (normalizedLiteralContent == "false") {
         lastParseResult_ = false;
       } else if (normalizedLiteralContent == "1") {
-        lastParseResult_ = Id::makeFromBinaryBool(true);
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(true);
       } else if (normalizedLiteralContent == "0") {
-        lastParseResult_ = Id::makeFromBinaryBool(false);
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(false);
       } else {
         raiseOrIgnoreTriple(absl::StrCat("Invalid boolean literal: '",
                                          normalizedLiteralContent, "'"));

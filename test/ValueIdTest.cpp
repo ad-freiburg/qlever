@@ -108,14 +108,14 @@ TEST_F(ValueIdTest, makeFromInt) {
 
 // _____________________________________________________________________________
 TEST_F(ValueIdTest, makeFromBool) {
-  EXPECT_TRUE(ValueId::makeFromBinaryBool(true).getBool());
+  EXPECT_TRUE(ValueId::makeBoolFromZeroOrOne(true).getBool());
   EXPECT_TRUE(ValueId::makeFromBool(true).getBool());
-  EXPECT_FALSE(ValueId::makeFromBinaryBool(false).getBool());
+  EXPECT_FALSE(ValueId::makeBoolFromZeroOrOne(false).getBool());
   EXPECT_FALSE(ValueId::makeFromBool(false).getBool());
 
-  EXPECT_EQ(ValueId::makeFromBinaryBool(true).getBoolLiteral(), "1");
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral(), "1");
   EXPECT_EQ(ValueId::makeFromBool(true).getBoolLiteral(), "true");
-  EXPECT_EQ(ValueId::makeFromBinaryBool(false).getBoolLiteral(), "0");
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(false).getBoolLiteral(), "0");
   EXPECT_EQ(ValueId::makeFromBool(false).getBoolLiteral(), "false");
 }
 
@@ -359,8 +359,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
-  test(ValueId::makeFromBinaryBool(false), "B:false");
-  test(ValueId::makeFromBinaryBool(true), "B:true");
+  test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
+  test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
   auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
