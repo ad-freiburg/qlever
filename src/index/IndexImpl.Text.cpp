@@ -112,22 +112,6 @@ template <typename Reader>
 IdTable IndexImpl::mergeTextBlockResults(
     Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  // Sort by TextRecordId then WordId and then score.
-  auto rowComparator = [](const columnBasedIdTable::Row<ValueId>& a,
-                          const columnBasedIdTable::Row<ValueId>& b) {
-    if (a.size() != b.size()) {
-      throw std::runtime_error{"Row sizes differ"};
-    };
-    for (auto it1 = a.begin(), it2 = b.begin(); it1 != a.end(); ++it1, ++it2) {
-      if (it1->getBits() < it2->getBits()) {
-        return true;
-      } else if (it1->getBits() > it2->getBits()) {
-        return false;
-      }
-    }
-    return true;
-  };
-
   // Collect all blocks as IdTables
   vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
@@ -141,7 +125,6 @@ IdTable IndexImpl::mergeTextBlockResults(
     partialResults.push_back(std::move(partialResult));
   }
   return SortedIdTableMerge::mergeIdTables(std::move(partialResults), allocator,
-                                           rowComparator,
                                            memoryLimitIndexBuilding());
 }
 
