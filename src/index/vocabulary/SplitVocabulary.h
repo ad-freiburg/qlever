@@ -40,11 +40,12 @@ CPP_concept SplitFilenameFunctionT =
 // well as a SplitFunction that decides which underlying vocabulary is used for
 // each word and a SplitFilenameFunction that assigns filenames to underlying
 // vocabularies.
-CPP_template(typename SplitFunction, typename SplitFilenameFunction,
-             class... UnderlyingVocabularies)(
-    requires SplitFunctionT<SplitFunction> CPP_and SplitFilenameFunctionT<
-        SplitFilenameFunction,
-        sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
+template <typename SplitFunction, typename SplitFilenameFunction,
+          class... UnderlyingVocabularies>
+requires SplitFunctionT<SplitFunction> &&
+         SplitFilenameFunctionT<SplitFilenameFunction,
+                                sizeof...(UnderlyingVocabularies)>
+class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
   // vocabularies. Note that this limit is very large and there should not be a
