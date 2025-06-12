@@ -826,8 +826,8 @@ inline auto datasetClausesMatcher(
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(Property(&DS::defaultGraphs, Eq(defaultGraphs)),
-               Property(&DS::namedGraphs, Eq(namedGraphs)));
+  return AllOf(AD_PROPERTY(DS, defaultGraphs, Eq(defaultGraphs)),
+               AD_PROPERTY(DS, namedGraphs, Eq(namedGraphs)));
 }
 
 inline auto SelectQuery =
