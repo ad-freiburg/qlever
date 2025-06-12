@@ -571,7 +571,7 @@ queries:
   - query : optional-spouse-group-concat
     type: no-text
     sparql: |
-      SELECT ?x (GROUP_CONCAT(?y; separator=";") AS ?partners) WHERE {
+      SELECT ?x (GROUP_CONCAT(COALESCE(STR(?y), ""); separator=";") AS ?partners) WHERE {
           FILTER (?x < <Ada_Lovelace>)
           ?x <is-a> <Scientist> .
           OPTIONAL {?x <Spouse_(or_domestic_partner)> ?y .}

@@ -673,8 +673,7 @@ class CompressedRelationReader {
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-      const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  public:
   // For a given relation, determine the `col1Id`s and their counts. This is

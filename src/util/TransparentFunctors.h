@@ -5,10 +5,10 @@
 #ifndef QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 #define QLEVER_SRC_UTIL_TRANSPARENTFUNCTORS_H
 
-#include <util/Forward.h>
-#include <util/TypeTraits.h>
-
 #include <utility>
+
+#include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Contains several function object types with templated operator() that wrap
 // overloaded functions from the standard library. This enables passing them as
