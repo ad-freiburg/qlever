@@ -776,12 +776,18 @@ auto QueryPlanner::seedWithScansAndText(
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-      // TODO<joka921, ullingec> Add the following assertion:
-      // Either the _idsOfIncludedFilters and ...textLimits of the plan are all
-      // `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for which we
-      // have special handling).
-      // newIdPlan._idsOfIncludedFilters = 0;
-      // newIdPlan.idsOfIncludedTextLimits_ = 0;
+
+      // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
+      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
+      // which we have special handling).
+      AD_CORRECTNESS_CHECK((newIdPlan._idsOfIncludedFilters == 0 &&
+                            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
+                           newIdPlan.type == SubtreePlan::Type::OPTIONAL ||
+                           newIdPlan.type == SubtreePlan::Type::MINUS ||
+                           (newIdPlan.type == SubtreePlan::Type::BASIC &&
+                            std::dynamic_pointer_cast<Bind>(
+                                newIdPlan._qet->getRootOperation())));
+
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
