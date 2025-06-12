@@ -168,6 +168,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
       },
       sv.getUnderlyingVocabulary(1));
   EXPECT_ANY_THROW(sv.getUnderlyingVocabulary(2));
+
+  sv.close();
 }
 
 // _____________________________________________________________________________
