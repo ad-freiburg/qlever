@@ -781,7 +781,7 @@ auto QueryPlanner::seedWithScansAndText(
       // `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for which we
       // have special handling).
       // newIdPlan._idsOfIncludedFilters = 0;
-      //       newIdPlan.idsOfIncludedTextLimits_ = 0;
+      // newIdPlan.idsOfIncludedTextLimits_ = 0;
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
@@ -1162,8 +1162,9 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-vector<SubtreePlan> QueryPlanner::merge(const vector<SubtreePlan>& a,
-                                        const vector<SubtreePlan>& b) const {
+vector<SubtreePlan> QueryPlanner::merge(
+    const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
+    const QueryPlanner::TripleGraph& tg) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -1176,7 +1177,7 @@ vector<SubtreePlan> QueryPlanner::merge(const vector<SubtreePlan>& a,
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      for (auto& plan : createJoinCandidates(ai, bj)) {
+      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
@@ -1462,7 +1463,7 @@ std::vector<SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
-    const TextLimitVec& textLimits) const {
+    const TextLimitVec& textLimits, const TripleGraph& tg) const {
   vector<vector<SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
@@ -1478,7 +1479,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
-      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1]);
+      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible<false>(dpTab.back(), filters);
       applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
@@ -1569,7 +1570,7 @@ size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
 std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
-    const TextLimitVec& textLimits) const {
+    const TextLimitVec& textLimits, const TripleGraph& tg) const {
   applyFiltersIfPossible<true>(connectedComponent, filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds = findUniqueNodeIds(connectedComponent);
@@ -1592,7 +1593,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // reinforces the above pre-/postconditions. Exception: if `isFirstStep` then
   // `cache` and `nextResult` must be empty, and the first step of greedy
   // planning is performed, which also establishes the pre-/postconditions.
-  auto greedyStep = [this, &filters, &textLimits,
+  auto greedyStep = [this, &tg, &filters, &textLimits,
                      currentPlans = std::move(connectedComponent),
                      cache = Plans{}](Plans& nextBestPlan,
                                       bool isFirstStep) mutable {
@@ -1601,8 +1602,8 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     // in the cache, so we only have to add the combinations between
     // `currentPlans` and `nextResult`. In the first step, we need to initially
     // compute all possible combinations.
-    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans)
-                                : merge(currentPlans, nextBestPlan);
+    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
+                                : merge(currentPlans, nextBestPlan, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
@@ -1705,7 +1706,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
     lastDpRowFromComponents.push_back(
         std::invoke(impl, this, std::move(component), filtersAndOptSubstitutes,
-                    textLimitVec));
+                    textLimitVec, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -2069,16 +2070,35 @@ size_t QueryPlanner::findSmallestExecutionTree(
 
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
-    const SubtreePlan& ain, const SubtreePlan& bin) const {
+    const SubtreePlan& ain, const SubtreePlan& bin,
+    boost::optional<const TripleGraph&> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
 
   // If plans overlap in what they calculate, they should not be joined.
+  // JoinColumns jcs;
+  // if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
+  //   jcs = getJoinColumns(a, b);
+  // }
+
+  // TODO<ullingerc>
+  // ______
+  std::vector<SubtreePlan> candidates;
+
+  // TODO<joka921> find out, what is ACTUALLY the use case for the triple
+  // graph. Is it only meant for (questionable) performance reasons
+  // or does it change the meaning.
   JoinColumns jcs;
-  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
-    jcs = getJoinColumns(a, b);
+  if (tg) {
+    if (connected(a, b, *tg)) {
+      jcs = getJoinColumns(a, b);
+    }
+  } else {
+    if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
+      jcs = getJoinColumns(a, b);
+    }
   }
 
   return createJoinCandidates(ain, bin, jcs);
@@ -2746,7 +2766,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     for (auto& b : candidates) {
       a._idsOfIncludedNodes = 1;
       b._idsOfIncludedNodes = 2;
-      auto vec = planner_.createJoinCandidates(a, b);
+      auto vec = planner_.createJoinCandidates(a, b, boost::none);
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
       }

@@ -361,12 +361,14 @@ class QueryPlanner {
    * the result of a plan in a and a plan in b.
    */
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
-                            const vector<SubtreePlan>& b) const;
+                            const vector<SubtreePlan>& b,
+                            const TripleGraph& tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
-  std::vector<SubtreePlan> createJoinCandidates(const SubtreePlan& a,
-                                                const SubtreePlan& b) const;
+  std::vector<SubtreePlan> createJoinCandidates(
+      const SubtreePlan& a, const SubtreePlan& b,
+      boost::optional<const TripleGraph&> tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.
@@ -531,7 +533,7 @@ class QueryPlanner {
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
@@ -539,7 +541,7 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
-      const TextLimitVec& textLimits) const;
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
