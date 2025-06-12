@@ -8,6 +8,7 @@
 #include <fstream>
 #include <future>
 #include <iostream>
+#include <optional>
 #include <queue>
 #include <string>
 #include <unordered_set>
@@ -23,6 +24,7 @@
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
@@ -63,25 +65,38 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  std::vector<cppcoro::generator<QueueWord>> generators;
-
-  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
-    uint64_t numWords;
-    infile >> numWords;
-    TripleComponentWithIndex val;
-    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
-      infile >> val;
-      QueueWord word{std::move(val), fileIdx};
-      co_yield word;
+  struct QueueWordGenerator : ad_utility::InputRangeFromGet<QueueWord> {
+    QueueWordGenerator(const size_t fileIdx, const std::string& basename)
+        : infile{absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)},
+          fileIdx{fileIdx} {
+      infile >> numWords;
     }
+
+    std::optional<QueueWord> get() {
+      if (i < numWords) {
+        infile >> val;
+        ++i;
+        QueueWord word{std::move(val), fileIdx};
+        return word;
+      }
+
+      return std::nullopt;
+    }
+
+    ad_utility::serialization::FileReadSerializer infile;
+    uint64_t numWords;
+    uint64_t i{0};
+    const std::size_t fileIdx;
+    TripleComponentWithIndex val;
   };
+
+  std::vector<ad_utility::InputRangeTypeErased<QueueWord>> generators;
 
   // Open and prepare all infiles and mmap output vectors.
   generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
-    generators.push_back(makeGenerator(i));
+    generators.push_back(ad_utility::InputRangeTypeErased<QueueWord>{
+        QueueWordGenerator{i, basename}});
     idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
@@ -328,10 +343,9 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
+          ql::ranges::transform(
+              singleMap.map_, els.begin() + offsets[i],
+              [](auto& el) -> T { return {el.first, std::move(el.second)}; });
         }));
     ++i;
   }
