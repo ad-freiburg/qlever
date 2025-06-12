@@ -482,7 +482,18 @@ class Operation {
   // children.
   // So unless you implement an operation that consumes a column from its child
   // and just adds arbitrary values to this column, this implementation is never
-  // wrong, just potentially inefficient.
+  // wrong, just potentially inefficientand assumes that variables that are
+  // newly created always contain values that are not from the knowledge graph
+  // (e.g. `BIND` with an arbitrary function). Variables that are also contained
+  // in at least one of the children are assumed to originate from the knowledge
+  // graph if this is true for the same variable in all the children that define
+  // this variable).
+  // Therefore, this function has to be overridden by classes that modify
+  // variables of their children in an arbitrary way (currently we can think of
+  // no such operation) and should be overridden (for efficiency reasons) in
+  // operations, that only pass on variables from some of their children (e.g.
+  // the variables on the right hand side of a MINUS operation never become part
+  // of the result).
   virtual bool columnOriginatesFromGraph(const Variable& variable) const;
 
  private:

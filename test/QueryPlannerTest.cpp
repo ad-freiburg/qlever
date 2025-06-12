@@ -4341,7 +4341,7 @@ TEST(QueryPlanner, emptyPathWithJoinOptimizationAndUndefFilter) {
                            h::IndexScanFromStrings(
                                "?internal_property_path_variable_z",
                                "?internal_property_path_variable_y", "?var"))),
-              h::Sort(h::Filter("?var != UNDEF",
+              h::Sort(h::Filter("BOUND(?var)",
                                 h::ValuesClause("VALUES (?var) { (UNDEF) }")))),
           h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));

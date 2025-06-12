@@ -242,6 +242,9 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
 bool ExistsJoin::columnOriginatesFromGraph(const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   if (variable == existsVariable_) {
+    // NOTE: We could in theory check if the literals true and false are
+    // contained in the knowledge graph, but that would makes things more
+    // complicated for almost no benefit.
     return false;
   }
   return left_->getRootOperation()->columnOriginatesFromGraph(variable);

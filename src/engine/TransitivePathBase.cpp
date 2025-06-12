@@ -22,7 +22,7 @@
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -431,11 +431,8 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
     using namespace sparqlExpression;
     SparqlExpressionPimpl pimpl{
-        std::make_shared<NotEqualExpression>(
-            std::array<SparqlExpression::Ptr, 2>{
-                std::make_unique<VariableExpression>(originalVar),
-                std::make_unique<IdExpression>(Id::makeUndefined())}),
-        absl::StrCat(originalVar.name(), " != UNDEF")};
+        makeBoundExpression(std::make_unique<VariableExpression>(originalVar)),
+        absl::StrCat("BOUND(", originalVar.name(), ")")};
     leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
         getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
     AD_CORRECTNESS_CHECK(
