@@ -159,7 +159,7 @@ TEST(Describe, simpleMembers) {
 
   // Test the cache key of the same query, but with a FROM clause.
   auto parsedDescribe2 = parsedDescribe;
-  parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(
+  parsedDescribe2.datasetClauses_.defaultGraphsMutable().emplace(
       {TripleComponent::Iri::fromIriref("<default-graph-1>")});
   Describe describe2{
       qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),

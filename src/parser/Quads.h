@@ -37,8 +37,7 @@ struct Quads {
 
   // Return the quads in a format for use as an update template.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
-      bool isDelete, const SparqlTripleSimpleWithGraph::Graph& withGraph,
-      const parsedQuery::DatasetClauses& activeDatasetClauses) const;
+      const SparqlTripleSimpleWithGraph::Graph& withGraph) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;

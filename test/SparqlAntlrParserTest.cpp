@@ -2044,10 +2044,8 @@ TEST(SparqlParser, Exists) {
 
   // Now run the same tests, but with non-empty dataset clauses, that have to be
   // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
-  ParsedQuery::DatasetClauses datasetClauses;
-  datasetClauses.defaultGraphs_ = defaultGraphs;
-  datasetClauses.namedGraphs_ = namedGraphs;
-  datasetClauses.defaultGraphs_.value().insert(iri("<blubb>"));
+  ParsedQuery::DatasetClauses datasetClauses{defaultGraphs, namedGraphs};
+  datasetClauses.defaultGraphsMutable().value().insert(iri("<blubb>"));
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     m::Exists(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",

@@ -26,8 +26,7 @@ static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
 
 // ____________________________________________________________________________________
 std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
-    bool isDelete, const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
-    const parsedQuery::DatasetClauses& activeDatasets) const {
+    const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const {
   std::vector<SparqlTripleSimpleWithGraph> quads;
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,

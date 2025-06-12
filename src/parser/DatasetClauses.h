@@ -27,6 +27,11 @@ struct DatasetClauses {
   // as needed for a `DatasetClauses` object.
   static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
 
+  DatasetClauses(Graphs defaultGraphs = std::nullopt,
+                 Graphs namedGraphs = std::nullopt)
+      : defaultGraphs_{std::move(defaultGraphs)},
+        namedGraphs_{std::move(namedGraphs)} {}
+
   bool unspecified() const {
     return (defaultGraphSpecifiedUsingWith_ || !defaultGraphs_.has_value()) &&
            !namedGraphs_.has_value();

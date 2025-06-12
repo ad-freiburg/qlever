@@ -826,8 +826,8 @@ inline auto datasetClausesMatcher(
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
-               Field(&DS::namedGraphs_, Eq(namedGraphs)));
+  return AllOf(Property(&DS::defaultGraphs, Eq(defaultGraphs)),
+               Property(&DS::namedGraphs, Eq(namedGraphs)));
 }
 
 inline auto SelectQuery =
@@ -999,20 +999,18 @@ inline auto Copy = [](bool silent, const GraphOrDefault& source,
 
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
-       const std::optional<ad_utility::triple_component::Iri>& with)
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
     -> Matcher<const updateClause::Operation&> {
   return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete))));
 };
 
 inline auto EmptyDatasets = [] {
-  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
-                        testing::Eq(std::nullopt)),
-               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
-                        testing::Eq(std::nullopt)));
+  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, defaultGraphs,
+                           testing::Eq(std::nullopt)),
+               AD_PROPERTY(ParsedQuery::DatasetClauses, namedGraphs,
+                           testing::Eq(std::nullopt)));
 };
 
 using Graphs = ad_utility::HashSet<TripleComponent>;
