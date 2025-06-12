@@ -1,6 +1,7 @@
 // Copyright 2022 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_SERVICE_H
 #define QLEVER_SRC_ENGINE_SERVICE_H
@@ -31,13 +32,6 @@
 //
 class Service : public Operation {
  public:
-  // The type of the function used to obtain the results, see below.
-  using GetResultFunction = std::function<HttpOrHttpsResponse(
-      const ad_utility::httpUtils::Url&,
-      ad_utility::SharedCancellationHandle handle,
-      const boost::beast::http::verb&, std::string_view, std::string_view,
-      std::string_view)>;
-
   // Information on a Sibling operation.
   struct SiblingInfo {
     std::shared_ptr<const Result> precomputedResult_;
@@ -50,7 +44,7 @@ class Service : public Operation {
   parsedQuery::Service parsedServiceClause_;
 
   // The function used to obtain the result from the remote endpoint.
-  GetResultFunction getResultFunction_;
+  SendRequestType getResultFunction_;
 
   // Optional sibling information to be used in `getSiblingValuesClause`.
   std::optional<SiblingInfo> siblingInfo_;
@@ -70,7 +64,7 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest);
+          SendRequestType getResultFunction = sendHttpOrHttpsRequest);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -160,13 +154,13 @@ class Service : public Operation {
 
   // Compute the result lazy as IdTable generator.
   // If the `singleIdTable` flag is set, the result is yielded as one idTable.
-  Result::Generator computeResultLazily(
+  Result::LazyResult computeResultLazily(
       const std::vector<std::string> vars,
       ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 
   FRIEND_TEST(ServiceTest, computeResult);
   FRIEND_TEST(ServiceTest, computeResultWrapSubqueriesWithSibling);
-  FRIEND_TEST(ServiceTest, getCacheKey);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };
 

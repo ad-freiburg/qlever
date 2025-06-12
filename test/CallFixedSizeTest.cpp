@@ -10,9 +10,11 @@ using namespace ad_utility;
 TEST(CallFixedSize, callLambdaForIntArray) {
   using namespace ad_utility::detail;
 
-  auto returnIPlusArgs = []<int I>(int arg1 = 0, int arg2 = 0) {
-    return I + arg1 + arg2;
-  };
+  auto returnIPlusArgs = ad_utility::ApplyAsValueIdentity{
+      [](auto valueIdentityI, int arg1 = 0, int arg2 = 0) {
+        static constexpr int I = valueIdentityI.value;
+        return I + arg1 + arg2;
+      }};
 
   static constexpr int maxValue = 242;
   for (int i = 0; i <= maxValue; ++i) {
@@ -28,9 +30,14 @@ TEST(CallFixedSize, callLambdaForIntArray) {
   }
 
   // Check for an array of size > 1
-  auto returnIJKPlusArgs = []<int I, int J, int K>(int arg1 = 0, int arg2 = 0) {
-    return I + J + K + arg1 + arg2;
-  };
+  auto returnIJKPlusArgs = ad_utility::ApplyAsValueIdentity{
+      [](auto valueIdentityI, auto valueIdentityJ, auto valueIdentityK,
+         int arg1 = 0, int arg2 = 0) {
+        static constexpr int I = valueIdentityI.value;
+        static constexpr int J = valueIdentityJ.value;
+        static constexpr int K = valueIdentityK.value;
+        return I + J + K + arg1 + arg2;
+      }};
   static constexpr int maxValue3 = 5;
   for (int i = 0; i <= maxValue3; ++i) {
     for (int j = 0; j <= maxValue3; ++j) {
@@ -61,7 +68,10 @@ namespace oneVar {
 
 // A simple lambda that has one explicit template parameter of type `int`
 // and can thus be used with `callFixedSize`.
-auto lambda = []<int I>(int arg1 = 0, int arg2 = 0) { return I + arg1 + arg2; };
+auto lambda = [](auto valueIdentityI, int arg1 = 0, int arg2 = 0) {
+  static constexpr int I = valueIdentityI.value;
+  return I + arg1 + arg2;
+};
 
 // A plain function templated on integer arguments to demonstrate the usage
 // of the `CALL_FIXED_SIZE` macro. Note that here we have to state all the
@@ -92,8 +102,8 @@ TEST(CallFixedSize, CallFixedSize1) {
   // static constexpr int m = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE;
   auto testWithGivenUpperBound = [](auto m, bool useMacro) {
     for (int i = 0; i <= m; ++i) {
-      ASSERT_EQ(callFixedSize<m>(i, lambda), i);
-      ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), i + 5);
+      ASSERT_EQ(callFixedSizeVi<m>(i, lambda), i);
+      ASSERT_EQ(callFixedSizeVi<m>(i, lambda, 2, 3), i + 5);
       if (useMacro) {
         ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), i + 5);
         S s;
@@ -105,8 +115,8 @@ TEST(CallFixedSize, CallFixedSize1) {
     // Values that are greater than `m` will be mapped to zero before being
     // passed to the actual function.
     for (int i = m + 1; i <= m + m + 1; ++i) {
-      ASSERT_EQ(callFixedSize<m>(i, lambda), 0);
-      ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), 5);
+      ASSERT_EQ(callFixedSizeVi<m>(i, lambda), 0);
+      ASSERT_EQ(callFixedSizeVi<m>(i, lambda, 2, 3), 5);
       if (useMacro) {
         ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), 5);
         S s;
@@ -130,7 +140,10 @@ namespace twoVars {
 // The same types of functions as above in the `oneVar` namespace, but these
 // versions take two integer template parameters.
 
-auto lambda = []<int I, int J>(int arg1 = 0, int arg2 = 0) {
+auto lambda = [](auto valueIdentityI, auto valueIdentityJ, int arg1 = 0,
+                 int arg2 = 0) {
+  static constexpr int I = valueIdentityI.value;
+  static constexpr int J = valueIdentityJ.value;
   return I - J + arg1 + arg2;
 };
 
@@ -163,8 +176,8 @@ TEST(CallFixedSize, CallFixedSize2) {
     // For given values for the template parameters I and J, and the result
     // I - J perform a set of tests.
     auto testForIAndJ = [&](auto array, auto resultOfIJ) {
-      ASSERT_EQ(callFixedSize<m>(array, lambda), resultOfIJ);
-      ASSERT_EQ(callFixedSize<m>(array, lambda, 2, 3), resultOfIJ + 5);
+      ASSERT_EQ(callFixedSizeVi<m>(array, lambda), resultOfIJ);
+      ASSERT_EQ(callFixedSizeVi<m>(array, lambda, 2, 3), resultOfIJ + 5);
       if (useMacro) {
         ASSERT_EQ(CALL_FIXED_SIZE(array, freeFunction, 2, 3), resultOfIJ + 5);
         S s;

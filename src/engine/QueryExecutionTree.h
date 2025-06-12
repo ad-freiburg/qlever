@@ -214,12 +214,14 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+  bool supportsLimit() const {
+    return getRootOperation()->supportsLimitOffset();
+  }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    getRootOperation()->setLimit(limitOffsetClause);
+  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
     cacheKey_ = getRootOperation()->getCacheKey();
@@ -264,9 +266,9 @@ namespace ad_utility {
 // Create a `QueryExecutionTree` with `Operation` at the root.
 // The `Operation` is created using `qec` and `args...` as constructor
 // arguments.
-template <typename Operation>
+template <typename Operation, typename... Args>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
+    QueryExecutionContext* qec, Args&&... args) {
   return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }

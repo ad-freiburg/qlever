@@ -12,9 +12,11 @@
 
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryRewriteUtils.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
+#include "parser/data/Types.h"
 
 class QueryPlanner {
   using TextLimitMap =
@@ -57,13 +59,13 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_.s_)) {
+        if (triple_.s_.isVariable()) {
           _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_.iri_});
+        if (auto predicate = triple_.getPredicateVariable()) {
+          _variables.insert(predicate.value());
         }
-        if (isVariable(triple_.o_)) {
+        if (triple_.o_.isVariable()) {
           _variables.insert(triple_.o_.getVariable());
         }
         if (graphVariable.has_value()) {
@@ -164,8 +166,19 @@ class QueryPlanner {
     size_t getSizeEstimate() const;
   };
 
+  // This struct represents a single SPARQL FILTER. Additionally, it has the
+  // option to also store a subtree plan, which is semantically equivalent to
+  // the filter, but might be cheaper to compute. This is currently used to
+  // rewrite FILTERs on geof: functions to spatial join operations.
+  struct FilterAndOptionalSubstitute {
+    SparqlFilter filter_;
+    std::optional<SubtreePlan> substitute_;
+
+    bool hasSubstitute() const { return substitute_.has_value(); }
+  };
+
   using FiltersAndOptionalSubstitutes =
-      std::vector<std::pair<SparqlFilter, std::optional<SubtreePlan>>>;
+      std::vector<FilterAndOptionalSubstitute>;
 
   // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
@@ -275,16 +288,16 @@ class QueryPlanner {
                               const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanTwoVarsCase(const SparqlTripleSimple& triple,
                             const AddedIndexScanFunction& addIndexScan,
-                            const auto& addFilter);
+                            const AddedFilter& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddedFilter>
   void indexScanThreeVarsCase(const SparqlTripleSimple& triple,
                               const AddedIndexScanFunction& addIndexScan,
-                              const auto& addFilter);
+                              const AddedFilter& addFilter);
 
   /**
    * @brief Fills children with all operations that are associated with a single
@@ -330,9 +343,10 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
-                                               const PropertyPath& path,
-                                               const TripleComponent& right);
+  static ParsedQuery::GraphPattern seedFromVarOrIri(
+      const TripleComponent& left,
+      const ad_utility::sparql_types::VarOrIri& varOrIri,
+      const TripleComponent& right);
 
   Variable generateUniqueVarName();
 
@@ -569,10 +583,18 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
+    // We remember the potential filter substitutions so we can avoid
+    // unnecessarily recomputing them.
+    FiltersAndOptionalSubstitutes filtersAndSubst_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
+        : planner_{planner},
+          rootPattern_{rootPattern},
+          qec_{planner._qec},
+          filtersAndSubst_{
+              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
@@ -597,8 +619,9 @@ class QueryPlanner {
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.
+    template <typename Variables>
     bool handleUnconnectedMinusOrOptional(std::vector<SubtreePlan>& candidates,
-                                          const auto& variables);
+                                          const Variables& variables);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
@@ -617,7 +640,8 @@ class QueryPlanner {
     void optimizeCommutatively();
 
     // Find a single best candidate for a given graph pattern.
-    SubtreePlan optimizeSingle(const auto& pattern) {
+    template <typename Pattern>
+    SubtreePlan optimizeSingle(const Pattern& pattern) {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);

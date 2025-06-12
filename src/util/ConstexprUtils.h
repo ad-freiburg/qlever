@@ -15,6 +15,7 @@
 #include "util/Forward.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
+#include "util/ValueIdentity.h"
 
 // Various helper functions for compile-time programming.
 
@@ -25,7 +26,8 @@ namespace ad_utility {
 // library should be chosen.
 // TODO<joka921> why can't this be consteval when the result is bound to a
 // `constexpr` variable?
-constexpr auto pow(auto base, int exponent) {
+template <typename T>
+constexpr auto pow(T base, int exponent) {
   if (exponent < 0) {
     throw std::runtime_error{"negative exponent"};
   }
@@ -52,6 +54,16 @@ template <typename Function, size_t... ForLoopIndexes>
 void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
                       const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
+}
+
+/*
+ * @brief A compile time for loop, similar to ConstexprForLoop, but wrapping
+ * loop body in `ApplyAsValueIdentity`.
+ */
+template <typename Function, size_t... ForLoopIndexes>
+void ConstexprForLoopVi(const std::index_sequence<ForLoopIndexes...>&,
+                        const Function& loopBody) {
+  ((ApplyAsValueIdentity{loopBody}.template operator()<ForLoopIndexes>()), ...);
 }
 
 template <typename Func, typename CaseConstant, typename... ArgTypes>
@@ -111,12 +123,23 @@ struct ConstexprSwitch {
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
-                   [&function, &value]<size_t Index>() {
-                     if (Index == value) {
-                       function.template operator()<Index>();
-                     }
-                   });
+  ConstexprForLoopVi(std::make_index_sequence<MaxValue + 1>{},
+                     [&function, &value](auto index) {
+                       if (index == value) {
+                         function.template operator()<index.value>();
+                       }
+                     });
+}
+
+/*
+ * @brief Similar to RuntimeValueToCompileTimeValue, but using
+ * ConstexprForLoopVi which automatically wraps the function in
+ * `ApplyAsValueIdentity`.
+ */
+template <size_t MaxValue, typename Function>
+void RuntimeValueToCompileTimeValueVi(const size_t& value, Function function) {
+  return RuntimeValueToCompileTimeValue<MaxValue>(
+      value, ApplyAsValueIdentity{std::move(function)});
 }
 
 /*
@@ -230,8 +253,8 @@ CPP_template(auto Upper,
 @brief Call the given lambda function with each of the given types `Ts` as
 explicit template parameter, keeping the same order.
 */
-template <typename... Ts>
-constexpr void forEachTypeInParameterPack(const auto& lambda) {
+template <typename... Ts, typename F>
+constexpr void forEachTypeInParameterPack(const F& lambda) {
   (lambda.template operator()<Ts>(), ...);
 }
 
@@ -254,7 +277,8 @@ struct forEachTypeInTemplateTypeImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
-  constexpr void operator()(const auto& lambda) const {
+  template <typename F>
+  constexpr void operator()(const F& lambda) const {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };
@@ -274,8 +298,8 @@ struct forEachTypeInTemplateTypeWithTIImpl<Template<Ts...>> {
 @brief Call the given lambda function with each type in the given instantiated
 template type as explicit template parameter, keeping the same order.
 */
-template <typename TemplateType>
-constexpr void forEachTypeInTemplateType(const auto& lambda) {
+template <typename TemplateType, typename F>
+constexpr void forEachTypeInTemplateType(const F& lambda) {
   detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
 }
 
@@ -285,6 +309,12 @@ template <typename TemplateType>
 constexpr void forEachTypeInTemplateTypeWithTI(
     use_type_identity::TI<TemplateType>, const auto& lambda) {
   detail::forEachTypeInTemplateTypeWithTIImpl<TemplateType>{}(lambda);
+}
+
+template <typename T, T... values, typename F>
+constexpr void forEachValueInValueSequence(ValueSequence<T, values...>,
+                                           F&& lambda) {
+  (lambda.template operator()<values>(), ...);
 }
 
 }  // namespace ad_utility

@@ -104,12 +104,14 @@ auto getComparisonFunctor() {
 // (like `std::less` on the values contained in `a` and `b`
 // (`isMatchingDatatype(a) and `isMatchingDatatype(b)` both are true when
 // `applyComparator` is called.
-auto testGetRangesForId(auto begin, auto end, ValueId id,
-                        auto isMatchingDatatype, auto applyComparator,
+template <typename It, typename IsMatchingDatatype, typename ApplyComparator>
+auto testGetRangesForId(It begin, It end, ValueId id,
+                        IsMatchingDatatype isMatchingDatatype,
+                        ApplyComparator applyComparator,
                         source_location l = source_location::current()) {
   auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
-  auto testImpl = [&]<Comparison comparison>() {
+  auto testImpl = [&](auto comparison) {
     auto ranges = getRangesForId(begin, end, id, comparison);
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
@@ -125,32 +127,36 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id << comparison;
+        ASSERT_FALSE(isMatching(*it, id))
+            << *it << ' ' << id << comparison.value;
         auto expected = isMatchingDatatype(*it) ? False : Undef;
         ASSERT_EQ(compareIds(*it, id, comparison), expected)
             << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id << comparison;
+        ASSERT_TRUE(isMatching(*it, id))
+            << *it << ' ' << id << comparison.value;
         ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(isMatching(*it, id)) << *it << ", " << id << comparison;
+      ASSERT_FALSE(isMatching(*it, id))
+          << *it << ", " << id << comparison.value;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
     }
   };
 
-  testImpl.template operator()<Comparison::LT>();
-  testImpl.template operator()<Comparison::LE>();
-  testImpl.template operator()<Comparison::EQ>();
-  testImpl.template operator()<Comparison::NE>();
-  testImpl.template operator()<Comparison::GE>();
-  testImpl.template operator()<Comparison::GT>();
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Comparison::LT>);
+  testImpl(vi<Comparison::LE>);
+  testImpl(vi<Comparison::EQ>);
+  testImpl(vi<Comparison::NE>);
+  testImpl(vi<Comparison::GE>);
+  testImpl(vi<Comparison::GT>);
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
@@ -214,10 +220,11 @@ TEST_F(ValueIdComparators, Undefined) {
 
 // Similar to `testGetRanges` (see above) but tests the comparison to a range of
 // `ValueId`s that are considered equal.
-auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
-                              ValueId idEnd, auto isMatchingDatatype) {
+template <typename It, typename IsMatchingDatatype>
+auto testGetRangesForEqualIds(It begin, It end, ValueId idBegin, ValueId idEnd,
+                              IsMatchingDatatype isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
-  auto testImpl = [&]<Comparison comparison>() {
+  auto testImpl = [&](auto comparison) {
     if (comparison == Comparison::NE &&
         idBegin.getDatatype() == Datatype::VocabIndex) {
       EXPECT_TRUE(true);
@@ -231,7 +238,7 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
         ASSERT_THAT(compareWithEqualIds(*it, idBegin, idEnd, comparison),
                     ::testing::AnyOf(False, Undef))
             << *it << " " << idBegin << ' ' << idEnd << ' '
-            << static_cast<int>(comparison);
+            << static_cast<int>(comparison.value);
         ++it;
       }
       while (it != rangeEnd) {
@@ -250,12 +257,13 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
     }
   };
 
-  testImpl.template operator()<Comparison::LT>();
-  testImpl.template operator()<Comparison::LE>();
-  testImpl.template operator()<Comparison::EQ>();
-  testImpl.template operator()<Comparison::NE>();
-  testImpl.template operator()<Comparison::GE>();
-  testImpl.template operator()<Comparison::GT>();
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Comparison::LT>);
+  testImpl(vi<Comparison::LE>);
+  testImpl(vi<Comparison::EQ>);
+  testImpl(vi<Comparison::NE>);
+  testImpl(vi<Comparison::GE>);
+  testImpl(vi<Comparison::GT>);
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
@@ -266,7 +274,7 @@ TEST_F(ValueIdComparators, IndexTypes) {
   std::sort(ids.begin(), ids.end(), compareByBits);
 
   // Perform the test for a single `Datatype`.
-  auto testImpl = [&]<Datatype datatype>(auto getFromId) {
+  auto testImpl = [&](auto datatype, auto getFromId) {
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
@@ -309,10 +317,11 @@ TEST_F(ValueIdComparators, IndexTypes) {
 
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....
-  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
-  testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
-  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
-  testImpl.operator()<Datatype::WordVocabIndex>(&getWordVocabIndex);
+  using ad_utility::use_value_identity::vi;
+  testImpl(vi<Datatype::VocabIndex>, &getVocabIndex);
+  testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex);
+  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex);
+  testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex);
 }
 
 // _______________________________________________________________________

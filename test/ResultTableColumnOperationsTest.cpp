@@ -95,8 +95,9 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ColumnNumWithType<ColumnInputTypeOne> inputColumnOne, const
 ColumnNumWithType<ColumnInputTypeTwo> inputColumnTwo`.
 */
+template <typename F>
 static void generalExceptionTestTwoInputColumns(
-    const auto& callTransform,
+    const F& callTransform,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "generalExceptionTestTwoInputColumns")};
@@ -172,8 +173,9 @@ for the function, that you want to test. Must have the signature `ResultTable*
 ,const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn, const
 ColumnNumWithType<ColumnInputTypes>&... inputColumns`.
 */
+template <typename F>
 static void generalExceptionTestUnlimitedInputColumns(
-    const auto& callTransform,
+    const F& callTransform,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{
@@ -418,15 +420,17 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
 
   // General exception tests.
   generalExceptionTestTwoInputColumns(
-      []<typename FirstType, typename SecondType>(
-          ResultTable* table, const auto& columnToPutResultIn,
-          const ColumnNumWithType<FirstType>& firstInputColumns,
-          const ColumnNumWithType<SecondType>& secondInputColumns) {
+      [](ResultTable* table, const auto& columnToPutResultIn,
+         const auto& firstInputColumns, const auto& secondInputColumns) {
         /*
         Unlike the other functions, `` only works with measured execution times.
         So, whenever the inputs are not for type `float`, we pass the
         responsibility to a trivial function.
         */
+        using FirstType =
+            typename std::decay_t<decltype(firstInputColumns)>::ColumnType;
+        using SecondType =
+            typename std::decay_t<decltype(secondInputColumns)>::ColumnType;
         if constexpr (std::same_as<FirstType, float> &&
                       std::same_as<SecondType, float>) {
           calculateSpeedupOfColumn(table, columnToPutResultIn,

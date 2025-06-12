@@ -65,6 +65,13 @@ inline auto& RuntimeParameters() {
         Bool<"zero-cost-estimate-for-cached-subtree">{false},
         // Maximum size for the body of requests that the server will process.
         MemorySizeParameter<"request-body-limit">{100_MB},
+        // SERVICE operations are not cached by default, but can be enabled
+        // which has the downside that the sibling optimization where VALUES are
+        // dynamically pushed into `SERVICE` is no longer used.
+        Bool<"cache-service-results">{false},
+        // If set to `true`, we expect the contents of URLs loaded via a LOAD to
+        // not change over time. This enables caching of LOAD operations.
+        Bool<"cache-load-results">{false},
     };
   }();
   return params;

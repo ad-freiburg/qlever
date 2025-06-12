@@ -129,6 +129,12 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"request-body-limit">(),
       "Set the maximum size for the body of requests the server will process. "
       "Set to zero to disable the limit.");
+  add("cache-service-results",
+      optionFactory.getProgramOption<"cache-service-results">(),
+      "SERVICE is not cached because we have to assume that any remote "
+      "endpoint might change at any point in time. If you control the "
+      "endpoints, you can override this setting. This will disable the sibling "
+      "optimization where VALUES are dynamically pushed into `SERVICE`.");
   add("persist-updates", po::bool_switch(&persistUpdates),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");

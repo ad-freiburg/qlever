@@ -262,4 +262,8 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
     Result::LazyResult generator, size_t numColumns);
 
+// Create an `IdTable` of the given size with width 1, filled with the given
+// value.
+IdTable createIdTableOfSizeWithValue(size_t size, Id value);
+
 #endif  // QLEVER_TEST_UTIL_IDTABLEHELPERS_H

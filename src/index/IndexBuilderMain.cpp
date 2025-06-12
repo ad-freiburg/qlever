@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/TextIndexBuilder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/File.h"
@@ -31,7 +32,8 @@ namespace po = boost::program_options;
 // vector will also be accepted. If this condition is violated, throw an
 // exception. This is used to validate the parameters for file types and default
 // graphs.
-static void checkNumParameterValues(const auto& values, size_t numFiles,
+template <typename T>
+static void checkNumParameterValues(const T& values, size_t numFiles,
                                     std::string_view parameterName) {
   if (values.empty()) {
     return;
@@ -100,8 +102,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
 // Get the parameter value at the given index. If the vector is empty, return
 // the given `defaultValue`. If the vector has exactly one element, return that
 // element, no matter what the index is.
-template <typename T>
-T getParameterValue(size_t idx, const auto& values, const T& defaultValue) {
+template <typename T, typename TsList>
+T getParameterValue(size_t idx, const TsList& values, const T& defaultValue) {
   if (values.empty()) {
     return defaultValue;
   }
@@ -331,8 +333,11 @@ int main(int argc, char** argv) {
           "text index. If none are given the option to add words from literals "
           "has to be true. For details see --help."));
     }
+    auto textIndexBuilder = TextIndexBuilder(
+        ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
+
     if (wordsAndDocsFileSpecified || addWordsFromLiterals) {
-      index.buildTextIndexFile(
+      textIndexBuilder.buildTextIndexFile(
           wordsAndDocsFileSpecified
               ? std::optional{std::pair{wordsfile, docsfile}}
               : std::nullopt,
@@ -341,7 +346,7 @@ int main(int argc, char** argv) {
     }
 
     if (!docsfile.empty()) {
-      index.buildDocsDB(docsfile);
+      textIndexBuilder.buildDocsDB(docsfile);
     }
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;

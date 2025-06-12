@@ -110,7 +110,12 @@ static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 // search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
-  // creates a SpatialJoin operation
+  // creates a SpatialJoin operation: the required configuration object
+  // can for example be obtained from the SpatialQuery class. Children are
+  // optional, because they may be added later using the addChild method.
+  // The substitutesFilterOp parameter indicates whether the spatial join
+  // was explicitly requested by the user (false) or has been created to
+  // implicitly rewrite a cartesian product with a geo filter (true).
   SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
