@@ -16,10 +16,12 @@ using std::string;
 // _____________________________________________________________________________
 MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2)
+                                 std::shared_ptr<QueryExecutionTree> t2,
+                                 bool allowSwappingChildrenOnlyForTesting)
     : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1->getCacheKey() > t2->getCacheKey()) {
+  if (allowSwappingChildrenOnlyForTesting &&
+      t1->getCacheKey() > t2->getCacheKey()) {
     std::swap(t1, t2);
   }
   std::tie(_left, _right, _joinColumns) =

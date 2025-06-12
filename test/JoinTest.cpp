@@ -909,7 +909,7 @@ TEST(JoinTest, columnOriginatesFromGraphOrUndef) {
                                  ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(location);
 
-    Join join{qec, std::move(left), std::move(right), 0, 0};
+    Join join{qec, std::move(left), std::move(right), 0, 0, false};
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);

@@ -154,7 +154,7 @@ TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
                                  ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(location);
 
-    MultiColumnJoin join{qec, std::move(left), std::move(right)};
+    MultiColumnJoin join{qec, std::move(left), std::move(right), false};
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
     EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
