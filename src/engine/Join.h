@@ -68,7 +68,8 @@ class Join : public Operation {
     return {_left.get(), _right.get()};
   }
 
-  bool columnOriginatesFromGraph(const Variable& variable) const override;
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins IdTables a and b on join column jc2, returning

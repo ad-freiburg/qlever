@@ -53,7 +53,8 @@ class Minus : public Operation {
     return {_left.get(), _right.get()};
   }
 
-  bool columnOriginatesFromGraph(const Variable& variable) const override;
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins a and b using the column defined int joinColumns, storing the

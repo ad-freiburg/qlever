@@ -667,7 +667,8 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::columnOriginatesFromGraph(const Variable& variable) const {
+bool IndexScan::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == subject_ || variable == predicate_ || variable == object_;
 }

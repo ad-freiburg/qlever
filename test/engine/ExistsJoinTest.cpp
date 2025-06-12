@@ -220,7 +220,7 @@ TEST(Exists, testGeneratorIsForwardedForDistinctColumnsFalseCase) {
 }
 
 // _____________________________________________________________________________
-TEST(Exists, columnOriginatesFromGraph) {
+TEST(Exists, columnOriginatesFromGraphOrUndef) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -235,33 +235,37 @@ TEST(Exists, columnOriginatesFromGraph) {
                          Iri::fromIriref("<c>")});
 
   ExistsJoin existJoin1{qec, values1, values1, Variable{"?z"}};
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraph(Variable{"?z"}));
-  EXPECT_THROW(existJoin1.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
+  EXPECT_THROW(
+      existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   ExistsJoin existJoin2{qec, values1, values2, Variable{"?z"}};
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraph(Variable{"?z"}));
-  EXPECT_THROW(existJoin2.columnOriginatesFromGraph(Variable{"?c"}),
+  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
+  EXPECT_THROW(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
                ad_utility::Exception);
-  EXPECT_THROW(existJoin2.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_THROW(
+      existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   ExistsJoin existJoin3{qec, index, values1, Variable{"?z"}};
-  EXPECT_TRUE(existJoin3.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_THROW(existJoin3.columnOriginatesFromGraph(Variable{"?b"}),
+  EXPECT_TRUE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_THROW(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
                ad_utility::Exception);
-  EXPECT_FALSE(existJoin3.columnOriginatesFromGraph(Variable{"?z"}));
-  EXPECT_THROW(existJoin3.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
+  EXPECT_THROW(
+      existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   ExistsJoin existJoin4{qec, values1, index, Variable{"?z"}};
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraph(Variable{"?z"}));
-  EXPECT_THROW(existJoin4.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
+  EXPECT_THROW(
+      existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 }

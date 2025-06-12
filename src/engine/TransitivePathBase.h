@@ -330,7 +330,8 @@ class TransitivePathBase : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  bool columnOriginatesFromGraph(const Variable& variable) const override;
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.

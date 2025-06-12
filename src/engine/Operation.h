@@ -474,9 +474,9 @@ class Operation {
 
   // Return true if all values that the `variable` will be bound to by this
   // expression are guaranteed to be contained in the underlying knowledge
-  // graph. This is e.g. true for results of `IndexScan`s, but not for `VALUES`
-  // clauses or expression results. This information is used to skip potentially
-  // expensive checks in the `TransitivePath` implementation.
+  // graph or undefined. This is e.g. true for results of `IndexScan`s, but not
+  // for `VALUES` clauses or expression results. This information is used to
+  // skip potentially expensive checks in the `TransitivePath` implementation.
   // The default implementation is very conservative and assume all operations
   // are just creating values from thin air, or intersect them from their
   // children.
@@ -494,7 +494,7 @@ class Operation {
   // operations, that only pass on variables from some of their children (e.g.
   // the variables on the right hand side of a MINUS operation never become part
   // of the result).
-  virtual bool columnOriginatesFromGraph(const Variable& variable) const;
+  virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
 
  private:
   // Create the runtime information in case the evaluation of this operation has

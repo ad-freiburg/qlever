@@ -53,6 +53,9 @@ class MultiColumnJoin : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
   /**
    * @brief Joins left and right using the column defined int joinColumns,
    *storing the resultMightBeUnsorted in resultMightBeUnsorted. R should have

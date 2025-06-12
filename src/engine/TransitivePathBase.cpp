@@ -442,7 +442,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
 
   // If we cannot guarantee the values are part of the graph, we have to join
   // with it first.
-  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraph(
+  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
           originalVar)) {
     leftOrRightOp = ad_utility::makeExecutionTree<Join>(
         getExecutionContext(), std::move(leftOrRightOp),
@@ -557,7 +557,7 @@ void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
 }
 
 // _____________________________________________________________________________
-bool TransitivePathBase::columnOriginatesFromGraph(
+bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == lhs_.value_ || variable == rhs_.value_;

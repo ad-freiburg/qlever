@@ -126,7 +126,7 @@ TEST(Minus, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(Minus, columnOriginatesFromGraph) {
+TEST(Minus, columnOriginatesFromGraphOrUndef) {
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -141,29 +141,33 @@ TEST(Minus, columnOriginatesFromGraph) {
                          Iri::fromIriref("<c>")});
 
   Minus minus1{qec, values1, values1};
-  EXPECT_FALSE(minus1.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(minus1.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_THROW(minus1.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_THROW(
+      minus1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   Minus minus2{qec, values1, values2};
-  EXPECT_FALSE(minus2.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(minus2.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_THROW(minus2.columnOriginatesFromGraph(Variable{"?c"}),
+  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_THROW(minus2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
                ad_utility::Exception);
-  EXPECT_THROW(minus2.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_THROW(
+      minus2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   Minus minus3{qec, index, values1};
-  EXPECT_TRUE(minus3.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_THROW(minus3.columnOriginatesFromGraph(Variable{"?b"}),
+  EXPECT_TRUE(minus3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_THROW(minus3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
                ad_utility::Exception);
-  EXPECT_THROW(minus3.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_THROW(
+      minus3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 
   Minus minus4{qec, values1, index};
-  EXPECT_FALSE(minus4.columnOriginatesFromGraph(Variable{"?a"}));
-  EXPECT_FALSE(minus4.columnOriginatesFromGraph(Variable{"?b"}));
-  EXPECT_THROW(minus4.columnOriginatesFromGraph(Variable{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_THROW(
+      minus4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
 }

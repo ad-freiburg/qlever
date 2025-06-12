@@ -631,7 +631,7 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 }
 
 // _____________________________________________________________________________
-TEST(Union, columnOriginatesFromGraph) {
+TEST(Union, columnOriginatesFromGraphOrUndef) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
@@ -646,31 +646,31 @@ TEST(Union, columnOriginatesFromGraph) {
       SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
 
   Union union1{qec, values, values};
-  EXPECT_FALSE(union1.columnOriginatesFromGraph(Var{"?a"}));
-  EXPECT_FALSE(union1.columnOriginatesFromGraph(Var{"?d"}));
-  EXPECT_THROW(union1.columnOriginatesFromGraph(Var{"?notExisting"}),
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
 
   Union union2{qec, values, index};
-  EXPECT_FALSE(union2.columnOriginatesFromGraph(Var{"?a"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraph(Var{"?b"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraph(Var{"?c"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraph(Var{"?d"}));
-  EXPECT_THROW(union2.columnOriginatesFromGraph(Var{"?notExisting"}),
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
 
   Union union3{qec, index, values};
-  EXPECT_FALSE(union3.columnOriginatesFromGraph(Var{"?a"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraph(Var{"?b"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraph(Var{"?c"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraph(Var{"?d"}));
-  EXPECT_THROW(union3.columnOriginatesFromGraph(Var{"?notExisting"}),
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
 
   Union union4{qec, index, index};
-  EXPECT_TRUE(union4.columnOriginatesFromGraph(Var{"?a"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraph(Var{"?b"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraph(Var{"?c"}));
-  EXPECT_THROW(union4.columnOriginatesFromGraph(Var{"?notExisting"}),
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
                ad_utility::Exception);
 }

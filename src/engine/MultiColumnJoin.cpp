@@ -295,3 +295,27 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
   copy->_right = _right->clone();
   return copy;
 }
+
+// _____________________________________________________________________________
+bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join columns we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (_left->getVariableColumnOrNullopt(variable).has_value() &&
+      _right->getVariableColumnOrNullopt(variable).has_value()) {
+    bool leftInGraph =
+        _left->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+    bool rightInGraph =
+        _right->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+    bool leftUndef =
+        _left->getVariableColumns().at(variable).mightContainUndef_ !=
+        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    bool rightUndef =
+        _right->getVariableColumns().at(variable).mightContainUndef_ !=
+        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+    return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
+           (rightInGraph && !rightUndef);
+  }
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
