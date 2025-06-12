@@ -4,15 +4,10 @@
 
 #include <gtest/gtest.h>
 
-// Including the SplitVocabulary.cpp file is necessary for the compiler to fully
-// see the SplitVocabulary template. The template is required to instantiate
-// example split vocabularies, which should not pollute the main implementation
-// of SplitVocabulary.
 #include "index/Vocabulary.h"
-#include "index/vocabulary/SplitVocabulary.cpp"
-#include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/SplitVocabularyImpl.h"
 
-namespace splitVocabTest {
+namespace splitVocabTestHelpers {
 
 using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
@@ -21,6 +16,48 @@ using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 // TODO<ullingerc> Re-add ItemAt and SplitWordWriter tests after integration of
 // SplitVocabulary in Vocabulary
 
+[[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
+  return s.starts_with("\"a");
+};
+
+[[maybe_unused]] auto testSplitFnTwoFunction =
+    [](std::string_view s) -> std::array<std::string, 2> {
+  return {std::string(s), absl::StrCat(s, ".a")};
+};
+
+using TwoSplitVocabulary =
+    SplitVocabulary<decltype(testSplitTwoFunction),
+                    decltype(testSplitFnTwoFunction), VocabularyInMemory,
+                    VocabularyInMemory>;
+
+[[maybe_unused]] auto testSplitThreeFunction =
+    [](std::string_view s) -> uint8_t {
+  if (s.starts_with("\"")) {
+    if (s.ends_with("\"^^<http://example.com>")) {
+      return 1;
+    } else if (s.ends_with("\"^^<blabliblu>")) {
+      return 2;
+    }
+  }
+  return 0;
+};
+
+[[maybe_unused]] auto testSplitFnThreeFunction =
+    [](std::string_view s) -> std::array<std::string, 3> {
+  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
+};
+
+using ThreeSplitVocabulary =
+    SplitVocabulary<decltype(testSplitThreeFunction),
+                    decltype(testSplitFnThreeFunction), VocabularyInMemory,
+                    VocabularyInMemory, VocabularyInMemory>;
+
+}  // namespace splitVocabTestHelpers
+
+namespace {
+using namespace splitVocabTestHelpers;
+
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitGeoVocab) {
   // Test check: Is a geo literal?
   ASSERT_EQ(SGV::getMarkerForWord(
@@ -58,20 +95,7 @@ TEST(Vocabulary, SplitGeoVocab) {
   ASSERT_FALSE(SGV::isSpecialVocabIndex(1ull << 58));
 }
 
-[[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
-  return s.starts_with("\"a");
-};
-
-[[maybe_unused]] auto testSplitFnTwoFunction =
-    [](std::string_view s) -> std::array<std::string, 2> {
-  return {std::string(s), absl::StrCat(s, ".a")};
-};
-
-using TwoSplitVocabulary =
-    SplitVocabulary<decltype(testSplitTwoFunction),
-                    decltype(testSplitFnTwoFunction), VocabularyInMemory,
-                    VocabularyInMemory>;
-
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in two underlying vocabularies
@@ -120,28 +144,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv[(1ull << 59) | 1], "\"axyz\"");
 }
 
-[[maybe_unused]] auto testSplitThreeFunction =
-    [](std::string_view s) -> uint8_t {
-  if (s.starts_with("\"")) {
-    if (s.ends_with("\"^^<http://example.com>")) {
-      return 1;
-    } else if (s.ends_with("\"^^<blabliblu>")) {
-      return 2;
-    }
-  }
-  return 0;
-};
-
-[[maybe_unused]] auto testSplitFnThreeFunction =
-    [](std::string_view s) -> std::array<std::string, 3> {
-  return {absl::StrCat(s, ".a"), absl::StrCat(s, ".b"), absl::StrCat(s, ".c")};
-};
-
-using ThreeSplitVocabulary =
-    SplitVocabulary<decltype(testSplitThreeFunction),
-                    decltype(testSplitFnThreeFunction), VocabularyInMemory,
-                    VocabularyInMemory, VocabularyInMemory>;
-
+// _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   // Tests the SplitVocabulary class with a custom split function that separates
   // all words in three underlying vocabularies (of different types)
@@ -200,13 +203,4 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv[1ull << 58], "\"xyz\"^^<http://example.com>");
 }
 
-}  // namespace splitVocabTest
-
-// Explicit instantiations for SplitVocabulary tests
-template class SplitVocabulary<decltype(splitVocabTest::testSplitTwoFunction),
-                               decltype(splitVocabTest::testSplitFnTwoFunction),
-                               VocabularyInMemory, VocabularyInMemory>;
-template class SplitVocabulary<
-    decltype(splitVocabTest::testSplitThreeFunction),
-    decltype(splitVocabTest::testSplitFnThreeFunction), VocabularyInMemory,
-    VocabularyInMemory, VocabularyInMemory>;
+}  // namespace
