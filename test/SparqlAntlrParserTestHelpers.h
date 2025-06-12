@@ -716,6 +716,13 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+inline auto Load = [](const TripleComponent::Iri& iri,
+                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Load>(
+      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
+                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
+};
+
 inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
@@ -936,25 +943,15 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto Load = [](bool silent,
-                      const ad_utility::triple_component::Iri& source,
-                      const std::optional<GraphRef>& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Load>(
-      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
-                     AD_FIELD(Load, source_, testing::Eq(source)),
-                     AD_FIELD(Load, target_, testing::Eq(target))));
-};
-
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
        const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
        const std::optional<ad_utility::triple_component::Iri>& with)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
+    -> Matcher<const updateClause::GraphUpdate&> {
+  return testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
       AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+      AD_FIELD(GraphUpdate, with_, testing::Eq(with)));
 };
 
 inline auto EmptyDatasets = [] {
@@ -967,7 +964,7 @@ inline auto EmptyDatasets = [] {
 using Graphs = ad_utility::HashSet<TripleComponent>;
 
 inline auto UpdateClause =
-    [](const Matcher<const updateClause::Operation&>& opMatcher,
+    [](const Matcher<const updateClause::GraphUpdate&>& opMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher,
        const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
            EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {

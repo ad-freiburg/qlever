@@ -69,7 +69,7 @@ struct Service {
 /// An internal pattern used in the `LOAD` update operation.
 struct Load {
  public:
-  ad_utility::httpUtils::Url url_;
+  TripleComponent::Iri iri_;
   bool silent_;
 };
 
@@ -196,7 +196,7 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe>;
+                 Minus, GroupGraphPattern, Describe, Load>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
