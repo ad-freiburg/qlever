@@ -41,7 +41,7 @@ CPP_concept SplitFilenameFunctionT =
 // each word and a SplitFilenameFunction that assigns filenames to underlying
 // vocabularies.
 template <typename SplitFunction, typename SplitFilenameFunction,
-          class... UnderlyingVocabularies>
+          typename... UnderlyingVocabularies>
 requires SplitFunctionT<SplitFunction> &&
          SplitFilenameFunctionT<SplitFilenameFunction,
                                 sizeof...(UnderlyingVocabularies)>
