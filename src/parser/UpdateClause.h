@@ -18,43 +18,9 @@ struct Load {
   std::optional<GraphRef> target_;
 };
 
-struct Clear {
-  bool silent_;
-  GraphRefAll target_;
-};
-
-struct Drop {
-  bool silent_;
-  GraphRefAll target_;
-};
-
-struct Create {
-  bool silent_;
-  GraphRef target_;
-};
-
-struct Add {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
-struct Move {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
-struct Copy {
-  bool silent_;
-  GraphOrDefault source_;
-  GraphOrDefault target_;
-};
-
 // A Graph Update is an Update operation that inserts or deletes some triples.
 // These triples can contain variables that are bound the result of the
-// ParsedQueries GraphPattern. This used for `INSERT DATA`, `DELETE DATA`,
-// `DELETE WHERE {...}` and `DELETE/INSERT {..} WHERE {...}`.
+// ParsedQueries GraphPattern. All Updates except `LOAD` are realised with it.
 struct GraphUpdate {
   std::vector<SparqlTripleSimpleWithGraph> toInsert_;
   std::vector<SparqlTripleSimpleWithGraph> toDelete_;
@@ -67,8 +33,7 @@ struct GraphUpdate {
 };
 
 // All the available update operations.
-using Operation =
-    std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy>;
+using Operation = std::variant<GraphUpdate, Load>;
 }  // namespace updateClause
 
 namespace parsedQuery {
