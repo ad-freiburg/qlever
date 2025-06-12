@@ -755,18 +755,7 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
   // For the join column we don't union the elements, we intersect them so we
   // can have a more efficient implementation.
   if (variable == _joinVar) {
-    bool leftInGraph =
-        _left->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
-    bool rightInGraph =
-        _right->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
-    bool leftUndef =
-        _left->getVariableColumns().at(variable).mightContainUndef_ !=
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    bool rightUndef =
-        _right->getVariableColumns().at(variable).mightContainUndef_ !=
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
-           (rightInGraph && !rightUndef);
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }

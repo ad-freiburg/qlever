@@ -3,11 +3,12 @@
 // Authors: Florian Kramer [2018 - 2020]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "MultiColumnJoin.h"
+#include "engine/MultiColumnJoin.h"
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/JoinHelpers.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -306,18 +307,8 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
   // can have a more efficient implementation.
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
-    bool leftInGraph =
-        _left->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
-    bool rightInGraph =
-        _right->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
-    bool leftUndef =
-        _left->getVariableColumns().at(variable).mightContainUndef_ !=
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    bool rightUndef =
-        _right->getVariableColumns().at(variable).mightContainUndef_ !=
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-    return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
-           (rightInGraph && !rightUndef);
+    using namespace qlever::joinHelpers;
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
