@@ -246,6 +246,7 @@ class SplitVocabulary {
 };
 
 // Concrete implementations of split function and split filename function
+namespace detail::splitVocabulary {
 
 // Split function for Well-Known Text Literals: All words are written to
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
@@ -262,13 +263,16 @@ class SplitVocabulary {
   return {std::string(base), absl::StrCat(base, ".geometry")};
 };
 
+}  // namespace detail::splitVocabulary
+
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
 // vocabulary. This can be used for precomputations for spatial features.
 // TODO<ullingerc>: Switch 2nd Vocab to GeoVocabulary<UnderlyingVocabulary>
 // after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<decltype(geoSplitFunc), decltype(geoFilenameFunc),
+    SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
+                    decltype(detail::splitVocabulary::geoFilenameFunc),
                     UnderlyingVocabulary, UnderlyingVocabulary>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H
