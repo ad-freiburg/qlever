@@ -2083,26 +2083,13 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
 
-  // If plans overlap in what they calculate, they should not be joined.
-  // JoinColumns jcs;
-  // if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
-  //   jcs = getJoinColumns(a, b);
-  // }
-
-  // TODO<ullingerc>
-  // ______
-  std::vector<SubtreePlan> candidates;
-
-  // TODO<joka921> find out, what is ACTUALLY the use case for the triple
-  // graph. Is it only meant for (questionable) performance reasons
-  // or does it change the meaning.
   JoinColumns jcs;
+  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
+    jcs = getJoinColumns(a, b);
+  }
+
   if (tg) {
     if (connected(a, b, *tg)) {
-      jcs = getJoinColumns(a, b);
-    }
-  } else {
-    if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
       jcs = getJoinColumns(a, b);
     }
   }
