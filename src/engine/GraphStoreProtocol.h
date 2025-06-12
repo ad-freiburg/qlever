@@ -89,6 +89,9 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
+    if (rawRequest.body().empty()) {
+      throw HttpError(boost::beast::http::status::no_content);
+    }
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
