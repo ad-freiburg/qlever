@@ -270,7 +270,8 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible<true>(candidatePlans[0], rootPattern->_filters);
+    applyFiltersIfPossible<true, true>(candidatePlans[0],
+                                       rootPattern->_filters);
     applyTextLimitsIfPossible(candidatePlans[0],
                               TextLimitVec{rootPattern->textLimits_.begin(),
                                            rootPattern->textLimits_.end()},
@@ -289,7 +290,7 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
       // or it only consists of a MINUS clause (which then has no effect).
       std::vector neutralPlans{makeSubtreePlan<NeutralElementOperation>(_qec)};
       // Neutral element can potentially still get filtered out
-      applyFiltersIfPossible<true>(neutralPlans, rootPattern->_filters);
+      applyFiltersIfPossible<true, true>(neutralPlans, rootPattern->_filters);
       return neutralPlans;
     }
     return candidatePlans[0];
@@ -1298,9 +1299,10 @@ string QueryPlanner::getPruningKey(
 }
 
 // _____________________________________________________________________________
-template <bool replace>
+template <bool replace, bool alsoApplyIfMissingVariables>
 void QueryPlanner::applyFiltersIfPossible(
     vector<SubtreePlan>& row, const vector<SparqlFilter>& filters) const {
+  static_assert(!alsoApplyIfMissingVariables || replace);
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
@@ -1330,7 +1332,8 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
-      if (ql::ranges::all_of(filters[i].expression_.containedVariables(),
+      if (alsoApplyIfMissingVariables ||
+          ql::ranges::all_of(filters[i].expression_.containedVariables(),
                              [&plan](const auto& variable) {
                                return plan._qet->isVariableCovered(*variable);
                              })) {
