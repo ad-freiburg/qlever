@@ -947,11 +947,11 @@ inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
        const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
        const std::optional<ad_utility::triple_component::Iri>& with)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
+    -> Matcher<const updateClause::GraphUpdate&> {
+  return testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
       AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+      AD_FIELD(GraphUpdate, with_, testing::Eq(with)));
 };
 
 inline auto EmptyDatasets = [] {
@@ -964,7 +964,7 @@ inline auto EmptyDatasets = [] {
 using Graphs = ad_utility::HashSet<TripleComponent>;
 
 inline auto UpdateClause =
-    [](const Matcher<const updateClause::Operation&>& opMatcher,
+    [](const Matcher<const updateClause::GraphUpdate&>& opMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher,
        const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
            EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {

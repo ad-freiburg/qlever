@@ -134,11 +134,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
-  if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
-    throw std::runtime_error(
-        "Only INSERT/DELETE update operations are currently supported.");
-  }
-  auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
+  auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
