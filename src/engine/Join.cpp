@@ -634,8 +634,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
             AD_CORRECTNESS_CHECK(
                 !indexScanResult.value()->isFullyMaterialized());
-            return convertGenerator(
-                std::move(indexScanResult.value()->idTables()));
+            return convertGenerator(indexScanResult.value()->idTables());
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
@@ -690,8 +689,8 @@ Result Join::computeResultForIndexScanAndLazyOperation(
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto [joinSide, indexScanSide] = scan->prefilterTables(
-            std::move(resultWithIdTable->idTables()), _leftJoinCol);
+        auto [joinSide, indexScanSide] =
+            scan->prefilterTables(resultWithIdTable->idTables(), _leftJoinCol);
 
         // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
         // switches to a more efficient implementation if there are no UNDEF

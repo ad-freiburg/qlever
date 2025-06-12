@@ -100,7 +100,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ad_utility::OwningView{leftRes->idTables()} |
                 ql::views::transform([exists = !right.empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is

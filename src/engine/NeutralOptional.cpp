@@ -127,10 +127,10 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
             childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {
-    return {std::move(childResult->idTables()), childResult->sortedBy()};
+    return {childResult->idTables(), childResult->sortedBy()};
   }
-  return {Result::LazyResult{WrapperWithEnsuredRow{
-              std::move(childResult->idTables()), std::move(singleRowTable)}},
+  return {Result::LazyResult{WrapperWithEnsuredRow{childResult->idTables(),
+                                                   std::move(singleRowTable)}},
           childResult->sortedBy()};
 }
 

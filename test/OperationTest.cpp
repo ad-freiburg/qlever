@@ -417,7 +417,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   EXPECT_GE(rti.originalOperationTime_, timeout);
 
   expectAtEachStageOfGenerator(
-      std::move(result.idTables()),
+      result.idTables(),
       {[&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 1);
@@ -493,7 +493,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 
   EXPECT_EQ(updateCallCounter, 1);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
@@ -525,7 +525,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
         operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
 
     EXPECT_EQ(updateCallCounter, 1);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
     // Only consume partially
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
@@ -558,7 +558,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   expectRtiHasDimensions(rti, 0, 0);
   expectRtiHasDimensions(childRti, 0, 0);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {[&]() {
                                   expectRtiHasDimensions(rti, 2, 0);
                                   expectRtiHasDimensions(childRti, 2, 1);

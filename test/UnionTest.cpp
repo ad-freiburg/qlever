@@ -115,7 +115,7 @@ TEST(Union, computeUnionLazy) {
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);
     ASSERT_FALSE(resultTable.isFullyMaterialized());
-    auto& result = resultTable.idTables();
+    auto result = resultTable.idTables();
 
     auto U = Id::makeUndefined();
     auto expected1 = makeIdTableFromVector({{V(1), U}, {V(2), U}, {V(3), U}});
@@ -156,7 +156,7 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
     qec->getQueryTreeCache().clearAll();
     auto resultTable = u.computeResultOnlyForTesting(true);
     ASSERT_FALSE(resultTable.isFullyMaterialized());
-    auto& result = resultTable.idTables();
+    auto result = resultTable.idTables();
 
     auto U = Id::makeUndefined();
     auto expected1 = makeIdTableFromVector({{1, 2, 3, 4, 5}});
@@ -218,7 +218,7 @@ TEST(Union, cheapMergeIfOrderNotImportant) {
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     EXPECT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto expected1 = makeIdTableFromVector({{1, 2}});
     auto expected2 = makeIdTableFromVector({{0, 0}, {2, 4}});
 
@@ -263,7 +263,7 @@ TEST(Union, sortedMerge) {
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     auto expected = makeIdTableFromVector({{1, U, 4}, {1, 2, 4}, {2, U, 8}});
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
     EXPECT_EQ(it->idTable_, expected);
@@ -296,7 +296,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     qec->getQueryTreeCache().clearAll();
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
     EXPECT_EQ(it->idTable_, makeIdTableFromVector({{0}, {1}}));
@@ -350,7 +350,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
     Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
 
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
@@ -603,7 +603,7 @@ TEST(Union, checkChunkSizeSplitsProperly) {
   qec->getQueryTreeCache().clearAll();
   auto result =
       unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
-  auto& idTables = result->idTables();
+  auto idTables = result->idTables();
 
   auto it = idTables.begin();
   ASSERT_NE(it, idTables.end());
