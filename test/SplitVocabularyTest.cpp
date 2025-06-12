@@ -169,6 +169,35 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
       sv.getUnderlyingVocabulary(1));
   EXPECT_ANY_THROW(sv.getUnderlyingVocabulary(2));
 
+  // Also test the const variant
+  const auto& um = sv.getUnderlyingMainVocabulary();
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"\"");
+        ASSERT_EQ(vocab[1], "\"xyz\"");
+      },
+      um);
+  const auto& u0 = sv.getUnderlyingVocabulary(0);
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"\"");
+        ASSERT_EQ(vocab[1], "\"xyz\"");
+      },
+      u0);
+  const auto& u1 = sv.getUnderlyingVocabulary(1);
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"abc\"");
+        ASSERT_EQ(vocab[1], "\"axyz\"");
+      },
+      u1);
+
+  const auto& svConstRef = sv;
+  EXPECT_ANY_THROW(svConstRef.getUnderlyingVocabulary(2));
+
   sv.close();
 }
 

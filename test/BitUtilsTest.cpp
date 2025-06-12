@@ -61,6 +61,8 @@ TEST(BitUtils, unsignedTypeForNumberOfBits) {
 
 // _____________________________________________________________________________
 TEST(BitUtils, bitMaskSize) {
+  // Test that (a) bitMaskSizeForValue returns the right result and (b) can be
+  // evaluated at compile time.
   static_assert(bitMaskSizeForValue(0) == 0);
   static_assert(bitMaskSizeForValue(1) == 1);
   static_assert(bitMaskSizeForValue(2) == 2);
@@ -69,6 +71,11 @@ TEST(BitUtils, bitMaskSize) {
   static_assert(bitMaskSizeForValue(-1ull) == 64);
   static_assert(bitMaskSizeForValue(std::numeric_limits<uint64_t>::max()) ==
                 64);
+  // Also some runtime tests to make codecov happy, who doesn't see the
+  // static_assert because they happen at compile time.
+  ASSERT_EQ(bitMaskSizeForValue(0), 0);
+  ASSERT_EQ(bitMaskSizeForValue(1), 1);
+  ASSERT_EQ(bitMaskSizeForValue(4), 3);
 }
 
 }  // namespace
