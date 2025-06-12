@@ -4250,3 +4250,99 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimization) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  TransitivePathSide left2{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?other"}, 1};
+  h::expect(
+      "SELECT * { ?var <a>* ?other . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { ?other <a>* ?var . ?var <a> <b> }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?var", "<a>", "<b>"),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  auto* qec = ad_utility::testing::getQec(
+      "<d> <c> <d> . <d1> <c> <d> . <d2> <c> <d> . <d> <a> <b> . <d2> <a> <b> "
+      ". <d3> <a> <b> . <d4> <a> <b> . <d5> <a> <b> . <d6> <a> <b>");
+
+  h::expect(
+      "SELECT * { ?var <a> <b> . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::IndexScanFromStrings("?var", "<a>", "<b>"),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+
+  h::expect(
+      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimizationAndUndefFilter) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { UNDEF } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::Filter("BOUND(?var)",
+                                h::ValuesClause("VALUES (?var) { (UNDEF) }")))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}

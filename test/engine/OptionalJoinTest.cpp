@@ -12,7 +12,9 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
@@ -580,4 +582,59 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected), true);
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = getQec();
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto index1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?c"}});
+  auto index2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?b"}});
+  auto index3 = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::PSO,
+               SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                                  Variable{"?c"}}));
+
+  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
+                             std::shared_ptr<QueryExecutionTree> right, bool a,
+                             bool b, bool c,
+                             ad_utility::source_location location =
+                                 ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(location);
+
+    OptionalJoin optional{qec, std::move(left), std::move(right)};
+    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
+    EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+    EXPECT_THROW(
+        optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+        ad_utility::Exception);
+  };
+
+  OptionalJoin optional{qec, values1, values1};
+  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
+  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_THROW(
+      optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      ad_utility::Exception);
+
+  testWithTrees(values1, values2, false, false, false);
+  testWithTrees(index1, values1, true, false, true);
+  testWithTrees(values1, index1, false, false, true);
+  testWithTrees(index1, index2, true, true, true);
+  testWithTrees(index3, index2, true, true, true);
+  testWithTrees(index3, values1, false, false, true);
 }

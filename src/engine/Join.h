@@ -68,6 +68,9 @@ class Join : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
   /**
    * @brief Joins IdTables a and b on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows.

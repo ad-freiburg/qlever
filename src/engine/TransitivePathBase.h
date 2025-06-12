@@ -127,6 +127,10 @@ class TransitivePathBase : public Operation {
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
 
+  // Store the active graphs for the transitive path operation. This is used to
+  // correctly match against the proper graph when the minimum distance is 0.
+  Graphs activeGraphs_;
+
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
@@ -258,9 +262,22 @@ class TransitivePathBase : public Operation {
       const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
-  // used as a starting point for evaluating the empty path.
+  // used as a starting point for evaluating the empty path and returns a single
+  // column containung all distinct entities the appear either as a subject or
+  // object in the knowledge graph. The optional parameter `variable` can be set
+  // to explicitly define the name of the column this produces (useful for
+  // subsequent joins), by default it is `?internal_property_path_variable_x`.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
-      QueryExecutionContext* qec, Graphs activeGraphs);
+      QueryExecutionContext* qec, Graphs activeGraphs,
+      std::optional<Variable> variable = std::nullopt);
+
+  // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
+  // found in the knowledge graph. In many cases we can statically guarantee
+  // this and just return the `leftOrRightOp` unchanged, in all other cases the
+  // result will be a join with the result of `makeEmptyPathSide` above.
+  std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
+      size_t& inputCol,
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
  public:
   size_t getCostEstimate() override;
@@ -312,6 +329,9 @@ class TransitivePathBase : public Operation {
   vector<QueryExecutionTree*> getChildren() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.

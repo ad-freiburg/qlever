@@ -665,3 +665,10 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
                                      additionalVariables_, graphsToFilter_,
                                      std::move(prefilter));
 }
+
+// _____________________________________________________________________________
+bool IndexScan::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  return variable == subject_ || variable == predicate_ || variable == object_;
+}

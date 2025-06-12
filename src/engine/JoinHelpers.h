@@ -128,6 +128,27 @@ CPP_template_2(typename ActionT)(
         yieldValue(std::move(lastBlock));
       });
 }
+
+// Helper function to check if the join of two columns propagate the value
+// returned by `Operation::columnOriginatesFromGraphOrUndef`.
+inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
+    const std::shared_ptr<QueryExecutionTree>& left,
+    const std::shared_ptr<QueryExecutionTree>& right,
+    const Variable& variable) {
+  auto graphOrUndef = [&variable](const auto& tree) {
+    return tree->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+  };
+  auto hasUndef = [&variable](const auto& tree) {
+    return tree->getVariableColumns().at(variable).mightContainUndef_ !=
+           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+  };
+  bool leftInGraph = graphOrUndef(left);
+  bool rightInGraph = graphOrUndef(right);
+  bool leftUndef = hasUndef(left);
+  bool rightUndef = hasUndef(right);
+  return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
+         (rightInGraph && !rightUndef);
+}
 }  // namespace qlever::joinHelpers
 
 #endif  // JOINHELPERS_H

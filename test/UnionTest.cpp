@@ -9,6 +9,7 @@
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/Sort.h"
 #include "engine/Union.h"
@@ -627,4 +628,49 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 
   ++it;
   EXPECT_EQ(it, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(Union, columnOriginatesFromGraphOrUndef) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+
+  IdTable reference{2, qec->getAllocator()};
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, reference.clone(), Vars{Var{"?a"}, Var{"?d"}}, false,
+      std::vector<ColumnIndex>{0, 1});
+
+  auto index = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
+
+  Union union1{qec, values, values};
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union2{qec, values, index};
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union3{qec, index, values};
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
+  EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
+
+  Union union4{qec, index, index};
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
+  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
+  EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+               ad_utility::Exception);
 }

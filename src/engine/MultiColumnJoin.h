@@ -23,9 +23,11 @@ class MultiColumnJoin : public Operation {
   bool _multiplicitiesComputed = false;
 
  public:
+  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
-                  std::shared_ptr<QueryExecutionTree> t2);
+                  std::shared_ptr<QueryExecutionTree> t2,
+                  bool allowSwappingChildrenOnlyForTesting = true);
 
  protected:
   string getCacheKeyImpl() const override;
@@ -52,6 +54,9 @@ class MultiColumnJoin : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins left and right using the column defined int joinColumns,

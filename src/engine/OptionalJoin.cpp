@@ -287,6 +287,25 @@ auto OptionalJoin::computeImplementationFromIdTables(
   return implementation;
 }
 
+// _____________________________________________________________________________
+bool OptionalJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join columns, we only need to look at the left side of the tree for
+  // this check if it doesn't contain undefined values.
+  if (_left->getVariableColumnOrNullopt(variable).has_value() &&
+      _right->getVariableColumnOrNullopt(variable).has_value()) {
+    return _left->getRootOperation()->columnOriginatesFromGraphOrUndef(
+               variable) &&
+           (_left->getVariableColumns().at(variable).mightContainUndef_ ==
+                ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined ||
+            _right->getRootOperation()->columnOriginatesFromGraphOrUndef(
+                variable));
+  }
+  // For all other columns, we just delegate to the default implementation
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
+
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTable& left, const IdTable& right,
