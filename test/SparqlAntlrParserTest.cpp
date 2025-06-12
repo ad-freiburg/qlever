@@ -2378,22 +2378,6 @@ TEST(SparqlParser, Update) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
-  expectUpdate(
-      "LOAD <https://example.com>",
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), noGraph}},
-                         std::nullopt),
-          m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
-  expectUpdate(
-      "LOAD SILENT <https://example.com> into GRAPH <bar>",
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), Iri("<bar>")}},
-                         std::nullopt),
-          m::GraphPattern(m::Load(Iri("<https://example.com>"), true))));
   const auto insertMatcher = m::UpdateClause(
       m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
                      std::nullopt),
@@ -2538,10 +2522,28 @@ TEST(SparqlParser, Copy) {
 }
 
 TEST(SparqlParser, Load) {
-  auto expectLoadFails = ExpectParseFails<&Parser::load>{defaultPrefixMap};
+  auto expectLoad = ExpectCompleteParse<&Parser::load>{defaultPrefixMap};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  auto noGraph = std::monostate{};
 
-  expectLoadFails("LOAD <foo>");
-  expectLoadFails("LOAD SILENT <foo> into GRAPH <bar>");
+  expectLoad(
+      "LOAD <https://example.com>",
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                      Var("?o"), noGraph}},
+                         std::nullopt),
+          m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
+  expectLoad(
+      "LOAD SILENT <http://example.com> into GRAPH <bar>",
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                      Var("?o"), Iri("<bar>")}},
+                         std::nullopt),
+          m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
