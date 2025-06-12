@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <variant>
+
 #include "index/Vocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
 
@@ -142,6 +144,30 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   ASSERT_EQ(sv.size(), 4);
   ASSERT_EQ(sv[1], "\"xyz\"");
   ASSERT_EQ(sv[(1ull << 59) | 1], "\"axyz\"");
+
+  // Test access to and content of underlying vocabs
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"\"");
+        ASSERT_EQ(vocab[1], "\"xyz\"");
+      },
+      sv.getUnderlyingMainVocabulary());
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"\"");
+        ASSERT_EQ(vocab[1], "\"xyz\"");
+      },
+      sv.getUnderlyingVocabulary(0));
+  std::visit(
+      [](auto& vocab) {
+        ASSERT_EQ(vocab.size(), 2);
+        ASSERT_EQ(vocab[0], "\"abc\"");
+        ASSERT_EQ(vocab[1], "\"axyz\"");
+      },
+      sv.getUnderlyingVocabulary(1));
+  EXPECT_ANY_THROW(sv.getUnderlyingVocabulary(2));
 }
 
 // _____________________________________________________________________________
