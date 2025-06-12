@@ -33,35 +33,9 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
       [](size_t acc, const GraphBlock& block) {
         return acc + get<ad_utility::sparql_types::Triples>(block).size();
       });
-  // TODO<joka921> Could adapt the free triples things.
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
       quads, transformTriplesTemplate(freeTriples_, defaultGraph));
-
-  /*
-  bool noDefaultGraphs = !activeDatasets.defaultGraphs().has_value() ||
-                         activeDatasets.defaultGraphs().value().empty();
-  bool withGraphContradictsDatasets = [&]() {
-    return isDelete &&
-  std::holds_alternative<TripleComponent::Iri>(defaultGraph) &&
-        !activeDatasets.isCompatibleNamedGraph(std::get<TripleComponent::Iri>(defaultGraph));
-  }();
-
-  if (!withGraphContradictsDatasets) {
-    if (!std::holds_alternative<std::monostate>(defaultGraph) ||
-        noDefaultGraphs) {
-      ad_utility::appendVector(
-          quads, transformTriplesTemplate(freeTriples_, defaultGraph));
-    } else {
-      for (const auto& dataset : activeDatasets.defaultGraphs().value()) {
-        ad_utility::appendVector(
-            quads, transformTriplesTemplate(
-                       freeTriples_,
-                       SparqlTripleSimpleWithGraph::Graph{dataset.getIri()}));
-      }
-    }
-  }
-   */
   for (const auto& [graph, triples] : graphTriples_) {
     ad_utility::appendVector(
         quads,

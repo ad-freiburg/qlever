@@ -110,10 +110,10 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // to them down the callstack. Subqueries can't have their own dataset clause,
   // but inherit it from the parent query.
   if (!isSubquery) {
-    AD_CORRECTNESS_CHECK(activeDatasetClauses_.unspecified());
+    AD_CORRECTNESS_CHECK(activeDatasetClauses_.isUnconstrainedOrWithClause());
     activeDatasetClauses_ = pq.datasetClauses_;
   } else {
-    AD_CORRECTNESS_CHECK(pq.datasetClauses_.unspecified());
+    AD_CORRECTNESS_CHECK(pq.datasetClauses_.isUnconstrainedOrWithClause());
   }
 
   // Look for ql:has-predicate to determine if the pattern trick should be used.
@@ -2665,22 +2665,21 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      // TODO<joka921> make this more efficient + correctly specified.
-      if (std::holds_alternative<TripleComponent::Iri>(arg.graphSpec_)) {
-        const auto& iri = std::get<TripleComponent::Iri>(arg.graphSpec_);
+      if (const auto* graphIri =
+              std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
         datasetBackup = planner_.activeDatasetClauses_;
         auto& defaultGraphs =
             planner_.activeDatasetClauses_.defaultGraphsMutable();
         bool isCompatible =
-            planner_.activeDatasetClauses_.isCompatibleNamedGraph(iri);
+            planner_.activeDatasetClauses_.isCompatibleNamedGraph(*graphIri);
         defaultGraphs.emplace();
         if (isCompatible) {
-          defaultGraphs.value().insert({iri});
+          defaultGraphs.value().insert({*graphIri});
         }
-      } else if (std::holds_alternative<Variable>(arg.graphSpec_)) {
-        const auto& graphVar = std::get<Variable>(arg.graphSpec_);
+      } else if (const auto* graphVar =
+                     std::get_if<Variable>(&arg.graphSpec_)) {
         if (checkUsePatternTrick::isVariableContainedInGraphPattern(
-                graphVar, arg._child, nullptr)) {
+                *graphVar, arg._child, nullptr)) {
           throw std::runtime_error(
               "A variable that is used as the graph specifier of a `GRAPH ?var "
               "{...}` clause may not appear in the body of that clause");
@@ -2689,7 +2688,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         planner_.activeDatasetClauses_.defaultGraphsMutable() =
             planner_.activeDatasetClauses_.namedGraphs();
         // We already have backed up the `activeGraphVariable_`.
-        planner_.activeGraphVariable_ = std::get<Variable>(arg.graphSpec_);
+        planner_.activeGraphVariable_ = *graphVar;
       } else {
         AD_CORRECTNESS_CHECK(
             std::holds_alternative<std::monostate>(arg.graphSpec_));

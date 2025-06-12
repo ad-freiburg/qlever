@@ -8,7 +8,6 @@
 
 #include <vector>
 
-#include "parser/DatasetClauses.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/data/Types.h"
@@ -36,8 +35,11 @@ struct Quads {
   void forAllVariables(absl::FunctionRef<void(const Variable&)> f);
 
   // Return the quads in a format for use as an update template.
+  // The `defaultGraph` is used for the `freeTriples_`. It for example is set
+  // when using a `WITH` clause. It can also be `std::monostate{}`, in which
+  // case the global default graph will be used later on.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
-      const SparqlTripleSimpleWithGraph::Graph& withGraph) const;
+      const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;

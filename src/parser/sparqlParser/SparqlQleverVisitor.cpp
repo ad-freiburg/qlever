@@ -700,28 +700,41 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
     }
   };
 
+  using Iri = TripleComponent::Iri;
+  // The graph specified in the `WITH` clause or `std::monostate{}` if there was
+  // no with clause.
   auto withGraph = [&]() -> SparqlTripleSimpleWithGraph::Graph {
-    std::optional<TripleComponent::Iri> with;
+    std::optional<Iri> with;
     visitIf(&with, ctx->iri());
     if (with.has_value()) {
       return std::move(with.value());
     }
     return std::monostate{};
   }();
+
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->usingClause()));
-  if (parsedQuery_.datasetClauses_.unspecified() &&
-      std::holds_alternative<TripleComponent::Iri>(withGraph)) {
-    parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
-        {DatasetClause{std::get<TripleComponent::Iri>(withGraph), false}});
-    parsedQuery_.datasetClauses_.setDefaultGraphIsSpecifiedUsingWith();
+
+  // If there is no USING clause, but a WITH clause, then the graph specified in
+  // the WITH clause is used as the default graph in the WHERE clause of this
+  // update.
+  if (const auto* withGraphIri = std::get_if<Iri>(&withGraph);
+      parsedQuery_.datasetClauses_.isUnconstrainedOrWithClause() &&
+      withGraphIri != nullptr) {
+    parsedQuery_.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromWithClause(*withGraphIri);
   }
+
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
+
+  // If there was a `WITH` clause, then the specified graph is used for all
+  // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH
+  // {}` clauses.
   visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
   visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
   parsedQuery_._clause = parsedQuery::UpdateClause{op};

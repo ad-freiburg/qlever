@@ -11,14 +11,18 @@
 #include "parser/sparqlParser/DatasetClause.h"
 
 namespace parsedQuery {
-// A struct for the FROM clause (default graphs) and FROM NAMED clauses (named
-// graphs).
+
+// A struct for the FROM [NAMED] clause in queries, and the `USING [NAMED]` and
+// `WITH` clauses from `SPARQL Update`.
 struct DatasetClauses {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
 
  private:
+  // Store the default and named graphs.
   Graphs defaultGraphs_{};
   Graphs namedGraphs_{};
+
+  // An empty set of graphs that sometimes has to be returned.
   Graphs emptyDummy_{Graphs::value_type{}};
   bool defaultGraphSpecifiedUsingWith_ = false;
 
@@ -27,36 +31,43 @@ struct DatasetClauses {
   // as needed for a `DatasetClauses` object.
   static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
 
-  DatasetClauses(Graphs defaultGraphs = std::nullopt,
-                 Graphs namedGraphs = std::nullopt)
-      : defaultGraphs_{std::move(defaultGraphs)},
-        namedGraphs_{std::move(namedGraphs)} {}
+  // Return the `DatasetClauses` that correspond to the `WITH <withGraph>`
+  // clause in a SPARQL UPDATE.
+  static DatasetClauses fromWithClause(const TripleComponent::Iri& withGraph);
 
-  bool unspecified() const {
-    return (defaultGraphSpecifiedUsingWith_ || !defaultGraphs_.has_value()) &&
-           !namedGraphs_.has_value();
-  }
+  // Construct directly from two optional sets, mostly used in tests.
+  DatasetClauses(Graphs defaultGraphs, Graphs namedGraphs);
 
-  const auto& defaultGraphs() const {
-    return unspecified() || defaultGraphs_.has_value() ? defaultGraphs_
-                                                       : emptyDummy_;
-  }
+  // Default constructor, leads to a completely unconstrained clause.
+  DatasetClauses() = default;
 
-  const auto& namedGraphs() const {
-    return unspecified() || namedGraphs_.has_value() ? namedGraphs_
-                                                     : emptyDummy_;
-  }
+  // Return true iff neither default nor named graphs were specified using a
+  // FROM or USING graph. Note that this function also returns true for a WITH
+  // clause, because those semantics are useful in the places where this
+  // function is needed (WITH clauses are the weakest clauses and can easily be
+  // overridden.
+  bool isUnconstrainedOrWithClause() const;
 
-  // TODO<joka921> Can we get a safer interface here?
-  auto& defaultGraphsMutable() { return defaultGraphs_; }
+  // Return the set of default graphs. `std::nullopt` means "use the implicit
+  // default graph", whereas an empty set means "the default graph is empty,
+  // because a named graph was specified" (See the SPARQL 1.1 standard,
+  // section 13.2).
+  const Graphs& defaultGraphs() const;
 
-  bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const {
-    return unspecified() || namedGraphs().value().contains(graph);
-  }
+  // Return the set of  named graphs. `std::nullopt` means "all named graphs can
+  // be used", whereas an empty set means "no named graphs can be used, because
+  // a default graph was explicitly specified" (See the SPARQL 1.1 standard,
+  // section 13.2).
+  const Graphs& namedGraphs() const;
 
-  void setDefaultGraphIsSpecifiedUsingWith() {
-    defaultGraphSpecifiedUsingWith_ = true;
-  }
+  // Get mutable access to the defaultGraphs_ member, required in the query
+  // planner. Should be used with care.
+  Graphs& defaultGraphsMutable();
+
+  // Return true iff the `graph` is a supported named graph, either because it
+  // is explicitly part of the `namedGraphs()`, or because all named graphs are
+  // implicitly allowed.
+  bool isCompatibleNamedGraph(const TripleComponent::Iri& graph) const;
 
   bool operator==(const DatasetClauses& other) const = default;
 };

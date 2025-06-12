@@ -4,8 +4,10 @@
 
 #include "parser/DatasetClauses.h"
 
+namespace parsedQuery {
+
 // _____________________________________________________________________________
-parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
+DatasetClauses DatasetClauses::fromClauses(
     const std::vector<DatasetClause>& clauses) {
   DatasetClauses result;
   for (auto& [dataset, isNamed] : clauses) {
@@ -17,3 +19,50 @@ parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
   }
   return result;
 }
+
+// _____________________________________________________________________________
+DatasetClauses DatasetClauses::fromWithClause(
+    const TripleComponent::Iri& withGraph) {
+  DatasetClauses result;
+  result.defaultGraphs_.emplace({withGraph});
+  result.defaultGraphSpecifiedUsingWith_ = true;
+  return result;
+}
+
+// _____________________________________________________________________________
+DatasetClauses::DatasetClauses(Graphs defaultGraphs, Graphs namedGraphs)
+    : defaultGraphs_{std::move(defaultGraphs)},
+      namedGraphs_{std::move(namedGraphs)} {}
+
+// _____________________________________________________________________________
+bool DatasetClauses::isUnconstrainedOrWithClause() const {
+  return (defaultGraphSpecifiedUsingWith_ || !defaultGraphs_.has_value()) &&
+         !namedGraphs_.has_value();
+}
+
+// _____________________________________________________________________________
+auto DatasetClauses::defaultGraphs() const -> const Graphs& {
+  return isUnconstrainedOrWithClause() || defaultGraphs_.has_value()
+             ? defaultGraphs_
+             : emptyDummy_;
+}
+
+// _____________________________________________________________________________
+auto DatasetClauses::namedGraphs() const -> const Graphs& {
+  return isUnconstrainedOrWithClause() || namedGraphs_.has_value()
+             ? namedGraphs_
+             : emptyDummy_;
+}
+
+// _____________________________________________________________________________
+auto DatasetClauses::defaultGraphsMutable() -> Graphs& {
+  AD_CORRECTNESS_CHECK(!defaultGraphSpecifiedUsingWith_);
+  return defaultGraphs_;
+}
+
+// _____________________________________________________________________________
+bool DatasetClauses::isCompatibleNamedGraph(
+    const TripleComponent::Iri& graph) const {
+  return isUnconstrainedOrWithClause() || namedGraphs().value().contains(graph);
+}
+}  // namespace parsedQuery
