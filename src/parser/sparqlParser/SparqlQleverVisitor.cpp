@@ -656,12 +656,20 @@ Copy Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  return {visit(ctx->quadData()).toTriplesWithGraph(), {}};
+  // TODO<joka921> Are those also affected by the HTTP-parameters
+  // `using-default-graph-uri`? (also affects DeleteDData and DeleteWhere)
+  return {
+      visit(ctx->quadData())
+          .toTriplesWithGraph(false, std::monostate{}, activeDatasetClauses_),
+      {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  return {{}, visit(ctx->quadData()).toTriplesWithGraph()};
+  return {
+      {},
+      visit(ctx->quadData())
+          .toTriplesWithGraph(true, std::monostate{}, activeDatasetClauses_)};
 }
 
 // ____________________________________________________________________________________
@@ -677,9 +685,10 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, triples.toTriplesWithGraph()}};
-
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{},
+                  triples.toTriplesWithGraph(true, std::monostate{},
+                                             activeDatasetClauses_)}};
   return parsedQuery_;
 }
 
@@ -691,25 +700,43 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
                                     " was not bound in the query body."));
     }
   };
-  auto visitTemplateClause = [&ensureVariableIsVisible, this](auto* ctx,
-                                                              auto* target) {
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](
+                                 auto* ctx, auto* target, bool isDelete,
+                                 const auto& defaultGraph,
+                                 const auto& datasetClauses) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      *target = quads.toTriplesWithGraph();
+      *target =
+          quads.toTriplesWithGraph(isDelete, defaultGraph, datasetClauses);
     }
   };
+  auto withGraph = [&]() -> SparqlTripleSimpleWithGraph::Graph {
+    std::optional<TripleComponent::Iri> with;
+    visitIf(&with, ctx->iri());
+    if (with.has_value()) {
+      return std::move(with.value());
+    }
+    return std::monostate{};
+  }();
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->usingClause()));
+  if (parsedQuery_.datasetClauses_.unspecified() &&
+      std::holds_alternative<TripleComponent::Iri>(withGraph)) {
+    parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+        {DatasetClause{std::get<TripleComponent::Iri>(withGraph), false}});
+    parsedQuery_.datasetClauses_.setDefaultGraphIsSpecifiedUsingWith();
+  }
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
-  visitTemplateClause(ctx->insertClause(), &op.toInsert_);
-  visitTemplateClause(ctx->deleteClause(), &op.toDelete_);
-  visitIf(&op.with_, ctx->iri());
+  visitTemplateClause(ctx->insertClause(), &op.toInsert_, false, withGraph,
+                      parsedQuery_.datasetClauses_);
+  visitTemplateClause(ctx->deleteClause(), &op.toDelete_, true, withGraph,
+                      parsedQuery_.datasetClauses_);
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
   return parsedQuery_;

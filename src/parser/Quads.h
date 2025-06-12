@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/data/Types.h"
@@ -35,7 +36,9 @@ struct Quads {
   void forAllVariables(absl::FunctionRef<void(const Variable&)> f);
 
   // Return the quads in a format for use as an update template.
-  std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph() const;
+  std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
+      bool isDelete, const SparqlTripleSimpleWithGraph::Graph& withGraph,
+      const parsedQuery::DatasetClauses& activeDatasetClauses) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;

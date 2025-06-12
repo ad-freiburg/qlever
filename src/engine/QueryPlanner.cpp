@@ -109,15 +109,11 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // Store the dataset clause (FROM and FROM NAMED clauses), s.t. we have access
   // to them down the callstack. Subqueries can't have their own dataset clause,
   // but inherit it from the parent query.
-  auto datasetClauseIsEmpty = [](const auto& datasetClause) {
-    return !datasetClause.defaultGraphs_.has_value() &&
-           !datasetClause.namedGraphs_.has_value();
-  };
   if (!isSubquery) {
-    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(activeDatasetClauses_));
+    AD_CORRECTNESS_CHECK(activeDatasetClauses_.unspecified());
     activeDatasetClauses_ = pq.datasetClauses_;
   } else {
-    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(pq.datasetClauses_));
+    AD_CORRECTNESS_CHECK(pq.datasetClauses_.unspecified());
   }
 
   // Look for ql:has-predicate to determine if the pattern trick should be used.
@@ -512,7 +508,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
         std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t.s_.getVariable()].push_back(s);
         if (activeGraphVariable_.has_value() ||
-            activeDatasetClauses_.defaultGraphs_.has_value()) {
+            activeDatasetClauses_.defaultGraphs().has_value()) {
           AD_THROW(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
@@ -835,7 +831,7 @@ auto QueryPlanner::seedWithScansAndText(
 
     auto addIndexScan =
         [this, pushPlan, node,
-         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
+         &relevantGraphs = activeDatasetClauses_.defaultGraphs()](
             Permutation::Enum permutation,
             std::optional<SparqlTripleSimple> triple = std::nullopt) {
           if (!triple.has_value()) {
@@ -2669,10 +2665,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+      // TODO<joka921> make this more efficient + correctly specified.
       if (std::holds_alternative<TripleComponent::Iri>(arg.graphSpec_)) {
+        const auto& iri = std::get<TripleComponent::Iri>(arg.graphSpec_);
         datasetBackup = planner_.activeDatasetClauses_;
-        planner_.activeDatasetClauses_.defaultGraphs_.emplace(
-            {std::get<TripleComponent::Iri>(arg.graphSpec_)});
+        auto& defaultGraphs =
+            planner_.activeDatasetClauses_.defaultGraphsMutable();
+        bool isCompatible =
+            planner_.activeDatasetClauses_.isCompatibleNamedGraph(iri);
+        defaultGraphs.emplace();
+        if (isCompatible) {
+          defaultGraphs.value().insert({iri});
+        }
       } else if (std::holds_alternative<Variable>(arg.graphSpec_)) {
         const auto& graphVar = std::get<Variable>(arg.graphSpec_);
         if (checkUsePatternTrick::isVariableContainedInGraphPattern(
@@ -2682,8 +2686,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
               "{...}` clause may not appear in the body of that clause");
         }
         datasetBackup = planner_.activeDatasetClauses_;
-        planner_.activeDatasetClauses_.defaultGraphs_ =
-            planner_.activeDatasetClauses_.namedGraphs_;
+        planner_.activeDatasetClauses_.defaultGraphsMutable() =
+            planner_.activeDatasetClauses_.namedGraphs();
         // We already have backed up the `activeGraphVariable_`.
         planner_.activeGraphVariable_ = std::get<Variable>(arg.graphSpec_);
       } else {
@@ -2828,7 +2832,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.defaultGraphs_);
+        planner_.activeDatasetClauses_.defaultGraphs());
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
