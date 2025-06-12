@@ -78,6 +78,7 @@ class SplitVocabulary {
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
+  // Instances of the functions used for implementing the specific split logic
   static constexpr SplitFunction splitFunction_{};
   static constexpr SplitFilenameFunction splitFilenameFunction_{};
 
@@ -86,8 +87,9 @@ class SplitVocabulary {
   UnderlyingVocabsArray underlying_;
 
  public:
-  // Check validity of vocabIndex and marker, then return a 64 bit index that
-  // contains the marker and vocabIndex, but leaves the ValueId datatype bits 0.
+  // Check validity of vocabIndex and marker, then return a new 64 bit index
+  // that contains the marker and vocabIndex. The result is guaranteed to be
+  // zero in all ValueId datatype bits.
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
