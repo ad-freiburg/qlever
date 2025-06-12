@@ -2,7 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Distinct.h"
+#include "engine/Distinct.h"
+
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"

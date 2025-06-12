@@ -905,7 +905,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
 }
 
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
-  auto maxDist = std::numeric_limits<size_t>::max();
+  auto maxDist = std::numeric_limits<double>::max();
   MaxDistanceConfig maxDistConf{maxDist};
   bool addLeftChildFirst = std::get<1>(GetParam());
 

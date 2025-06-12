@@ -7,13 +7,14 @@
 #ifndef QLEVER_SRC_UTIL_ANTLR_ANTLRERRORHANDLING_H
 #define QLEVER_SRC_UTIL_ANTLR_ANTLRERRORHANDLING_H
 
+#include <BaseErrorListener.h>
+#include <Recognizer.h>
+#include <Token.h>
+#include <absl/strings/str_cat.h>
+
 #include <concepts>
 #include <string>
 
-#include "BaseErrorListener.h"
-#include "Recognizer.h"
-#include "Token.h"
-#include "absl/strings/str_cat.h"
 #include "backports/concepts.h"
 #include "util/ParseException.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
