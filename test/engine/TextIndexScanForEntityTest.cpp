@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../WordsAndDocsFileLineCreator.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -23,16 +24,90 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> .";
 
+std::string wordsFileContent =
+    createWordsFileLineAsString("astronomer", false, 1, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
+    createWordsFileLineAsString("scientist", false, 1, 1) +
+    createWordsFileLineAsString("field", false, 1, 1) +
+    createWordsFileLineAsString("astronomy", false, 1, 1) +
+    createWordsFileLineAsString("astronomer", false, 2, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
+    createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
+    createWordsFileLineAsString("scientist", false, 2, 0) +
+    createWordsFileLineAsString("field", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 3, 1) +
+    createWordsFileLineAsString("concentrates", false, 3, 1) +
+    createWordsFileLineAsString("studies", false, 3, 1) +
+    createWordsFileLineAsString("specific", false, 3, 1) +
+    createWordsFileLineAsString("question", false, 3, 1) +
+    createWordsFileLineAsString("outside", false, 3, 1) +
+    createWordsFileLineAsString("scope", false, 3, 1) +
+    createWordsFileLineAsString("earth", false, 3, 1) +
+    createWordsFileLineAsString("astronomy", false, 4, 1) +
+    createWordsFileLineAsString("concentrates", false, 4, 1) +
+    createWordsFileLineAsString("studies", false, 4, 1) +
+    createWordsFileLineAsString("field", false, 4, 1) +
+    createWordsFileLineAsString("outside", false, 4, 1) +
+    createWordsFileLineAsString("scope", false, 4, 1) +
+    createWordsFileLineAsString("earth", false, 4, 1) +
+    createWordsFileLineAsString("tester", false, 5, 1) +
+    createWordsFileLineAsString("rockets", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 5, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
+    createWordsFileLineAsString("although", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("although", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("space", false, 6, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
+    createWordsFileLineAsString("space", false, 7, 0) +
+    createWordsFileLineAsString("earth", false, 7, 1);
+
+std::string firstDocText =
+    "An astronomer is a scientist in the field of "
+    "astronomy who concentrates their studies on a "
+    "specific question or field outside of the scope of "
+    "Earth.";
+
+std::string secondDocText =
+    "The Tester of the rockets can be an astronomer "
+    "too although they might not be in space but on "
+    "earth.";
+
+std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
+                              createDocsFileLineAsString(7, secondDocText);
+
+std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
+    wordsFileContent, docsFileContent};
+
 // Return a `QueryExecutionContext` from the given `kg`(see above) that has a
 // text index for the literals in the `kg`.
-auto qecWithTextIndex = []() {
+auto qecWithOnlyLiteralTextIndex = []() {
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   return getQec(std::move(config));
 };
 
+// Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
+// text index that contains the literals from the `kg` as well as the
+// `contentsOfWordsFileAndDocsFile` (also above). The metrics used for the text
+// scores can be specified.
+auto getQecWithTextIndex(
+    std::optional<TextScoringMetric> textScoring = std::nullopt) {
+  using namespace ad_utility::testing;
+  TestIndexConfig config{kg};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
+  if (textScoring.has_value()) {
+    config.scoringMetric = textScoring;
+  }
+  return getQec(std::move(config));
+}
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
-  auto qec = qecWithTextIndex();
+  auto qec = qecWithOnlyLiteralTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -63,7 +138,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 }
 
 TEST(TextIndexScanForEntity, FixedEntityScan) {
-  auto qec = qecWithTextIndex();
+  auto qec = qecWithOnlyLiteralTextIndex();
 
   string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
@@ -93,8 +168,27 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(fixedEntity, h::getTextRecordFromResultTable(qec, result, 0));
 }
 
+TEST(TextIndexScanForEntity, FullTextIndexEntityScan) {
+  auto qec = getQecWithTextIndex();
+
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "astronomer*"};
+  ASSERT_EQ(s1.getResultWidth(), 3);
+
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 3);
+
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 0));
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 1));
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 2));
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 3));
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 4));
+  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 5));
+}
+
 TEST(TextIndexScanForEntity, CacheKeys) {
-  auto qec = qecWithTextIndex();
+  auto qec = qecWithOnlyLiteralTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test*"};
@@ -138,7 +232,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 }
 
 TEST(TextIndexScanForEntity, KnownEmpty) {
-  auto qec = qecWithTextIndex();
+  auto qec = qecWithOnlyLiteralTextIndex();
 
   TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "nonExistentWord*"};
