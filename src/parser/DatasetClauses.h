@@ -62,6 +62,8 @@ struct DatasetClauses {
 
   // Get mutable access to the defaultGraphs_ member, required in the query
   // planner. Should be used with care.
+  // TODO<joka921> Make this interface unnecessary, by implementing everything
+  // as a member function.
   Graphs& defaultGraphsMutable();
 
   // Return true iff the `graph` is a supported named graph, either because it

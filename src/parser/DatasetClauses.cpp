@@ -56,7 +56,6 @@ auto DatasetClauses::namedGraphs() const -> const Graphs& {
 
 // _____________________________________________________________________________
 auto DatasetClauses::defaultGraphsMutable() -> Graphs& {
-  AD_CORRECTNESS_CHECK(!defaultGraphSpecifiedUsingWith_);
   return defaultGraphs_;
 }
 

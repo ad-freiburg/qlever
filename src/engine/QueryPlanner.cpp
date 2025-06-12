@@ -2685,6 +2685,10 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
               "{...}` clause may not appear in the body of that clause");
         }
         datasetBackup = planner_.activeDatasetClauses_;
+
+        // TODO<joka921> Move this whole block above and below into the
+        // `DatasetClauses` class. By the way the following is not quite
+        // correct, as it also should set the `specifiedUsingWith` to false etc.
         planner_.activeDatasetClauses_.defaultGraphsMutable() =
             planner_.activeDatasetClauses_.namedGraphs();
         // We already have backed up the `activeGraphVariable_`.
