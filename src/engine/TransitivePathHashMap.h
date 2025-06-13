@@ -106,15 +106,10 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  // initialize the map from the subresult
+  // Initialize the map from the subresult.
   HashMapWrapper setupEdgesMap(
-      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const IdTable& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
-
-  template <size_t SUB_WIDTH>
-  HashMapWrapper setupEdgesMap(const IdTable& dynSub,
-                               const TransitivePathSide& startSide,
-                               const TransitivePathSide& targetSide) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H

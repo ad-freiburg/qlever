@@ -12,19 +12,8 @@
 
 // _____________________________________________________________________________
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
-    const IdTable& dynSub, const TransitivePathSide& startSide,
+    const IdTable& sub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
-                         &TransitivePathHashMap::setupEdgesMap, this, dynSub,
-                         startSide, targetSide);
-}
-
-// _____________________________________________________________________________
-template <size_t SUB_WIDTH>
-HashMapWrapper TransitivePathHashMap::setupEdgesMap(
-    const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide) const {
-  const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
   if (graphVariable_.has_value()) {
