@@ -1198,7 +1198,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   }
 
   DecompressedBlock lastBlock{allocator_};
-  for (auto it = --blocks.end(); it != firstBlockIt && !lastBlock.empty();
+  for (auto it = --blocks.end(); it != firstBlockIt && lastBlock.empty();
        --it) {
     lastBlock = scanBlock(*it);
   }
