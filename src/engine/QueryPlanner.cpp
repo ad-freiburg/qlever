@@ -8,6 +8,7 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
@@ -781,13 +782,28 @@ auto QueryPlanner::seedWithScansAndText(
       // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
       // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
       // which we have special handling).
-      AD_CORRECTNESS_CHECK((newIdPlan._idsOfIncludedFilters == 0 &&
-                            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
-                           newIdPlan.type == SubtreePlan::Type::OPTIONAL ||
-                           newIdPlan.type == SubtreePlan::Type::MINUS ||
-                           (newIdPlan.type == SubtreePlan::Type::BASIC &&
-                            std::dynamic_pointer_cast<Bind>(
-                                newIdPlan._qet->getRootOperation())));
+
+      // TODO<ullingerc> clean up
+      AD_CORRECTNESS_CHECK(
+          (newIdPlan._idsOfIncludedFilters == 0 &&
+           newIdPlan.idsOfIncludedTextLimits_ == 0) ||
+              newIdPlan.type == SubtreePlan::Type::OPTIONAL ||
+              newIdPlan.type == SubtreePlan::Type::MINUS ||
+              (newIdPlan.type == SubtreePlan::Type::BASIC &&
+               (std::dynamic_pointer_cast<Bind>(
+                    newIdPlan._qet->getRootOperation()) ||
+                std::dynamic_pointer_cast<OptionalJoin>(
+                    newIdPlan._qet->getRootOperation()) ||
+                std::dynamic_pointer_cast<Minus>(
+                    newIdPlan._qet->getRootOperation()))),
+          [&]() {
+            return absl::StrCat(
+                "Included filters and text limits illegal: filters: ",
+                newIdPlan._idsOfIncludedFilters,
+                ", text limits:", newIdPlan.idsOfIncludedTextLimits_,
+                ", subtree type: ", newIdPlan.type,
+                ", subtree  cache key: ", newIdPlan._qet->getCacheKey());
+          });
 
       seeds.emplace_back(newIdPlan);
     }
