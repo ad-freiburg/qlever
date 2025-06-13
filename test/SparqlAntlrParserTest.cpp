@@ -2516,19 +2516,15 @@ TEST(SparqlParser, Load) {
   expectLoad(
       "LOAD <https://example.com>",
       m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), noGraph}},
-                         std::nullopt),
+          m::GraphUpdate({}, {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                          Var("?o"), noGraph}}),
           m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
-  expectLoad(
-      "LOAD SILENT <http://example.com> into GRAPH <bar>",
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), Iri("<bar>")}},
-                         std::nullopt),
-          m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
+  expectLoad("LOAD SILENT <http://example.com> into GRAPH <bar>",
+             m::UpdateClause(
+                 m::GraphUpdate(
+                     {}, {SparqlTripleSimpleWithGraph{
+                             Var("?s"), Var("?p"), Var("?o"), Iri("<bar>")}}),
+                 m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
 }
 
 TEST(SparqlParser, GraphOrDefault) {

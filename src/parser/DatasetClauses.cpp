@@ -55,11 +55,6 @@ auto DatasetClauses::namedGraphs() const -> const Graphs& {
 }
 
 // _____________________________________________________________________________
-auto DatasetClauses::defaultGraphsMutable() -> Graphs& {
-  return defaultGraphs_;
-}
-
-// _____________________________________________________________________________
 bool DatasetClauses::isCompatibleNamedGraph(
     const TripleComponent::Iri& graph) const {
   return isUnconstrainedOrWithClause() || namedGraphs().value().contains(graph);
