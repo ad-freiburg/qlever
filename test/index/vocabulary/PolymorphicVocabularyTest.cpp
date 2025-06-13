@@ -16,7 +16,8 @@ void testForVocabType(VocabularyType::Enum vocabType) {
   std::string filename =
       absl::StrCat("polymorphicVocabularyTest.", type.toString(), ".vocab");
 
-  auto writer = PolymorphicVocabulary::makeDiskWriter(filename, type);
+  auto writerPtr = PolymorphicVocabulary::makeDiskWriterPtr(filename, type);
+  auto& writer = *writerPtr;
   writer("alpha", false);
   writer("beta", true);
   writer("gamma", false);

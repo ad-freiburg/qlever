@@ -35,7 +35,9 @@ class NeutralOptional : public Operation {
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool supportsLimit() const override;
+  bool supportsLimitOffset() const override;
+  void onLimitOffsetChanged(
+      const LimitOffsetClause& limitOffset) const override;
 
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;

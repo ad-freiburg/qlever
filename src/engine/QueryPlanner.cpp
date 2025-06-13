@@ -28,6 +28,7 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Load.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
@@ -203,8 +204,13 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->setLimit(pq._limitOffset);
+    // For subqueries the limit has already been applied, for the root query the
+    // exporter will apply LIMIT and OFFSET if `supportsLimit()` is not natively
+    // supported by the `Operation`. Check the documentation of
+    // `ExportQueryExecutionTrees::compensateForLimitOffsetClause to see `how
+    // this is comphandled in the exporter.
+    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
+      plan._qet->applyLimit(pq._limitOffset);
     }
   }
 
@@ -2710,6 +2716,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Service>) {
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
+  } else if constexpr (std::is_same_v<T, p::Load>) {
+    SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
+    visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
@@ -2959,7 +2968,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->setLimit(arg.get()._limitOffset);
+    plan._qet->applyLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }

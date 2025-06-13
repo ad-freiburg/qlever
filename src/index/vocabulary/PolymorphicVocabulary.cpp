@@ -4,7 +4,7 @@
 
 #include "index/vocabulary/PolymorphicVocabulary.h"
 
-#include <engine/CallFixedSize.h>
+#include "engine/CallFixedSize.h"
 
 // _____________________________________________________________________________
 void PolymorphicVocabulary::open(const std::string& filename) {
@@ -34,36 +34,18 @@ std::string PolymorphicVocabulary::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
-PolymorphicVocabulary::WordWriter::WordWriter(WordWriters writer)
-    : writer_(std::move(writer)) {}
-
-// _____________________________________________________________________________
-void PolymorphicVocabulary::WordWriter::finish() {
-  std::visit([](auto& writer) { return writer->finish(); }, writer_);
-}
-
-// _____________________________________________________________________________
-uint64_t PolymorphicVocabulary::WordWriter::operator()(std::string_view word,
-                                                       bool isExternal) {
-  return std::visit(
-      [&word, isExternal](auto& writer) { return (*writer)(word, isExternal); },
-      writer_);
-}
-
-// _____________________________________________________________________________
 auto PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename) const
-    -> std::unique_ptr<WordWriter> {
-  return std::make_unique<WordWriter>(std::visit(
-      [&filename](auto& vocab) -> WordWriters {
+    -> std::unique_ptr<WordWriterBase> {
+  return std::visit(
+      [&filename](auto& vocab) -> std::unique_ptr<WordWriterBase> {
         return vocab.makeDiskWriterPtr(filename);
       },
-      vocab_));
+      vocab_);
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<PolymorphicVocabulary::WordWriter>
-PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename,
-                                         VocabularyType type) {
+std::unique_ptr<WordWriterBase> PolymorphicVocabulary::makeDiskWriterPtr(
+    const std::string& filename, VocabularyType type) {
   PolymorphicVocabulary dummyVocab;
   dummyVocab.resetToType(type);
   return dummyVocab.makeDiskWriterPtr(filename);
@@ -72,19 +54,19 @@ PolymorphicVocabulary::makeDiskWriterPtr(const std::string& filename,
 // _____________________________________________________________________________
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
+  // The names of the enum values are the same as the type aliases for the
+  // implementations, so we can shorten the following code using a macro.
+#undef AD_CASE
+#define AD_CASE(vocabType)              \
+  case VocabularyType::Enum::vocabType: \
+    vocab_.emplace<vocabType>();        \
+    break
+
   switch (type.value()) {
-    case VocabularyType::Enum::InMemoryUncompressed:
-      vocab_.emplace<InMemory>();
-      break;
-    case VocabularyType::Enum::OnDiskUncompressed:
-      vocab_.emplace<External>();
-      break;
-    case VocabularyType::Enum::InMemoryCompressed:
-      vocab_.emplace<CompressedInMemory>();
-      break;
-    case VocabularyType::Enum::OnDiskCompressed:
-      vocab_.emplace<CompressedExternal>();
-      break;
+    AD_CASE(InMemoryUncompressed);
+    AD_CASE(OnDiskUncompressed);
+    AD_CASE(InMemoryCompressed);
+    AD_CASE(OnDiskCompressed);
     default:
       AD_FAIL();
   }

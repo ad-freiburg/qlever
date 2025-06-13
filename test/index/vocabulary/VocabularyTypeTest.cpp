@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "index/vocabulary/VocabularyType.h"
+#include "util/HashMap.h"
 
 using namespace ad_utility;
 // Simple tests for the glorified enum `VocabularyType`.
@@ -33,5 +34,17 @@ TEST(VocabularyType, allTests) {
     nlohmann::json j = T{e};
     t = j.get<T>();
     EXPECT_EQ(t.value(), e);
+  }
+}
+
+// Test the random sampling.
+TEST(VocabularyType, random) {
+  ad_utility::HashMap<size_t, size_t> counts;
+  size_t numSamples = 100'000;
+  for (size_t i = 0; i < numSamples; ++i) {
+    counts[static_cast<size_t>(VocabularyType::random().value())]++;
+  }
+  for (const auto& [_, count] : counts) {
+    EXPECT_GE(count, numSamples / VocabularyType::all().size() / 3);
   }
 }

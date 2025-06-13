@@ -4,14 +4,13 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <atomic>
 #include <ranges>
 
 #include "./util/GTestHelpers.h"
-#include "absl/cleanup/cleanup.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
