@@ -165,6 +165,20 @@ class QueryPlanner {
     size_t getSizeEstimate() const;
   };
 
+  // This struct represents a single SPARQL FILTER. Additionally, it has the
+  // option to also store a subtree plan, which is semantically equivalent to
+  // the filter, but might be cheaper to compute. This is currently used to
+  // rewrite FILTERs on geof: functions to spatial join operations.
+  struct FilterAndOptionalSubstitute {
+    SparqlFilter filter_;
+    std::optional<SubtreePlan> substitute_;
+
+    bool hasSubstitute() const { return substitute_.has_value(); }
+  };
+
+  using FiltersAndOptionalSubstitutes =
+      std::vector<FilterAndOptionalSubstitute>;
+
   // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
    private:
@@ -193,16 +207,19 @@ class QueryPlanner {
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
     static std::vector<size_t> computeConnectedComponents(
-        const std::vector<SubtreePlan>& nodes) {
+        const std::vector<SubtreePlan>& nodes,
+        const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
       QueryGraph graph;
-      graph.setupGraph(nodes);
+      graph.setupGraph(nodes, filtersAndOptionalSubstitutes);
       return graph.dfsForAllNodes();
     }
 
    private:
     // The actual implementation of `setupGraph`. First build a
     // graph from the `leafOperations` and then run DFS and return the result.
-    void setupGraph(const std::vector<SubtreePlan>& leafOperations);
+    void setupGraph(
+        const std::vector<SubtreePlan>& leafOperations,
+        const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes);
 
     // Run a single DFS startint at the `startNode`. All nodes that are
     // connected to this node (including the node itself) will have
@@ -294,6 +311,12 @@ class QueryPlanner {
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
       TextLimitMap& textLimits);
+
+  // Function for optimization query rewrites: The function returns pairs of
+  // filters with the corresponding substitute subtree plan. This is currently
+  // used to translate GeoSPARQL filters to spatial join operations.
+  FiltersAndOptionalSubstitutes seedFilterSubstitutes(
+      std::vector<SparqlFilter> filters);
 
   /**
    * @brief Returns a parsed query for the property path.
@@ -429,8 +452,9 @@ class QueryPlanner {
                        const vector<ColumnIndex>& orderedOnColumns) const;
 
   template <bool replaceInsteadOfAddPlans>
-  void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
-                              const std::vector<SparqlFilter>& filters) const;
+  void applyFiltersIfPossible(
+      std::vector<SubtreePlan>& row,
+      const FiltersAndOptionalSubstitutes& filters) const;
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -507,16 +531,16 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-      const TripleGraph& tg) const;
+      const FiltersAndOptionalSubstitutes& filters,
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
   // algorithm that always greedily chooses the smallest result of the possible
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-      const TripleGraph& tg) const;
+      const FiltersAndOptionalSubstitutes& filters,
+      const TextLimitVec& textLimits, const TripleGraph& tg) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
@@ -560,10 +584,18 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
+    // We remember the potential filter substitutions so we can avoid
+    // unnecessarily recomputing them.
+    FiltersAndOptionalSubstitutes filtersAndSubst_;
+
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
                         ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
+        : planner_{planner},
+          rootPattern_{rootPattern},
+          qec_{planner._qec},
+          filtersAndSubst_{
+              planner.seedFilterSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
