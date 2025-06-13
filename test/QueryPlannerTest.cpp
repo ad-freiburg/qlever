@@ -2602,13 +2602,14 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     auto qec = ad_utility::testing::getQec();
     TripleComponent subject{Variable{"?subject"}};
     TripleComponent object{Variable{"?object"}};
-    SparqlTriple triple{subject, distanceIRI, object};
     if (shouldThrow) {
-      ASSERT_ANY_THROW(
-          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
+      ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
+                            SparqlTriple{subject, distanceIRI, object}})
+                           .toSpatialJoinConfiguration());
     } else {
       auto config =
-          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration();
+          parsedQuery::SpatialQuery{SparqlTriple{subject, distanceIRI, object}}
+              .toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);
@@ -3930,6 +3931,12 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
             h::CartesianProductJoin(
                 h::NeutralOptional(h::IndexScanFromStrings("?a", "?b", "?c")),
                 h::NeutralOptional(h::IndexScanFromStrings("?d", "?e", "?f"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, InverseGraphPattern) {
+  h::expect("SELECT * { ?a ^<b> ?c }",
+            h::IndexScanFromStrings("?c", "<b>", "?a"));
 }
 
 // _____________________________________________________________________________

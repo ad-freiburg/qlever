@@ -55,8 +55,6 @@ class SparqlPrefix {
   bool operator==(const SparqlPrefix&) const = default;
 };
 
-std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
-
 // Forward declaration
 namespace parsedQuery {
 struct GraphPatternOperation;
