@@ -1019,6 +1019,7 @@ TEST(SparqlExpression, isSomethingFunctions) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
   Id geo = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13"));
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
@@ -1026,18 +1027,18 @@ TEST(SparqlExpression, isSomethingFunctions) {
   Id localLiteral = testContext().notInVocabA;
 
   IdOrLiteralOrIriVec testIdOrStrings = IdOrLiteralOrIriVec{
-      iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank,
-      localLiteral,  I(42),        D(1),   F,   geo,     U};
+      iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
+      I(42),         D(1),         F,      geo, date,    U};
   testUnaryExpression<makeIsIriExpression>(
-      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F});
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
   testUnaryExpression<makeIsBlankExpression>(
-      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F});
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
   testUnaryExpression<makeBoundExpression>(
-      testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________
