@@ -942,6 +942,10 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           // execution could happen directly against the DeltaTriples
           // instead of the snapshot that has to be refreshed after each
           // step.
+
+          // Note: It is crucial that we first update the
+          // `LocatedTriplesSnapshot` s.t. the query planner has the correct
+          // size estimates.
           qec.updateLocatedTriplesSnapshot();
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
