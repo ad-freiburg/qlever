@@ -159,8 +159,9 @@ TEST(Describe, simpleMembers) {
 
   // Test the cache key of the same query, but with a FROM clause.
   auto parsedDescribe2 = parsedDescribe;
-  parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(
-      {TripleComponent::Iri::fromIriref("<default-graph-1>")});
+  parsedDescribe2.datasetClauses_ =
+      parsedQuery::DatasetClauses::fromClauses(std::vector{DatasetClause{
+          TripleComponent::Iri::fromIriref("<default-graph-1>"), false}});
   Describe describe2{
       qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
       parsedDescribe2};
