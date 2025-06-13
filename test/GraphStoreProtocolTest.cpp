@@ -62,12 +62,18 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
                            isInsertion ? graph : empty, std::nullopt),
             m::GraphPattern()));
     AD_EXPECT_THROW_WITH_MESSAGE(
-        transform(ad_utility::testing::makePostRequest(
-                      "/?default", "application/sparql-results+xml", ""),
-                  DEFAULT{}),
+        transform(
+            ad_utility::testing::makePostRequest(
+                "/?default", "application/sparql-results+xml", "<foo></foo>"),
+            DEFAULT{}),
         testing::HasSubstr(
             "Mediatype \"application/sparql-results+xml\" is not supported for "
             "SPARQL Graph Store HTTP Protocol in QLever."));
+
+    AD_EXPECT_THROW_WITH_MESSAGE(transform(ad_utility::testing::makePostRequest(
+                                               "/?default", "text/turtle", ""),
+                                           DEFAULT{}),
+                                 testing::HasSubstr("No Content"));
     AD_EXPECT_THROW_WITH_MESSAGE(
         transform(ad_utility::testing::makePostRequest(
                       "/?default", "application/n-quads", "<a> <b> <c> <d> ."),

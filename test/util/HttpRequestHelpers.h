@@ -32,7 +32,7 @@ inline auto makeRequest(
 }
 // Overload of `makeRequest` where the HTTP method is a string.
 inline auto makeRequest(
-    string_view method, const std::string_view target = "/",
+    std::string_view method, const std::string_view target = "/",
     const ad_utility::HashMap<http::field, std::string>& headers = {},
     const std::optional<std::string>& body = std::nullopt) {
   auto request = makeRequest(http::verb::get, target, headers, body);
