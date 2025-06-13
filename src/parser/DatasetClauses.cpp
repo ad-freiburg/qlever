@@ -64,4 +64,24 @@ bool DatasetClauses::isCompatibleNamedGraph(
     const TripleComponent::Iri& graph) const {
   return isUnconstrainedOrWithClause() || namedGraphs().value().contains(graph);
 }
+
+// _____________________________________________________________________________
+DatasetClauses DatasetClauses::getDatasetClauseForGraphClause(
+    const TripleComponent::Iri& graphIri) const {
+  DatasetClauses result;
+  result.defaultGraphs_.emplace();
+  if (isCompatibleNamedGraph(graphIri)) {
+    result.defaultGraphs_.value().insert({graphIri});
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+DatasetClauses DatasetClauses::getDatasetClauseForVariableGraphClause() const {
+  DatasetClauses result;
+  result.defaultGraphs_ = namedGraphs_;
+  result.namedGraphs_ = namedGraphs_;
+  return result;
+}
+
 }  // namespace parsedQuery

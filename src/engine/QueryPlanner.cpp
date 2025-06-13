@@ -2664,18 +2664,13 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
+    auto& activeDatasets = planner_.activeDatasetClauses_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (const auto* graphIri =
               std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
-        datasetBackup = planner_.activeDatasetClauses_;
-        auto& defaultGraphs =
-            planner_.activeDatasetClauses_.defaultGraphsMutable();
-        bool isCompatible =
-            planner_.activeDatasetClauses_.isCompatibleNamedGraph(*graphIri);
-        defaultGraphs.emplace();
-        if (isCompatible) {
-          defaultGraphs.value().insert({*graphIri});
-        }
+        datasetBackup = std::exchange(
+            activeDatasets,
+            activeDatasets.getDatasetClauseForGraphClause(*graphIri));
       } else if (const auto* graphVar =
                      std::get_if<Variable>(&arg.graphSpec_)) {
         if (checkUsePatternTrick::isVariableContainedInGraphPattern(
@@ -2684,13 +2679,10 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
               "A variable that is used as the graph specifier of a `GRAPH ?var "
               "{...}` clause may not appear in the body of that clause");
         }
-        datasetBackup = planner_.activeDatasetClauses_;
+        datasetBackup = std::exchange(
+            activeDatasets,
+            activeDatasets.getDatasetClauseForVariableGraphClause());
 
-        // TODO<joka921> Move this whole block above and below into the
-        // `DatasetClauses` class. By the way the following is not quite
-        // correct, as it also should set the `specifiedUsingWith` to false etc.
-        planner_.activeDatasetClauses_.defaultGraphsMutable() =
-            planner_.activeDatasetClauses_.namedGraphs();
         // We already have backed up the `activeGraphVariable_`.
         planner_.activeGraphVariable_ = *graphVar;
       } else {

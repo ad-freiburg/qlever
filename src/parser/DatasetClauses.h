@@ -60,11 +60,18 @@ struct DatasetClauses {
   // section 13.2).
   const Graphs& namedGraphs() const;
 
-  // Get mutable access to the defaultGraphs_ member, required in the query
-  // planner. Should be used with care.
-  // TODO<joka921> Make this interface unnecessary, by implementing everything
-  // as a member function.
-  Graphs& defaultGraphsMutable();
+  // Get the DatasetClause that corresponds to a given `Graph <iri> {}` clause
+  // when `this` is the dataset clause of the outer query. In particular,
+  // `<iri>` becomes the default graph, unless it is not specified in the
+  // `namedGraphs` of this dataset clause. In that case, the default graph will
+  // be empty.
+  [[nodiscard]] DatasetClauses getDatasetClauseForGraphClause(
+      const TripleComponent::Iri&) const;
+
+  // Get the DatasetClause that corresponds to a given `Graph ?var {}` clause
+  // when `this` is the dataset clause of the outer query. In particular, the
+  // named graphs now become the default graph.
+  [[nodiscard]] DatasetClauses getDatasetClauseForVariableGraphClause() const;
 
   // Return true iff the `graph` is a supported named graph, either because it
   // is explicitly part of the `namedGraphs()`, or because all named graphs are
