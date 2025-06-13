@@ -777,29 +777,23 @@ auto QueryPlanner::seedWithScansAndText(
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
 
+      // Helper to check if the query execution tree of the plan holds a given
+      // operation type as its root
+      auto is = [&](auto ti) {
+        using T = typename decltype(ti)::type;
+        return dynamic_cast<const T*>(
+                   newIdPlan._qet->getRootOperation().get()) != nullptr;
+      };
+
       // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
       // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
       // which we have special handling).
+      using namespace ad_utility::use_type_identity;
       AD_CORRECTNESS_CHECK(
           (newIdPlan._idsOfIncludedFilters == 0 &&
            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
-              newIdPlan.type == SubtreePlan::Type::OPTIONAL ||
-              newIdPlan.type == SubtreePlan::Type::MINUS ||
-              (newIdPlan.type == SubtreePlan::Type::BASIC &&
-               (std::dynamic_pointer_cast<Bind>(
-                    newIdPlan._qet->getRootOperation()) ||
-                std::dynamic_pointer_cast<OptionalJoin>(
-                    newIdPlan._qet->getRootOperation()) ||
-                std::dynamic_pointer_cast<Minus>(
-                    newIdPlan._qet->getRootOperation()))),
-          [&]() {
-            return absl::StrCat(
-                "Included filters and text limits illegal: filters: ",
-                newIdPlan._idsOfIncludedFilters,
-                ", text limits:", newIdPlan.idsOfIncludedTextLimits_,
-                ", subtree type: ", newIdPlan.type,
-                ", subtree  cache key: ", newIdPlan._qet->getCacheKey());
-          });
+              is(ti<Bind>) || is(ti<OptionalJoin>) || is(ti<Minus>),
+          "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
 
       seeds.emplace_back(newIdPlan);
     }
@@ -1269,32 +1263,37 @@ size_t SubtreePlan::getCostEstimate() const { return _qet->getCostEstimate(); }
 size_t SubtreePlan::getSizeEstimate() const { return _qet->getSizeEstimate(); }
 
 // _____________________________________________________________________________
-bool QueryPlanner::connected(const SubtreePlan& a, const SubtreePlan& b,
-                             const QueryPlanner::TripleGraph& tg) const {
+QueryPlanner::JoinColumns QueryPlanner::connected(
+    const SubtreePlan& a, const SubtreePlan& b,
+    boost::optional<const QueryPlanner::TripleGraph&> tg) const {
   // Check if there is overlap.
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) {
-    return false;
+    return {};
   }
 
-  if (a._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size()) ||
-      b._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size())) {
-    return getJoinColumns(a, b).size() > 0;
+  if (!tg) {
+    return getJoinColumns(a, b);
   }
 
-  for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
+  if (a._idsOfIncludedNodes >= (size_t(1) << tg->_nodeMap.size()) ||
+      b._idsOfIncludedNodes >= (size_t(1) << tg->_nodeMap.size())) {
+    return getJoinColumns(a, b);
+  }
+
+  for (size_t i = 0; i < tg->_nodeMap.size(); ++i) {
     if (((a._idsOfIncludedNodes >> i) & 1) == 0) {
       continue;
     }
-    auto& connectedNodes = tg._adjLists[i];
+    auto& connectedNodes = tg->_adjLists[i];
     for (auto targetNodeId : connectedNodes) {
       if ((((a._idsOfIncludedNodes >> targetNodeId) & 1) == 0) &&
           (((b._idsOfIncludedNodes >> targetNodeId) & 1) != 0)) {
-        return true;
+        return getJoinColumns(a, b);
       }
     }
   }
-  return false;
+  return {};
 }
 
 // _____________________________________________________________________________
@@ -2096,18 +2095,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
 
-  JoinColumns jcs;
-  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
-    jcs = getJoinColumns(a, b);
-  }
-
-  if (tg) {
-    if (connected(a, b, *tg)) {
-      jcs = getJoinColumns(a, b);
-    }
-  }
-
-  return createJoinCandidates(ain, bin, jcs);
+  return createJoinCandidates(ain, bin, connected(a, b, tg));
 }
 
 // _____________________________________________________________________________
