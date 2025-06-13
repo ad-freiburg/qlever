@@ -1652,6 +1652,8 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     std::vector<SparqlFilter> filters) {
   FiltersAndOptionalSubstitutes plans;
 
+  // Currently, no filter substitutes are implemented. This will follow in
+  // #1935.
   for (const auto& filterExpression : filters) {
     plans.push_back(
         FilterAndOptionalSubstitute(filterExpression, std::nullopt));
