@@ -767,8 +767,21 @@ auto QueryPlanner::seedWithScansAndText(
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-      newIdPlan._idsOfIncludedFilters = 0;
-      newIdPlan.idsOfIncludedTextLimits_ = 0;
+
+      // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
+      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
+      // which we have special handling).
+      AD_CORRECTNESS_CHECK(
+          (newIdPlan._idsOfIncludedFilters == 0 &&
+           newIdPlan.idsOfIncludedTextLimits_ == 0) ||
+              std::dynamic_pointer_cast<Bind>(
+                  newIdPlan._qet->getRootOperation()) ||
+              std::dynamic_pointer_cast<OptionalJoin>(
+                  newIdPlan._qet->getRootOperation()) ||
+              std::dynamic_pointer_cast<Minus>(
+                  newIdPlan._qet->getRootOperation()),
+          "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
+
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
@@ -2009,18 +2022,16 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
-  std::vector<SubtreePlan> candidates;
 
-  // TODO<joka921> find out, what is ACTUALLY the use case for the triple
-  // graph. Is it only meant for (questionable) performance reasons
-  // or does it change the meaning.
   JoinColumns jcs;
+  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
+    jcs = getJoinColumns(a, b);
+  }
+
   if (tg) {
     if (connected(a, b, *tg)) {
       jcs = getJoinColumns(a, b);
     }
-  } else {
-    jcs = getJoinColumns(a, b);
   }
 
   return createJoinCandidates(ain, bin, jcs);
@@ -2624,6 +2635,10 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
+    for (auto& plan : candidatePlans_.back()) {
+      plan._idsOfIncludedFilters = 0;
+      plan.idsOfIncludedTextLimits_ = 0;
+    }
     return;
   }
 
@@ -2636,9 +2651,14 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // For each candidate plan, and each plan from the OPTIONAL or MINUS, create
   // a new plan with an optional join. Note that `createJoinCandidates` will
   // whether `b` is from an OPTIONAL or MINUS.
-  for (const auto& a : candidatePlans_.at(0)) {
-    for (const auto& b : candidates) {
+  for (auto& a : candidatePlans_.at(0)) {
+    for (auto& b : candidates) {
+      a._idsOfIncludedNodes = 1;
+      b._idsOfIncludedNodes = 2;
       auto vec = planner_.createJoinCandidates(a, b, boost::none);
+      for (auto& plan : vec) {
+        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+      }
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
                             std::make_move_iterator(vec.end()));
@@ -2652,7 +2672,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   AD_CORRECTNESS_CHECK(
       !nextCandidates.empty(),
       "Could not find a single candidate join for two optimized graph "
-      "patterns. Please report this to the developers");
+      "patterns");
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
   candidatePlans_.clear();
   candidatePlans_.push_back({std::move(nextCandidates[idx])});
