@@ -523,15 +523,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
   leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
-  std::optional<ColumnIndex> graphCol =
-      graphVariable_.has_value()
-          ? std::optional{leftOrRightOp->getVariableColumn(
-                graphVariable_.value())}
-          : std::nullopt;
-  leftOrRightOp = QueryExecutionTree::createSortedTree(
-      std::move(leftOrRightOp), graphCol.has_value()
-                                    ? std::vector{graphCol.value(), inputCol}
-                                    : std::vector{inputCol});
   // Create a copy of this.
   //
   // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
