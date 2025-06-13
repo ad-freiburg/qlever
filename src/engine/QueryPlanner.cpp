@@ -768,18 +768,22 @@ auto QueryPlanner::seedWithScansAndText(
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
 
+      // Helper to check if a the query execution tree of the plan holds a given
+      // operation type as its root
+      auto is = [&](auto ti) {
+        using T = typename decltype(ti)::type;
+        return dynamic_cast<const T*>(
+                   newIdPlan._qet->getRootOperation().get()) != nullptr;
+      };
+
       // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
       // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
       // which we have special handling).
+      using namespace ad_utility::use_type_identity;
       AD_CORRECTNESS_CHECK(
           (newIdPlan._idsOfIncludedFilters == 0 &&
            newIdPlan.idsOfIncludedTextLimits_ == 0) ||
-              std::dynamic_pointer_cast<Bind>(
-                  newIdPlan._qet->getRootOperation()) ||
-              std::dynamic_pointer_cast<OptionalJoin>(
-                  newIdPlan._qet->getRootOperation()) ||
-              std::dynamic_pointer_cast<Minus>(
-                  newIdPlan._qet->getRootOperation()),
+              is(ti<Bind>) || is(ti<OptionalJoin>) || is(ti<Minus>),
           "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
 
       seeds.emplace_back(newIdPlan);
@@ -2635,10 +2639,14 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
+
+    // We have finished a nested GroupGraphPattern, reset the filter and text
+    // limit IDs, s.t. they don't leak into other groups
     for (auto& plan : candidatePlans_.back()) {
       plan._idsOfIncludedFilters = 0;
       plan.idsOfIncludedTextLimits_ = 0;
     }
+
     return;
   }
 
@@ -2656,6 +2664,9 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       a._idsOfIncludedNodes = 1;
       b._idsOfIncludedNodes = 2;
       auto vec = planner_.createJoinCandidates(a, b, boost::none);
+      // This is not yet the end of a group (but just an optimization barrier
+      // within the group), so we have to remember which filters have already
+      // been applied
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
       }
