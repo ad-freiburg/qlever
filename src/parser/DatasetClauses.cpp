@@ -74,7 +74,10 @@ DatasetClauses DatasetClauses::getDatasetClauseForGraphClause(
 // _____________________________________________________________________________
 DatasetClauses DatasetClauses::getDatasetClauseForVariableGraphClause() const {
   DatasetClauses result;
-  result.defaultGraphs_ = namedGraphs_;
+  // Note: It is important that we use the member function `namedGraphs()` here,
+  // because if default graphs were specified but no named graphs, then `GRAPH
+  // ?var` clauses have to be empty according to the SPARQL 1.1 standard.
+  result.defaultGraphs_ = namedGraphs();
   result.namedGraphs_ = namedGraphs_;
   return result;
 }
