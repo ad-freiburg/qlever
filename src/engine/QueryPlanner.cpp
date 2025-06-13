@@ -2028,14 +2028,16 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   const auto& b = !swapForTesting ? bin : ain;
 
   JoinColumns jcs;
-  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) == 0) {
-    jcs = getJoinColumns(a, b);
+  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) {
+    return {};
   }
 
   if (tg) {
     if (connected(a, b, *tg)) {
       jcs = getJoinColumns(a, b);
     }
+  } else {
+    jcs = getJoinColumns(a, b);
   }
 
   return createJoinCandidates(ain, bin, jcs);
