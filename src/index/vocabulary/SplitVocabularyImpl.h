@@ -104,4 +104,4 @@ void SplitVocabulary<SF, SFN, S...>::close() {
   }
 }
 
-#endif
+#endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARYIMPL_H
