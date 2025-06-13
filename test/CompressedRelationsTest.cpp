@@ -448,6 +448,8 @@ TEST(CompressedRelationWriter, SmallRelations) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, getFirstAndLastTriple) {
+  // TODO<joka921> Add tests for the cases where we have to read multiple blocks
+  // because of SPARQL UPDATE
   using namespace ::testing;
   // Write some triples, and prepare an index
   std::vector<RelationInput> inputs;

@@ -1179,14 +1179,34 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
-  auto firstBlock = scanBlock(blocks.front());
-  auto lastBlock = scanBlock(blocks.back());
+  // The first / last block might be empty because of SPARQL UPDATEs that
+  // completely delete them. Read blocks until we find a nonempty block. Avoid
+  // reading the blocks twice.
+  auto [firstBlock, firstBlockIt] = [&]() {
+    auto last = std::prev(blocks.end());
+    for (auto it = blocks.begin(); it != blocks.end(); ++it) {
+      auto block = scanBlock(*it);
+      if (!block.empty() || it == last) {
+        return std::pair{std::move(block), it};
+      }
+    }
+    AD_FAIL();
+  }();
+
   if (firstBlock.empty()) {
     return std::nullopt;
   }
-  AD_CORRECTNESS_CHECK(!lastBlock.empty());
+
+  DecompressedBlock lastBlock{allocator_};
+  for (auto it = --blocks.end(); it != firstBlockIt && !lastBlock.empty();
+       --it) {
+    lastBlock = scanBlock(*it);
+  }
+  const auto& actualLastBlock = lastBlock.empty() ? firstBlock : lastBlock;
+
+  AD_CORRECTNESS_CHECK(!actualLastBlock.empty());
   return ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
-      rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+      rowToTriple(firstBlock.front()), rowToTriple(actualLastBlock.back())};
 }
 
 // ____________________________________________________________________________
