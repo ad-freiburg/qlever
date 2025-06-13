@@ -7,8 +7,10 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "engine/HttpError.h"
 #include "parser/ParsedQuery.h"
 #include "parser/RdfParser.h"
+#include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
@@ -44,10 +46,16 @@ class GraphStoreProtocol {
       // If the mediatype is not given, return an error.
       // Note: The specs also allow to try to determine the media type from the
       // content.
-      throw UnknownMediatypeError("Mediatype empty or not set.");
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      "Mediatype empty or not set.");
     }
-    const auto mediatype =
-        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    std::optional<ad_utility::MediaType> mediatype;
+    try {
+      mediatype = ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    } catch (const std::exception& e) {
+      throw HttpError(boost::beast::http::status::unsupported_media_type,
+                      e.what());
+    }
     // A media type is set but not one of the supported ones as per the QLever
     // MediaType code.
     if (!mediatype.has_value()) {
@@ -62,7 +70,7 @@ class GraphStoreProtocol {
       const std::string_view& mediatype);
 
   // Throws the error if an HTTP method is not supported.
-  [[noreturn]] static void throwUnsupportedHTTPMethod(
+  [[noreturn]] static void throwNotYetImplementedHTTPMethod(
       const std::string_view& method);
 
   // Parse the triples from the request body according to the content type.
@@ -81,6 +89,9 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
+    if (rawRequest.body().empty()) {
+      throw HttpError(boost::beast::http::status::no_content);
+    }
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
@@ -94,43 +105,108 @@ class GraphStoreProtocol {
                      ad_utility::truncateOperationString(rawRequest.body()));
     return res;
   }
-  FRIEND_TEST(GraphStoreProtocolTest, transformPost);
+  FRIEND_TEST(GraphStoreProtocolTest, transformPostAndTsop);
+
+  // Transform a SPARQL Graph Store Protocol TSOP to an equivalent ParsedQuery
+  // which is an SPARQL Update.
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph) {
+    if (rawRequest.body().empty()) {
+      throw HttpError(boost::beast::http::status::no_content);
+    }
+    auto triples =
+        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    auto convertedTriples = convertTriples(graph, std::move(triples));
+    updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
+    ParsedQuery res;
+    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    // Graph store protocol TSOP requests might have a very large body. Limit
+    // the length used for the string representation.
+    res._originalString =
+        absl::StrCat("Graph Store TSOP Operation\n",
+                     ad_utility::truncateOperationString(rawRequest.body()));
+    return res;
+  }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
   // which is an SPARQL Query.
   static ParsedQuery transformGet(const GraphOrDefault& graph);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
+  // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
+  // which are SPARQL Queries.
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      vector<ParsedQuery> transformPut(const RequestT& rawRequest,
+                                       const GraphOrDefault& graph) {
+    // TODO: The response codes are not conform to the specs. "If new RDF graph
+    //  content is created", then the status must be `201 Created`. "If
+    //  existing graph content is modified", then the status must be `200 OK`
+    //  or `204 No Content`.
+    auto triples =
+        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    auto convertedTriples = convertTriples(graph, std::move(triples));
+    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
+    ParsedQuery res;
+    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    // Graph store protocol POST requests might have a very large body. Limit
+    // the length used for the string representation.
+    std::string stringRepresentation =
+        absl::StrCat("Graph Store PUT Operation\n",
+                     ad_utility::truncateOperationString(rawRequest.body()));
+    res._originalString = stringRepresentation;
+    std::string dropUpdate;
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      dropUpdate =
+          absl::StrCat("DROP SILENT GRAPH ", iri->toStringRepresentation());
+    } else {
+      dropUpdate = "DROP SILENT DEFAULT";
+    }
+    std::vector<ParsedQuery> drop = SparqlParser::parseUpdate(dropUpdate);
+    AD_CORRECTNESS_CHECK(drop.size() == 1);
+    drop[0]._originalString = stringRepresentation;
+    return {std::move(drop[0]), std::move(res)};
+  }
+  FRIEND_TEST(GraphStoreProtocolTest, transformPut);
+
+  // Transform a SPARQL Graph Store Protocol DELETE to equivalent ParsedQueries
+  // which are SPARQL Queries.
+  static ParsedQuery transformDelete(const GraphOrDefault& graph);
+  FRIEND_TEST(GraphStoreProtocolTest, transformDelete);
+
  public:
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
-      transformGraphStoreProtocol(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      vector<ParsedQuery> transformGraphStoreProtocol(
           ad_utility::url_parser::sparqlOperation::GraphStoreOperation
               operation,
           const RequestT& rawRequest) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
-    auto method = rawRequest.method();
-    if (method == get) {
-      return transformGet(operation.graph_);
-    } else if (method == put) {
-      throwUnsupportedHTTPMethod("PUT");
-    } else if (method == delete_) {
-      throwUnsupportedHTTPMethod("DELETE");
-    } else if (method == post) {
-      return transformPost(rawRequest, operation.graph_);
-    } else if (method == head) {
-      throwUnsupportedHTTPMethod("HEAD");
-    } else if (method == patch) {
-      throwUnsupportedHTTPMethod("PATCH");
+    std::string_view method = rawRequest.method_string();
+    if (method == "GET") {
+      return {transformGet(operation.graph_)};
+    } else if (method == "PUT") {
+      return transformPut(rawRequest, operation.graph_);
+    } else if (method == "DELETE") {
+      return {transformDelete(operation.graph_)};
+    } else if (method == "POST") {
+      return {transformPost(rawRequest, operation.graph_)};
+    } else if (method == "TSOP") {
+      return {transformTsop(rawRequest, operation.graph_)};
+    } else if (method == "HEAD") {
+      throwNotYetImplementedHTTPMethod("HEAD");
+    } else if (method == "PATCH") {
+      throwNotYetImplementedHTTPMethod("PATCH");
     } else {
       throw std::runtime_error(
-          absl::StrCat("Unsupported HTTP method \"",
-                       std::string_view{rawRequest.method_string()},
+          absl::StrCat("Unsupported HTTP method \"", method,
                        "\" for the SPARQL Graph Store HTTP Protocol."));
     }
   }

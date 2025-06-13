@@ -46,6 +46,9 @@ class SPARQLProtocol {
   static ad_utility::url_parser::ParsedRequest parsePOST(
       const RequestType& request);
 
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocol(
+      const RequestType& request);
+
  public:
   // Parse a HTTP request.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
