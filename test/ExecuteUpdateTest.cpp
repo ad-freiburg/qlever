@@ -222,8 +222,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
+      auto result = qet.getResult(false);
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, qet, sharedHandle, metadata));
+          index, pq, *result, qet.getVariableColumns(), sharedHandle,
+          metadata));
       ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
     }
     return results;

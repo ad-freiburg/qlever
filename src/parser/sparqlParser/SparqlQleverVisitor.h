@@ -216,7 +216,7 @@ class SparqlQleverVisitor {
 
   std::vector<ParsedQuery> visit(Parser::Update1Context* ctx);
 
-  updateClause::Load visit(Parser::LoadContext* ctx);
+  ParsedQuery visit(Parser::LoadContext* ctx);
 
   ParsedQuery visit(Parser::ClearContext* ctx);
 
