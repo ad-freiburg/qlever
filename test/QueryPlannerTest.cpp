@@ -3983,14 +3983,19 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 
 // _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
-  auto query = SparqlParser::parseQuery(
-      "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
-  auto qp = makeQueryPlanner();
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      qp.createExecutionTree(query),
-      ::testing::HasSubstr("Property paths inside a GRAPH clause with a graph "
-                           "variable are not yet supported."),
-      std::runtime_error);
+  TransitivePathSide left{std::nullopt, 0, 0, 0};
+  TransitivePathSide right{std::nullopt, 1, 1, 1};
+  h::expect(
+      "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }",
+      h::Filter("Filter (?g = <abc>)",
+                h::transitivePath(
+                    left, right, 1, std::numeric_limits<size_t>::max(),
+                    // Sort by ?g
+                    h::Sort(h::IndexScanFromStrings(
+                        "?_QLever_internal_variable_qp_0",
+                        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                        "?_QLever_internal_variable_qp_1", {}, {},
+                        {Variable{"?g"}}, {3})))));
 }
 
 // _____________________________________________________________________________

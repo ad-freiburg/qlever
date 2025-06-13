@@ -2848,14 +2848,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
-    if (planner_.activeGraphVariable_.has_value()) {
-      throw std::runtime_error{
-          "Property paths inside a GRAPH clause with a graph variable are not "
-          "yet supported."};
-    }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.activeDefaultGraphs());
+        planner_.activeDatasetClauses_.activeDefaultGraphs(),
+        planner_.activeGraphVariable_);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }

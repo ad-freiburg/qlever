@@ -74,7 +74,10 @@ struct TransitivePathSide {
 // are not exception safe.
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-
+using SetWithGraph =
+    std::unordered_set<std::pair<Id, Id>, absl::Hash<std::pair<Id, Id>>,
+                       std::equal_to<std::pair<Id, Id>>,
+                       ad_utility::AllocatorWithLimit<std::pair<Id, Id>>>;
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
 // index of the node in the input table. The `IdTable` pointer might be null if
@@ -86,16 +89,19 @@ struct NodeWithTargets {
   LocalVocab localVocab_;
   std::optional<IdTableView<0>> idTable_;
   size_t row_;
+  // Graph id, undefined if no graph is set.
+  Id graph_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  std::optional<IdTableView<0>> idTable, size_t row)
+                  std::optional<IdTableView<0>> idTable, size_t row, Id graph)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
         idTable_{std::move(idTable)},
-        row_{row} {}
+        row_{row},
+        graph_{graph} {}
 };
 
 using NodeGenerator = cppcoro::generator<NodeWithTargets>;
@@ -127,12 +133,14 @@ class TransitivePathBase : public Operation {
   // Store the active graphs for the transitive path operation. This is used to
   // correctly match against the proper graph when the minimum distance is 0.
   Graphs activeGraphs_;
+  std::optional<Variable> graphVariable_;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist, Graphs activeGraphs);
+                     size_t minDist, size_t maxDist, Graphs activeGraphs,
+                     const std::optional<Variable>& graphVariable);
 
   ~TransitivePathBase() override = 0;
 
@@ -220,9 +228,9 @@ class TransitivePathBase : public Operation {
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow);
+  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
+                   size_t outputRow) const;
 
  public:
   std::string getDescriptor() const override;
@@ -249,6 +257,7 @@ class TransitivePathBase : public Operation {
   // contain this value it is filtered out.
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
@@ -259,6 +268,7 @@ class TransitivePathBase : public Operation {
   // subsequent joins), by default it is `?internal_property_path_variable_x`.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       std::optional<Variable> variable = std::nullopt);
 
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
@@ -289,11 +299,13 @@ class TransitivePathBase : public Operation {
    * TransitivePathBinSearch. Else it will be a TransitivePathFallback
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {});
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
@@ -310,11 +322,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, Graphs activeGraphs = {});
+      size_t maxDist, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   vector<QueryExecutionTree*> getChildren() override;
 
