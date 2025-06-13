@@ -127,7 +127,7 @@ class TransitivePathImpl : public TransitivePathBase {
         startSide.value_, targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
-                                    targetSide.outputCol_, yieldOnce);
+                                    targetSide.outputCol_, yieldOnce, 0);
 
     // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
