@@ -403,7 +403,10 @@ TEST(ExportQueryExecutionTrees, Integers) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Bool) {
-  std::string kg = "<s> <p> true . <s> <p> false.";
+  std::string kg =
+      "<s> <p> true . <s> <p> false ."
+      " <s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> ."
+      " <s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -412,44 +415,72 @@ TEST(ExportQueryExecutionTrees, Bool) {
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
   </result>
   <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">0</literal></binding>
+  </result>
+  <result>
     <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
+  </result>
+  <result>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">1</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
-      kg, query, 2,
+      kg, query, 4,
       // TSV
       "?o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       // CSV
       "o\n"
       "false\n"
-      "true\n",
+      "0\n"
+      "true\n"
+      "1\n",
       makeExpectedQLeverJSON(
           {"\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
-           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
+           "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s,
+           "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
                            "literal", "false"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
-                           "literal", "true")}),
+                           "literal", "0"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "true"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#boolean",
+                           "literal", "1")}),
       expectedXml};
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 2,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 4, 4,
       // TSV
       "<s>\t<p>\tfalse\n"
-      "<s>\t<p>\ttrue\n",
+      "<s2>\t<p2>\t\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n"
+      "<s>\t<p>\ttrue\n"
+      "<s2>\t<p2>\t\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>\n",
       // CSV
       "<s>,<p>,false\n"
-      "<s>,<p>,true\n",
+      "<s2>,<p2>,\"\"\"0\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n"
+      "<s>,<p>,true\n"
+      "<s2>,<p2>,\"\"\"1\"\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"\n",
       // Turtle
       "<s> <p> false .\n"
-      "<s> <p> true .\n",
+      "<s2> <p2> \"0\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n"
+      "<s> <p> true .\n"
+      "<s2> <p2> \"1\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "false"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"0\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "true"s});
+        j.push_back(
+            std::vector{"<s2>"s, "<p2>"s,
+                        "\"1\"^^<http://www.w3.org/2001/XMLSchema#boolean>"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
