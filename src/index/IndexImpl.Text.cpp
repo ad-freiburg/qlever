@@ -87,8 +87,8 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
 
-  IdTable output = mergeTextBlockResults(textIndexReadWrite::readWordCl,
-                                         optionalTbmd.value(), allocator);
+  IdTable output = mergeTextBlockResults(
+      textIndexReadWrite::readWordCl, optionalTbmd.value(), allocator, false);
 
   LOG(DEBUG) << "Word postings for term: " << term
              << ": cids: " << output.getColumn(0).size() << '\n';
@@ -104,21 +104,22 @@ IdTable IndexImpl::getEntityMentionsForWord(
     return IdTable{allocator};
   }
   return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl,
-                               optTbmd.value(), allocator);
+                               optTbmd.value(), allocator, true);
 }
 
 // _____________________________________________________________________________
 template <typename Reader>
 IdTable IndexImpl::mergeTextBlockResults(
     Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    bool isEntitySearch) const {
   // Collect all blocks as IdTables
   vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
     IdTable partialResult{allocator};
     partialResult =
         reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
-    if (tbmd.hasToBeFiltered_) {
+    if (!isEntitySearch && tbmd.hasToBeFiltered_) {
       partialResult =
           FTSAlgorithms::filterByRange(tbmd.idRange_, partialResult);
     }

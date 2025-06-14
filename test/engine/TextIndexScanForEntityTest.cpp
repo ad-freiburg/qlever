@@ -97,6 +97,11 @@ auto qecWithOnlyLiteralTextIndex = []() {
 auto getQecWithTextIndex(
     std::optional<TextScoringMetric> textScoring = std::nullopt) {
   using namespace ad_utility::testing;
+  kg =
+      "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
+      "\"some other sentence\" . <b> <p> \"the test on friday was really "
+      "hard\" "
+      ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
@@ -177,14 +182,12 @@ TEST(TextIndexScanForEntity, FullTextIndexEntityScan) {
 
   auto result = s1.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
 
   ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 0));
   ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 1));
   ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 2));
   ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 3));
-  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 4));
-  ASSERT_EQ("<Astronomer>", h::getEntityFromResultTable(qec, result, 5));
 }
 
 TEST(TextIndexScanForEntity, CacheKeys) {
