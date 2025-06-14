@@ -87,10 +87,10 @@ ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
 
 class TextMetaData {
  public:
-  //! Get the corresponding block meta data for some word or entity Id range.
-  //! Currently assumes that the range lies in a single block.
-  const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
-                                                   const uint64_t upper) const;
+  // Get the corresponding block meta data for some word or entity Id range.
+  // Can be multiple blocks.
+  const vector<std::reference_wrapper<const TextBlockMetaData>>
+  getBlockInfoByWordRange(const uint64_t lower, const uint64_t upper) const;
 
   size_t getBlockCount() const;
 
