@@ -119,7 +119,6 @@ std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
-  auto& limitOffset = parsedQuery._limitOffset;
 
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
