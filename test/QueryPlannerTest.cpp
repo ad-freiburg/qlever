@@ -4279,7 +4279,36 @@ TEST(QueryPlanner, correctFiltersHandling) {
   h::expect("SELECT * { ?x <c> ?d . MINUS {  ?x <b> ?c . FILTER(?c < 5) } }",
             h::Minus(scan("?x", "<c>", "?d"),
                      h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
-  // TODO multiple filters , bind,
-  // TODO subquery filter inside outside
-  //
+
+  // Filter inside and outside of a subquery
+  h::expect("SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c FILTER(?c < 5) } } }",
+            h::Join(scan("?x", "<c>", "?d"),
+                    h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+  h::expect(
+      "SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c } } FILTER(?c < 5) }",
+      ::testing::AnyOf(h::Join(scan("?x", "<c>", "?d"),
+                               h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<c>", "?d"),
+                                                   scan("?x", "<b>", "?c")))));
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) { SELECT * { ?x <c> ?d } } }",
+      ::testing::AnyOf(h::Join(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                               scan("?x", "<c>", "?d")),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<b>", "?c"),
+                                                   scan("?x", "<c>", "?d")))));
+
+  // Filter and bind
+  h::expect(
+      "SELECT * { ?x <b> ?c FILTER(?c < 5) BIND(42 AS ?unrelated) FILTER(?c >= "
+      "1) }",
+      h::AnyOf(
+          h::Filter("?c >= 1",
+                    h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")), "42",
+                            Variable{"?unrelated"})),
+          h::Filter("?c >= 1",
+                    h::Filter("?c < 5", h::Bind(scan("?x", "<b>", "?c"), "42",
+                                                Variable{"?unrelated"}))),
+          h::Bind(h::Filter("?c >= 1",
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                  "42", Variable{"?unrelated"})));
 }
