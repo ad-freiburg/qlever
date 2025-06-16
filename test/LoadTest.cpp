@@ -7,7 +7,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "DeltaTriplesTestHelpers.h"
+#include "engine/ExecuteUpdate.h"
 #include "engine/Load.h"
+#include "engine/QueryPlanner.h"
+#include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -18,7 +22,9 @@
 namespace {
 
 auto pqLoad = [](std::string url, bool silent = false) {
-  return parsedQuery::Load{ad_utility::httpUtils::Url{url}, silent};
+  return parsedQuery::Load{ad_utility::triple_component::Iri::fromIriref(
+                               absl::StrCat("<", url, ">")),
+                           silent};
 };
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -57,8 +63,7 @@ TEST_F(LoadTest, basicMethods) {
   Load load{testQec, pqLoad("https://mundhahs.dev")};
 
   // Test the basic methods.
-  EXPECT_THAT(load.getDescriptor(),
-              testing::Eq("LOAD https://mundhahs.dev:443/"));
+  EXPECT_THAT(load.getDescriptor(), testing::Eq("LOAD <https://mundhahs.dev>"));
   EXPECT_THAT(load.getCacheKey(), testing::StartsWith("LOAD"));
   EXPECT_THAT(load.getResultWidth(), testing::Eq(3));
   EXPECT_THAT(load.getMultiplicity(0), testing::Eq(1));
@@ -222,9 +227,9 @@ TEST_F(LoadTest, getCacheKey) {
     EXPECT_THAT(load1.getCacheKey(),
                 testing::Not(testing::Eq(load3.getCacheKey())));
     EXPECT_THAT(load1.getCacheKey(),
-                testing::Eq("LOAD https://mundhahs.dev:443/"));
+                testing::Eq("LOAD <https://mundhahs.dev>"));
     EXPECT_THAT(load3.getCacheKey(),
-                testing::Eq("LOAD https://mundhahs.dev:443/ SILENT"));
+                testing::Eq("LOAD <https://mundhahs.dev> SILENT"));
   }
   {
     auto cleanup = setRuntimeParameterForTest<"cache-load-results">(false);
@@ -262,6 +267,26 @@ TEST_F(LoadTest, clone) {
     EXPECT_THAT(clone->getDescriptor(), testing::Eq(load.getDescriptor()));
     EXPECT_THAT(*clone, IsDeepCopy(load));
   }
+}
+
+TEST_F(LoadTest, Integration) {
+  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
+  auto qec =
+      ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp(qec, cancellationHandle);
+  auto executionTree = qp.createExecutionTree(parsedUpdate[0]);
+  Load* load = dynamic_cast<Load*>(executionTree.getRootOperation().get());
+  ASSERT_THAT(load, testing::NotNull()) << "Root operation is not a Load";
+  load->resetGetResultFunctionForTesting(
+      getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
+                               boost::beast::http::status::ok, "text/turtle"));
+  DeltaTriples deltaTriples{qec->getIndex()};
+  ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
+                               deltaTriples, cancellationHandle);
+  EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
 }
 
 }  // namespace
