@@ -1167,7 +1167,7 @@ auto CompressedRelationReader::getFirstAndLastTriple(
                     locatedTriplesPerBlock);
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
-    // actually matches the col0 and col1.
+    // matches the `col0` and `col1`.
     return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
                                        locatedTriplesPerBlock);
   };
@@ -1179,11 +1179,11 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
-  // The first / last block might be empty because of SPARQL UPDATEs that
-  // completely delete them. Read blocks until we find a nonempty block. Avoid
-  // reading the blocks twice.
+  // NOTE: Without updates, it would suffice to look at the first and last
+  // block in order to determine the first and last triple. However, with
+  // updates, all triples in a block might be deleted.
 
-  // First, obtain the first nonempty block and an iterator to that block.
+  // Find the first non-empty block.
   auto [firstBlock, firstBlockIt] = [&]() {
     auto last = std::prev(blocks.end());
     for (auto it = blocks.begin(); it != blocks.end(); ++it) {
@@ -1195,20 +1195,21 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     AD_FAIL();
   }();
 
-  // If no nonempty block exists, then the scan result will be empty and thu
-  // there is no first or last triple.
+  // If we did not find a non-empty block, the scan result is empty and there
+  // is no first or last triple.
   if (firstBlock.empty()) {
     return std::nullopt;
   }
 
-  // Find the last nonempty block. Avoid reading the `firstBlock` twice.
+  // Find the last non-empty block. Avoid reading the first non-empty block
+  // again.
   DecompressedBlock lastBlock{allocator_};
   for (auto it = std::prev(blocks.end());
        it != firstBlockIt && lastBlock.empty(); --it) {
     lastBlock = scanBlock(*it);
   }
 
-  // Handle the case where the first and last nonempty block are the same.
+  // Handle the case where the first and last non-empty block are the same.
   const auto& actualLastBlock = lastBlock.empty() ? firstBlock : lastBlock;
 
   AD_CORRECTNESS_CHECK(!actualLastBlock.empty());
