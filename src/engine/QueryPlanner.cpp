@@ -1693,7 +1693,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
   // If we have FILTER statements that can also be answered by a SpatialJoin,
   // add the respective spatial join query plans.
-  auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
+  const auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");

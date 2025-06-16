@@ -189,14 +189,17 @@ constexpr auto makeConcatExpressionVariadic =
 
 // Helper struct for `getGeoFunctionExpressionParameters`
 struct GeoFunctionCall {
-  SpatialJoinType function;
-  Variable left;
-  Variable right;
+  SpatialJoinType function_;
+  Variable left_;
+  Variable right_;
 };
 
 // Helper to extract spatial join parameters from a parsed `geof:` function
-// call. Returns `std:nullopt` if the given `SparqlExpression` is not a
+// call. Returns `std::nullopt` if the given `SparqlExpression` is not a
 // supported geo function.
+// Note: this function must be declared here, because the definitions of the
+// different geo expressions are hidden in the cpp file and are therefore
+// invisible elsewhere.
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr);
 
