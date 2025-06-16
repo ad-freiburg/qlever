@@ -41,7 +41,7 @@ bool DatasetClauses::isUnconstrainedOrWithClause() const {
 }
 
 // _____________________________________________________________________________
-auto DatasetClauses::defaultGraphs() const -> const Graphs& {
+auto DatasetClauses::activeDefaultGraphs() const -> const Graphs& {
   return isUnconstrainedOrWithClause() || defaultGraphs_.has_value()
              ? defaultGraphs_
              : emptyDummy_;

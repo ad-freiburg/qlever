@@ -509,7 +509,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
         std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t.s_.getVariable()].push_back(s);
         if (activeGraphVariable_.has_value() ||
-            activeDatasetClauses_.defaultGraphs().has_value()) {
+            activeDatasetClauses_.activeDefaultGraphs().has_value()) {
           AD_THROW(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
@@ -832,7 +832,7 @@ auto QueryPlanner::seedWithScansAndText(
 
     auto addIndexScan =
         [this, pushPlan, node,
-         &relevantGraphs = activeDatasetClauses_.defaultGraphs()](
+         &relevantGraphs = activeDatasetClauses_.activeDefaultGraphs()](
             Permutation::Enum permutation,
             std::optional<SparqlTripleSimple> triple = std::nullopt) {
           if (!triple.has_value()) {
@@ -2831,7 +2831,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.defaultGraphs());
+        planner_.activeDatasetClauses_.activeDefaultGraphs());
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }

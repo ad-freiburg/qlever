@@ -24,6 +24,8 @@ struct DatasetClauses {
 
   // An empty set of graphs that sometimes has to be returned.
   Graphs emptyDummy_{Graphs::value_type{}};
+  // True iff the `defaultGraph` is a single graph that originates from a `WITH`
+  // clause, which slightly changes the semantics.
   bool defaultGraphSpecifiedUsingWith_ = false;
 
  public:
@@ -48,29 +50,31 @@ struct DatasetClauses {
   // overridden.
   bool isUnconstrainedOrWithClause() const;
 
-  // Return the set of default graphs. `std::nullopt` means "use the implicit
-  // default graph", whereas an empty set means "the default graph is empty,
-  // because a named graph was specified" (See the SPARQL 1.1 standard,
-  // section 13.2).
-  const Graphs& defaultGraphs() const;
+  // Return the set of active default graphs (The set of graphs which will be
+  // used evaluate all triples outside an explicit `GRAPH` clause.
+  // `std::nullopt` means "use the implicit default graph", whereas an empty set
+  // means "the active default graph is empty, because a named graph was
+  // specified" (See the SPARQL 1.1 standard, section 13.2).
+  const Graphs& activeDefaultGraphs() const;
 
-  // Return the set of  named graphs. `std::nullopt` means "all named graphs can
-  // be used", whereas an empty set means "no named graphs can be used, because
-  // a default graph was explicitly specified" (See the SPARQL 1.1 standard,
-  // section 13.2).
+  // Return the set of named graphs that can be used inside a `GRAPH` clause.
+  // `std::nullopt` means "all named graphs can be used", whereas an empty set
+  // means "no named graphs can be used, because a default graph was explicitly
+  // specified" (See the SPARQL 1.1 standard, section 13.2).
   const Graphs& namedGraphs() const;
 
-  // Get the DatasetClause that corresponds to a given `Graph <iri> {}` clause
+  // Get the DatasetClause that corresponds to a given `GRAPH <iri> {}` clause
   // when `this` is the dataset clause of the outer query. In particular,
-  // `<iri>` becomes the default graph, unless it is not specified in the
-  // `namedGraphs` of this dataset clause. In that case, the default graph will
-  // be empty.
+  // if `<iri>` is a valid named graph in this dataset clause, then it will
+  // become the single active default graph of the returned `DatasetClauses`.
+  // Otherwise, the active default graph of the result will be empty.
   [[nodiscard]] DatasetClauses getDatasetClauseForGraphClause(
       const TripleComponent::Iri&) const;
 
-  // Get the DatasetClause that corresponds to a given `Graph ?var {}` clause
-  // when `this` is the dataset clause of the outer query. In particular, the
-  // named graphs now become the default graph.
+  // Get the DatasetClause that corresponds to a given `GRAPH ?var {}` clause
+  // when `*this` is the dataset clause of the outer query. In particular, the
+  // named graphs of `*this` become the active default graphs of the return
+  // value.
   [[nodiscard]] DatasetClauses getDatasetClauseForVariableGraphClause() const;
 
   // Return true iff the `graph` is a supported named graph, either because it
