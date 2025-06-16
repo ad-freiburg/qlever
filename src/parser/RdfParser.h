@@ -124,9 +124,9 @@ class TurtleParser : public RdfParserBase {
 
  private:
   // Impl of the method above, also used in rdfLiteral parsing.
-  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+  TripleComponent literalAndDatatypeToTripleComponentImpl(
       std::string_view normalizedLiteralContent,
-      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
+      const TripleComponent::Iri& typeIri);
 
   static constexpr std::array<const char*, 12> integerDatatypes_ = {
       XSD_INT_TYPE,
