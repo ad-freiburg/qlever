@@ -1662,14 +1662,13 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    std::vector<SparqlFilter> filters) {
+    const std::vector<SparqlFilter>& filters) const {
   FiltersAndOptionalSubstitutes plans;
 
   // Currently, no filter substitutes are implemented. This will follow in
   // #1935.
   for (const auto& filterExpression : filters) {
-    plans.push_back(
-        FilterAndOptionalSubstitute(filterExpression, std::nullopt));
+    plans.emplace_back(filterExpression, std::nullopt);
   }
   return plans;
 };

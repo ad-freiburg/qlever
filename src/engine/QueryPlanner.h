@@ -316,7 +316,7 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      std::vector<SparqlFilter> filters);
+      const std::vector<SparqlFilter>& filters) const;
 
   /**
    * @brief Returns a parsed query for the property path.
