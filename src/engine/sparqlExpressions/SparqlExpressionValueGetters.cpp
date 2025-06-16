@@ -396,7 +396,25 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<std::optional<std::string>>(id, context, *this);
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case GeoPoint:
+      // For literals without language tag, we return an empty string per
+      // standard.
+      return {""};
+    case Undefined:
+    case VocabIndex:
+    case LocalVocabIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+      return getValue<std::optional<std::string>>(id, context, *this);
+  }
+  AD_FAIL();
 }
 
 //______________________________________________________________________________
