@@ -180,19 +180,33 @@ std::string ReplacementStringGetter::convertToReplacementString(
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
-  if (id.getDatatype() == Datatype::VocabIndex) {
-    // See instantiations below for what `isSomethingFunction` is.
-    return Id::makeFromBool(std::invoke(isSomethingFunction,
-                                        context->_qec.getIndex().getVocab(),
-                                        id.getVocabIndex()));
-  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-    auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
-        context->_qec.getIndex(), id, context->_localVocab);
-    return Id::makeFromBool(word.has_value() &&
-                            word.value().first.starts_with(prefix));
-  } else {
-    return Id::makeFromBool(false);
+  switch (id.getDatatype()) {
+    case Datatype::VocabIndex:
+      // See instantiations below for what `isSomethingFunction` is.
+      return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                          context->_qec.getIndex().getVocab(),
+                                          id.getVocabIndex()));
+    case Datatype::LocalVocabIndex: {
+      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return Id::makeFromBool(word.has_value() &&
+                              word.value().first.starts_with(prefix));
+    }
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
+      if constexpr (prefix == isLiteralPrefix) {
+        return Id::makeFromBool(true);
+      }
+    case Datatype::Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
+      return Id::makeFromBool(false);
   }
+  AD_FAIL();
 }
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
