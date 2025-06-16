@@ -2608,7 +2608,7 @@ void QueryPlanner::QueryGraph::setupGraph(
             for (auto [n1, n2] :
                  ::ranges::views::cartesian_product(varToNode.at(*first),
                                                     varToNode.at(*second)) |
-                     ql::views::filter([](const auto& pair) {
+                     ::ranges::views::filter([](const auto& pair) {
                        return std::get<0>(pair) != std::get<1>(pair);
                      })) {
               result[n1].insert(n2);
