@@ -634,8 +634,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
             AD_CORRECTNESS_CHECK(
                 !indexScanResult.value()->isFullyMaterialized());
-            return convertGenerator(
-                std::move(indexScanResult.value()->idTables()));
+            return convertGenerator(indexScanResult.value()->idTables());
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
@@ -690,8 +689,8 @@ Result Join::computeResultForIndexScanAndLazyOperation(
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto [joinSide, indexScanSide] = scan->prefilterTables(
-            std::move(resultWithIdTable->idTables()), _leftJoinCol);
+        auto [joinSide, indexScanSide] =
+            scan->prefilterTables(resultWithIdTable->idTables(), _leftJoinCol);
 
         // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
         // switches to a more efficient implementation if there are no UNDEF
@@ -747,4 +746,15 @@ std::unique_ptr<Operation> Join::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join column we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (variable == _joinVar) {
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+  }
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
 }
