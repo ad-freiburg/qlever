@@ -43,7 +43,7 @@ word    is_entity    record_id   score
 Here is an example excerpt for the text record `In 1928, Fleming discovered
 penicillin`, assuming that the id of the text record is `17`and that the
 scientist and the drug are annotated with the IRIs of the corresponding
-entities in the RDF data. Note that the IRI can be syntaxically completely
+entities in the RDF data. Note that the IRI can be syntactically completely
 different from the words used to refer to that entity in the text.
 ```
 In                  0   17   1
