@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
-#include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -484,9 +484,12 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
+  using Loc = ad_utility::source_location;
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
                                    const LocatedTriplesPerBlock& =
-                                       emptyLocatedTriples) {
+                                       emptyLocatedTriples,
+                                   Loc loc = Loc::current()) {
+    auto trace = generateLocationTrace(loc);
     auto firstAndLastTriple = readerPtr->getFirstAndLastTriple(
         {spec, blockMetadata}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
@@ -537,7 +540,9 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   locatedTriples.add(deleteTriples);
 
   // Test infrastructure.
-  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
+  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
+                                   Loc loc = Loc::current()) {
+    auto trace = generateLocationTrace(loc);
     auto blockMetadata =
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
     auto firstAndLastTriple =

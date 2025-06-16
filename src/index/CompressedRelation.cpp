@@ -1182,6 +1182,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   // The first / last block might be empty because of SPARQL UPDATEs that
   // completely delete them. Read blocks until we find a nonempty block. Avoid
   // reading the blocks twice.
+
+  // First, obtain the first nonempty block and an iterator to that block.
   auto [firstBlock, firstBlockIt] = [&]() {
     auto last = std::prev(blocks.end());
     for (auto it = blocks.begin(); it != blocks.end(); ++it) {
@@ -1193,15 +1195,20 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     AD_FAIL();
   }();
 
+  // If no nonempty block exists, then the scan result will be empty and thu
+  // there is no first or last triple.
   if (firstBlock.empty()) {
     return std::nullopt;
   }
 
+  // Find the last nonempty block. Avoid reading the `firstBlock` twice.
   DecompressedBlock lastBlock{allocator_};
-  for (auto it = --blocks.end(); it != firstBlockIt && lastBlock.empty();
-       --it) {
+  for (auto it = std::prev(blocks.end());
+       it != firstBlockIt && lastBlock.empty(); --it) {
     lastBlock = scanBlock(*it);
   }
+
+  // Handle the case where the first and last nonempty block are the same.
   const auto& actualLastBlock = lastBlock.empty() ? firstBlock : lastBlock;
 
   AD_CORRECTNESS_CHECK(!actualLastBlock.empty());
