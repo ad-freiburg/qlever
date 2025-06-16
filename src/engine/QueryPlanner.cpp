@@ -1662,7 +1662,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    std::vector<SparqlFilter> filters) {
+    const std::vector<SparqlFilter>& filters) const {
   FiltersAndOptionalSubstitutes plans;
 
   for (const auto& [i, filterExpression] :
@@ -1670,16 +1670,14 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     // Check if the filter expression is suitable for spatial join optimization
     auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
     if (!sjConfig.has_value()) {
-      plans.push_back(
-          FilterAndOptionalSubstitute(filterExpression, std::nullopt));
+      plans.emplace_back(filterExpression, std::nullopt);
     } else {
       // Construct spatial join
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
       // Mark that this subtree plan handles (that is, substitutes) the filter
       plan._idsOfIncludedFilters |= 1ull << i;
-      plans.push_back(
-          FilterAndOptionalSubstitute(filterExpression, std::move(plan)));
+      plans.emplace_back(filterExpression, std::move(plan));
     }
   }
   return plans;
