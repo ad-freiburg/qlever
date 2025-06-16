@@ -1068,6 +1068,46 @@ TEST_P(TransitivePathTest, sameVariableResultsInDifferentCacheKey) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
+  auto sub = makeIdTableFromVector({{0, 2}});
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathBound(
+        false, sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}},
+        sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+                 ad_utility::Exception);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+                 ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
