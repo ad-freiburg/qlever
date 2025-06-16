@@ -363,6 +363,34 @@ CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 // Ensures that T is a floating-point type.
 template <typename T>
 CPP_concept FloatingPoint = std::is_floating_point_v<T>;
+
+// Make a variadic type unique (std::tuple containing each type once)
+namespace detail {
+template <typename...>
+struct UniqueTypesTupleImpl;
+
+template <>
+struct UniqueTypesTupleImpl<> {
+  using type = std::tuple<>;
+};
+
+template <typename T, typename... List>
+struct UniqueTypesTupleImpl<T, List...> {
+ private:
+  using tail = typename UniqueTypesTupleImpl<List...>::type;
+
+ public:
+  using type = std::conditional_t<SameAsAny<T, List...>, tail,
+                                  TupleCat<std::tuple<T>, tail>>;
+};
+}  // namespace detail
+
+// Behaves like std::variant<List...> but ensures uniqueness of the types in
+// List to avoid ambigiuity when converting from types in List to the variant.
+template <typename... List>
+using UniqueVariant = typename detail::TupleToVariantImpl<
+    typename detail::UniqueTypesTupleImpl<List...>::type>::type;
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_SRC_UTIL_TYPETRAITS_H

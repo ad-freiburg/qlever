@@ -24,6 +24,7 @@
 #include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -101,7 +102,8 @@ class Vocabulary {
   vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
-      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
+      UnicodeVocabulary<SplitGeoVocabulary<UnderlyingVocabulary>,
+                        ComparatorType>;
 
   VocabularyWithUnicodeComparator vocabulary_;
 
@@ -125,7 +127,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -207,13 +209,46 @@ class Vocabulary {
     return getCaseComparator().getLocaleManager();
   }
 
+  // Get bounds for a given prefix.
+  template <bool getUpperBound, typename... Args>
+  IndexType boundImpl(std::string_view word,
+                      const SortLevel level = SortLevel::QUARTERNARY,
+                      Args&&... args) const {
+    WordAndIndex wordAndIndex;
+    if constexpr (getUpperBound) {
+      wordAndIndex = vocabulary_.upper_bound(word, level, AD_FWD(args)...);
+    } else {
+      wordAndIndex = vocabulary_.lower_bound(word, level, AD_FWD(args)...);
+    }
+    return IndexType::make(wordAndIndex.indexOrDefault(size()));
+  };
+
   // Wraps std::lower_bound and returns an index instead of an iterator
   IndexType lower_bound(std::string_view word,
-                        const SortLevel level = SortLevel::QUARTERNARY) const;
+                        const SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<false>(word, level);
+  };
 
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
-                        SortLevel level = SortLevel::QUARTERNARY) const;
+                        SortLevel level = SortLevel::QUARTERNARY) const {
+    return boundImpl<true>(word, level);
+  };
+
+  // Get the position for a word in the vocabulary. In contrast to the getId
+  // method, this method also returns an index if the word is not present in the
+  // vocabulary. This index represents the position where the word would be
+  // stored if it were in the vocabulary. The method is different from the upper
+  // and lower bound methods in that it can reliably use the split of
+  // SplitVocabulary because the word is guaranteed to be a full word, not only
+  // a prefix of it (which could change the result of a split).
+  std::pair<IndexType, IndexType> getPositionOfWord(
+      const std::string& word, SortLevel level = SortLevel::QUARTERNARY) const {
+    uint8_t marker =
+        vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
+    return {boundImpl<false>(word, level, marker),
+            boundImpl<true>(word, level, marker)};
+  };
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
