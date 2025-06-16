@@ -8,6 +8,7 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
@@ -1702,6 +1703,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
   auto componentIndices = QueryGraph::computeConnectedComponents(
       initialPlans, filtersAndOptSubstitutes);
+
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
@@ -2095,7 +2097,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
-
   return createJoinCandidates(ain, bin, connected(a, b, tg));
 }
 
@@ -2741,10 +2742,14 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
+
+    // We have finished a nested GroupGraphPattern, reset the filter and text
+    // limit IDs, s.t. they don't leak into other groups
     for (auto& plan : candidatePlans_.back()) {
       plan._idsOfIncludedFilters = 0;
       plan.idsOfIncludedTextLimits_ = 0;
     }
+
     return;
   }
 
@@ -2762,6 +2767,9 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       a._idsOfIncludedNodes = 1;
       b._idsOfIncludedNodes = 2;
       auto vec = planner_.createJoinCandidates(a, b, boost::none);
+      // This is not yet the end of a group (but just an optimization barrier
+      // within the group), so we have to remember which filters have already
+      // been applied
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
       }
