@@ -540,6 +540,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   locatedTriples.add(deleteTriples);
 
   // Test infrastructure.
+  using Loc = ad_utility::source_location;
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
                                    Loc loc = Loc::current()) {
     auto trace = generateLocationTrace(loc);
