@@ -11,7 +11,8 @@ bool TripleInTextIndex::operator()(const TurtleTriple& triple) const {
   if (!(triple.object_.isIri() || triple.object_.isLiteral())) {
     return false;
   }
+  RE2 matcher = RE2{regex_, RE2::Quiet};
   return (
       isWhitelist_ ==
-      RE2::PartialMatch(triple.predicate_.toStringRepresentation(), regex_));
+      RE2::PartialMatch(triple.predicate_.toStringRepresentation(), matcher));
 }

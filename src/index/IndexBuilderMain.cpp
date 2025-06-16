@@ -132,6 +132,7 @@ int main(int argc, char** argv) {
   string kbIndexName;
   string settingsFile;
   string scoringMetric = "explicit";
+  string tripleInTextIndexRegex = "*";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -141,6 +142,7 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  bool tripleInTextIndexRegexIsWhitelist = true;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
@@ -187,6 +189,14 @@ int main(int argc, char** argv) {
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
+  add("text-index-regex,r", po::value(&tripleInTextIndexRegex),
+      "Regex which is used to match predicates. If the predicate matches and"
+      "`text-index-regex-is-whitelist` is set to true (default), the object if"
+      "literal or IRI is added to the text index.");
+  add("text-index-regex-is-whitelist,R",
+      po::bool_switch(&tripleInTextIndexRegexIsWhitelist),
+      "If set to true (default) the `text-index-regex` works as whitelist, if"
+      "false as blacklist.");
   add("text-index-name,T", po::value(&textIndexName),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
@@ -284,6 +294,8 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
+    index.setTextRegex(tripleInTextIndexRegex,
+                       tripleInTextIndexRegexIsWhitelist);
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

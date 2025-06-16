@@ -1031,6 +1031,11 @@ void IndexImpl::setKbName(const string& name) {
   osp_.setKbName(name);
 }
 
+// _____________________________________________________________________________
+void IndexImpl::setTextRegex(const std::string& regex, bool isWhitelist) {
+  tripleInTextIndexMatcher_ = TripleInTextIndex(regex, isWhitelist);
+}
+
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;

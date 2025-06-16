@@ -12,7 +12,7 @@
 class TripleInTextIndex {
  public:
   // Delete standard constructor to prevent empty regex by mistake
-  TripleInTextIndex() = delete;
+  TripleInTextIndex() : regex_{"*"}, isWhitelist_{true} {};
 
   /**
    * @brief Class to determine whether the literal of a triple should be part of
@@ -24,14 +24,14 @@ class TripleInTextIndex {
    *                  the text index. If set to falls the matching regex cases
    *                  will not be added but everything else.
    */
-  TripleInTextIndex(std::string_view regex, bool whitelist = true)
-      : regex_{RE2{regex, RE2::Quiet}}, isWhitelist_{whitelist} {
-    if (!regex_.ok()) {
+  TripleInTextIndex(string regex, bool whitelist = true)
+      : regex_{std::move(regex)}, isWhitelist_{whitelist} {
+    if (const RE2 reg{regex_, RE2::Quiet}; !reg.ok()) {
       throw std::runtime_error{absl::StrCat(
-          "The regex \"", regex,
+          "The regex \"", regex_,
           "\" is not supported by QLever (which uses Google's RE2 library); "
           "the error from RE2 is: ",
-          regex_.error())};
+          reg.error())};
     }
   }
 
@@ -41,8 +41,8 @@ class TripleInTextIndex {
   bool operator()(const TurtleTriple& triple) const;
 
  private:
-  // The regex object used to do the comparison
-  RE2 regex_;
+  // The regex string used to do the comparison
+  string regex_;
   // Determine whether the regex should act as whitelist or blacklist
   bool isWhitelist_;
 };

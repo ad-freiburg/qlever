@@ -29,12 +29,22 @@ auto testMultipleTriples = [](const TripleInTextIndex& filter,
   }
 };
 
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
+
+auto literal = [](std::string_view s) {
+  return TripleComponent::Literal::fromStringRepresentation(std::string{s});
+};
+
 std::vector<TurtleTriple> testVector = {
-    makeTurtleTripleFromStrings("<Scientist>", "<has-description>", "\"Test\""),
-    makeTurtleTripleFromStrings("<Book>", "<describes>", "\"Stack of paper\""),
-    makeTurtleTripleFromStrings("<Rope>", "<descending>", "\"R P O E\""),
-    makeTurtleTripleFromStrings("<Uppercase>", "<Describes>",
-                                "\"Big letter\"")};
+    TurtleTriple{iri("<Scientist>"), iri("<has-description>"),
+                 literal("\"Test\"")},
+    TurtleTriple{iri("<Book>"), iri("<describes>"),
+                 literal("\"Stack of paper\"")},
+    TurtleTriple{iri("<Rope>"), iri("<descending>"), literal("\"R P O E\"")},
+    TurtleTriple{iri("<Uppercase>"), iri("<Describes>"),
+                 literal("\"Big letter\"")}};
 
 TEST(TripleInTextIndex, FaultyRegex) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
@@ -45,9 +55,9 @@ TEST(TripleInTextIndex, FaultyRegex) {
 }
 
 TEST(TripleInTextIndex, NoLiteralObject) {
-  TripleInTextIndex filter{"*"};
-  TurtleTriple triple =
-      makeTurtleTripleFromStrings("<Scientist>", "<is-a>", "<Job>");
+  TripleInTextIndex filter{"(?s).*"};
+  TurtleTriple triple{iri("<Scientist>"), iri("<has-description>"),
+                      TripleComponent{4}};
   ASSERT_FALSE(filter(triple));
 }
 
