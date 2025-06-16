@@ -196,6 +196,10 @@ CPP_template_def(typename C, typename L)(
       // externalize it.
       bool& external = lastTripleComponent_.value().isExternal();
       external = external || top.isExternal();
+      // Also if a word appears with different values for `inTextIndex`, then
+      // it gets into the text index
+      bool& inText = lastTripleComponent_.value().inTextIndex();
+      inText = inText || top.inTextIndex();
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =

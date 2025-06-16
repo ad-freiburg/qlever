@@ -21,7 +21,7 @@
 #include "util/TypeTraits.h"
 
 // An IRI or a literal together with the information, whether it should be part
-// of the external vocabulary
+// of the external vocabulary and if it should be in the text index.
 struct PossiblyExternalizedIriOrLiteral {
   PossiblyExternalizedIriOrLiteral(TripleComponent iriOrLiteral,
                                    bool isExternal = false,
