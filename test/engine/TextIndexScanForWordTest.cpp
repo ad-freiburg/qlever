@@ -1,6 +1,7 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2023-2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
+//  Author: Felix Meisen <fesemeisen@outlook.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
