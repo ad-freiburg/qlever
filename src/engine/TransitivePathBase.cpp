@@ -452,30 +452,62 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::filterUndefVariable(
+    std::shared_ptr<QueryExecutionTree> leftOrRightOp,
+    const Variable& dataVariable) {
+  using namespace sparqlExpression;
+  auto descriptor = absl::StrCat("BOUND(", dataVariable.name(), ")");
+  auto expression =
+      makeBoundExpression(std::make_unique<VariableExpression>(dataVariable));
+  auto* qec = leftOrRightOp->getRootOperation()->getExecutionContext();
+  return ad_utility::makeExecutionTree<Filter>(
+      qec, std::move(leftOrRightOp),
+      SparqlExpressionPimpl{std::move(expression), std::move(descriptor)});
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
   auto [originalVar, info] =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
 
-  // Join with the starting side of a clone of the subtree to get the proper
-  // graph values.
-  if (graphVariable_.has_value() &&
-      !leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
-           .has_value()) {
-    auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
-                                          graphVariable_, originalVar);
-    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
-        getExecutionContext(), std::move(leftOrRightOp), completeScan, inputCol,
-        0);
-    inputCol = leftOrRightOp->getVariableColumn(originalVar);
-    // Update to correct state
-    info.mightContainUndef_ = ColumnIndexAndTypeInfo::AlwaysDefined;
-  }
+  if (graphVariable_.has_value()) {
+    // Join with the starting side of a clone of the subtree to get the proper
+    // graph values.
+    if (!leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
+             .has_value()) {
+      // Remove undef values, these  are problematic when joining.
+      if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
+        leftOrRightOp =
+            filterUndefVariable(std::move(leftOrRightOp), originalVar);
+        AD_CORRECTNESS_CHECK(
+            inputCol == leftOrRightOp->getVariableColumn(originalVar),
+            "The column index should not change when applying a filter.");
+        // Update state for subsequent logic.
+        info.mightContainUndef_ = ColumnIndexAndTypeInfo::AlwaysDefined;
+      }
+      auto completeScan = makeEmptyPathSide(
+          getExecutionContext(), activeGraphs_, graphVariable_, originalVar);
+      leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+          getExecutionContext(), std::move(leftOrRightOp), completeScan,
+          inputCol, 0);
+      inputCol = leftOrRightOp->getVariableColumn(originalVar);
+    }
 
-  AD_CORRECTNESS_CHECK(
-      !graphVariable_.has_value() ||
-      leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
-          .has_value());
+    AD_CORRECTNESS_CHECK(
+        leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value())
+            .has_value());
+
+    // Remove undef graph values. We have to remove these, because this
+    // operation treats undefined as "no graph" and matches everything. It also
+    // would be problematic for the potential join for the empty path scenario.
+    if (leftOrRightOp->getVariableColumns()
+            .at(graphVariable_.value())
+            .mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
+      leftOrRightOp =
+          filterUndefVariable(std::move(leftOrRightOp), graphVariable_.value());
+    }
+  }
 
   // If we're not explicitly handling the empty path, the first step will
   // already filter out non-matching values.
@@ -486,12 +518,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   // Remove undef values, these are definitely not in the graph, and are
   // problematic when joining.
   if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
-    using namespace sparqlExpression;
-    SparqlExpressionPimpl pimpl{
-        makeBoundExpression(std::make_unique<VariableExpression>(originalVar)),
-        absl::StrCat("BOUND(", originalVar.name(), ")")};
-    leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
-        getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
+    leftOrRightOp = filterUndefVariable(std::move(leftOrRightOp), originalVar);
     AD_CORRECTNESS_CHECK(
         inputCol == leftOrRightOp->getVariableColumn(originalVar),
         "The column index should not change when applying a filter.");
