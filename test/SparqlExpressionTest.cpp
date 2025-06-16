@@ -768,16 +768,18 @@ TEST(SparqlExpression, binaryStringOperations) {
   checkStrAfter(
       IdOrLiteralOrIriVec{lit("bc"), lit("abc"), lit("c", "@en"), lit(""),
                           lit("abc", "@en"), lit("abc", "@en"), lit(""),
-                          lit("abc", "@en")},
+                          lit("abc", "@en"), U, U},
       IdOrLiteralOrIriVec{
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"), lit("abc"),
+          lit("abc", "@en")},
       IdOrLiteralOrIriVec{
           lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
           lit("z", "@en"),
-          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit("a", "@de")});
 
   checkStrBefore(
       S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
@@ -785,16 +787,18 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
   checkStrBefore(IdOrLiteralOrIriVec{lit("a"), lit(""), lit("a", "@en"),
                                      lit(""), lit("", "@en"), lit("", "@en"),
-                                     lit(""), lit("", "@en")},
+                                     lit(""), lit("", "@en"), U, U},
                  IdOrLiteralOrIriVec{
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc"), lit("abc", "@en")},
                  IdOrLiteralOrIriVec{
                      lit("bc"), lit(""), lit("bc"), lit("z"), lit(""),
                      lit("", "@en"), lit("z", "@en"),
-                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("bc", "@en"), lit("bc", "@de")});
 }
 
 // ______________________________________________________________________________
