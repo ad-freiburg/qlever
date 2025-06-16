@@ -148,10 +148,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
   auto z = makeInternalVariable("z");
   std::vector variables{x};
   SparqlTripleSimple::AdditionalScanColumns additionalColumns;
+  std::vector<ColumnIndex> distinctIndices{0};
   if (graphVariable.has_value()) {
     additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
                                    graphVariable.value());
     variables.push_back(graphVariable.value());
+    distinctIndices.push_back(1);
   }
   // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
   // and ?z in the first place.
@@ -175,7 +177,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
                              additionalColumns},
           activeGraphs)));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::vector<ColumnIndex>{0});
+                                                 std::move(distinctIndices));
 }
 
 // _____________________________________________________________________________
