@@ -13,10 +13,10 @@
 #include <string>
 
 #include "CompilationInfo.h"
-#include "IndexImpl.h"
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
