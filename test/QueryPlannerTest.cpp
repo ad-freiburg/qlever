@@ -1625,7 +1625,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       parsedQuery::PathSearchException);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -1866,6 +1866,7 @@ TEST(QueryPlanner, SpatialJoinService) {
                      scan("?a", "<p>", "?b")));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   // Test the <payload> option which allows selecting columns from the graph
   // pattern inside the service.
@@ -1982,6 +1983,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2067,6 +2069,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
           "SERVICE, but the <payload> parameter was set"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   // Test two spatial join SERVICEs that share a common ?left variable
 
@@ -2144,6 +2147,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
                          scan("?ab", "<p1>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMissingConfig) {
   // Tests with incomplete config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2209,6 +2213,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                                "`<maxDistance>` were provided"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
   // Test that unallowed operations inside the SERVICE statement throw
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2228,6 +2233,7 @@ TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
       ::testing::ContainsRegex("Unsupported element in spatialQuery"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
   // Test that the SERVICE statement may only contain at most one graph pattern
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2247,6 +2253,7 @@ TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
                                "than one nested group graph pattern"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
   // Tests with mistakes in the config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2438,6 +2445,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2595,6 +2603,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                 ::testing::_));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   // test if the SpatialJoin operation parses the maximum distance correctly
   auto testMaxDistance = [](std::string distanceIRI, long long distance,
@@ -2679,7 +2688,7 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
@@ -4249,6 +4258,59 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                               h::IndexScanFromStrings(
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, correctFiltersHandling) {
+  auto scan = h::IndexScanFromStrings;
+
+  // Filter is only applied once with OPTIONAL
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?x <c> ?d } }",
+            h::OptionalJoin(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                            scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . OPTIONAL {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::OptionalJoin(scan("?x", "<c>", "?d"),
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter is applied in the correct subtree with MINUS
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) MINUS { ?x <c> ?d } }",
+            h::Minus(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                     scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . MINUS {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::Minus(scan("?x", "<c>", "?d"),
+                     h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter inside and outside of a subquery
+  h::expect("SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c FILTER(?c < 5) } } }",
+            h::Join(scan("?x", "<c>", "?d"),
+                    h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+  h::expect(
+      "SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c } } FILTER(?c < 5) }",
+      ::testing::AnyOf(h::Join(scan("?x", "<c>", "?d"),
+                               h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<c>", "?d"),
+                                                   scan("?x", "<b>", "?c")))));
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) { SELECT * { ?x <c> ?d } } }",
+      ::testing::AnyOf(h::Join(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                               scan("?x", "<c>", "?d")),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<b>", "?c"),
+                                                   scan("?x", "<c>", "?d")))));
+
+  // Filter and bind
+  h::expect(
+      "SELECT * { ?x <b> ?c FILTER(?c < 5) BIND(42 AS ?unrelated) FILTER(?c >= "
+      "1) }",
+      h::AnyOf(
+          h::Filter("?c >= 1",
+                    h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")), "42",
+                            Variable{"?unrelated"})),
+          h::Filter("?c >= 1",
+                    h::Filter("?c < 5", h::Bind(scan("?x", "<b>", "?c"), "42",
+                                                Variable{"?unrelated"}))),
+          h::Bind(h::Filter("?c >= 1",
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                  "42", Variable{"?unrelated"})));
 }
 
 // _____________________________________________________________________________
