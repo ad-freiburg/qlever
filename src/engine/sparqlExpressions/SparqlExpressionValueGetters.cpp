@@ -83,6 +83,10 @@ auto EffectiveBooleanValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::Bool) {
+    // Always use canonical representation when converting to string.
+    return id.getBool() ? "true" : "false";
+  }
   // `true` means that we remove the quotes and angle brackets.
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
@@ -177,19 +181,33 @@ std::string ReplacementStringGetter::convertToReplacementString(
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
-  if (id.getDatatype() == Datatype::VocabIndex) {
-    // See instantiations below for what `isSomethingFunction` is.
-    return Id::makeFromBool(std::invoke(isSomethingFunction,
-                                        context->_qec.getIndex().getVocab(),
-                                        id.getVocabIndex()));
-  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
-    auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
-        context->_qec.getIndex(), id, context->_localVocab);
-    return Id::makeFromBool(word.has_value() &&
-                            word.value().first.starts_with(prefix));
-  } else {
-    return Id::makeFromBool(false);
+  switch (id.getDatatype()) {
+    case Datatype::VocabIndex:
+      // See instantiations below for what `isSomethingFunction` is.
+      return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                          context->_qec.getIndex().getVocab(),
+                                          id.getVocabIndex()));
+    case Datatype::LocalVocabIndex: {
+      auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return Id::makeFromBool(word.has_value() &&
+                              word.value().first.starts_with(prefix));
+    }
+    case Datatype::Bool:
+    case Datatype::Int:
+    case Datatype::Double:
+    case Datatype::Date:
+    case Datatype::GeoPoint:
+      if constexpr (prefix == isLiteralPrefix) {
+        return Id::makeFromBool(true);
+      }
+    case Datatype::Undefined:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::BlankNodeIndex:
+      return Id::makeFromBool(false);
   }
+  AD_FAIL();
 }
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
@@ -393,7 +411,25 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 //______________________________________________________________________________
 std::optional<std::string> LanguageTagValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<std::optional<std::string>>(id, context, *this);
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case GeoPoint:
+      // For literals without language tag, we return an empty string per
+      // standard.
+      return {""};
+    case Undefined:
+    case VocabIndex:
+    case LocalVocabIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+      return getValue<std::optional<std::string>>(id, context, *this);
+  }
+  AD_FAIL();
 }
 
 //______________________________________________________________________________

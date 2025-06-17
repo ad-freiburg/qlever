@@ -31,19 +31,19 @@ enum class SpatialJoinType {
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
-  std::optional<size_t> maxDist_ = std::nullopt;
+  std::optional<double> maxDist_ = std::nullopt;
 };
 
 // A spatial search limited only by a maximum distance.
 struct MaxDistanceConfig {
-  size_t maxDist_;
+  double maxDist_;
 };
 
 // Spatial join using one of the join types above. The maximal distance is
 // relevant only for the `WITHIN_DIST` join type.
 struct SpatialJoinConfig {
   SpatialJoinType joinType_;
-  std::optional<size_t> maxDist_ = std::nullopt;
+  std::optional<double> maxDist_ = std::nullopt;
 };
 
 // Configuration to restrict the results provided by the SpatialJoin
@@ -94,7 +94,7 @@ struct PreparedSpatialJoinParams {
   ColumnIndex rightJoinCol_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
 };
@@ -163,7 +163,7 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<size_t> getMaxDist() const;
+  std::optional<double> getMaxDist() const;
 
   // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
@@ -180,8 +180,8 @@ class SpatialJoin : public Operation {
   }
 
   // Helper functions for unit tests
-  std::pair<size_t, size_t> onlyForTestingGetTask() const {
-    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  std::pair<double, size_t> onlyForTestingGetTask() const {
+    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {

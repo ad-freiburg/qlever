@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/hash/hash_testing.h>
 #include <gtest/gtest.h>
 
 #include <bitset>
@@ -9,7 +10,6 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
-#include "absl/hash/hash_testing.h"
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
@@ -61,7 +61,7 @@ TEST_F(ValueIdTest, makeFromDouble) {
   testRepresentableDouble(-std::numeric_limits<double>::infinity());
 
   // Test positive and negative 0.
-  ASSERT_NE(std::bit_cast<uint64_t>(0.0), std::bit_cast<uint64_t>(-0.0));
+  ASSERT_NE(absl::bit_cast<uint64_t>(0.0), absl::bit_cast<uint64_t>(-0.0));
   ASSERT_EQ(0.0, -0.0);
   testRepresentableDouble(0.0);
   testRepresentableDouble(-0.0);
@@ -104,6 +104,19 @@ TEST_F(ValueIdTest, makeFromInt) {
 
   testOverflow(overflowingNBitGenerator);
   testOverflow(underflowingNBitGenerator);
+}
+
+// _____________________________________________________________________________
+TEST_F(ValueIdTest, makeFromBool) {
+  EXPECT_TRUE(ValueId::makeBoolFromZeroOrOne(true).getBool());
+  EXPECT_TRUE(ValueId::makeFromBool(true).getBool());
+  EXPECT_FALSE(ValueId::makeBoolFromZeroOrOne(false).getBool());
+  EXPECT_FALSE(ValueId::makeFromBool(false).getBool());
+
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(true).getBoolLiteral(), "1");
+  EXPECT_EQ(ValueId::makeFromBool(true).getBoolLiteral(), "true");
+  EXPECT_EQ(ValueId::makeBoolFromZeroOrOne(false).getBoolLiteral(), "0");
+  EXPECT_EQ(ValueId::makeFromBool(false).getBoolLiteral(), "false");
 }
 
 TEST_F(ValueIdTest, Indices) {
@@ -222,7 +235,7 @@ TEST_F(ValueIdTest, DoubleOrdering) {
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) {
-    auto bits = std::bit_cast<uint64_t>(id.getDouble());
+    auto bits = absl::bit_cast<uint64_t>(id.getDouble());
     return bits & ad_utility::bitMaskForHigherBits(1);
   };
   auto beginOfNegatives =
@@ -346,6 +359,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
+  test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
+  test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
   auto str = LocalVocabEntry{
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(

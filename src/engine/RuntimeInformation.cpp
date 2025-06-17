@@ -2,12 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-#include <engine/RuntimeInformation.h>
-#include <util/Exception.h>
-#include <util/Log.h>
-#include <util/TransparentFunctors.h>
+
+#include "engine/RuntimeInformation.h"
+
+#include <absl/strings/str_join.h>
 
 #include <ranges>
+
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 

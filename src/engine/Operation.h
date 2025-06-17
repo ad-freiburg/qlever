@@ -6,6 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_OPERATION_H
 #define QLEVER_SRC_ENGINE_OPERATION_H
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest_prod.h>
 
 #include <memory>
@@ -63,7 +64,7 @@ class Operation {
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
   // future.
-  LimitOffsetClause _limit;
+  LimitOffsetClause limitOffset_;
 
   // Mutex that protects the `variableToColumnMap_` below.
   mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
@@ -173,13 +174,20 @@ class Operation {
   // actual result because it has been constrained by a parent operation (e.g.
   // an IndexScan that has been prefiltered by another operation which it is
   // joined with).
-  virtual bool canResultBeCached() const { return canResultBeCached_; }
+  virtual bool canResultBeCached() const final {
+    return canResultBeCachedImpl() && canResultBeCached_;
+  }
 
   // After calling this function, `canResultBeCached()` will return `false` (see
   // above for details).
   virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
+  // Return if the result of this `Operation` can be cached at all. Caching can
+  // still be disabled for other reason external to this operation with
+  // `disableStoringInCache()`.
+  virtual bool canResultBeCachedImpl() const { return true; }
+
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
   virtual string getCacheKeyImpl() const = 0;
@@ -280,13 +288,24 @@ class Operation {
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+  [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
-  // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    _limit = limitOffsetClause;
+ private:
+  // This function is called each time `applyLimit` is called. It can be
+  // overridden by subclasses to e.g. implement the LIMIT in a more efficient
+  // way
+  virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
+    // If `supportsLimitOffset()` returns `false`, this function has to be
+    // no-op.
   }
+
+ public:
+  // Set the value of the `LIMIT`/`OFFSET` clause that will be applied to the
+  // result of this operation. If a `LIMIT`/`OFFSET` was previously set, this
+  // `LIMIT`/`OFFSET` will not be replaced, but the new `LIMIT`/`OFFSET` will be
+  // applied additionally after the previous `LIMIT`s/`OFFSET`s. This might
+  // happen e.g. for nested subqueries.
+  void applyLimitOffset(const LimitOffsetClause& limitOffsetClause);
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -315,7 +334,7 @@ class Operation {
     return computeResult(requestLaziness);
   }
 
-  const auto& getLimit() const { return _limit; }
+  const auto& getLimitOffset() const { return limitOffset_; }
 
  private:
   // Actual implementation of `clone()` without extra checks.
@@ -324,6 +343,18 @@ class Operation {
  public:
   // Create a deep copy of this operation.
   std::unique_ptr<Operation> clone() const;
+
+  // Helper function to check hif the result of this operation is
+  // already sorted accordigngly.
+  virtual bool isSortedBy(const vector<ColumnIndex>& sortColumns) const final;
+
+  // Try to create a version of this operation that is sorted on the given
+  // `sortColumns`. The default implementation returns `std::nullopt`, assuming
+  // most operations can't efficiently produce a sorted result. Subclasses may
+  // override this function if they are able to provide more efficient
+  // implementations.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
+      const vector<ColumnIndex>& sortColumns) const;
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -364,6 +395,13 @@ class Operation {
   // in case of a subquery.
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
+
+  // Helper function to allow dynamic modification of LIMIT/OFFSET from child
+  // operations. It returns an object that restores the original LIMIT + OFFSET
+  // the child operations haven when calling this function on destruction.
+  [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
+                                      std::function<void()>>
+  resetChildLimitsAndOffsetOnDestruction() final;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -434,6 +472,30 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
+  // Return true if all values that the `variable` will be bound to by this
+  // expression are guaranteed to be contained in the underlying knowledge
+  // graph or undefined. This is e.g. true for results of `IndexScan`s, but not
+  // for `VALUES` clauses or expression results. This information is used to
+  // skip potentially expensive checks in the `TransitivePath` implementation.
+  // The default implementation is very conservative and assume all operations
+  // are just creating values from thin air, or intersect them from their
+  // children.
+  // So unless you implement an operation that consumes a column from its child
+  // and just adds arbitrary values to this column, this implementation is never
+  // wrong, just potentially inefficientand assumes that variables that are
+  // newly created always contain values that are not from the knowledge graph
+  // (e.g. `BIND` with an arbitrary function). Variables that are also contained
+  // in at least one of the children are assumed to originate from the knowledge
+  // graph if this is true for the same variable in all the children that define
+  // this variable).
+  // Therefore, this function has to be overridden by classes that modify
+  // variables of their children in an arbitrary way (currently we can think of
+  // no such operation) and should be overridden (for efficiency reasons) in
+  // operations, that only pass on variables from some of their children (e.g.
+  // the variables on the right hand side of a MINUS operation never become part
+  // of the result).
+  virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
@@ -464,6 +526,7 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
+  FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

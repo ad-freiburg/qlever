@@ -117,7 +117,7 @@ class IndexImpl {
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
   // Private data members.
- private:
+ protected:
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
@@ -160,6 +160,7 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+  string gitShortHash_ = "git short hash not set";
 
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
@@ -256,19 +257,6 @@ class IndexImpl {
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase,
                              bool persistUpdatesOnDisk);
-
-  // Adds a text index to a complete KB index. Reads words from the given
-  // wordsfile and calculates bm25 scores with the docsfile if given.
-  // Additionally adds words from literals of the existing KB. Can't be called
-  // with only words or only docsfile, but with or without both. Also can't be
-  // called with the pair empty and bool false
-  void buildTextIndexFile(
-      const std::optional<std::pair<string, string>>& wordsAndDocsFile,
-      bool addWordsFromLiterals, TextScoringMetric textScoringMetric,
-      std::pair<float, float> bAndKForBM25);
-
-  // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const string& docsFile) const;
 
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
@@ -385,17 +373,6 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  IdTable readContextListHelper(
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const ContextListMetaData& contextList, bool isWordCl) const;
-
-  IdTable readWordCl(const TextBlockMetaData& tbmd,
-                     const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
-  IdTable readWordEntityCl(
-      const TextBlockMetaData& tbmd,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
-
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
       return "";
@@ -445,6 +422,7 @@ class IndexImpl {
   const string& getKbName() const { return pso_.getKbName(); }
   const string& getOnDiskBase() const { return onDiskBase_; }
   const string& getIndexId() const { return indexId_; }
+  const string& getGitShortHash() const { return gitShortHash_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -486,7 +464,7 @@ class IndexImpl {
       const Permutation::Enum& permutation,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
- private:
+ protected:
   // Private member functions
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
@@ -531,34 +509,6 @@ class IndexImpl {
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial, Func isQLeverInternalTriple);
-
-  // Generator that returns all words in the given context file (if not empty)
-  // and then all words in all literals (if second argument is true).
-  //
-  // TODO: So far, this is limited to the internal vocabulary (still in the
-  // testing phase, once it works, it should be easy to include the IRIs and
-  // literals from the external vocabulary as well).
-  cppcoro::generator<WordsFileLine> wordsInTextRecords(
-      std::string contextFile, bool addWordsFromLiterals) const;
-
-  void processEntityCaseDuringInvertedListProcessing(
-      const WordsFileLine& line,
-      ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,
-      size_t& entityNotFoundErrorMsgCount) const;
-
-  void processWordCaseDuringInvertedListProcessing(
-      const WordsFileLine& line,
-      ad_utility::HashMap<WordIndex, Score>& wordsInContext,
-      ScoreData& scoreData) const;
-
-  static void logEntityNotFound(const string& word,
-                                size_t& entityNotFoundErrorMsgCount);
-
-  size_t processWordsForVocabulary(const string& contextFile,
-                                   bool addWordsFromLiterals);
-
-  void processWordsForInvertedLists(const string& contextFile,
-                                    bool addWordsFromLiterals, TextVec& vec);
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
@@ -606,13 +556,7 @@ class IndexImpl {
                      const Permutation& p1, const Permutation& p2,
                      Callbacks&&... perTripleCallbacks);
 
-  void createTextIndex(const string& filename, TextVec& vec);
-
   void openTextFileHandle();
-
-  void addContextToVector(TextVec& vec, TextRecordIndex context,
-                          const ad_utility::HashMap<WordIndex, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
@@ -631,21 +575,6 @@ class IndexImpl {
   std::optional<TextBlockMetadataAndWordInfo>
   getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
 
-  /// Calculate the block boundaries for the text index. The boundary of a
-  /// block is the index in the `textVocab_` of the last word that belongs
-  /// to this block.
-  /// This implementation takes a reference to an `IndexImpl` and a callable,
-  /// that is called once for each blockBoundary, with the `size_t`
-  /// blockBoundary as a parameter. Internally uses
-  /// `calculateBlockBoundariesImpl`.
-  template <typename I, typename BlockBoundaryAction>
-  static void calculateBlockBoundariesImpl(
-      I&& index, const BlockBoundaryAction& blockBoundaryAction);
-
-  /// Calculate the block boundaries for the text index, and store them in the
-  /// blockBoundaries_ member.
-  void calculateBlockBoundaries();
-
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
   // FRIEND TESTS
@@ -658,7 +587,7 @@ class IndexImpl {
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 
- private:
+ protected:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
    *        within any index method that returns data requiring the patterns

@@ -44,7 +44,7 @@ class RelationalExpression : public SparqlExpression {
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
   // corresponds to the sorted column.
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      [[maybe_unused]] bool isNegated) const override;
+      bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
@@ -53,7 +53,7 @@ class RelationalExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 // Implementation of the `IN` expression
@@ -78,6 +78,9 @@ class InExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override;
+
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
   Estimates getEstimatesForFilterExpression(
@@ -85,7 +88,7 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
 }  // namespace sparqlExpression::relational

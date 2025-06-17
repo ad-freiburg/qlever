@@ -7,9 +7,10 @@
 #ifndef QLEVER_SRC_UTIL_HASHSET_H
 #define QLEVER_SRC_UTIL_HASHSET_H
 
+#include <absl/container/flat_hash_set.h>
+
 #include <unordered_set>
 
-#include "absl/container/flat_hash_set.h"
 #include "util/AllocatorWithLimit.h"
 
 namespace ad_utility {

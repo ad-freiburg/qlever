@@ -4,6 +4,8 @@
 
 #include "engine/Describe.h"
 
+#include <absl/strings/str_join.h>
+
 #include "../../test/engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -99,7 +101,7 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 template <typename Allocator>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, std::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);

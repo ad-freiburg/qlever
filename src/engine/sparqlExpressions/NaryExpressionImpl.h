@@ -7,6 +7,8 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSIONIMPL_H
 
+#include <absl/functional/bind_front.h>
+
 #include <ranges>
 
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -43,15 +45,9 @@ class NaryExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
-  // _________________________________________________________________________
-  std::optional<SparqlExpression*> getChildAtIndex(size_t childIndex) const {
-    return childIndex < N ? std::make_optional(children_[childIndex].get())
-                          : std::nullopt;
-  }
-
  private:
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  ql::span<SparqlExpression::Ptr> childrenImpl() override;
 
   // Evaluate the `naryOperation` on the `operands` using the `context`.
   CPP_template(typename... Operands)(
@@ -172,7 +168,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
   // A function that only takes several `ExpressionResult`s,
   // and evaluates the expression.
-  auto evaluateOnChildrenResults = std::bind_front(
+  auto evaluateOnChildrenResults = absl::bind_front(
       ad_utility::visitWithVariantsAndParameters,
       evaluateOnChildOperandsAsLambda, NaryOperation{}, context);
 
@@ -181,7 +177,7 @@ ExpressionResult NaryExpression<NaryOperation>::evaluate(
 
 // _____________________________________________________________________________
 template <typename Op>
-std::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
+ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 

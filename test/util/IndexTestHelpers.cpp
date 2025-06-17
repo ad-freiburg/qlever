@@ -8,6 +8,7 @@
 #include "./TripleComponentTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
+#include "index/TextIndexBuilder.h"
 #include "util/ProgressBar.h"
 
 namespace ad_utility::testing {
@@ -185,15 +186,17 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                         std::nullopt};
     index.createFromFiles({spec});
     if (c.createTextIndex) {
+      TextIndexBuilder textIndexBuilder = TextIndexBuilder(
+          ad_utility::makeUnlimitedAllocator<Id>(), index.getOnDiskBase());
       // First test the case of invalid b and k parameters for BM25, it should
       // throw
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile(std::nullopt, true, TextScoringMetric::BM25,
-                                   {2.0f, 0.5f}),
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {2.0f, 0.5f}),
           ::testing::HasSubstr("Invalid values"));
       AD_EXPECT_THROW_WITH_MESSAGE(
-          index.buildTextIndexFile(std::nullopt, true, TextScoringMetric::BM25,
-                                   {0.5f, -1.0f}),
+          textIndexBuilder.buildTextIndexFile(
+              std::nullopt, true, TextScoringMetric::BM25, {0.5f, -1.0f}),
           ::testing::HasSubstr("Invalid values"));
       c.scoringMetric = c.scoringMetric.value_or(TextScoringMetric::EXPLICIT);
       c.bAndKParam = c.bAndKParam.value_or(std::pair{0.75f, 1.75f});
@@ -203,11 +206,11 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
       if (c.scoringMetric.value() != TextScoringMetric::BM25) {
         c.bAndKParam = std::pair{-3.f, -3.f};
       }
-      auto buildTextIndex = [&index, &c](auto wordsAndDocsfile,
-                                         bool addWordsFromLiterals) {
-        index.buildTextIndexFile(std::move(wordsAndDocsfile),
-                                 addWordsFromLiterals, c.scoringMetric.value(),
-                                 c.bAndKParam.value());
+      auto buildTextIndex = [&textIndexBuilder, &c](auto wordsAndDocsfile,
+                                                    bool addWordsFromLiterals) {
+        textIndexBuilder.buildTextIndexFile(
+            std::move(wordsAndDocsfile), addWordsFromLiterals,
+            c.scoringMetric.value(), c.bAndKParam.value());
       };
       if (c.contentsOfWordsFileAndDocsfile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
@@ -220,14 +223,14 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                        c.contentsOfWordsFileAndDocsfile.value().second.size());
         wordsFile.close();
         docsFile.close();
-        index.setKbName(indexBasename);
-        index.setTextName(indexBasename);
-        index.setOnDiskBase(indexBasename);
+        textIndexBuilder.setKbName(indexBasename);
+        textIndexBuilder.setTextName(indexBasename);
+        textIndexBuilder.setOnDiskBase(indexBasename);
         buildTextIndex(
             std::pair<std::string, std::string>{indexBasename + ".wordsfile",
                                                 indexBasename + ".docsfile"},
             c.addWordsFromLiterals);
-        index.buildDocsDB(indexBasename + ".docsfile");
+        textIndexBuilder.buildDocsDB(indexBasename + ".docsfile");
       } else if (c.addWordsFromLiterals) {
         buildTextIndex(std::nullopt, true);
       }

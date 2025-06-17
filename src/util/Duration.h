@@ -7,19 +7,16 @@
 #ifndef QLEVER_DURATION_H
 #define QLEVER_DURATION_H
 
-#include <inttypes.h>
-#include <util/Exception.h>
+#include <absl/strings/str_cat.h>
 
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <exception>
-#include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 
-#include "absl/strings/str_cat.h"
+#include "util/Exception.h"
 
 //______________________________________________________________________________
 class DurationOverflowException : public std::exception {
@@ -92,7 +89,7 @@ class DayTimeDuration {
   // into the positive value range to store an unsigned value in
   // totalMilliseconds_.
   static constexpr uint8_t numMillisecondBits =
-      std::bit_width(boundTotalMilliseconds * 2);
+      absl::bit_width(boundTotalMilliseconds * 2);
   static constexpr uint8_t numUnusedBits = 64 - numMillisecondBits;
   static_assert(numUnusedBits == 16,
                 "The number of unused bits for Duration should be 16");
@@ -204,13 +201,13 @@ class DayTimeDuration {
   // Converts the underlying `dayTimeDuration` representation to a compact
   // bit representation (necessary for the == and <=> implementation).
   [[nodiscard]] constexpr uint64_t toBits() const {
-    return std::bit_cast<uint64_t>(*this);
+    return absl::bit_cast<uint64_t>(*this);
   }
 
   // From a given bit representation, retrieve the actual `dayTimeDuration`
   // object again.
   static constexpr DayTimeDuration fromBits(uint64_t bytes) {
-    return std::bit_cast<DayTimeDuration>(bytes);
+    return absl::bit_cast<DayTimeDuration>(bytes);
   }
 
   //____________________________________________________________________________

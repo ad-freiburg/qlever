@@ -42,7 +42,7 @@ std::vector<int64_t> toPositions(G generator, const R& range) {
 // point to the elements from `range` at indices 3 and 7.
 template <size_t I>
 void testSmallerUndefRangesForArbitraryRows(
-    std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
+    Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& expectedPositions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -62,7 +62,7 @@ void testSmallerUndefRangesForArbitraryRows(
 // `findSmallerUndefRangesForRowsWithoutUndef`.
 template <size_t I>
 void testSmallerUndefRangesForRowsWithoutUndef(
-    std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
+    Arr<I> row, const std::vector<Arr<I>>& range,
     const std::vector<size_t>& positions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -86,9 +86,10 @@ TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithoutUndef) {
   testSmallerUndefRangesForRowsWithoutUndef<1>({V(3)}, oneCol, {0, 1});
 
   // (3, 19) is compatible to (U, U), (U, 19), and (3, U);
-  std::vector<Arr<2>> twoCols{{U, U},       {U, V(1)},     {U, V(2)}, {U, V(3)},
-                              {U, V(3)},    {U, V(19)},    {V(1), U}, {V(3), U},
-                              {V(3), V(3)}, {V(7), V(12)}, {V(8), U}};
+  std::vector<Arr<2>> twoCols{{U, U},        {U, V(1)},     {U, V(2)},
+                              {U, V(3)},     {U, V(3)},     {U, V(19)},
+                              {V(1), U},     {V(3), U},     {V(3), V(3)},
+                              {V(3), V(19)}, {V(7), V(12)}, {V(8), U}};
   testSmallerUndefRangesForRowsWithoutUndef<2>({V(3), V(19)}, twoCols,
                                                {0, 5, 7});
 
