@@ -187,6 +187,43 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
 }
 
 // _____________________________________________________________________________
+TEST(Union, inputWithZeroColumns) {
+  auto* qec = ad_utility::testing::getQec();
+  auto leftT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+  auto rightT = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+
+  Union u{qec, std::move(leftT), std::move(rightT)};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(resultTable.isFullyMaterialized());
+    auto result = resultTable.idTables();
+
+    auto expected1 = makeIdTableFromVector({{}});
+
+    auto iterator = result.begin();
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(iterator->idTable_, expected1);
+
+    ++iterator;
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(iterator->idTable_, expected1);
+
+    ASSERT_EQ(++iterator, result.end());
+  }
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting();
+    ASSERT_TRUE(resultTable.isFullyMaterialized());
+
+    auto expected = makeIdTableFromVector({{}, {}});
+    EXPECT_EQ(resultTable.idTable(), expected);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Union, clone) {
   auto* qec = ad_utility::testing::getQec();
 
