@@ -455,8 +455,8 @@ GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
   if (datatype == Datatype::VocabIndex) {
     // TODO<ullingerc> After merge of GeoVocabulary this can be activated
     // TODO<ullingerc> Retrieve via getGeoInfo only if we have a GeoVocab as
-    // underlying vocabulary of the PolymorphicVocabulary, otherwise compute
-    // adhoc
+    // underlying vocabulary of the PolymorphicVocabulary, otherwise return
+    // nullopt
 
     // All geometry strings encountered during index build have a precomputed
     // geometry info object.
