@@ -8,9 +8,12 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <exception>
+#include <memory>
+#include <optional>
 #include <thread>
 
 #include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ThreadSafeQueue.h"
@@ -31,6 +34,7 @@ template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
 cppcoro::generator<typename Range::value_type> runStreamAsync(
     Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
+
   ThreadSafeQueue<value_type> queue{bufferLimit};
   std::exception_ptr exception = nullptr;
   std::thread thread{[&] {
@@ -78,6 +82,56 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
                << "ms" << std::endl;
   });
 }
+
+/**
+ * This is iterator based runStreamAsync template to facilitate refactoring from
+ * cppcoro::generator<ValueType> to ad_utility::InputRangeTypeErased<ValueType>
+ */
+template <typename Range, bool logTime = (LOGLEVEL >= TIMING)>
+ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsyncV2(
+    Range range, size_t bufferLimit) {
+  using value_type = typename Range::value_type;
+
+  struct Generator : public ad_utility::InputRangeFromGet<value_type> {
+    Generator(Range range, const size_t bufferLimit)
+        : queue{std::make_shared<ThreadSafeQueue<value_type>>(bufferLimit)},
+          exception{std::make_shared<std::exception_ptr>(nullptr)},
+          thread{std::shared_ptr<std::thread>(
+              new std::thread(&Generator::thread_function, std::move(range),
+                              queue, exception),
+              &Generator::threadCleanup)} {}
+
+    std::optional<value_type> get() override { return queue->pop(); }
+
+    static void thread_function(
+        Range range, std::shared_ptr<ThreadSafeQueue<value_type>> queue,
+        std::shared_ptr<std::exception_ptr> exception) {
+      try {
+        for (auto& value : range) {
+          if (!queue->push(std::move(value))) {
+            return;
+          }
+        }
+      } catch (...) {
+        *exception = std::current_exception();
+      }
+      queue->finish();
+    }
+
+    static void threadCleanup(std::thread* thread) {
+      thread->join();
+      delete thread;
+    }
+
+    std::shared_ptr<ThreadSafeQueue<value_type>> queue;
+    std::shared_ptr<std::exception_ptr> exception;
+    std::shared_ptr<std::thread> thread;
+  };
+
+  return ad_utility::InputRangeTypeErased<value_type>{
+      Generator{std::move(range), bufferLimit}};
+}
+
 }  // namespace ad_utility::streams
 
 #endif  // QLEVER_SRC_UTIL_ASYNCSTREAM_H
