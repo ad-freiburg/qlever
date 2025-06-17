@@ -3462,13 +3462,16 @@ TEST(QueryPlanner, DatasetClause) {
   h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
-  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{}));
 
   auto g1 = Graphs{"<g1>"};
   auto g2 = Graphs{"<g2>"};
   h::expect(
-      "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
+      "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH "
+      "<g2> { <c> ?p <z> "
       "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
@@ -3476,6 +3479,7 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<e>", "?p", "<z3>", {}, g1)));
 
   auto g12 = Graphs{"<g1>", "<g2>"};
+  auto noGraphs = Graphs{};
   auto varG = std::vector{Variable{"?g"}};
   std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
   h::expect(
@@ -3484,7 +3488,7 @@ TEST(QueryPlanner, DatasetClause) {
       scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
 
   h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
-            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
+            scan("<a>", "<b>", "<c>", {}, noGraphs, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
   // We use the `UnorderedJoins` matcher, because the index scan has to be
