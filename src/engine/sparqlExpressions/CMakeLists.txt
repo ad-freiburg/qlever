@@ -24,4 +24,4 @@ add_library(sparqlExpressions
         BlankNodeExpression.cpp
         GroupConcatExpression.cpp)
 
-qlever_target_link_libraries(sparqlExpressions util index Boost::url pb_util)
+qlever_target_link_libraries(sparqlExpressions util index parser Boost::url pb_util)
