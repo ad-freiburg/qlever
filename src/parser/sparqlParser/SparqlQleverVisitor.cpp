@@ -877,6 +877,12 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto op = GraphUpdate{};
   visitTemplateClause(ctx->insertClause(), &op.toInsert_);
   visitTemplateClause(ctx->deleteClause(), &op.toDelete_);
+  if (ctx->iri() && datasetsAreFixed_) {
+    reportError(ctx->iri(),
+                "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   visitIf(&op.with_, ctx->iri());
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
@@ -1402,6 +1408,12 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 
 // ____________________________________________________________________________________
 DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
+  if (datasetsAreFixed_) {
+    reportError(ctx,
+                "`USING [NAMED]` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {
