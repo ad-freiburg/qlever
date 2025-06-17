@@ -209,7 +209,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
     EXPECT_EQ(idTables.begin(), idTables.end());
   }
   {
@@ -234,7 +234,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
     EXPECT_EQ(idTables.begin(), idTables.end());
   }
 }
@@ -257,7 +257,7 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
   {
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
 
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
@@ -300,7 +300,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     {
       qec->getQueryTreeCache().clearAll();
       auto result = no.computeResultOnlyForTesting(true);
-      auto& idTables = result.idTables();
+      auto idTables = result.idTables();
 
       auto it = idTables.begin();
       ASSERT_NE(it, idTables.end());
@@ -335,7 +335,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     no.applyLimitOffset({std::nullopt, 1});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
 
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
@@ -369,7 +369,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     no.applyLimitOffset({2});
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
 
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
