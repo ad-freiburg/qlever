@@ -46,7 +46,8 @@ Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
     const char* i = XSD_INT_TYPE;
     const char* d = XSD_DECIMAL_TYPE;
     const char* b = XSD_BOOLEAN_TYPE;
-    if (type == nullptr || type == i || type == d || type == b) {
+    if (type == nullptr || type == i || type == d ||
+        (type == b && literal.length() > 1)) {
       return std::move(literal);
     } else {
       return absl::StrCat("\"", literal, "\"^^<", type, ">");
