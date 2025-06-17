@@ -2664,3 +2664,25 @@ TEST(SparqlParser, Datasets) {
                                      filterGraphPattern)),
           datasets, noGraphs));
 }
+
+TEST(SparqlParser, BlankNodesInUpdate) {
+  // TODO<joka921> Use a proper test...
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  /*
+  auto noGraph = std::monostate{};
+
+  auto iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  ScanSpecificationAsTripleComponent::Graphs datasets{{iri("<g>")}};
+  // Only checks `_filters` on the GraphPattern. We are not concerned with the
+  // `_graphPatterns` here.
+  auto filterGraphPattern = m::Filters(m::ExistsFilter(
+      m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
+      {}));
+*/
+  expectUpdate(
+      "INSERT DATA { GRAPH <g1>  { _:b <p> <o> }"
+      "GRAPH <g2>  { _:b <p> <o> } }",
+      testing::_);
+}
