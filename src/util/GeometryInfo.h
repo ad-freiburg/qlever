@@ -63,7 +63,7 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
 
-  // TODO<ullingerc>: Implement the following behavior for the following two
+  // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
   //   double metricSize_ = 0;
   //   int64_t parsedGeometryOffset_ = -1;
