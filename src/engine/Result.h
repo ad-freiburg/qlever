@@ -71,6 +71,7 @@ class Result {
     LocalVocabPtr localVocab_;
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
+
   // The actual entries.
   Data data_;
 
@@ -80,8 +81,11 @@ class Result {
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
-  // those remain valid after calling non-const function like
-  // `applyLimitOffset`.
+  // 1. The members and invariants remain valid after calling non-const function
+  // like `applyLimitOffset`.
+  // 2. The generator returned by the `idTables()`method for lazy operations is
+  // valid even after the `Result` object from which it was obtained is
+  // destroyed.
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
@@ -170,8 +174,12 @@ class Result {
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
-  // if the underlying `data_` member holds the wrong variant.
-  LazyResult& idTables() const;
+  // if the underlying `data_` member holds the wrong variant or if the result
+  // has previously already been retrieved.
+  // Note: The returned `LazyResult` is not coupled to the `Result` object, and
+  // thus can be used even after the `Result` object from which it was obtained
+  // was destroyed.
+  LazyResult idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }

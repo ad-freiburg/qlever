@@ -69,7 +69,7 @@ inline std::variant<LazyInputView, MaterializedInputView> resultToView(
   if (result.isFullyMaterialized()) {
     return asSingleTableView(result, permutation);
   }
-  return convertGenerator(std::move(result.idTables()), permutation);
+  return convertGenerator(result.idTables(), permutation);
 }
 
 using GeneratorWithDetails =
