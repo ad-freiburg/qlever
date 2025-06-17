@@ -40,8 +40,6 @@ TEST(EngineTest, minusTest) {
   b.push_back({V(3), V(3), V(1), V(5)});
   b.push_back({V(1), V(8), V(1), V(5)});
 
-  IdTable res = table(3);
-
   vector<array<ColumnIndex, 2>> jcls;
   jcls.push_back(array<ColumnIndex, 2>{{0, 1}});
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
@@ -53,11 +51,17 @@ TEST(EngineTest, minusTest) {
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.numColumns();
-  int bWidth = b.numColumns();
-  Minus m{Minus::OnlyForTestingTag{}};
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
-                  jcls, &res);
+  auto* qec = ad_utility::testing::getQec();
+  Minus m{qec,
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, a.clone(),
+              std::vector<std::optional<Variable>>{
+                  Variable{"?a"}, Variable{"?b"}, std::nullopt}),
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, b.clone(),
+              std::vector<std::optional<Variable>>{
+                  Variable{"?b"}, Variable{"?a"}, std::nullopt, std::nullopt})};
+  IdTable res = m.computeMinus(a, b, jcls);
 
   ASSERT_EQ(wantedRes.size(), res.size());
 
@@ -68,8 +72,7 @@ TEST(EngineTest, minusTest) {
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
-                  jcls, &res);
+  res = m.computeMinus(a, b, jcls);
   ASSERT_EQ(a.size(), res.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], res[i]);
@@ -86,17 +89,22 @@ TEST(EngineTest, minusTest) {
   vb.push_back({V(2), V(3), V(5)});
   vb.push_back({V(6), V(7), V(4)});
 
-  IdTable vres = table(6);
   jcls.clear();
   jcls.push_back({1, 0});
   jcls.push_back({2, 1});
 
-  // The template size parameter can be at most 6 (the maximum number
-  // of fixed size columns plus one).
-  aWidth = va.numColumns();
-  bWidth = vb.numColumns();
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, va, vb,
-                  jcls, &vres);
+  Minus vm{qec,
+           ad_utility::makeExecutionTree<ValuesForTesting>(
+               qec, va.clone(),
+               std::vector<std::optional<Variable>>{
+                   std::nullopt, Variable{"?a"}, Variable{"?b"}, std::nullopt,
+                   std::nullopt, std::nullopt}),
+           ad_utility::makeExecutionTree<ValuesForTesting>(
+               qec, vb.clone(),
+               std::vector<std::optional<Variable>>{
+                   Variable{"?a"}, Variable{"?b"}, std::nullopt})};
+
+  IdTable vres = vm.computeMinus(va, vb, jcls);
 
   wantedRes = table(6);
   wantedRes.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
