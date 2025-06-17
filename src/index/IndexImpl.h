@@ -378,7 +378,11 @@ class IndexImpl {
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
-      return "";
+      size_t index = cid.get() - docsDB_._size;
+      if (index >= textIndexIndices_.size()) {
+        return "";
+      }
+      return vocab_[VocabIndex::make(textIndexIndices_[index])];
     }
     return docsDB_.getTextExcerpt(cid);
   }
