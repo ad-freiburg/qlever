@@ -110,10 +110,12 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
   };
   std::vector variables{x};
   SparqlTripleSimple::AdditionalScanColumns additionalColumns;
+  std::vector<ColumnIndex> distinctIndices{0};
   if (graphVariable.has_value()) {
     additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
                                    graphVariable.value());
     variables.push_back(graphVariable.value());
+    distinctIndices.push_back(1);
   }
   auto selectXVariable =
       [&variables](std::shared_ptr<QueryExecutionTree> executionTree) {
@@ -134,7 +136,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
                              additionalColumns},
           activeGraphs))));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
-                                                 std::vector<ColumnIndex>{0});
+                                                 std::move(distinctIndices));
 }
 
 // _____________________________________________________________________________
