@@ -610,8 +610,10 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
   checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
            IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
-  checkStr(Ids{B(true), B(false), B(true)},
-           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
+  checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
+               Id::makeBoolFromZeroOrOne(false)},
+           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
+                               lit("false")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
   checkStr(IdOrLiteralOrIriVec{iriref("<http://example.org/str>"),
@@ -766,16 +768,18 @@ TEST(SparqlExpression, binaryStringOperations) {
   checkStrAfter(
       IdOrLiteralOrIriVec{lit("bc"), lit("abc"), lit("c", "@en"), lit(""),
                           lit("abc", "@en"), lit("abc", "@en"), lit(""),
-                          lit("abc", "@en")},
+                          lit("abc", "@en"), U, U},
       IdOrLiteralOrIriVec{
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"), lit("abc"),
+          lit("abc", "@en")},
       IdOrLiteralOrIriVec{
           lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
           lit("z", "@en"),
-          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit("a", "@de")});
 
   checkStrBefore(
       S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
@@ -783,16 +787,18 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
   checkStrBefore(IdOrLiteralOrIriVec{lit("a"), lit(""), lit("a", "@en"),
                                      lit(""), lit("", "@en"), lit("", "@en"),
-                                     lit(""), lit("", "@en")},
+                                     lit(""), lit("", "@en"), U, U},
                  IdOrLiteralOrIriVec{
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc"), lit("abc", "@en")},
                  IdOrLiteralOrIriVec{
                      lit("bc"), lit(""), lit("bc"), lit("z"), lit(""),
                      lit("", "@en"), lit("z", "@en"),
-                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("bc", "@en"), lit("bc", "@de")});
 }
 
 // ______________________________________________________________________________
@@ -1018,25 +1024,27 @@ TEST(SparqlExpression, customNumericFunctions) {
 TEST(SparqlExpression, isSomethingFunctions) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
+  Id geo = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13"));
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
   Id blank2 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12));
   Id localLiteral = testContext().notInVocabA;
 
-  IdOrLiteralOrIriVec testIdOrStrings =
-      IdOrLiteralOrIriVec{iriref("<i>"), lit("\"l\""), blank2, iri,  literal,
-                          blank,         localLiteral, I(42),  D(1), U};
-  testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
-                                           Ids{T, F, F, T, F, F, F, F, F, F});
-  testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
-                                             Ids{F, F, T, F, F, T, F, F, F, F});
+  IdOrLiteralOrIriVec testIdOrStrings = IdOrLiteralOrIriVec{
+      iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
+      I(42),         D(1),         F,      geo, date,    U};
+  testUnaryExpression<makeIsIriExpression>(
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, F, F, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
-  testUnaryExpression<makeBoundExpression>(testIdOrStrings,
-                                           Ids{T, T, T, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+  testUnaryExpression<makeBoundExpression>(
+      testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________

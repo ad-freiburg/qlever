@@ -2044,10 +2044,7 @@ TEST(SparqlParser, Exists) {
 
   // Now run the same tests, but with non-empty dataset clauses, that have to be
   // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
-  ParsedQuery::DatasetClauses datasetClauses;
-  datasetClauses.defaultGraphs_ = defaultGraphs;
-  datasetClauses.namedGraphs_ = namedGraphs;
-  datasetClauses.defaultGraphs_.value().insert(iri("<blubb>"));
+  ParsedQuery::DatasetClauses datasetClauses{defaultGraphs, namedGraphs};
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     m::Exists(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
@@ -2292,27 +2289,22 @@ TEST(SparqlParser, Update) {
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
       m::UpdateClause(
-          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
-                         std::nullopt),
+          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
           m::GraphPattern()));
   expectUpdate(
       "INSERT DATA { <a> <b> \"foo:bar\" }",
-      m::UpdateClause(
-          m::GraphUpdate(
-              {}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\""), noGraph}},
-              std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"),
+                                           Literal("\"foo:bar\""), noGraph}}),
+                      m::GraphPattern()));
   expectUpdate(
       "DELETE DATA { <a> <b> <c> }",
       m::UpdateClause(
-          m::GraphUpdate({{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
-                         std::nullopt),
+          m::GraphUpdate({{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
           m::GraphPattern()));
   expectUpdate(
       "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
-                         std::nullopt),
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   // Use variables that are not visible in the query body. Do this for all parts
   // of the quad for coverage reasons.
@@ -2326,40 +2318,35 @@ TEST(SparqlParser, Update) {
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}},
-                         {{Iri("<a>"), Var("?a"), Iri("<c>"), noGraph}},
-                         std::nullopt),
+                         {{Iri("<a>"), Var("?a"), Iri("<c>"), noGraph}}),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdate(
       "DELETE WHERE { ?a <foo> ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), noGraph}}, {},
-                         std::nullopt),
+          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), noGraph}}, {}),
           m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");  // Variables are not allowed
   // inside INSERT DATA.
   expectUpdate(
       "WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {},
-                         Iri("<foo>")),
-          m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))));
-  expectUpdate(
-      "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
-      m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {},
-                         std::nullopt),
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), Iri("<foo>")}}, {}),
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
           m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
                                    std::nullopt)));
   expectUpdate(
-      "INSERT DATA { GRAPH <foo> { } }",
-      m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
+      "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
+      m::UpdateClause(
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {}),
+          m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})),
+          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
+                                   m::Graphs{})));
+  expectUpdate("INSERT DATA { GRAPH <foo> { } }",
+               m::UpdateClause(m::GraphUpdate({}, {}), m::GraphPattern()));
   expectUpdate("INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
-               m::UpdateClause(
-                   m::GraphUpdate(
-                       {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
-                       std::nullopt),
-                   m::GraphPattern()));
+               m::UpdateClause(m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"),
+                                                    Iri("<c>"), Iri("<foo>")}}),
+                               m::GraphPattern()));
   expectUpdateFails(
       "INSERT DATA { GRAPH ?f { } }",
       testing::HasSubstr(
@@ -2367,29 +2354,27 @@ TEST(SparqlParser, Update) {
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
-                         std::nullopt),
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
-          m::datasetClausesMatcher(std::nullopt,
+          m::datasetClausesMatcher(m::Graphs{},
                                    m::Graphs{TripleComponent(Iri("<foo>"))})));
   expectUpdate(
       "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
-                         Iri("<foo>")),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), Iri("<foo>")}},
+                         {}),
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
+          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
+                                   std::nullopt)));
   const auto insertMatcher = m::UpdateClause(
-      m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
-                     std::nullopt),
+      m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
       m::GraphPattern());
   const auto fooInsertMatcher = m::UpdateClause(
       m::GraphUpdate(
-          {}, {{Iri("<foo/a>"), Iri("<foo/b>"), Iri("<foo/c>"), noGraph}},
-          std::nullopt),
+          {}, {{Iri("<foo/a>"), Iri("<foo/b>"), Iri("<foo/c>"), noGraph}}),
       m::GraphPattern());
   const auto deleteWhereAllMatcher = m::UpdateClause(
-      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {},
-                     std::nullopt),
+      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {}),
       m::GraphPattern(m::Triples({{Var("?s"), Var{"?p"}, Var("?o")}})));
   expectUpdate("INSERT DATA { <a> <b> <c> }", insertMatcher);
   // Multiple Updates
@@ -2531,19 +2516,15 @@ TEST(SparqlParser, Load) {
   expectLoad(
       "LOAD <https://example.com>",
       m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), noGraph}},
-                         std::nullopt),
+          m::GraphUpdate({}, {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
+                                                          Var("?o"), noGraph}}),
           m::GraphPattern(m::Load(Iri("<https://example.com>"), false))));
-  expectLoad(
-      "LOAD SILENT <http://example.com> into GRAPH <bar>",
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {SparqlTripleSimpleWithGraph{Var("?s"), Var("?p"),
-                                                      Var("?o"), Iri("<bar>")}},
-                         std::nullopt),
-          m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
+  expectLoad("LOAD SILENT <http://example.com> into GRAPH <bar>",
+             m::UpdateClause(
+                 m::GraphUpdate(
+                     {}, {SparqlTripleSimpleWithGraph{
+                             Var("?s"), Var("?p"), Var("?o"), Iri("<bar>")}}),
+                 m::GraphPattern(m::Load(Iri("<http://example.com>"), true))));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
@@ -2649,31 +2630,31 @@ TEST(SparqlParser, Datasets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   auto noGraph = std::monostate{};
+  auto noGraphs = m::Graphs{};
   ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<g>")}};
   // Only checks `_filters` on the GraphPattern. We are not concerned with the
   // `_graphPatterns` here.
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
-      datasets));
+      datasets, noGraphs));
   // Check that datasets are propagated correctly into the different types of
   // operations.
   expectUpdate(
       "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
       "?c} }",
       testing::ElementsAre(m::UpdateClause(
-          m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
-                         std::nullopt),
-          filterGraphPattern, m::datasetClausesMatcher(datasets))));
-  expectQuery(
-      "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
-      m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
+          m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {}),
+          filterGraphPattern, m::datasetClausesMatcher(datasets, noGraphs))));
+  expectQuery("SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
+              m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets,
+                             noGraphs));
   expectAsk("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-            m::AskQuery(filterGraphPattern, datasets));
+            m::AskQuery(filterGraphPattern, datasets, noGraphs));
   expectConstruct(
       "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b?c}}",
       m::ConstructQuery(
           {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
-          filterGraphPattern, datasets));
+          filterGraphPattern, datasets, noGraphs));
   // See comment in visit function for `DescribeQueryContext`.
   expectDescribe(
       "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
@@ -2681,5 +2662,5 @@ TEST(SparqlParser, Datasets) {
           m::Describe({Var("?x")}, {datasets, {}},
                       m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
                                      filterGraphPattern)),
-          datasets));
+          datasets, noGraphs));
 }
