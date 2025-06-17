@@ -123,15 +123,35 @@ IdTable Minus::computeMinus(
 
   std::vector<size_t> nonMatchingIndices;
 
+  auto markToKeep = [&nonMatchingIndices,
+                     &joinColumnsLeft](const auto& leftIt) {
+    nonMatchingIndices.push_back(
+        ql::ranges::distance(joinColumnsLeft.begin(), leftIt));
+  };
+
   auto outOfOrder = ad_utility::zipperJoinWithUndef(
       joinColumnsLeft, joinColumnsRight, ql::ranges::lexicographical_compare,
-      [](const auto&, const auto&) {}, ad_utility::findSmallerUndefRanges,
-      ad_utility::findSmallerUndefRanges,
-      [&nonMatchingIndices, &joinColumnsLeft](const auto& matching) {
-        nonMatchingIndices.push_back(
-            ql::ranges::distance(joinColumnsLeft.begin(), matching));
-      });
-  AD_CORRECTNESS_CHECK(outOfOrder == 0);
+      [&markToKeep](const auto& leftIt, const auto& rightIt) {
+        const auto& leftRow = *leftIt;
+        const auto& rightRow = *rightIt;
+        bool onlyMatchesBecauseOfUndef = ql::ranges::all_of(
+            ::ranges::views::zip(leftRow, rightRow), [](const auto& tuple) {
+              const auto& [leftId, rightId] = tuple;
+              return leftId.isUndefined() || rightId.isUndefined();
+            });
+        if (onlyMatchesBecauseOfUndef) {
+          markToKeep(leftIt);
+        }
+      },
+      ad_utility::findSmallerUndefRanges, ad_utility::findSmallerUndefRanges,
+      markToKeep);
+
+  // We need to sort the indices to ensure correct sort order if the algorithm
+  // can't guarantee that. There's also a more efficient way to sort the list,
+  // since the last `outOfOrder` items are the last ones in the list.
+  if (outOfOrder > 0) {
+    ql::ranges::sort(nonMatchingIndices);
+  }
 
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
