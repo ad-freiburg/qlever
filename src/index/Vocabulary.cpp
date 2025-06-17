@@ -258,7 +258,6 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 template <typename UnderlyingVocabulary, typename C, typename I>
 auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
     -> AccessReturnType {
-  AD_CONTRACT_CHECK(idx.get() < size());
   return vocabulary_[idx.get()];
 }
 
