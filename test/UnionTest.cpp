@@ -198,7 +198,7 @@ TEST(Union, inputWithZeroColumns) {
     qec->getQueryTreeCache().clearAll();
     auto resultTable = u.computeResultOnlyForTesting(true);
     ASSERT_FALSE(resultTable.isFullyMaterialized());
-    auto& result = resultTable.idTables();
+    auto result = resultTable.idTables();
 
     auto expected1 = makeIdTableFromVector({{}});
 
