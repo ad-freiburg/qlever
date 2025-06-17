@@ -3982,6 +3982,22 @@ TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner,
+     PropertyPathWithGraphVariableNoSpecialHandlingWhenJoiningOnGraph) {
+  TransitivePathSide left{std::nullopt, 0, Variable{"?a"}, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?b"}, 1};
+  h::expect("SELECT * { GRAPH ?g { ?a <a>+ ?b . ?c <a> ?d } }",
+            h::Join(h::Sort(h::transitivePath(
+                        left, right, 1, std::numeric_limits<size_t>::max(),
+                        h::Sort(h::IndexScanFromStrings(
+                            "?_QLever_internal_variable_qp_0", "<a>",
+                            "?_QLever_internal_variable_qp_1", {}, {},
+                            {Variable{"?g"}}, {3})))),
+                    h::Sort(h::IndexScanFromStrings("?c", "<a>", "?d", {}, {},
+                                                    {Variable{"?g"}}, {3}))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   {
     TransitivePathSide left{std::nullopt, 0, 0, 0};
