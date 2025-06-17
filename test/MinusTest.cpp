@@ -17,37 +17,15 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
-namespace {
-auto table(size_t cols) {
-  return IdTable(cols, ad_utility::testing::makeAllocator());
-}
-auto V = ad_utility::testing::VocabId;
-}  // namespace
-
 TEST(EngineTest, minusTest) {
-  using std::array;
-  using std::vector;
+  IdTable a = makeIdTableFromVector(
+      {{1, 2, 1}, {2, 1, 4}, {5, 4, 1}, {8, 1, 2}, {8, 2, 3}});
 
-  IdTable a = table(3);
-  a.push_back({V(1), V(2), V(1)});
-  a.push_back({V(2), V(1), V(4)});
-  a.push_back({V(5), V(4), V(1)});
-  a.push_back({V(8), V(1), V(2)});
-  a.push_back({V(8), V(2), V(3)});
+  IdTable b = makeIdTableFromVector({{1, 2, 7, 5}, {3, 3, 1, 5}, {1, 8, 1, 5}});
 
-  IdTable b = table(4);
-  b.push_back({V(1), V(2), V(7), V(5)});
-  b.push_back({V(3), V(3), V(1), V(5)});
-  b.push_back({V(1), V(8), V(1), V(5)});
-
-  vector<array<ColumnIndex, 2>> jcls;
-  jcls.push_back(array<ColumnIndex, 2>{{0, 1}});
-  jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
-
-  IdTable wantedRes = table(3);
-  wantedRes.push_back({V(1), V(2), V(1)});
-  wantedRes.push_back({V(5), V(4), V(1)});
-  wantedRes.push_back({V(8), V(2), V(3)});
+  std::vector<std::array<ColumnIndex, 2>> jcls;
+  jcls.push_back(std::array<ColumnIndex, 2>{{0, 1}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 0}});
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
@@ -63,31 +41,19 @@ TEST(EngineTest, minusTest) {
                   Variable{"?b"}, Variable{"?a"}, std::nullopt, std::nullopt})};
   IdTable res = m.computeMinus(a, b, jcls);
 
-  ASSERT_EQ(wantedRes.size(), res.size());
-
-  ASSERT_EQ(wantedRes[0], res[0]);
-  ASSERT_EQ(wantedRes[1], res[1]);
-  ASSERT_EQ(wantedRes[2], res[2]);
+  EXPECT_EQ(res, makeIdTableFromVector({{1, 2, 1}, {5, 4, 1}, {8, 2, 3}}));
 
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
   res = m.computeMinus(a, b, jcls);
-  ASSERT_EQ(a.size(), res.size());
-  for (size_t i = 0; i < a.size(); ++i) {
-    ASSERT_EQ(a[i], res[i]);
-  }
+  EXPECT_EQ(res, a);
 
   // Test minus with variable sized data.
-  IdTable va = table(6);
-  va.push_back({V(1), V(2), V(3), V(4), V(5), V(6)});
-  va.push_back({V(1), V(2), V(3), V(7), V(5), V(6)});
-  va.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
+  IdTable va = makeIdTableFromVector(
+      {{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5, 6}, {7, 6, 5, 4, 3, 2}});
 
-  IdTable vb = table(3);
-  vb.push_back({V(2), V(3), V(4)});
-  vb.push_back({V(2), V(3), V(5)});
-  vb.push_back({V(6), V(7), V(4)});
+  IdTable vb = makeIdTableFromVector({{2, 3, 4}, {2, 3, 5}, {6, 7, 4}});
 
   jcls.clear();
   jcls.push_back({1, 0});
@@ -106,12 +72,7 @@ TEST(EngineTest, minusTest) {
 
   IdTable vres = vm.computeMinus(va, vb, jcls);
 
-  wantedRes = table(6);
-  wantedRes.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
-  ASSERT_EQ(wantedRes.size(), vres.size());
-  ASSERT_EQ(wantedRes.numColumns(), vres.numColumns());
-
-  ASSERT_EQ(wantedRes[0], vres[0]);
+  EXPECT_EQ(vres, makeIdTableFromVector({{7, 6, 5, 4, 3, 2}}));
 }
 
 // _____________________________________________________________________________
