@@ -1016,7 +1016,6 @@ TEST(IdTable, setColumnSubset) {
 
   // Empty column subset
   t.setColumnSubset(std::array<ColumnIndex, 0>{});
-  ;
   ASSERT_EQ(0, t.numColumns());
 
   // Duplicate columns are not allowed.

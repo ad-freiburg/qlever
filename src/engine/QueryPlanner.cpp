@@ -270,8 +270,8 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible<true, true>(candidatePlans[0],
-                                       rootPattern->_filters);
+    applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+        candidatePlans[0], rootPattern->_filters);
     applyTextLimitsIfPossible(candidatePlans[0],
                               TextLimitVec{rootPattern->textLimits_.begin(),
                                            rootPattern->textLimits_.end()},
@@ -290,7 +290,8 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
       // or it only consists of a MINUS clause (which then has no effect).
       std::vector neutralPlans{makeSubtreePlan<NeutralElementOperation>(_qec)};
       // Neutral element can potentially still get filtered out
-      applyFiltersIfPossible<true, true>(neutralPlans, rootPattern->_filters);
+      applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+          neutralPlans, rootPattern->_filters);
       return neutralPlans;
     }
     return candidatePlans[0];
@@ -1299,10 +1300,9 @@ string QueryPlanner::getPruningKey(
 }
 
 // _____________________________________________________________________________
-template <bool replace, bool alsoApplyIfMissingVariables>
+template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
     vector<SubtreePlan>& row, const vector<SparqlFilter>& filters) const {
-  static_assert(!alsoApplyIfMissingVariables || replace);
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
@@ -1332,7 +1332,9 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
-      if (alsoApplyIfMissingVariables ||
+      const bool applyAll =
+          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
+      if (applyAll ||
           ql::ranges::all_of(filters[i].expression_.containedVariables(),
                              [&plan](const auto& variable) {
                                return plan._qet->isVariableCovered(*variable);
@@ -1344,7 +1346,7 @@ void QueryPlanner::applyFiltersIfPossible(
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
         newPlan.type = plan.type;
-        if constexpr (replace) {
+        if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
           addedPlans.push_back(std::move(newPlan));
@@ -1439,7 +1441,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  applyFiltersIfPossible<false>(dpTab.back(), filters);
+  applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
   applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
@@ -1451,7 +1453,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible<false>(dpTab.back(), filters);
+      applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
       applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     }
     // As we only passed in connected components, we expect the result to always
@@ -1459,7 +1461,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   auto& result = dpTab.back();
-  applyFiltersIfPossible<true>(result, filters);
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(result, filters);
   applyTextLimitsIfPossible(result, textLimits, true);
   return std::move(result);
 }
@@ -1541,7 +1543,8 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
     const TripleGraph& tg) const {
-  applyFiltersIfPossible<true>(connectedComponent, filters);
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
+                                                        filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds = findUniqueNodeIds(connectedComponent);
   if (numSeeds <= 1) {
@@ -1574,7 +1577,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     // compute all possible combinations.
     auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
                                 : merge(currentPlans, nextBestPlan, tg);
-    applyFiltersIfPossible<true>(newPlans, filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
@@ -1655,7 +1658,8 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   }
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
-    applyFiltersIfPossible<true>(lastDpRowFromComponents.back(), filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(
+        lastDpRowFromComponents.back(), filters);
     applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimitVec,
                               true);
     return lastDpRowFromComponents;
@@ -1687,7 +1691,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
-  applyFiltersIfPossible<true>(result.at(0), filters);
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(result.at(0), filters);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
 }
