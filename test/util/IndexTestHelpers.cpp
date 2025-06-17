@@ -182,6 +182,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
+    index.setTripleInTextIndexFilter(c.literalRegex.value_or("(?s).*"),
+                                     c.literalRegexIsWhitelist);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     index.createFromFiles({spec});

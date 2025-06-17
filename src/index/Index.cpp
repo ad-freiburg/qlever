@@ -150,8 +150,9 @@ void Index::setKbName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setTextRegex(const std::string& regex, bool isWhitelist) {
-  return pimpl_->setTextRegex(regex, isWhitelist);
+void Index::setTripleInTextIndexFilter(const std::string& regex,
+                                       bool isWhitelist) {
+  return pimpl_->setTripleInTextIndexFilter(regex, isWhitelist);
 }
 
 // ____________________________________________________________________________

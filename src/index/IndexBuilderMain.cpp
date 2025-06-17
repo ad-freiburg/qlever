@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
   string kbIndexName;
   string settingsFile;
   string scoringMetric = "explicit";
-  string tripleInTextIndexRegex = "*";
+  string tripleInTextIndexRegex = "(?s).*";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -294,8 +294,8 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    index.setTextRegex(tripleInTextIndexRegex,
-                       tripleInTextIndexRegexIsWhitelist);
+    index.setTripleInTextIndexFilter(tripleInTextIndexRegex,
+                                     tripleInTextIndexRegexIsWhitelist);
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

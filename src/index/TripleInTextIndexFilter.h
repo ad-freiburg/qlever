@@ -9,10 +9,10 @@
 
 #include "parser/RdfParser.h"
 
-class TripleInTextIndex {
+class TripleInTextIndexFilter {
  public:
   // Delete standard constructor to prevent empty regex by mistake
-  TripleInTextIndex() : regex_{"*"}, isWhitelist_{true} {};
+  TripleInTextIndexFilter() : regex_{"*"}, isWhitelist_{true} {};
 
   /**
    * @brief Class to determine whether the literal of a triple should be part of
@@ -24,7 +24,7 @@ class TripleInTextIndex {
    *                  the text index. If set to falls the matching regex cases
    *                  will not be added but everything else.
    */
-  TripleInTextIndex(string regex, bool whitelist = true)
+  TripleInTextIndexFilter(string regex, bool whitelist = true)
       : regex_{std::move(regex)}, isWhitelist_{whitelist} {
     if (const RE2 reg{regex_, RE2::Quiet}; !reg.ok()) {
       throw std::runtime_error{absl::StrCat(
@@ -38,7 +38,7 @@ class TripleInTextIndex {
   // Returns true iff object of triple is literal or IRI and should be added to
   // the text index depending on the given regex and whitelist parameter. The
   // regex looks for a partial match.
-  bool operator()(const TurtleTriple& triple) const;
+  bool operator()(const TripleComponent& p, const TripleComponent& o) const;
 
  private:
   // The regex string used to do the comparison

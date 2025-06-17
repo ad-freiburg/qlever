@@ -31,7 +31,7 @@
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
-#include "index/TripleInTextIndex.h"
+#include "index/TripleInTextIndexFilter.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -138,7 +138,7 @@ class IndexImpl {
   vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
-  TripleInTextIndex tripleInTextIndexMatcher_;
+  TripleInTextIndexFilter tripleInTextIndexFilter_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -389,7 +389,7 @@ class IndexImpl {
 
   void setKbName(const string& name);
 
-  void setTextRegex(const std::string& regex, bool isWhitelist);
+  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
 
   void setTextName(const string& name);
 

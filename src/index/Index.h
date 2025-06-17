@@ -179,7 +179,7 @@ class Index {
 
   void setKbName(const std::string& name);
 
-  void setTextRegex(const std::string& regex, bool isWhitelist);
+  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
 
   void setTextName(const std::string& name);
 

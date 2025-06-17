@@ -1032,8 +1032,9 @@ void IndexImpl::setKbName(const string& name) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setTextRegex(const std::string& regex, bool isWhitelist) {
-  tripleInTextIndexMatcher_ = TripleInTextIndex(regex, isWhitelist);
+void IndexImpl::setTripleInTextIndexFilter(const std::string& regex,
+                                           bool isWhitelist) {
+  tripleInTextIndexFilter_ = TripleInTextIndexFilter(regex, isWhitelist);
 }
 
 // ____________________________________________________________________________
@@ -1207,6 +1208,9 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
+  // Here changes can be made whether literals should be in the text index
+  bool inTextIndex =
+      tripleInTextIndexFilter_(triple.predicate_, triple.object_);
   resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
@@ -1243,9 +1247,11 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
                 "This place probably has to be changed when additional payload "
                 "columns are added to the index");
 
+  size_t index = 0;
   for (auto& el : resultTriple) {
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
+      ++index;
       continue;
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
@@ -1253,14 +1259,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-
-    // Here changes can be made whether literals should be in the text index
-    if (vocab_.stringIsLiteral(iriOrLiteral.toString())) {
+    if (inTextIndex && index == 2) {
       component.inTextIndex_ = true;
     }
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }
+    ++index;
   }
   return result;
 }
