@@ -222,7 +222,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
 if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} )
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
-    add_compile_definitions(QLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0)
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
 endif()
 
 set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
