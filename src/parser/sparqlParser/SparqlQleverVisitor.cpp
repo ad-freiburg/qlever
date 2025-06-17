@@ -75,7 +75,7 @@ BlankNode Visitor::newBlankNode() {
 
 // _____________________________________________________________________________
 GraphTerm Visitor::newBlankNodeOrVariable() {
-  if (isInsideConstructTriples_) {
+  if (treatBnodesAsBnodesNotAsInternalVariables_) {
     return GraphTerm{newBlankNode()};
   } else {
     return parsedQuery_.getNewInternalVariable();
@@ -300,7 +300,7 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
   }
   prologueString_ = {};
   parsedQuery_ = {};
-  isInsideConstructTriples_ = false;
+  treatBnodesAsBnodesNotAsInternalVariables_ = false;
 }
 
 // ____________________________________________________________________________________
@@ -400,9 +400,9 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
     // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
     // syntactically the same, so we set the flag to true to keep the blank
     // nodes, and convert them into variables during `toGraphPattern`.
-    isInsideConstructTriples_ = true;
-    auto cleanup =
-        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
+    treatBnodesAsBnodesNotAsInternalVariables_ = true;
+    auto cleanup = absl::Cleanup{
+        [this]() { treatBnodesAsBnodesNotAsInternalVariables_ = false; }};
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
     query._rootGraphPattern._graphPatterns.emplace_back(
@@ -929,6 +929,11 @@ Quads Visitor::visit(Parser::QuadPatternContext* ctx) {
 
 // ____________________________________________________________________________________
 Quads Visitor::visit(Parser::QuadDataContext* ctx) {
+  // Inside the `QuadData` rule, blank nodes are treated as blank nodes,
+  // not as variables.
+  treatBnodesAsBnodesNotAsInternalVariables_ = true;
+  auto cleanup = absl::Cleanup{
+      [this]() { treatBnodesAsBnodesNotAsInternalVariables_ = false; }};
   auto quads = visit(ctx->quads());
   quads.forAllVariables([&ctx](const Variable& v) {
     reportError(ctx->quads(),
@@ -1331,9 +1336,9 @@ vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
 std::optional<parsedQuery::ConstructClause> Visitor::visit(
     Parser::ConstructTemplateContext* ctx) {
   if (ctx->constructTriples()) {
-    isInsideConstructTriples_ = true;
-    auto cleanup =
-        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
+    treatBnodesAsBnodesNotAsInternalVariables_ = true;
+    auto cleanup = absl::Cleanup{
+        [this]() { treatBnodesAsBnodesNotAsInternalVariables_ = false; }};
     return parsedQuery::ConstructClause{visit(ctx->constructTriples())};
   } else {
     return std::nullopt;
@@ -2895,7 +2900,7 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     return newBlankNodeOrVariable();
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
-    if (isInsideConstructTriples_) {
+    if (treatBnodesAsBnodesNotAsInternalVariables_) {
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
       const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
