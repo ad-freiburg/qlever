@@ -82,7 +82,7 @@ struct HashMapWrapper {
 
   // Prefilter the map for values of a certain graph.
   void setGraphId(const Id& graphId) {
-    AD_CORRECTNESS_CHECK(graphId.isUndefined() || graphMap_.size() == 1);
+    AD_CORRECTNESS_CHECK(!graphId.isUndefined() || graphMap_.size() == 1);
     if (graphMap_.contains(graphId)) {
       map_ = &graphMap_.at(graphId);
     } else {
