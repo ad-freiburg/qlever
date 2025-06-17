@@ -452,7 +452,7 @@ addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 
-addLinkAndDiscoverTest(ValueGetterTest engine util)
+addLinkAndDiscoverTest(ValueGetterTest engine)
 
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
