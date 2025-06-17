@@ -420,8 +420,8 @@ class QueryPlanner {
       const parsedQuery::Values& values,
       const std::vector<SubtreePlan>& currentPlans) const;
 
-  bool connected(const SubtreePlan& a, const SubtreePlan& b,
-                 const TripleGraph& graph) const;
+  JoinColumns connected(const SubtreePlan& a, const SubtreePlan& b,
+                        boost::optional<const TripleGraph&> tg) const;
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
