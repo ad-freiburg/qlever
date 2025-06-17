@@ -313,7 +313,8 @@ IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
   // NOTE: previously the check was for `getResultWidth()`, but that is wrong if
   // some variables in the subtree are invisible because of a subquery.
-  auto maxNumRequiredColumns = ql::ranges::max(permutation) + 1;
+  auto maxNumRequiredColumns =
+      permutation.empty() ? ColumnIndex{0} : ql::ranges::max(permutation) + 1;
   while (idTable.numColumns() < maxNumRequiredColumns) {
     idTable.addEmptyColumn();
     ad_utility::chunkedFill(idTable.getColumn(idTable.numColumns() - 1),
