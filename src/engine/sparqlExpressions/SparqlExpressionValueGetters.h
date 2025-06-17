@@ -394,16 +394,23 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
 };
 
-// Value getter for `GeometryInfo` objects. If a `ValueId` pointing to a literal
-// in the geometry vocabulary is given, the object is fetched from the
-// precomputed file. For `GeoPoint`s (trivial) and string literals it is
-// computed ad hoc.
-struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter> {
-  using Mixin<GeometryInfoValueGetter>::operator();
-  std::optional<ad_utility::GeometryInfo> operator()(
+// Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
+// pointing to a literal in the geometry vocabulary is given, the object is
+// fetched from the precomputed file and the `RequestedInfo` is extracted from
+// it. For Well Known Text literals only the `RequestedInfo` is computed ad
+// hoc.
+template <typename RequestedInfo = ad_utility::GeometryInfo>
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
+  std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
-  std::optional<ad_utility::GeometryInfo> operator()(
+  std::optional<RequestedInfo> operator()(
       const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
+
+  // Helper: This function returns a `GeometryInfo` object if it can be fetched
+  // from a precomputation result. Otherwise `std::nullopt` is returned.
+  static std::optional<ad_utility::GeometryInfo> getPrecomputedGeometryInfo(
+      ValueId id, const EvaluationContext* context);
 };
 
 // Defines the return type for value-getter `StringOrDateGetter`.
