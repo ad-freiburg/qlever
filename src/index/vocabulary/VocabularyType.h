@@ -27,22 +27,24 @@ class VocabularyType {
     InMemoryUncompressed,
     OnDiskUncompressed,
     InMemoryCompressed,
-    OnDiskCompressed
+    OnDiskCompressed,
+    OnDiskCompressedGeoSplit
   };
 
  private:
   Enum value_ = Enum::InMemoryUncompressed;
 
-  static constexpr size_t numValues_ = 4;
+  static constexpr size_t numValues_ = 5;
   // All possible values.
   static constexpr std::array<Enum, numValues_> all_{
       Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
-      Enum::InMemoryCompressed, Enum::OnDiskCompressed};
+      Enum::InMemoryCompressed, Enum::OnDiskCompressed,
+      Enum::OnDiskCompressedGeoSplit};
 
   // The string representations of the enum values.
   static constexpr std::array<std::string_view, numValues_> descriptions_{
       "in-memory-uncompressed", "on-disk-uncompressed", "in-memory-compressed",
-      "on-disk-compressed"};
+      "on-disk-compressed", "on-disk-compressed-geo-split"};
 
   static_assert(all_.size() == descriptions_.size());
 

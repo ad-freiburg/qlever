@@ -105,7 +105,7 @@ class TransitivePathTest
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
     if (requestLaziness()) {
       const auto& [idTable, localVocab] =
-          aggregateTables(std::move(result.idTables()), expected.numColumns());
+          aggregateTables(result.idTables(), expected.numColumns());
       EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
       EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
@@ -144,6 +144,77 @@ TEST_P(TransitivePathTest, idToId) {
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, knownEmptyResult) {
+  auto nonEmptySub = makeIdTableFromVector({{1, 1}});
+  IdTable emptySub{2, nonEmptySub.getAllocator()};
+  Vars vars = {Variable{"?start"}, Variable{"?target"}};
+
+  TransitivePathSide fixedLeft{std::nullopt, 0, V(0), 0};
+  TransitivePathSide fixedRight{std::nullopt, 1, V(3), 1};
+
+  {
+    auto T = makePathUnbound(emptySub.clone(), vars, fixedLeft, fixedRight, 1,
+                             std::numeric_limits<size_t>::max());
+    EXPECT_TRUE(T->isBoundOrId());
+    EXPECT_TRUE(T->knownEmptyResult());
+  }
+  {
+    auto T = makePathUnbound(nonEmptySub.clone(), vars, fixedLeft, fixedRight,
+                             1, std::numeric_limits<size_t>::max());
+    EXPECT_TRUE(T->isBoundOrId());
+    EXPECT_FALSE(T->knownEmptyResult());
+  }
+
+  TransitivePathSide left{std::nullopt, 0, Variable{"?x"}, 0};
+  TransitivePathSide right{std::nullopt, 1, Variable{"?y"}, 1};
+
+  {
+    auto T = makePathUnbound(emptySub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max());
+    EXPECT_FALSE(T->isBoundOrId());
+    EXPECT_TRUE(T->knownEmptyResult());
+  }
+  {
+    auto T = makePathUnbound(nonEmptySub.clone(), vars, left, right, 1,
+                             std::numeric_limits<size_t>::max());
+    EXPECT_FALSE(T->isBoundOrId());
+    EXPECT_FALSE(T->knownEmptyResult());
+  }
+
+  for (bool isLeft : {true, false}) {
+    {
+      auto T = makePathBound(isLeft, emptySub.clone(), vars,
+                             nonEmptySub.clone(), 0, vars, left, right, 0,
+                             std::numeric_limits<size_t>::max());
+      EXPECT_TRUE(T->isBoundOrId());
+      EXPECT_FALSE(T->knownEmptyResult());
+    }
+    {
+      auto T = makePathBound(isLeft, nonEmptySub.clone(), vars,
+                             nonEmptySub.clone(), 0, vars, left, right, 0,
+                             std::numeric_limits<size_t>::max());
+      EXPECT_TRUE(T->isBoundOrId());
+      EXPECT_FALSE(T->knownEmptyResult());
+    }
+
+    {
+      auto T = makePathBound(isLeft, emptySub.clone(), vars, emptySub.clone(),
+                             0, vars, left, right, 0,
+                             std::numeric_limits<size_t>::max());
+      EXPECT_TRUE(T->isBoundOrId());
+      EXPECT_TRUE(T->knownEmptyResult());
+    }
+    {
+      auto T = makePathBound(isLeft, nonEmptySub.clone(), vars,
+                             emptySub.clone(), 0, vars, left, right, 0,
+                             std::numeric_limits<size_t>::max());
+      EXPECT_TRUE(T->isBoundOrId());
+      EXPECT_TRUE(T->knownEmptyResult());
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -994,6 +1065,46 @@ TEST_P(TransitivePathTest, sameVariableResultsInDifferentCacheKey) {
       right2, 1, std::numeric_limits<size_t>::max());
 
   EXPECT_NE(T1->getCacheKey(), T2->getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
+  auto sub = makeIdTableFromVector({{0, 2}});
+
+  {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathBound(
+        false, sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}},
+        sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+                 ad_utility::Exception);
+  }
+
+  {
+    TransitivePathSide left(std::nullopt, 0, 1, 0);
+    TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+    auto T = makePathUnbound(
+        std::move(sub), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
+                 ad_utility::Exception);
+    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+                 ad_utility::Exception);
+  }
 }
 
 // _____________________________________________________________________________
