@@ -828,12 +828,13 @@ inline auto SubSelect =
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs activeDefaultGraphs =
+        std::nullopt,
     ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(AD_PROPERTY(DS, defaultGraphs, Eq(defaultGraphs)),
+  return AllOf(AD_PROPERTY(DS, activeDefaultGraphs, Eq(activeDefaultGraphs)),
                AD_PROPERTY(DS, namedGraphs, Eq(namedGraphs)));
 }
 
@@ -953,7 +954,7 @@ inline auto GraphUpdate =
 };
 
 inline auto EmptyDatasets = [] {
-  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, defaultGraphs,
+  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
                            testing::Eq(std::nullopt)),
                AD_PROPERTY(ParsedQuery::DatasetClauses, namedGraphs,
                            testing::Eq(std::nullopt)));
