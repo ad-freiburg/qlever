@@ -11,12 +11,9 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
-#include <array>
-#include <cstdint>
 #include <memory>
 #include <optional>
-#include <ranges>
+#include <range/v3/view/cartesian_product.hpp>
 #include <type_traits>
 #include <variant>
 
@@ -64,7 +61,6 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/data/Variable.h"
-#include "range/v3/view/cartesian_product.hpp"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
