@@ -17,7 +17,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
-TEST(EngineTest, minusTest) {
+TEST(Minus, computeMinus) {
   IdTable a = makeIdTableFromVector(
       {{1, 2, 1}, {2, 1, 4}, {5, 4, 1}, {8, 1, 2}, {8, 2, 3}});
 
@@ -73,6 +73,32 @@ TEST(EngineTest, minusTest) {
   IdTable vres = vm.computeMinus(va, vb, jcls);
 
   EXPECT_EQ(vres, makeIdTableFromVector({{7, 6, 5, 4, 3, 2}}));
+}
+
+// _____________________________________________________________________________
+TEST(Minus, computeMinusWithUndefined) {
+  auto U = Id::makeUndefined();
+  IdTable a =
+      makeIdTableFromVector({{U, U, 10}, {U, 1, 11}, {1, U, 12}, {5, 4, 13}});
+  IdTable b = makeIdTableFromVector({{U, U, 20}, {3, U, 21}, {1, 2, 22}});
+
+  std::vector<std::array<ColumnIndex, 2>> jcls;
+  jcls.push_back(std::array<ColumnIndex, 2>{{0, 1}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 0}});
+
+  auto* qec = ad_utility::testing::getQec();
+  Minus m{qec,
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, a.clone(),
+              std::vector<std::optional<Variable>>{
+                  Variable{"?a"}, Variable{"?b"}, std::nullopt}),
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, b.clone(),
+              std::vector<std::optional<Variable>>{
+                  Variable{"?b"}, Variable{"?a"}, std::nullopt})};
+
+  IdTable res = m.computeMinus(a, b, jcls);
+  EXPECT_EQ(res, makeIdTableFromVector({{U, U, 10}, {1, U, 12}, {5, 4, 13}}));
 }
 
 // _____________________________________________________________________________

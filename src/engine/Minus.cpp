@@ -121,17 +121,16 @@ IdTable Minus::computeMinus(
   auto rightPermuted =
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
-  std::vector<size_t> nonMatchingIndices;
+  // Keep all entries by default, set to false when matching.
+  std::vector keepEntry(left.size(), true);
 
-  auto markToKeep = [&nonMatchingIndices,
-                     &joinColumnsLeft](const auto& leftIt) {
-    nonMatchingIndices.push_back(
-        ql::ranges::distance(joinColumnsLeft.begin(), leftIt));
+  auto markForRemoval = [&keepEntry, &joinColumnsLeft](const auto& leftIt) {
+    keepEntry.at(ql::ranges::distance(joinColumnsLeft.begin(), leftIt)) = false;
   };
 
-  auto outOfOrder = ad_utility::zipperJoinWithUndef(
+  [[maybe_unused]] auto outOfOrder = ad_utility::zipperJoinWithUndef(
       joinColumnsLeft, joinColumnsRight, ql::ranges::lexicographical_compare,
-      [&markToKeep](const auto& leftIt, const auto& rightIt) {
+      [&markForRemoval](const auto& leftIt, const auto& rightIt) {
         const auto& leftRow = *leftIt;
         const auto& rightRow = *rightIt;
         bool onlyMatchesBecauseOfUndef = ql::ranges::all_of(
@@ -139,22 +138,22 @@ IdTable Minus::computeMinus(
               const auto& [leftId, rightId] = tuple;
               return leftId.isUndefined() || rightId.isUndefined();
             });
-        if (onlyMatchesBecauseOfUndef) {
-          markToKeep(leftIt);
+        if (!onlyMatchesBecauseOfUndef) {
+          markForRemoval(leftIt);
         }
       },
-      ad_utility::findSmallerUndefRanges, ad_utility::findSmallerUndefRanges,
-      markToKeep);
-
-  // We need to sort the indices to ensure correct sort order if the algorithm
-  // can't guarantee that. There's also a more efficient way to sort the list,
-  // since the last `outOfOrder` items are the last ones in the list.
-  if (outOfOrder > 0) {
-    ql::ranges::sort(nonMatchingIndices);
-  }
+      ad_utility::findSmallerUndefRanges, ad_utility::findSmallerUndefRanges);
 
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
+
+  // Transform into dense vector of indices.
+  std::vector<size_t> nonMatchingIndices;
+  for (size_t row = 0; row < left.numRows(); ++row) {
+    if (keepEntry.at(row)) {
+      nonMatchingIndices.push_back(row);
+    }
+  }
   result.resize(nonMatchingIndices.size());
 
   for (ColumnIndex col = 0; col < result.numColumns(); col++) {
