@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <string>
 
+#include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "parser/GeoPoint.h"
 #include "util/BitUtils.h"
@@ -43,6 +44,15 @@ struct GeometryType {
   uint8_t type_;
   GeometryType(uint8_t type) : type_{type} {};
 };
+
+// Forward declaration for concept
+class GeometryInfo;
+
+// Concept for the `RequestedInfo` template parameter: any of these types is
+// allowed to be requested.
+template <typename T>
+CPP_concept RequestedInfoT =
+    SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -92,10 +102,11 @@ class GeometryInfo {
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>
-  RequestedInfo getRequestedInfo() const;
+  requires RequestedInfoT<RequestedInfo> RequestedInfo getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   template <typename RequestedInfo = GeometryInfo>
+  requires RequestedInfoT<RequestedInfo>
   static RequestedInfo getRequestedInfo(const std::string_view& wkt);
 };
 

@@ -172,6 +172,7 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 template <typename RequestedInfo>
+requires RequestedInfoT<RequestedInfo>
 RequestedInfo GeometryInfo::getRequestedInfo() const {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return *this;
@@ -193,6 +194,7 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 
 // ____________________________________________________________________________
 template <typename RequestedInfo>
+requires RequestedInfoT<RequestedInfo>
 RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     return GeometryInfo::fromWktLiteral(wkt);

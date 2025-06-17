@@ -400,6 +400,7 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // it. For Well Known Text literals only the `RequestedInfo` is computed ad
 // hoc.
 template <typename RequestedInfo = ad_utility::GeometryInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
 struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
