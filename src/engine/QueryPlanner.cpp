@@ -1278,8 +1278,8 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
     return getJoinColumns(a, b);
   }
 
-  if (a._idsOfIncludedNodes >= (size_t(1) << tg->_nodeMap.size()) ||
-      b._idsOfIncludedNodes >= (size_t(1) << tg->_nodeMap.size())) {
+  auto scope = 1ULL << tg->_nodeMap.size();
+  if (a._idsOfIncludedNodes >= scope || b._idsOfIncludedNodes >= scope) {
     return getJoinColumns(a, b);
   }
 
