@@ -79,8 +79,7 @@ GeoPoint centroidAsGeoPoint(ParsedWkt& geometry) {
 
 // ____________________________________________________________________________
 std::pair<GeoPoint, GeoPoint> boundingBoxAsGeoPoints(ParsedWkt& geometry) {
-  auto bb = std::visit([]<typename T>(T& val) { return getBoundingBox(val); },
-                       geometry);
+  auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
   auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
   auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
   return {lowerLeft, upperRight};
@@ -96,7 +95,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType,
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
   // index size.
-  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits));
+  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1);
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0);

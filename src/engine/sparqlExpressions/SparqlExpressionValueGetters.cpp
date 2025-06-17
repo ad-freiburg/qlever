@@ -456,6 +456,9 @@ std::optional<ad_utility::GeometryInfo> GeometryInfoValueGetter::operator()(
       return GeometryInfoValueGetter{}(lit, context);
     }
     // TODO<ullingerc> After merge of GeoVocabulary this can be activated
+    // TODO<ullingerc> Retrieve via getGeoInfo only if we have a GeoVocab as
+    // underlying vocabulary of the PolymorphicVocabulary, otherwise compute
+    // adhoc
     /*
     case VocabIndex: {
       // All geometry strings encountered during index build have a precomputed

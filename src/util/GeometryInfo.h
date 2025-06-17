@@ -17,7 +17,8 @@ namespace ad_utility {
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
-// index-breaking change. Please update the index version accordingly.
+// index-breaking change regarding the GeoVocabulary. Please update the index
+// version accordingly.
 class GeometryInfo {
  private:
   std::pair<uint64_t, uint64_t> boundingBox_;  // TODO: Has 8 unused bits...
@@ -25,7 +26,7 @@ class GeometryInfo {
 
   // double metricSize_;  // TODO: calc ; we only need length for lines and area
   // for polygons
-  // std::optional<uint64_t> parsedVocabOffset_ = std::nullopt;
+  // uint64_t parsedVocabOffset_ = std::nullopt;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(ValueId::numDatatypeBits);
