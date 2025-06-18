@@ -871,8 +871,14 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   using Iri = TripleComponent::Iri;
   // The graph specified in the `WITH` clause or `std::monostate{}` if there was
   // no with clause.
-  auto withGraph = [&]() -> SparqlTripleSimpleWithGraph::Graph {
+  auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
     std::optional<Iri> with;
+    if (ctx->iri() && datasetsAreFixed_) {
+      reportError(ctx->iri(),
+                  "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                  "1.1 protocol standard if the `using-graph-uri` or "
+                  "`using-named-graph-uri` http parameters are used");
+    }
     visitIf(&with, ctx->iri());
     if (with.has_value()) {
       return std::move(with.value());
@@ -905,13 +911,6 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   // {}` clauses.
   visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
   visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
-
-  if (ctx->iri() && datasetsAreFixed_) {
-    reportError(ctx->iri(),
-                "`WITH` is disallowed in section 2.2.3 of the SPARQL "
-                "1.1 protocol standard if the `using-graph-uri` or "
-                "`using-named-graph-uri` http parameters are used");
-  }
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
   return parsedQuery_;
