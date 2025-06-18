@@ -18,7 +18,6 @@ namespace updateClause {
 struct GraphUpdate {
   std::vector<SparqlTripleSimpleWithGraph> toInsert_;
   std::vector<SparqlTripleSimpleWithGraph> toDelete_;
-  std::optional<ad_utility::triple_component::Iri> with_;
 
   GraphUpdate() = default;
   GraphUpdate(std::vector<SparqlTripleSimpleWithGraph> toInsert,

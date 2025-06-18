@@ -31,27 +31,21 @@ TEST(GraphStoreProtocolTest, transformPost) {
 
   expectTransformPost(
       makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."), DEFAULT{},
-      m::UpdateClause(
-          m::GraphUpdate(
-              {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-              std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           std::monostate{}}}),
+                      m::GraphPattern()));
   expectTransformPost(
       makePostRequest("/?default", "application/n-triples", "<a> <b> <c> ."),
       DEFAULT{},
-      m::UpdateClause(
-          m::GraphUpdate(
-              {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-              std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           std::monostate{}}}),
+                      m::GraphPattern()));
   expectTransformPost(
       makePostRequest("/?graph=bar", "application/n-triples", "<a> <b> <c> ."),
       iri("<bar>"),
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {{iri("<a>"), iri("<b>"), iri("<c>"), iri("<bar>")}},
-                         std::nullopt),
-          m::GraphPattern()));
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"), iri("<c>"),
+                                           iri("<bar>")}}),
+                      m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::makePostRequest(
@@ -114,10 +108,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makePostRequest(
               "/?default", "application/n-triples", "<foo> <bar> <baz> .")),
-      m::UpdateClause(m::GraphUpdate({},
-                                     {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
-                                       std::monostate{}}},
-                                     std::nullopt),
+      m::UpdateClause(m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"),
+                                           iri("<baz>"), std::monostate{}}}),
                       m::GraphPattern()));
   auto expectUnsupportedMethod =
       [](const http::verb method, ad_utility::source_location l =

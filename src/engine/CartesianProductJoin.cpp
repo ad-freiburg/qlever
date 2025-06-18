@@ -400,7 +400,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
             })});
   };
   return Result::LazyResult(ad_utility::CachingContinuableTransformInputRange(
-      std::move(lazyResult->idTables()), std::move(get)));
+      lazyResult->idTables(), std::move(get)));
 }
 
 // _____________________________________________________________________________
