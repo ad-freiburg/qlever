@@ -2509,6 +2509,43 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                      PayloadVariables::all(), algo, type,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 500)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 1)"
+      " }",
+      h::spatialJoin(1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 0.5)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
   // Two distance filters
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "

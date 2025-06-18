@@ -108,15 +108,24 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       unit = UnitOfMeasurement::METERS;
     } else if constexpr (std::is_same_v<T, DistWithUnitExpression>) {
       // If the unit is not fixed, derive it from the user-specified IRI
+      // TODO<ullingerc> clean up this code
       auto unitExpr =
-          dynamic_cast<const IriExpression*>(&*distExpr->children()[2]);
-      if (unitExpr == nullptr) {
-        return std::nullopt;
+          dynamic_cast<const IriExpression*>(distExpr->children()[2].get());
+      if (unitExpr != nullptr) {
+        unit = ad_utility::detail::iriToUnitOfMeasurement(
+            asStringViewUnsafe(unitExpr->value().getContent()));
+      } else {
+        auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(
+            distExpr->children()[2].get());
+        if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
+            asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
+                XSD_ANYURI_TYPE) {
+          unit = ad_utility::detail::iriToUnitOfMeasurement(
+              asStringViewUnsafe(unitExpr2->value().getContent()));
+        } else {
+          return std::nullopt;
+        }
       }
-      // TODO<ullingerc> Also support unit as xsd:anyURI literal, see
-      // UnitOfMeasurementValueGetter
-      unit = ad_utility::detail::iriToUnitOfMeasurement(
-          asStringViewUnsafe(unitExpr->value().getContent()));
     }
 
     return DistArgs{p1.value(), p2.value(), unit};
