@@ -143,7 +143,7 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     return std::nullopt;
   }
 
-  auto [v1, v2, unit] = distVars.value();
+  const auto& [v1, v2, unit] = distVars.value();
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 

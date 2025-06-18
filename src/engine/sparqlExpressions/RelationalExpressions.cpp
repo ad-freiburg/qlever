@@ -607,7 +607,7 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
   if (constant.getDatatype() == Datatype::Double) {
     maxDistAnyUnit = constant.getDouble();
   } else if (constant.getDatatype() == Datatype::Int) {
-    maxDistAnyUnit = constant.getInt();
+    maxDistAnyUnit = static_cast<double>(constant.getInt());
   } else {
     return std::nullopt;
   }
