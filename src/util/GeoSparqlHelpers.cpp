@@ -78,8 +78,7 @@ double kilometerToUnit(double kilometers,
 // ____________________________________________________________________________
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit) {
-  double factor = 1.0 / kilometerToUnit(1.0, unit);
-  return valueInUnit * factor;
+  return valueInUnit / kilometerToUnit(1.0, unit);
 }
 
 // ____________________________________________________________________________
