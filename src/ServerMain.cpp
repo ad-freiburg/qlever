@@ -138,6 +138,11 @@ int main(int argc, char** argv) {
   add("persist-updates", po::bool_switch(&persistUpdates),
       "If set, then SPARQL UPDATES will be persisted on disk. Otherwise they "
       "will be lost when the engine is stopped");
+  add("syntax-test-mode", optionFactory.getProgramOption<"syntax-test-mode">(),
+      "Make several query patterns that are syntactially valid, but otherwise "
+      "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
+      "nonexisting endpoints). This mode should only be used for running the "
+      "syntax tests from the W3C SPARQL 1.1 test suite.");
   po::variables_map optionsMap;
 
   try {

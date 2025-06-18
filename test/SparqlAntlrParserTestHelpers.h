@@ -828,13 +828,14 @@ inline auto SubSelect =
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs activeDefaultGraphs =
+        std::nullopt,
     ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
-               Field(&DS::namedGraphs_, Eq(namedGraphs)));
+  return AllOf(AD_PROPERTY(DS, activeDefaultGraphs, Eq(activeDefaultGraphs)),
+               AD_PROPERTY(DS, namedGraphs, Eq(namedGraphs)));
 }
 
 inline auto SelectQuery =
@@ -945,20 +946,18 @@ using namespace updateClause;
 
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
-       const std::optional<ad_utility::triple_component::Iri>& with)
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
     -> Matcher<const updateClause::GraphUpdate&> {
   return testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with)));
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)));
 };
 
 inline auto EmptyDatasets = [] {
-  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
-                        testing::Eq(std::nullopt)),
-               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
-                        testing::Eq(std::nullopt)));
+  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
+                           testing::Eq(std::nullopt)),
+               AD_PROPERTY(ParsedQuery::DatasetClauses, namedGraphs,
+                           testing::Eq(std::nullopt)));
 };
 
 using Graphs = ad_utility::HashSet<TripleComponent>;
@@ -1154,18 +1153,16 @@ inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
   return UpdateClause(
       GraphUpdate(
           {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
-          {}, std::nullopt),
+          {}),
       SelectAllPattern(graph, AD_FWD(filter)));
 };
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
 inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
                         const SparqlTripleSimpleWithGraph::Graph& to) {
-  return UpdateClause(GraphUpdate({},
-                                  {SparqlTripleSimpleWithGraph(
-                                      ::Variable("?s"), ::Variable("?p"),
-                                      ::Variable("?o"), to)},
-                                  std::nullopt),
+  return UpdateClause(GraphUpdate({}, {SparqlTripleSimpleWithGraph(
+                                          ::Variable("?s"), ::Variable("?p"),
+                                          ::Variable("?o"), to)}),
                       SelectAllPattern(from));
 };
 

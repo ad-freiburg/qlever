@@ -24,8 +24,7 @@ namespace {
 auto ClearGraph = [](SparqlTripleSimpleWithGraph::Graph graph)
     -> testing::Matcher<const ParsedQuery&> {
   return m::UpdateClause(
-      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), graph}}, {},
-                     std::nullopt),
+      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), graph}}, {}),
       m::GraphPattern(m::GroupGraphPatternWithGraph(
           graph, m::Triples({SparqlTriple(TC(Var{"?s"}), Var{"?p"},
                                           TC(Var{"?o"}))}))));
@@ -43,26 +42,23 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
     EXPECT_THAT(
         transform(makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."),
                   DEFAULT{}),
-        m::UpdateClause(
-            m::GraphUpdate(isInsertion ? empty : defaultGraph,
-                           isInsertion ? defaultGraph : empty, std::nullopt),
-            m::GraphPattern()));
+        m::UpdateClause(m::GraphUpdate(isInsertion ? empty : defaultGraph,
+                                       isInsertion ? defaultGraph : empty),
+                        m::GraphPattern()));
     EXPECT_THAT(
         transform(makePostRequest("/?default", "application/n-triples",
                                   "<a> <b> <c> ."),
                   DEFAULT{}),
-        m::UpdateClause(
-            m::GraphUpdate(isInsertion ? empty : defaultGraph,
-                           isInsertion ? defaultGraph : empty, std::nullopt),
-            m::GraphPattern()));
+        m::UpdateClause(m::GraphUpdate(isInsertion ? empty : defaultGraph,
+                                       isInsertion ? defaultGraph : empty),
+                        m::GraphPattern()));
     EXPECT_THAT(
         transform(makePostRequest("/?graph=bar", "application/n-triples",
                                   "<a> <b> <c> ."),
                   iri("<bar>")),
-        m::UpdateClause(
-            m::GraphUpdate(isInsertion ? empty : graph,
-                           isInsertion ? graph : empty, std::nullopt),
-            m::GraphPattern()));
+        m::UpdateClause(m::GraphUpdate(isInsertion ? empty : graph,
+                                       isInsertion ? graph : empty),
+                        m::GraphPattern()));
     AD_EXPECT_THROW_WITH_MESSAGE(
         transform(
             ad_utility::testing::makePostRequest(
@@ -141,31 +137,25 @@ TEST(GraphStoreProtocolTest, transformPut) {
       makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."), DEFAULT{},
       testing::ElementsAre(
           ClearGraph(iri(DEFAULT_GRAPH_IRI)),
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-                  std::nullopt),
-              m::GraphPattern())));
+          m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
+                                               iri("<c>"), std::monostate{}}}),
+                          m::GraphPattern())));
   expectTransformPut(
       makePostRequest("/?default", "application/n-triples", "<a> <b> <c> ."),
       DEFAULT{},
       testing::ElementsAre(
           ClearGraph(iri(DEFAULT_GRAPH_IRI)),
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{iri("<a>"), iri("<b>"), iri("<c>"), std::monostate{}}},
-                  std::nullopt),
-              m::GraphPattern())));
+          m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
+                                               iri("<c>"), std::monostate{}}}),
+                          m::GraphPattern())));
   expectTransformPut(
       makePostRequest("/?graph=bar", "application/n-triples", "<a> <b> <c> ."),
       iri("<bar>"),
       testing::ElementsAre(
           ClearGraph(iri("<bar>")),
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{iri("<a>"), iri("<b>"), iri("<c>"), iri("<bar>")}},
-                  std::nullopt),
-              m::GraphPattern())));
+          m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
+                                               iri("<c>"), iri("<bar>")}}),
+                          m::GraphPattern())));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makeRequest(http::verb::put, "/?default"),
@@ -224,10 +214,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           ad_utility::testing::makePostRequest(
               "/?default", "application/n-triples", "<foo> <bar> <baz> .")),
       testing::ElementsAre(m::UpdateClause(
-          m::GraphUpdate(
-              {},
-              {{iri("<foo>"), iri("<bar>"), iri("<baz>"), std::monostate{}}},
-              std::nullopt),
+          m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
+                               std::monostate{}}}),
           m::GraphPattern())));
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
@@ -238,7 +226,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
               testing::ElementsAre(m::UpdateClause(
                   m::GraphUpdate({{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                    std::monostate{}}},
-                                 {}, std::nullopt),
+                                 {}),
                   m::GraphPattern())));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
@@ -253,11 +241,9 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
               {{http::field::content_type, "text/turtle"}}, "<a> <b> <c>")),
       testing::ElementsAre(
           ClearGraph(iri("<foo>")),
-          m::UpdateClause(
-              m::GraphUpdate(
-                  {}, {{iri("<a>"), iri("<b>"), iri("<c>"), iri("<foo>")}},
-                  std::nullopt),
-              m::GraphPattern())));
+          m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
+                                               iri("<c>"), iri("<foo>")}}),
+                          m::GraphPattern())));
   auto expectUnsupportedMethod =
       [](const http::verb method, ad_utility::source_location l =
                                       ad_utility::source_location::current()) {

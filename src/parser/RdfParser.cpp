@@ -500,8 +500,7 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
     lastParseResult_ = std::move(previous);
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
     literalAndDatatypeToTripleComponentImpl(
-        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri(),
-        this);
+        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri());
   }
 
   // It is okay to neither have a langtag nor an XSD datatype.
@@ -512,13 +511,13 @@ bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
 template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     std::string_view normalizedLiteralContent,
-    const TripleComponent::Iri& typeIri, TurtleParser<T>* parser) {
+    const TripleComponent::Iri& typeIri) {
   auto literal = TripleComponent::Literal::literalWithNormalizedContent(
       asNormalizedStringViewUnsafe(normalizedLiteralContent));
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   // Helper to handle literals that are invalid for the respective datatype
-  auto makeNormalLiteral = [&parser, &literal, normalizedLiteralContent,
+  auto makeNormalLiteral = [this, &literal, normalizedLiteralContent,
                             type](std::optional<std::exception> error =
                                       std::nullopt) {
     std::string_view errorMsg = error.has_value() ? error.value().what() : "";
@@ -529,49 +528,54 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
                << ". It is treated as a plain string literal without datatype "
                   "instead."
                << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    lastParseResult_ = std::move(literal);
   };
 
   try {
     if (ad_utility::contains(integerDatatypes_, type)) {
-      parser->parseIntegerConstant(normalizedLiteralContent);
+      parseIntegerConstant(normalizedLiteralContent);
     } else if (type == XSD_BOOLEAN_TYPE) {
       if (normalizedLiteralContent == "true") {
-        parser->lastParseResult_ = true;
+        lastParseResult_ = true;
       } else if (normalizedLiteralContent == "false") {
-        parser->lastParseResult_ = false;
+        lastParseResult_ = false;
+      } else if (normalizedLiteralContent == "1") {
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(true);
+      } else if (normalizedLiteralContent == "0") {
+        lastParseResult_ = Id::makeBoolFromZeroOrOne(false);
       } else {
-        makeNormalLiteral();
+        raiseOrIgnoreTriple(absl::StrCat("Invalid boolean literal: '",
+                                         normalizedLiteralContent, "'"));
       }
     } else if (ad_utility::contains(floatDatatypes_, type)) {
-      parser->parseDoubleConstant(normalizedLiteralContent);
+      parseDoubleConstant(normalizedLiteralContent);
     } else if (type == XSD_DATETIME_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDatetime(normalizedLiteralContent);
     } else if (type == XSD_DATE_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDate(normalizedLiteralContent);
     } else if (type == XSD_GYEARMONTH_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseGYearMonth(normalizedLiteralContent);
     } else if (type == XSD_GYEAR_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseGYear(normalizedLiteralContent);
     } else if (type == XSD_DAYTIME_DURATION_TYPE) {
-      parser->lastParseResult_ =
+      lastParseResult_ =
           DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
     } else if (type == GEO_WKT_LITERAL) {
       // Not all WKT literals represent points (we can only fold points)
       auto geopoint = GeoPoint::parseFromLiteral(literal, false);
       if (geopoint.has_value()) {
-        parser->lastParseResult_ = geopoint.value();
+        lastParseResult_ = geopoint.value();
       } else {
         literal.addDatatype(typeIri);
-        parser->lastParseResult_ = std::move(literal);
+        lastParseResult_ = std::move(literal);
       }
     } else {
       literal.addDatatype(typeIri);
-      parser->lastParseResult_ = std::move(literal);
+      lastParseResult_ = std::move(literal);
     }
   } catch (const DateParseException& ex) {
     makeNormalLiteral(ex);
@@ -584,9 +588,9 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   } catch (const CoordinateOutOfRangeException& ex) {
     makeNormalLiteral(ex);
   } catch (const std::exception& e) {
-    parser->raise(e.what());
+    raise(e.what());
   }
-  return parser->lastParseResult_;
+  return lastParseResult_;
 }
 
 // _____________________________________________________________________________
@@ -620,8 +624,8 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     const TripleComponent::Iri& typeIri) {
   RdfStringParser<TurtleParser<T>> parser;
 
-  return literalAndDatatypeToTripleComponentImpl(normalizedLiteralContent,
-                                                 typeIri, &parser);
+  return parser.literalAndDatatypeToTripleComponentImpl(
+      normalizedLiteralContent, typeIri);
 }
 
 // ______________________________________________________________________

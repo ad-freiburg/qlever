@@ -23,7 +23,7 @@ endif ()
 # recycling and gets rid of all of those errors and crashes.
 # TODO<joka921> Further analyze and then report this bug to the ASIO
 # developers.
-add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+add_compile_definitions(BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
@@ -126,8 +126,7 @@ FetchContent_Declare(
         GIT_TAG fd59f632ae2dc674a1f9f5b0b0c0382085d1dd88
 )
 # disable bzip2 and zlib support in spatialjoin, we don't need it
-add_definitions("-DSPATIALJOIN_NO_BZIP2=True")
-add_definitions("-DSPATIALJOIN_NO_ZLIB=True")
+add_compile_definitions(SPATIALJOIN_NO_BZIP2=True SPATIALJOIN_NO_ZLIB=True)
 
 ################################
 # Threading
@@ -223,8 +222,13 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 set(USE_CPP_17_BACKPORTS OFF CACHE BOOL "Use the C++17 backports (range-v3 and enable_if_t instead of std::ranges and concepts)")
 if (${USE_CPP_17_BACKPORTS} OR ${RANGE_V3_REQUIRED_BY_COMPILER} )
     MESSAGE(STATUS "Using the C++17 backports (e.g. range-v3)")
-    add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
+    add_compile_definitions(QLEVER_CPP_17 CPP_CXX_CONCEPTS=0)
 endif()
+
+set(VOCAB_UNCOMPRESSED_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary uncompressed and completely in RAM")
+if (${VOCAB_UNCOMPRESSED_IN_MEMORY})
+    add_compile_definitions(QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY)
+endif ()
 
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
@@ -287,27 +291,27 @@ if (USE_PARALLEL)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-        add_definitions("-D_PARALLEL_SORT")
+        add_compile_definitions(PARALLEL_SORT)
     endif ()
 endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
-    add_definitions("-D_QLEVER_NO_TIMING_TESTS")
+    add_compile_definitions(QLEVER_NO_TIMING_TESTS)
 endif ()
 
 if (USE_TREE_BASED_CACHE)
-    add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
+    add_compile_definitions(_QLEVER_USE_TREE_BASED_CACHE)
 endif ()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
-    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+    add_compile_definitions(QLEVER_RUN_EXPENSIVE_TESTS)
 endif ()
 
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
-    add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
+    add_compile_definitions(AD_ENABLE_EXPENSIVE_CHECKS)
 endif ()
 
 set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
@@ -317,7 +321,7 @@ set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_
 if (QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
     message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
 endif ()
-add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
+add_compile_definitions(QUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE})
 
 ################################
 # FSST
@@ -406,7 +410,7 @@ else ()
     set(LOGLEVEL INFO CACHE STRING "The loglevel")
 endif ()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
-add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+add_compile_definitions(LOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
 
 ##################################################
