@@ -2,25 +2,25 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
 #include "parser/GeoPoint.h"
+#include "util/GTestHelpers.h"
 #include "util/GeometryInfo.h"
+
 namespace {
 
 using namespace ad_utility;
 using namespace geoInfoTestHelpers;
 
 // Example WKT literals for the tests below
-const std::string lit =
+constexpr std::string_view lit =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-
-const std::string lit2 =
+constexpr std::string_view lit2 =
     "\"LINESTRING(2 2, 4 "
     "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-
-const std::string lit3 =
+constexpr std::string_view lit3 =
     "\"POLYGON(2 4, 4 4, 4 "
     "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
@@ -38,10 +38,13 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
 
   // Too large wkt type value
-  ASSERT_ANY_THROW(GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}));
+  AD_EXPECT_THROW_WITH_MESSAGE(GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}),
+                               ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
-  ASSERT_ANY_THROW(GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}),
+      ::testing::HasSubstr("Bounding box coordinates invalid"));
 }
 
 // ____________________________________________________________________________

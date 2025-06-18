@@ -7,22 +7,30 @@
 
 #include <gtest/gtest.h>
 
+#include "util/GTestHelpers.h"
 #include "util/GeometryInfo.h"
 
 namespace geoInfoTestHelpers {
 
 using namespace ad_utility;
+using Loc = ad_utility::source_location;
 
-inline void checkGeometryType(GeometryType a, GeometryType b) {
+inline void checkGeometryType(GeometryType a, GeometryType b,
+                              Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(a.type_, b.type_);
 }
 
-inline void checkCentroid(Centroid a, Centroid b) {
+inline void checkCentroid(Centroid a, Centroid b,
+                          Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   ASSERT_NEAR(a.centroid_.getLat(), b.centroid_.getLat(), 0.001);
   ASSERT_NEAR(a.centroid_.getLng(), b.centroid_.getLng(), 0.001);
 }
 
-inline void checkBoundingBox(BoundingBox a, BoundingBox b) {
+inline void checkBoundingBox(BoundingBox a, BoundingBox b,
+                             Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   auto [all, aur] = a;
   auto [bll, bur] = b;
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
@@ -33,7 +41,9 @@ inline void checkBoundingBox(BoundingBox a, BoundingBox b) {
 
 // Helper that asserts (approx.) equality of two GeometryInfo objects
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
-                         std::optional<GeometryInfo> expected) {
+                         std::optional<GeometryInfo> expected,
+                         Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(actual.has_value(), expected.has_value());
   if (!actual.has_value() || !expected.has_value()) {
     return;
@@ -42,29 +52,39 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   auto a = actual.value();
   auto b = expected.value();
 
-  checkGeometryType(a.getWktType(), b.getWktType());
+  checkGeometryType(a.getWktType(), b.getWktType(), sourceLocation);
 
-  checkCentroid(a.getCentroid(), b.getCentroid());
+  checkCentroid(a.getCentroid(), b.getCentroid(), sourceLocation);
 
-  checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
+  checkBoundingBox(a.getBoundingBox(), b.getBoundingBox(), sourceLocation);
 }
 
-inline void checkRequestedInfoForInstance(GeometryInfo gi) {
-  checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>());
-  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>());
-  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>());
-  checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>());
+inline void checkRequestedInfoForInstance(GeometryInfo gi,
+                                          Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>(), sourceLocation);
+  checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>(),
+                   sourceLocation);
+  checkCentroid(gi.getCentroid(), gi.getRequestedInfo<Centroid>(),
+                sourceLocation);
+  checkGeometryType(gi.getWktType(), gi.getRequestedInfo<GeometryType>(),
+                    sourceLocation);
 }
 
-inline void checkRequestedInfoForWktLiteral(const std::string_view& wkt) {
+inline void checkRequestedInfoForWktLiteral(
+    const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   auto gi = GeometryInfo::fromWktLiteral(wkt);
-  checkGeoInfo(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
+  checkGeoInfo(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt),
+               sourceLocation);
   checkBoundingBox(gi.getBoundingBox(),
-                   GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
-  checkCentroid(gi.getCentroid(),
-                GeometryInfo::getRequestedInfo<Centroid>(wkt));
+                   GeometryInfo::getRequestedInfo<BoundingBox>(wkt),
+                   sourceLocation);
+  checkCentroid(gi.getCentroid(), GeometryInfo::getRequestedInfo<Centroid>(wkt),
+                sourceLocation);
   checkGeometryType(gi.getWktType(),
-                    GeometryInfo::getRequestedInfo<GeometryType>(wkt));
+                    GeometryInfo::getRequestedInfo<GeometryType>(wkt),
+                    sourceLocation);
 }
 
 };  // namespace geoInfoTestHelpers

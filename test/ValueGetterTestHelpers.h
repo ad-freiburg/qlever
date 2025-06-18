@@ -206,7 +206,9 @@ using namespace geoInfoTestHelpers;
 // Helper that constructs a local vocab, inserts the literal and passes the
 // LocalVocabIndex as a ValueId to the GeometryInfoValueGetter
 inline void checkGeoInfoFromLocalVocab(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
+    Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   // Not the geoInfoTtl here because the literals should not be contained
   TestContextWithGivenTTl testContext{ttl};
@@ -217,7 +219,7 @@ inline void checkGeoInfoFromLocalVocab(
   auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
   auto id = ValueId::makeFromLocalVocabIndex(idx);
   auto res = getter(id, &testContext.context);
-  checkGeoInfo(res, expected);
+  checkGeoInfo(res, expected, sourceLocation);
 }
 
 // Test knowledge graph that contains all used literals and iris.
@@ -234,45 +236,53 @@ const std::string geoInfoTtl =
 // Helper that tests the GeometryInfoValueGetter using the ValueId of a
 // VocabIndex for a string in the example knowledge graph.
 inline void checkGeoInfoFromVocab(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
+    Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
   VocabIndex idx;
   ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
   auto id = ValueId::makeFromVocabIndex(idx);
   auto res = getter(id, &testContext.context);
-  checkGeoInfo(res, expected);
+  checkGeoInfo(res, expected, sourceLocation);
 }
 
 // Helper that tests the GeometryInfoValueGetter using an arbitrary ValueId
 inline void checkGeoInfoFromValueId(
-    ValueId input, std::optional<ad_utility::GeometryInfo> expected) {
+    ValueId input, std::optional<ad_utility::GeometryInfo> expected,
+    Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
   auto res = getter(input, &testContext.context);
-  checkGeoInfo(res, expected);
+  checkGeoInfo(res, expected, sourceLocation);
 }
 
 // Helper that tests the GeometryInfoValueGetter using a string passed directly
 // as LiteralOrIri, not ValueId
 inline void checkGeoInfoFromLiteral(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
+    Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
   auto litOrIri =
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           wktInput);
   auto res = getter(litOrIri, &testContext.context);
-  checkGeoInfo(res, expected);
+  checkGeoInfo(res, expected, sourceLocation);
 }
 
 // Helper that runs each of the tests for GeometryInfoValueGetter using the same
 // input
 inline void checkGeoInfoFromLocalAndNormalVocabAndLiteral(
-    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected) {
-  checkGeoInfoFromVocab(wktInput, expected);
-  checkGeoInfoFromLocalVocab(wktInput, expected);
-  checkGeoInfoFromLiteral(wktInput, expected);
+    std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
+    Loc sourceLocation = Loc::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  checkGeoInfoFromVocab(wktInput, expected, sourceLocation);
+  checkGeoInfoFromLocalVocab(wktInput, expected, sourceLocation);
+  checkGeoInfoFromLiteral(wktInput, expected, sourceLocation);
 }
 
 }  // namespace geoInfoVGTestHelpers

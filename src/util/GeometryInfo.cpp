@@ -104,15 +104,19 @@ GeometryInfo::GeometryInfo(uint8_t wktType, BoundingBox boundingBox,
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
   // index size.
-  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1);
+  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1,
+                       "WKT Type out of range");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.centroid_.toBitRepresentation();
-  AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0);
+  AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
+                       "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
 
   AD_CORRECTNESS_CHECK(
       boundingBox.lowerLeft_.getLat() <= boundingBox.upperRight_.getLat() &&
-      boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng());
+          boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng(),
+      "Bounding box coordinates invalid: first point must be lower "
+      "left and second point must be upper right of a rectangle.");
   boundingBox_ = {boundingBox.lowerLeft_.toBitRepresentation(),
                   boundingBox.upperRight_.toBitRepresentation()};
 };
@@ -133,8 +137,7 @@ GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
 };
 
 // ____________________________________________________________________________
-GeometryInfo GeometryInfo::fromGeoPoint(
-    [[maybe_unused]] const GeoPoint& point) {
+GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
   return {util::geo::WKTType::POINT, {point, point}, point};
 }
 
@@ -182,8 +185,9 @@ RequestedInfo GeometryInfo::getRequestedInfo() const {
     return getBoundingBox();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return getWktType();
+  } else {
+    static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
-  AD_FAIL();
 };
 
 // Explicit instantiations
@@ -204,8 +208,9 @@ RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
     return GeometryInfo::getBoundingBox(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryType>) {
     return GeometryInfo::getWktType(wkt);
+  } else {
+    static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
-  AD_FAIL();
 };
 
 // Explicit instantiations
