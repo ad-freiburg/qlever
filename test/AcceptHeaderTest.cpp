@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <string>
 
@@ -138,35 +138,32 @@ TEST(AcceptHeaderParser, IllegalInput) {
 
 TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
   std::string p = "text/html,application/sparql-results+json";
-  auto result = getMediaTypeFromAcceptHeader(p);
-  ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::sparqlJson);
+  auto result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::sparqlJson));
 
   p = "application/json, image/jpeg";
-  ASSERT_FALSE(getMediaTypeFromAcceptHeader(p).has_value());
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ::testing::ElementsAre());
 
-  // The wildcard matches all the supported media types, sparql-json has
-  // higher priority;
+  // The wildcard matches all the supported media types, ignoring it leaves the
+  // decision to another mechanism.
   p = "*/*, text/html";
-  result = getMediaTypeFromAcceptHeader(p);
-  ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::sparqlJson);
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ::testing::ElementsAre());
 
   // The wildcard matches csv and tsv, but not the json variants
   p = "text/*, text/html";
-  result = getMediaTypeFromAcceptHeader(p);
-  ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::tsv);
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::tsv));
 
   // The wildcard matches csv/tsv, qlever-json has higher precedence;
   p = "text/*, application/qlever-results+json";
-  result = getMediaTypeFromAcceptHeader(p);
-  ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::qleverJson);
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result,
+              ::testing::ElementsAre(MediaType::qleverJson, MediaType::tsv));
 
-  // The wildcard matches tsv/csv, which has the higher quality value;
+  // The wildcard matches tsv/csv, since the json is not supported.
   p = "text/*, application/json; q=0.3";
-  result = getMediaTypeFromAcceptHeader(p);
-  ASSERT_TRUE(result.has_value());
-  ASSERT_EQ(result.value(), MediaType::tsv);
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::tsv));
 }

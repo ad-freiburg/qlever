@@ -137,12 +137,13 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 }
 
 // ___________________________________________________________________________
-std::optional<MediaType> getMediaTypeFromAcceptHeader(
+std::vector<MediaType> getMediaTypesFromAcceptHeader(
     std::string_view acceptHeader) {
   static_assert(!detail::SUPPORTED_MEDIA_TYPES.empty());
-  // empty accept Header means "any type is allowed", so simply choose one.
+
+  // Empty header means the same as no header.
   if (acceptHeader.empty()) {
-    return detail::SUPPORTED_MEDIA_TYPES.at(0);
+    return {};
   }
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
@@ -151,7 +152,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
     using T = std::decay_t<decltype(part)>;
     static constexpr std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
-      return detail::SUPPORTED_MEDIA_TYPES.at(0);
+      return noValue;
     } else if constexpr (ad_utility::isSimilar<
                              T, MediaTypeWithQuality::TypeWithWildcard>) {
       auto it = ql::ranges::find_if(
@@ -166,15 +167,16 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
     }
   };
 
+  std::vector<MediaType> result;
+
   for (const auto& mediaType : orderedMediaTypes) {
     auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
     if (match.has_value()) {
-      return match.value();
+      result.emplace_back(std::move(match.value()));
     }
   }
 
-  // No supported `MediaType` was found, return std::nullopt.
-  return std::nullopt;
+  return result;
 }
 
 // ______________________________________________________________________
