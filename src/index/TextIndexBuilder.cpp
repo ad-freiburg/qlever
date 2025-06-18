@@ -161,7 +161,11 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInTextRecords(
       if (!isLiteral(text)) {
         continue;
       }
-      WordsFileLine entityLine{text, true, contextId, 1, true};
+
+      // We need the explicit cast to `std::string` because the return type of
+      // `indexToString` might be `string_view` if the vocabulary is stored
+      // uncompressed in memory.
+      WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
