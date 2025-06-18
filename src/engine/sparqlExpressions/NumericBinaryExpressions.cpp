@@ -19,25 +19,18 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // like `NaN` or `infinity`, decimals don't). As we currently make no difference
 // between those two types, we have to choose one of the behaviors. We make the
 // result `UNDEF` in this case to pass the sparql conformance tests that rely on
-// this behavior.
+// this behavior. The old behavior can be reinstated by a RuntimeParameter.
 // Note: The result of a division in
 // SPARQL is always a decimal number, so there is no integer division.
-template <bool DivisionByZeroIsUndef>
 [[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
-  if constexpr (DivisionByZeroIsUndef) {
-    if (y == 0) {
-      return std::numeric_limits<double>::quiet_NaN();
-    }
-  }
   return static_cast<double>(x) / static_cast<double>(y);
 };
 
-inline auto divide1 = makeNumericExpression<decltype(divideImpl<true>), true>();
+inline auto divide1 = makeNumericExpression<decltype(divideImpl), true>();
 NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
                 FV<decltype(divide1), NumericValueGetter>);
 
-inline auto divide2 =
-    makeNumericExpression<decltype(divideImpl<false>), false>();
+inline auto divide2 = makeNumericExpression<decltype(divideImpl), false>();
 NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
                 FV<decltype(divide2), NumericValueGetter>);
 
