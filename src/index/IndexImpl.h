@@ -591,7 +591,7 @@ class IndexImpl {
   // to prevent filtering.
   template <typename Reader>
   IdTable mergeTextBlockResults(
-      Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
+      Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       bool isEntitySearch) const;
 

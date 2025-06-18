@@ -8,7 +8,7 @@
 #include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
-const vector<std::reference_wrapper<const TextBlockMetaData>>
+vector<std::reference_wrapper<const TextBlockMetaData>>
 TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
                                       const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);

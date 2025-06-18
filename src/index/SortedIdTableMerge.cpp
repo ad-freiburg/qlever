@@ -13,8 +13,8 @@ IdTable mergeIdTables(
     std::vector<IdTable> tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ad_utility::MemorySize& memory,
-    std::function<bool(const columnBasedIdTable::Row<ValueId>&,
-                       const columnBasedIdTable::Row<ValueId>&)>
+    const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
+                             const columnBasedIdTable::Row<ValueId>&)>&
         comparator) {
   std::vector<cppcoro::generator<columnBasedIdTable::Row<ValueId>>> generators;
   auto makeGenerator = [](const IdTable& table)

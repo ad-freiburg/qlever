@@ -110,7 +110,7 @@ IdTable IndexImpl::getEntityMentionsForWord(
 // _____________________________________________________________________________
 template <typename Reader>
 IdTable IndexImpl::mergeTextBlockResults(
-    Reader reader, std::vector<TextBlockMetadataAndWordInfo> tbmds,
+    Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     bool isEntitySearch) const {
   // Collect all blocks as IdTables
@@ -252,8 +252,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     hasToBeFiltered = tbmd.get()._cl.hasMultipleWords() &&
                       !(tbmd.get()._firstWordId == idRange.first().get() &&
                         tbmd.get()._lastWordId == idRange.last().get());
-    output.emplace_back(
-        TextBlockMetadataAndWordInfo{tbmd.get(), hasToBeFiltered, idRange});
+    output.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
   }
   return std::optional{output};
 }

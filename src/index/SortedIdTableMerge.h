@@ -20,13 +20,13 @@ IdTable mergeIdTables(
     std::vector<IdTable> tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ad_utility::MemorySize& memory,
-    std::function<bool(const columnBasedIdTable::Row<ValueId>&,
-                       const columnBasedIdTable::Row<ValueId>&)>
+    const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
+                             const columnBasedIdTable::Row<ValueId>&)>&
         comparator = [](const columnBasedIdTable::Row<ValueId>& a,
                         const columnBasedIdTable::Row<ValueId>& b) {
           if (a.size() != b.size()) {
             throw std::runtime_error{"Row sizes differ"};
-          };
+          }
           for (auto it1 = a.begin(), it2 = b.begin(); it1 != a.end();
                ++it1, ++it2) {
             if (it1->getBits() < it2->getBits()) {
