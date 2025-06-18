@@ -17,10 +17,7 @@ class HttpError : public std::exception {
   explicit HttpError(boost::beast::http::status status)
       : status_{status}, reason_{boost::beast::http::obsolete_reason(status)} {}
   explicit HttpError(boost::beast::http::status status, string_view extra)
-      : status_{status},
-        reason_{absl::StrCat(
-            std::string_view{boost::beast::http::obsolete_reason(status)}, ": ",
-            extra)} {}
+      : status_{status}, reason_{extra} {}
 
   const char* what() const noexcept override { return reason_.c_str(); }
 

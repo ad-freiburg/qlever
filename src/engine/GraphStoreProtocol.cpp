@@ -69,14 +69,15 @@ std::vector<SparqlTripleSimpleWithGraph> GraphStoreProtocol::convertTriples(
 ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   // Construct the parsed query from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
-  std::string query;
-  if (const auto* iri =
-          std::get_if<ad_utility::triple_component::Iri>(&graph)) {
-    query = absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
-                         iri->toStringRepresentation(), " { ?s ?p ?o } }");
-  } else {
-    query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
-  }
+  auto query = [&graph]() -> std::string {
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      return absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
+                          iri->toStringRepresentation(), " { ?s ?p ?o } }");
+    } else {
+      return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
+    }
+  }();
   return SparqlParser::parseQuery(query);
 }
 
@@ -84,14 +85,15 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
 ParsedQuery GraphStoreProtocol::transformDelete(const GraphOrDefault& graph) {
   // Construct the parsed update from its short equivalent SPARQL Update string.
   // This is easier and also provides e.g. the `_originalString` field.
-  std::string update;
-  if (const auto* iri =
-          std::get_if<ad_utility::triple_component::Iri>(&graph)) {
-    update = absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
-  } else {
-    update = "DROP DEFAULT";
-  }
+  auto update = [&graph]() -> std::string {
+    if (const auto* iri =
+            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+      return absl::StrCat("DROP GRAPH ", iri->toStringRepresentation());
+    } else {
+      return "DROP DEFAULT";
+    }
+  }();
   auto updates = SparqlParser::parseUpdate(update);
   AD_CORRECTNESS_CHECK(updates.size() == 1);
-  return std::move(updates[0]);
+  return std::move(updates.at(0));
 }
