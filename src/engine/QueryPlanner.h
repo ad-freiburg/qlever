@@ -458,12 +458,15 @@ class QueryPlanner {
     // already bind all the variables that are used in the filter. The plans
     // with the added filters are added to the candidate set. This mode is used
     // in the dynamic programming approach, where we don't apply the filters
-    // greedily.
+    // greedily. Applying filter substitutes is permitted in this mode.
     KeepUnfiltered,
     // Only apply matching filters (see above), but the plans with added filters
     // replace the plans without filters. This is used in the greedy approach,
-    // where filters are always applied as early as possible.
+    // where filters are always applied as early as possible. Applying filter
+    // substitutes is permitted in this mode.
     ReplaceUnfiltered,
+    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    ReplaceUnfilteredNoSubstitutes,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
     // where we have to make sure that all filters are applied.
