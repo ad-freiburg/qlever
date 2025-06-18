@@ -30,6 +30,7 @@ TEST(ServerTest, determineResultPinning) {
               testing::Pair(false, false));
 }
 
+// _____________________________________________________________________________
 TEST(ServerTest, determineMediaType) {
   auto MakeRequest = [](const std::optional<std::string>& accept,
                         const http::verb method = http::verb::get,
@@ -78,6 +79,50 @@ TEST(ServerTest, determineMediaType) {
               testing::ElementsAre());
 }
 
+// _____________________________________________________________________________
+TEST(ServerTest, chooseBestFittingMediaType) {
+  auto askQuery = SparqlParser::parseQuery("ASK {}");
+  auto selectQuery = SparqlParser::parseQuery("SELECT * {}");
+  auto constructQuery = SparqlParser::parseQuery("CONSTRUCT WHERE {}");
+  using enum ad_utility::MediaType;
+
+  auto choose = &Server::chooseBestFittingMediaType;
+
+  // Empty case
+  EXPECT_EQ(choose({}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({}, constructQuery), turtle);
+
+  // Single matching element
+  EXPECT_EQ(choose({sparqlJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, constructQuery), turtle);
+  EXPECT_EQ(choose({qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({qleverJson}, constructQuery), qleverJson);
+
+  // Single non-matching element
+  EXPECT_EQ(choose({tsv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream}, constructQuery), turtle);
+
+  // Multiple matching elements
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({sparqlJson, qleverJson}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, constructQuery), turtle);
+
+  // One matching, one non-matching element
+  EXPECT_EQ(choose({tsv, qleverJson}, askQuery), qleverJson);
+  EXPECT_EQ(choose({turtle, qleverJson}, selectQuery), qleverJson);
+  EXPECT_EQ(choose({octetStream, qleverJson}, constructQuery), qleverJson);
+
+  // Multiple non-matching elements
+  EXPECT_EQ(choose({tsv, csv}, askQuery), sparqlJson);
+  EXPECT_EQ(choose({turtle, json}, selectQuery), sparqlJson);
+  EXPECT_EQ(choose({octetStream, sparqlJson}, constructQuery), turtle);
+}
+
+// _____________________________________________________________________________
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};

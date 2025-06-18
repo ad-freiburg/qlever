@@ -154,7 +154,8 @@ class Server {
   // list is empty, just choose one that works for the given query type.
   static ad_utility::MediaType chooseBestFittingMediaType(
       const std::vector<ad_utility::MediaType>& candidates,
-      const PlannedQuery& plannedQuery);
+      const ParsedQuery& plannedQuery);
+  FRIEND_TEST(ServerTest, chooseBestFittingMediaType);
 
   // Do the actual execution of a query.
   CPP_template(typename RequestT, typename ResponseT)(

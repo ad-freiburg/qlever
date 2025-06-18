@@ -765,15 +765,33 @@ CPP_template_def(typename RequestT)(
 // _____________________________________________________________________________
 ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
-    const PlannedQuery& plannedQuery) {
-  if (candidates.empty()) {
-    return plannedQuery.parsedQuery_.hasConstructClause()
-               ? MediaType::turtle
-               : MediaType::sparqlJson;
-  } else {
-    // Very simple approach for now.
-    return candidates.front();
+    const ParsedQuery& plannedQuery) {
+  if (!candidates.empty()) {
+    auto it = ql::ranges::find_if(candidates, [&plannedQuery](
+                                                  MediaType mediaType) {
+      if (plannedQuery.hasAskClause()) {
+        std::array supportedMediaTypes{
+            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      if (plannedQuery.hasSelectClause()) {
+        std::array supportedMediaTypes{
+            MediaType::octetStream, MediaType::csv,
+            MediaType::tsv,         MediaType::qleverJson,
+            MediaType::sparqlXml,   MediaType::sparqlJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
+                                     MediaType::qleverJson, MediaType::turtle};
+      return ad_utility::contains(supportedMediaTypes, mediaType);
+    });
+    if (it != candidates.end()) {
+      return *it;
+    }
   }
+
+  return plannedQuery.hasConstructClause() ? MediaType::turtle
+                                           : MediaType::sparqlJson;
 }
 
 // ____________________________________________________________________________
@@ -816,7 +834,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto qet = plannedQuery.value().queryExecutionTree_;
 
   MediaType mediaType =
-      chooseBestFittingMediaType(mediaTypes, plannedQuery.value());
+      chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
