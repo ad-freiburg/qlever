@@ -13,6 +13,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
@@ -1965,8 +1966,14 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
 
   // Prefix for which no function is known.
-  std::string prefixNexistepas = "<http://nexiste.pas/>";
+  std::string prefixNexistepas = "<http://nexiste.pas/";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
+
+  // Check that arbitrary nonexisting functions with a single argument silently
+  // return a `LatitudeExpression` in the syntax test mode.
+  auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+  expectFunctionCall(absl::StrCat(prefixNexistepas, "nada>(?x)"),
+                     matchUnary(&makeLatitudeExpression));
 }
 
 // ______________________________________________________________________________

@@ -239,9 +239,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    AD_CORRECTNESS_CHECK(
+        argList.size() == 1,
+        "Please change if the W3C test suite ever adds syntax tests for "
+        "arbitrary function IRIs which don't have exactly one argument");
+    return createUnary(&makeLatitudeExpression);
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
