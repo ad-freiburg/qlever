@@ -1970,10 +1970,12 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 
   // Check that arbitrary nonexisting functions with a single argument silently
-  // return a `LatitudeExpression` in the syntax test mode.
+  // return an `IdExpression(UNDEF)` in the syntax test mode.
   auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
-  expectFunctionCall(absl::StrCat(prefixNexistepas, "nada>(?x)"),
-                     matchUnary(&makeLatitudeExpression));
+  expectFunctionCall(
+      absl::StrCat(prefixNexistepas, "nada>(?x)"),
+      matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,
+                                         ::testing::Eq(Id::makeUndefined()))));
 }
 
 // ______________________________________________________________________________
