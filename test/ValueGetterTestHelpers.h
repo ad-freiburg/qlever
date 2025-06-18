@@ -219,7 +219,7 @@ inline void checkGeoInfoFromLocalVocab(
   auto idx = localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
   auto id = ValueId::makeFromLocalVocabIndex(idx);
   auto res = getter(id, &testContext.context);
-  checkGeoInfo(res, expected, sourceLocation);
+  checkGeoInfo(res, expected);
 }
 
 // Test knowledge graph that contains all used literals and iris.
@@ -245,7 +245,7 @@ inline void checkGeoInfoFromVocab(
   ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
   auto id = ValueId::makeFromVocabIndex(idx);
   auto res = getter(id, &testContext.context);
-  checkGeoInfo(res, expected, sourceLocation);
+  checkGeoInfo(res, expected);
 }
 
 // Helper that tests the GeometryInfoValueGetter using an arbitrary ValueId
@@ -256,7 +256,7 @@ inline void checkGeoInfoFromValueId(
   sparqlExpression::detail::GeometryInfoValueGetter getter;
   TestContextWithGivenTTl testContext{geoInfoTtl};
   auto res = getter(input, &testContext.context);
-  checkGeoInfo(res, expected, sourceLocation);
+  checkGeoInfo(res, expected);
 }
 
 // Helper that tests the GeometryInfoValueGetter using a string passed directly
@@ -271,7 +271,7 @@ inline void checkGeoInfoFromLiteral(
       ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
           wktInput);
   auto res = getter(litOrIri, &testContext.context);
-  checkGeoInfo(res, expected, sourceLocation);
+  checkGeoInfo(res, expected);
 }
 
 // Helper that runs each of the tests for GeometryInfoValueGetter using the same
@@ -280,9 +280,9 @@ inline void checkGeoInfoFromLocalAndNormalVocabAndLiteral(
     std::string wktInput, std::optional<ad_utility::GeometryInfo> expected,
     Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  checkGeoInfoFromVocab(wktInput, expected, sourceLocation);
-  checkGeoInfoFromLocalVocab(wktInput, expected, sourceLocation);
-  checkGeoInfoFromLiteral(wktInput, expected, sourceLocation);
+  checkGeoInfoFromVocab(wktInput, expected);
+  checkGeoInfoFromLocalVocab(wktInput, expected);
+  checkGeoInfoFromLiteral(wktInput, expected);
 }
 
 }  // namespace geoInfoVGTestHelpers
