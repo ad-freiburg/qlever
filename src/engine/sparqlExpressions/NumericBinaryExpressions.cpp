@@ -20,8 +20,8 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 // between those two types, we have to choose one of the behaviors. We make the
 // result `UNDEF` in this case to pass the sparql conformance tests that rely on
 // this behavior. The old behavior can be reinstated by a RuntimeParameter.
-// Note: The result of a division in
-// SPARQL is always a decimal number, so there is no integer division.
+// Note: The result of a division in SPARQL is always a decimal number, so there
+// is no integer division.
 [[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
   return static_cast<double>(x) / static_cast<double>(y);
 };
