@@ -14,20 +14,6 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
-// The mediatype of a request could not be determined.
-class UnknownMediatypeError : public std::runtime_error {
- public:
-  explicit UnknownMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
-// The mediatype of a request is not supported.
-class UnsupportedMediatypeError : public std::runtime_error {
- public:
-  explicit UnsupportedMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
 // Transform SPARQL Graph Store Protocol requests to their equivalent
 // ParsedQuery (SPARQL Query or Update).
 class GraphStoreProtocol {

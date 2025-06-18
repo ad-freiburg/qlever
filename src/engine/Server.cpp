@@ -1035,9 +1035,6 @@ CPP_template_def(typename VisitorT, typename RequestT, typename ResponseT)(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-  } catch (const UnknownMediatypeError& e) {
-    responseStatus = http::status::bad_request;
-    exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached
     // or the query was cancelled because of some other reason.
