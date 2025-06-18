@@ -113,6 +113,8 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       if (unitExpr == nullptr) {
         return std::nullopt;
       }
+      // TODO<ullingerc> Also support unit as xsd:anyURI literal, see
+      // UnitOfMeasurementValueGetter
       unit = ad_utility::detail::iriToUnitOfMeasurement(
           asStringViewUnsafe(unitExpr->value().getContent()));
     }
