@@ -2487,8 +2487,6 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
                              scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
               scan("?a", "<p>", "?b"))));
 
-  // The problem
-  // TODO<ullingerc>
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
