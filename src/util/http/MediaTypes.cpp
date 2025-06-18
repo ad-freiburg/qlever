@@ -4,8 +4,9 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include "MediaTypes.h"
+#include "util/http/MediaTypes.h"
 
+#include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
@@ -148,32 +149,34 @@ std::vector<MediaType> getMediaTypesFromAcceptHeader(
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
 
-  auto getMediaTypeFromPart = [](const auto& part) -> std::optional<MediaType> {
-    using T = std::decay_t<decltype(part)>;
-    static constexpr std::optional<MediaType> noValue = std::nullopt;
-    if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
-      return noValue;
-    } else if constexpr (ad_utility::isSimilar<
-                             T, MediaTypeWithQuality::TypeWithWildcard>) {
-      auto it = ql::ranges::find_if(
-          detail::SUPPORTED_MEDIA_TYPES,
-          [&part](const auto& el) { return getType(el) == part._type; });
-      return it == detail::SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
-    } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
-      auto it = ql::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
-      return it != detail::SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
-    } else {
-      static_assert(ad_utility::alwaysFalse<T>);
-    }
-  };
-
   std::vector<MediaType> result;
 
   for (const auto& mediaType : orderedMediaTypes) {
-    auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
-    if (match.has_value()) {
-      result.emplace_back(std::move(match.value()));
-    }
+    std::visit(
+        [&result](const auto& part) {
+          using T = std::decay_t<decltype(part)>;
+          if constexpr (ad_utility::isSimilar<T,
+                                              MediaTypeWithQuality::Wildcard>) {
+            // Nothing to do in this case.
+            (void)part;
+          } else if constexpr (ad_utility::isSimilar<
+                                   T, MediaTypeWithQuality::TypeWithWildcard>) {
+            for (MediaType supportedType :
+                 detail::SUPPORTED_MEDIA_TYPES |
+                     ql::views::filter([&part](const auto& el) {
+                       return getType(el) == part._type;
+                     })) {
+              result.push_back(supportedType);
+            }
+          } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
+            if (ad_utility::contains(detail::SUPPORTED_MEDIA_TYPES, part)) {
+              result.push_back(part);
+            }
+          } else {
+            static_assert(ad_utility::alwaysFalse<T>);
+          }
+        },
+        mediaType._mediaType);
   }
 
   return result;

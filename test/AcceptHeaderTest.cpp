@@ -137,33 +137,42 @@ TEST(AcceptHeaderParser, IllegalInput) {
 }
 
 TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
+  using ::testing::ElementsAre;
+
   std::string p = "text/html,application/sparql-results+json";
   auto result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::sparqlJson));
+  EXPECT_THAT(result, ElementsAre(MediaType::sparqlJson));
 
   p = "application/json, image/jpeg";
   result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result, ::testing::ElementsAre());
+  EXPECT_THAT(result, ElementsAre());
 
   // The wildcard matches all the supported media types, ignoring it leaves the
   // decision to another mechanism.
   p = "*/*, text/html";
   result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result, ::testing::ElementsAre());
+  EXPECT_THAT(result, ElementsAre());
 
-  // The wildcard matches csv and tsv, but not the json variants
+  // The wildcard matches csv, tsv and turtle, but not the json variants
   p = "text/*, text/html";
   result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::tsv));
+  EXPECT_THAT(result,
+              ElementsAre(MediaType::tsv, MediaType::csv, MediaType::turtle));
 
-  // The wildcard matches csv/tsv, qlever-json has higher precedence;
+  // The wildcard matches csv/tsv/turtle, qlever-json has higher precedence;
   p = "text/*, application/qlever-results+json";
   result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result,
-              ::testing::ElementsAre(MediaType::qleverJson, MediaType::tsv));
+  EXPECT_THAT(result, ElementsAre(MediaType::qleverJson, MediaType::tsv,
+                                  MediaType::csv, MediaType::turtle));
 
-  // The wildcard matches tsv/csv, since the json is not supported.
-  p = "text/*, application/json; q=0.3";
+  // The wildcard matches tsv/csv/turtle, since the json is not supported.
+  p = "text/*, application/json";
   result = getMediaTypesFromAcceptHeader(p);
-  EXPECT_THAT(result, ::testing::ElementsAre(MediaType::tsv));
+  EXPECT_THAT(result,
+              ElementsAre(MediaType::tsv, MediaType::csv, MediaType::turtle));
+
+  // Expect that values are reordered due to higher quality value.
+  p = "text/tab-separated-values;q=0.3, text/csv;q=0.4";
+  result = getMediaTypesFromAcceptHeader(p);
+  EXPECT_THAT(result, ElementsAre(MediaType::csv, MediaType::tsv));
 }
