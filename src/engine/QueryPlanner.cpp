@@ -1186,7 +1186,8 @@ vector<SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
+      // TODO<joka921> the boost::none is only for debugging
+      for (auto& plan : createJoinCandidates(ai, bj, boost::none)) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
@@ -1361,7 +1362,10 @@ void QueryPlanner::applyFiltersIfPossible(
 
       const bool applyAll =
           mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
-      if (filterAndSubst.hasSubstitute() &&
+      // TODO<joka921> Comment this and this currently breaks spatial join
+      // optimizations in the greedy query planner.
+      if (mode == FilterMode::KeepUnfiltered &&
+          filterAndSubst.hasSubstitute() &&
           ql::ranges::any_of(
               filterAndSubst.filter_.expression_.containedVariables(),
               [&plan](const auto& variable) {
@@ -1486,20 +1490,20 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
-  applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
+  // applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+  // applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
+    applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+    applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
-      applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
