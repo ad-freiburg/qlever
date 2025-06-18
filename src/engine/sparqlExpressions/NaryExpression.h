@@ -16,6 +16,7 @@
 #include "backports/concepts.h"
 #include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
 #include "parser/data/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
@@ -196,11 +197,22 @@ struct GeoFunctionCall {
 
 // Helper to extract spatial join parameters from a parsed `geof:` function
 // call. Returns `std::nullopt` if the given `SparqlExpression` is not a
-// supported geo function.
+// supported geo function or `geof:distance`/`geof:metricDistance` which is
+// handled by the `getGeoDistanceExpressionParameters` function below.
 // Note: this function must be declared here, because the definitions of the
 // different geo expressions are hidden in the cpp file and are therefore
 // invisible elsewhere.
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr);
+
+// Helper struct for `getGeoDistanceExpressionParameters`
+struct GeoDistanceCall : public GeoFunctionCall {
+  UnitOfMeasurement unit_;
+};
+
+// Same as `getGeoFunctionExpressionParameters`, but with special handling for
+// the unit of measurement associated with a distance.
+std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr);
 
 }  // namespace sparqlExpression

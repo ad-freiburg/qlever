@@ -10,6 +10,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -575,7 +576,7 @@ template class RelationalExpression<Comparison::GE>;
 // _____________________________________________________________________________
 namespace sparqlExpression {
 
-std::optional<std::pair<sparqlExpression::GeoFunctionCall, size_t>>
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
   // TODO<ullingerc> Add support for more optimizable filters:
   // * geof:distance() < constant
@@ -602,22 +603,29 @@ getGeoDistanceFilter(const SparqlExpression& expr) {
     return std::nullopt;
   }
   ValueId constant = literalExpr->value();
-  // TODO<ullingerc> After merge of #1938 handle distance unit
-  size_t maxDist = 0;
+  // Extract distance. Here we don't know the unit of this number yet. It is
+  // extracted from the function call in the next step.
+  double maxDistAnyUnit = 0;
   if (constant.getDatatype() == Datatype::Double) {
-    maxDist = static_cast<size_t>(round(constant.getDouble() * 1000));
+    maxDistAnyUnit = constant.getDouble();
   } else if (constant.getDatatype() == Datatype::Int) {
-    maxDist = constant.getInt() * 1000;
+    maxDistAnyUnit = constant.getInt();
   } else {
     return std::nullopt;
   }
 
-  auto geoFuncCall = getGeoFunctionExpressionParameters(leftChild);
+  // Extract variables and distance unit from function call
+  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
   if (!geoFuncCall.has_value()) {
     return std::nullopt;
   }
 
-  return std::pair<sparqlExpression::GeoFunctionCall, size_t>{
+  // Convert unit to meters
+  double maxDist = ad_utility::detail::valueInUnitToKilometer(
+                       maxDistAnyUnit, geoFuncCall.value().unit_) *
+                   1000;
+
+  return std::pair<sparqlExpression::GeoFunctionCall, double>{
       geoFuncCall.value(), maxDist};
 }
 

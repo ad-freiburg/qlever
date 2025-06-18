@@ -15,7 +15,7 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
   // Analyze the expression: Check if the body of the filter directly is an
   // optimizable geof: function
   auto geoFuncCall = getGeoFunctionExpressionParameters(filterBody);
-  std::optional<size_t> maxDist = std::nullopt;
+  std::optional<double> maxDist = std::nullopt;
 
   if (!geoFuncCall.has_value()) {
     // If the filter body is no geof: function, it can still be a maximum

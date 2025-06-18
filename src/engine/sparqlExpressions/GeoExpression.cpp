@@ -5,12 +5,15 @@
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 //          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
+#include <type_traits>
+
 #include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/Constants.h"
 #include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
@@ -69,23 +72,68 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
 }
 
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
-    const SparqlExpression& expr) {
-  // TODO<ullingerc> handle distance unit and metricDistance function
+    const SparqlExpression&) {
+  // TODO<ullingerc> handle geo relation functions in subsequent PR
+  return std::nullopt;
+}
 
-  // Currently only DistExpression
-  auto distExpr = dynamic_cast<const DistExpression*>(&expr);
-  if (distExpr == nullptr) {
+std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
+    const SparqlExpression& expr) {
+  using namespace ad_utility::use_type_identity;
+  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+
+  // Helper lambda to extract the variables and the distance unit from a
+  // distance function call
+  auto extractArguments = [&](auto ti) -> std::optional<DistArgs> {
+    // Check if the argument is a distance function expression
+    using T = typename decltype(ti)::type;
+    auto distExpr = dynamic_cast<const T*>(&expr);
+    if (distExpr == nullptr) {
+      return std::nullopt;
+    }
+
+    // Extract variables
+    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    if (!p1.has_value()) {
+      return std::nullopt;
+    }
+    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    if (!p2.has_value()) {
+      return std::nullopt;
+    }
+
+    // Extract unit
+    auto unit = UnitOfMeasurement::KILOMETERS;
+    if constexpr (std::is_same_v<T, MetricDistExpression>) {
+      unit = UnitOfMeasurement::METERS;
+    } else if constexpr (std::is_same_v<T, DistWithUnitExpression>) {
+      // If the unit is not fixed, derive it from the user-specified IRI
+      auto unitExpr =
+          dynamic_cast<const IriExpression*>(&*distExpr->children()[2]);
+      if (unitExpr == nullptr) {
+        return std::nullopt;
+      }
+      unit = ad_utility::detail::iriToUnitOfMeasurement(
+          asStringViewUnsafe(unitExpr->value().getContent()));
+    }
+
+    return DistArgs{p1.value(), p2.value(), unit};
+  };
+
+  // Try all possible distance expression types
+  auto distVars = extractArguments(ti<DistExpression>);
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<MetricDistExpression>);
+  }
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<DistWithUnitExpression>);
+  }
+  if (!distVars.has_value()) {
     return std::nullopt;
   }
-  auto p1 = distExpr->children()[0]->getVariableOrNullopt();
-  if (!p1.has_value()) {
-    return std::nullopt;
-  }
-  auto p2 = distExpr->children()[1]->getVariableOrNullopt();
-  if (!p2.has_value()) {
-    return std::nullopt;
-  }
-  return GeoFunctionCall{SpatialJoinType::WITHIN_DIST, p1.value(), p2.value()};
+
+  auto [v1, v2, unit] = distVars.value();
+  return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
 }
 
 }  // namespace sparqlExpression

@@ -137,6 +137,38 @@ TEST(GeoSparqlHelpers, KmToUnit) {
       ::testing::HasSubstr("Unsupported unit"));
 }
 
+TEST(GeoSparqlHelpers, UnitToKm) {
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(0.0, std::nullopt),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::KILOMETERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::METERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::valueInUnitToKilometer(0.0, UnitOfMeasurement::MILES),
+      0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  -500.0, UnitOfMeasurement::KILOMETERS),
+              -500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(-500.0, std::nullopt),
+              -500.0, 0.0001);
+
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  500000.0, UnitOfMeasurement::METERS),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  310.685595, UnitOfMeasurement::MILES),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.62137119, UnitOfMeasurement::MILES),
+              1.0, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::detail::valueInUnitToKilometer(
+                                   1.0, UnitOfMeasurement::UNKNOWN),
+                               ::testing::HasSubstr("Unsupported unit"));
+}
+
 TEST(GeoSparqlHelpers, IriToUnit) {
   ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(""),
             UnitOfMeasurement::UNKNOWN);

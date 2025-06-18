@@ -379,7 +379,7 @@ inline auto ValuesClause = [](string cacheKey) {
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
-struct SpatialJoin {
+struct SpatialJoinMatcher {
   template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
@@ -390,7 +390,7 @@ struct SpatialJoin {
     return RootOperation<::SpatialJoin>(
         AllOf(children(childMatchers...),
               AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
-                          Eq(std::pair(maxDist, maxResults))),
+                          Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
               AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
                           Eq(std::pair(left, right))),
               AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
@@ -401,7 +401,7 @@ struct SpatialJoin {
               AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType))));
   }
 };
-constexpr inline SpatialJoin spatialJoin;
+constexpr inline SpatialJoinMatcher spatialJoin;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =
