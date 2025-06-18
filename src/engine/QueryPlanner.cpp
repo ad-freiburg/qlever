@@ -1173,7 +1173,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 // _____________________________________________________________________________
 vector<SubtreePlan> QueryPlanner::merge(
     const vector<SubtreePlan>& a, const vector<SubtreePlan>& b,
-    const QueryPlanner::TripleGraph& tg) const {
+    const QueryPlanner::TripleGraph&) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -1186,7 +1186,13 @@ vector<SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
+      // TODO<joka921> Triple Graph
+
+      // Formerly the triple graph was passed to createJoinCandidates here,
+      // however this led to problems with filter substitutes. This is because a
+      // substitute connects triples that are otherwise unconnected and the
+      // connection was not part of the triple graph.
+      for (auto& plan : createJoinCandidates(ai, bj, boost::none)) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
@@ -1359,9 +1365,9 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
-      const bool applyAll =
-          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
-      if (filterAndSubst.hasSubstitute() &&
+      const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
+                                    mode == FilterMode::ReplaceUnfiltered;
+      if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           ql::ranges::any_of(
               filterAndSubst.filter_.expression_.containedVariables(),
               [&plan](const auto& variable) {
@@ -1379,6 +1385,8 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
+      const bool applyAll =
+          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
       if (applyAll ||
           ql::ranges::all_of(
               filterAndSubst.filter_.expression_.containedVariables(),
@@ -1486,27 +1494,26 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
-  applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
+    applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+    applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
-      applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   auto& result = dpTab.back();
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(result, filters);
+  applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
+                                                                     filters);
   applyTextLimitsIfPossible(result, textLimits, true);
   return std::move(result);
 }
@@ -1613,8 +1620,8 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // planning is performed, which also establishes the pre-/postconditions.
   auto greedyStep = [this, &tg, &filters, &textLimits,
                      currentPlans = std::move(connectedComponent),
-                     cache = Plans{}](Plans& nextBestPlan,
-                                      bool isFirstStep) mutable {
+                     cache = Plans{}](Plans& nextBestPlan, bool isFirstStep,
+                                      bool isLastStep) mutable {
     checkCancellation();
     // Normally, we already have all combinations of two nodes in `currentPlans`
     // in the cache, so we only have to add the combinations between
@@ -1622,7 +1629,13 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     // compute all possible combinations.
     auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
                                 : merge(currentPlans, nextBestPlan, tg);
-    applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
+    // Do not apply filter substitutes in the last round
+    if (isLastStep) {
+      applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+          newPlans, filters);
+    } else {
+      applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
+    }
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
@@ -1648,11 +1661,9 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::erase_if(cache, shouldBeErased);
   };
 
-  bool first = true;
   Plans result;
   for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    greedyStep(result, first);
-    first = false;
+    greedyStep(result, i == 0, i == numSeeds - 2);
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
   return result;
@@ -1689,6 +1700,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
 
   auto componentIndices = QueryGraph::computeConnectedComponents(
       initialPlans, filtersAndOptSubstitutes);
+
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
@@ -1724,7 +1736,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   }
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
-    applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
         lastDpRowFromComponents.back(), filtersAndOptSubstitutes);
     applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimitVec,
                               true);
@@ -1757,7 +1769,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(
+  applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
