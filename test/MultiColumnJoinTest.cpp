@@ -8,7 +8,9 @@
 #include <array>
 #include <vector>
 
+#include "engine/IndexScan.h"
 #include "engine/MultiColumnJoin.h"
+#include "engine/NeutralOptional.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -104,4 +106,77 @@ TEST(MultiColumnJoin, clone) {
     return vars;
   };
   EXPECT_EQ(getVars(clone->getDescriptor()), getVars(join.getDescriptor()));
+}
+
+// _____________________________________________________________________________
+TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = ad_utility::testing::getQec();
+  // Not in graph no undef
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  // Not in graph, potentially undef
+  auto values3 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto values4 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  // In graph, no undef
+  auto index1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?c"}});
+  auto index2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?b"}});
+  // In graph, potential undef
+  auto index3 = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::PSO,
+               SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                                  Variable{"?c"}}));
+  auto index4 = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::PSO,
+               SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                                  Variable{"?b"}}));
+
+  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
+                             std::shared_ptr<QueryExecutionTree> right, bool a,
+                             bool b, bool c,
+                             ad_utility::source_location location =
+                                 ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(location);
+
+    MultiColumnJoin join{qec, std::move(left), std::move(right), false};
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+    EXPECT_THROW(
+        join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+        ad_utility::Exception);
+  };
+
+  testWithTrees(index3, index4, true, true, true);
+  testWithTrees(index3, index2, true, true, true);
+  testWithTrees(index3, values4, false, false, true);
+  testWithTrees(index3, values2, false, false, true);
+  testWithTrees(index1, index4, true, true, true);
+  testWithTrees(index1, index2, true, true, true);
+  testWithTrees(index1, values4, true, false, true);
+  testWithTrees(index1, values2, true, false, true);
+  testWithTrees(values4, index3, false, false, true);
+  testWithTrees(values4, index1, true, false, true);
+  testWithTrees(values4, values3, false, false, false);
+  testWithTrees(values4, values1, false, false, false);
+  testWithTrees(values2, index3, false, false, true);
+  testWithTrees(values2, index1, true, false, true);
+  testWithTrees(values2, values3, false, false, false);
+  testWithTrees(values2, values1, false, false, false);
 }

@@ -72,6 +72,11 @@ inline auto& RuntimeParameters() {
         // If set to `true`, we expect the contents of URLs loaded via a LOAD to
         // not change over time. This enables caching of LOAD operations.
         Bool<"cache-load-results">{false},
+        // If set to `true`, several exceptions will silently be ignored and a
+        // dummy result will be returned instead.
+        // This mode should only be activated when running the syntax tests of
+        // the SPARQL conformance test suite.
+        Bool<"syntax-test-mode">{false},
         // If set to `true`, then a division by zero in an expression will lead
         // to an
         // expression error, meaning that the result is undefined. If set to
