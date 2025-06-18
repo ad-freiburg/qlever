@@ -3567,6 +3567,13 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
             h::Filter("?x = ?_QLever_internal_variable_qp_0",
                       scan("?x", "?y", "?z", {}, std::nullopt,
                            {Variable{internalVar(0)}}, {3})));
+
+  // Wrapped in subquery (one of the compliance tests)
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
 }
 
 // _____________________________________________________________________________
