@@ -50,8 +50,8 @@ std::vector<parsedQuery::GraphPatternOperation>
 Quads::toGraphPatternOperations() const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
     return SparqlTriple::fromSimple(SparqlTripleSimple(
-        triple[0].toTripleComponent(), triple[1].toTripleComponent(),
-        triple[2].toTripleComponent()));
+        triple[0].toTripleComponent(true), triple[1].toTripleComponent(true),
+        triple[2].toTripleComponent(true)));
   };
 
   using namespace parsedQuery;
