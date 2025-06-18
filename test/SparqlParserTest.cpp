@@ -9,6 +9,7 @@
 #include <utility>
 #include <variant>
 
+#include "./util/GTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
@@ -1457,14 +1458,20 @@ TEST(ParserTest, parseWithDatasets) {
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
-  EXPECT_THAT(
+
+  // If the datasets are specified externally, then `USING [NAMED]` is forbidden
+  // by the SPARQL standard.
+  AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseUpdate("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
-      testing::ElementsAre(m::UpdateClause(
-          m::GraphUpdate(
-              {{Var("?x"), Iri("<b>"), Iri("<c>"), std::monostate{}}}, {}),
-          filterGraphPattern, m::datasetClausesMatcher(datasets, noGraphs))));
+      ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
+  // Same goes for `WITH`
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseUpdate("WITH <g> DELETE { ?x <b> <c> } WHERE { ?x ?y "
+                                "?z FILTER EXISTS {?a ?b ?c} }",
+                                {{{Iri("<h>"), false}}}),
+      ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
       SparqlParser::parseQuery(
           "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
