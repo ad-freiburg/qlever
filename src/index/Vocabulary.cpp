@@ -39,20 +39,8 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
   vocabulary_.close();
   vocabulary_.open(fileName);
-  if constexpr (std::is_same_v<S, detail::UnderlyingVocabRdfsVocabulary>) {
-    const auto& internalExternalVocab =
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-    LOG(INFO) << "Done, number of words: "
-              << internalExternalVocab.internalVocab().size() << std::endl;
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << internalExternalVocab.externalVocab().size() << std::endl;
-  } else {
-    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
-  }
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -98,6 +86,8 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
+  // TODO<joka921> We should have a completely separate layer that handles the
+  // externalization, not the Vocab.
   if (!stringIsLiteral(s)) {
     return shouldEntityBeExternalized(s);
   } else {
@@ -265,9 +255,9 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::operator[](IndexType idx) const -> AccessReturnType {
-  AD_CONTRACT_CHECK(idx.get() < size());
+template <typename UnderlyingVocabulary, typename C, typename I>
+auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
+    -> AccessReturnType {
   return vocabulary_[idx.get()];
 }
 

@@ -186,6 +186,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
                                      c.literalRegexIsWhitelist);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(VocabularyType::random());
     index.createFromFiles({spec});
     if (c.createTextIndex) {
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
