@@ -2623,6 +2623,111 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, FilterIsNotRewritten) {
+  auto scan = h::IndexScanFromStrings;
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) > 0.5)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) > 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(\"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter(
+              "geof:distance(\"POINT(50. "
+              "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+              "?b) <= 0.5",
+              h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                      scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(\"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+                  "?b) <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, \"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter("geof:distance(?b, \"POINT(50. "
+                    "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                    ") <= 0.5",
+                    h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                            scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(?b, \"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                  ") <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, ?y, ?a) <= 0.5)"
+      " }",
+      h::Filter("geof:distance(?b, ?y, ?a) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER((?b + ?y) <= 0.5)"
+      " }",
+      h::Filter("(?b + ?y) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= ?a)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= ?a",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= \"abc\")"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= \"abc\"",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
