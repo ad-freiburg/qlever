@@ -239,9 +239,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    // In the syntax test mode we silently create an expression that always
+    // returns `UNDEF`.
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeUndefined());
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
