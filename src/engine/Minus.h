@@ -25,10 +25,6 @@ class Minus : public Operation {
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right);
 
-  // Uninitialized Object for testing the computeMinus method
-  struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag) {}
-
  protected:
   string getCacheKeyImpl() const override;
 
@@ -62,22 +58,12 @@ class Minus : public Operation {
    *        that should have resultWidth entries).
    *        This method is made public here for unit testing purposes.
    **/
-  template <int A_WIDTH, int B_WIDTH>
-  void computeMinus(const IdTable& a, const IdTable& b,
-                    const vector<std::array<ColumnIndex, 2>>& matchedColumns,
-                    IdTable* result) const;
+  IdTable computeMinus(
+      const IdTable& a, const IdTable& b,
+      const vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
-
-  /**
-   * @brief Compares the two rows under the assumption that the first
-   * entries of the rows are equal.
-   */
-  template <int A_WIDTH, int B_WIDTH>
-  static RowComparison isRowEqSkipFirst(
-      const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-      size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
