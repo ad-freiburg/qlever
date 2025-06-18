@@ -8,8 +8,8 @@
 
 #include "util/http/beast.h"
 
-#ifndef QLEVER_HTTPERROR_H
-#define QLEVER_HTTPERROR_H
+#ifndef QLEVER_SRC_ENGINE_HTTPERROR_H
+#define QLEVER_SRC_ENGINE_HTTPERROR_H
 
 // An Error occurred that results in a specific HTTP status code.
 class HttpError : public std::exception {
@@ -33,4 +33,4 @@ class HttpError : public std::exception {
   std::string reason_{};
 };
 
-#endif  // QLEVER_HTTPERROR_H
+#endif  // QLEVER_SRC_ENGINE_HTTPERROR_H

@@ -73,6 +73,13 @@ class GraphStoreProtocol {
   [[noreturn]] static void throwNotYetImplementedHTTPMethod(
       const std::string_view& method);
 
+  // Aborts the request with a HTTP 204 No Content if the request body is empty.
+  [[noreturn]] static void throwIfRequestBodyEmpty(auto request) {
+    if (request.body().empty()) {
+      throw HttpError(boost::beast::http::status::no_content);
+    }
+  }
+
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
       const std::string& body, const ad_utility::MediaType contentType);
@@ -89,9 +96,7 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
-    if (rawRequest.body().empty()) {
-      throw HttpError(boost::beast::http::status::no_content);
-    }
+    throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
@@ -112,9 +117,7 @@ class GraphStoreProtocol {
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
       transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph) {
-    if (rawRequest.body().empty()) {
-      throw HttpError(boost::beast::http::status::no_content);
-    }
+    throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
@@ -156,18 +159,19 @@ class GraphStoreProtocol {
         absl::StrCat("Graph Store PUT Operation\n",
                      ad_utility::truncateOperationString(rawRequest.body()));
     res._originalString = stringRepresentation;
-    std::string dropUpdate;
-    if (const auto* iri =
-            std::get_if<ad_utility::triple_component::Iri>(&graph)) {
-      dropUpdate =
-          absl::StrCat("DROP SILENT GRAPH ", iri->toStringRepresentation());
-    } else {
-      dropUpdate = "DROP SILENT DEFAULT";
-    }
+    std::string dropUpdate = [&graph]() -> std::string {
+      if (const auto* iri =
+              std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+        return absl::StrCat("DROP SILENT GRAPH ",
+                            iri->toStringRepresentation());
+      } else {
+        return "DROP SILENT DEFAULT";
+      }
+    }();
     std::vector<ParsedQuery> drop = SparqlParser::parseUpdate(dropUpdate);
     AD_CORRECTNESS_CHECK(drop.size() == 1);
-    drop[0]._originalString = stringRepresentation;
-    return {std::move(drop[0]), std::move(res)};
+    drop.at(0)._originalString = stringRepresentation;
+    return {std::move(drop.at(0)), std::move(res)};
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPut);
 

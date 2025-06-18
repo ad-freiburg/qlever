@@ -19,6 +19,8 @@ using Var = Variable;
 using TC = TripleComponent;
 
 namespace {
+// A matcher that matches a ParsedQuery that is an updated that deletes all
+// triples from the given `graph`.
 auto ClearGraph = [](SparqlTripleSimpleWithGraph::Graph graph)
     -> testing::Matcher<const ParsedQuery&> {
   return m::UpdateClause(
