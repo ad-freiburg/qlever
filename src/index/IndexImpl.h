@@ -583,8 +583,17 @@ class IndexImpl {
     bool hasToBeFiltered_;
     IdRange<WordVocabIndex> idRange_;
   };
-  std::optional<TextBlockMetadataAndWordInfo>
+  std::optional<std::vector<TextBlockMetadataAndWordInfo>>
   getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
+
+  // This method is used to combine the multiple blocks returned from a word or
+  // prefix scan into one IdTable. The parameter isEntitySearch is necessary
+  // to prevent filtering.
+  template <typename Reader>
+  IdTable mergeTextBlockResults(
+      Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      bool isEntitySearch) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
