@@ -239,9 +239,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    // In the syntax test mode we silently create an expression that always
+    // returns `UNDEF`.
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeUndefined());
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -605,21 +612,43 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
   if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
-      ctx->create() || ctx->copy() || ctx->move() || ctx->add()) {
+      ctx->create() || ctx->copy() || ctx->move() || ctx->add() ||
+      ctx->load()) {
     return visitAlternative<std::vector<ParsedQuery>>(
         ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
-        ctx->create(), ctx->copy(), ctx->move(), ctx->add());
+        ctx->create(), ctx->copy(), ctx->move(), ctx->add(), ctx->load());
   }
-  AD_CORRECTNESS_CHECK(ctx->load() || ctx->insertData() || ctx->deleteData());
+  AD_CORRECTNESS_CHECK(ctx->insertData() || ctx->deleteData());
   parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-      ctx->load(), ctx->insertData(), ctx->deleteData());
+      ctx->insertData(), ctx->deleteData());
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return {std::move(parsedQuery_)};
 }
 
 // ____________________________________________________________________________________
-Load Visitor::visit(Parser::LoadContext* ctx) {
-  reportNotSupported(ctx, "LOAD Update is");
+ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  GraphPattern pattern;
+  auto iri = visit(ctx->iri());
+  // The `LOAD` Update operation is translated into something like
+  // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
+  // an internal operation that binds the result of parsing the given RDF
+  // document into the variables `?s`, `?p`, and `?o`.
+  pattern._graphPatterns.emplace_back(
+      parsedQuery::Load{iri, static_cast<bool>(ctx->SILENT())});
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  addVisibleVariable(Variable("?s"));
+  addVisibleVariable(Variable("?p"));
+  addVisibleVariable(Variable("?o"));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
+  using Quad = SparqlTripleSimpleWithGraph;
+  std::vector<Quad> toInsert{
+      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                           : Quad::Graph(std::monostate{})}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{toInsert, {}}};
+  return parsedQuery_;
 }
 
 // Helper functions for some inner parts of graph management operations.
@@ -802,12 +831,12 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  return {visit(ctx->quadData()).toTriplesWithGraph(), {}};
+  return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  return {{}, visit(ctx->quadData()).toTriplesWithGraph()};
+  return {{}, visit(ctx->quadData()).toTriplesWithGraph(std::monostate{})};
 }
 
 // ____________________________________________________________________________________
@@ -823,9 +852,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, triples.toTriplesWithGraph()}};
-
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{})}};
   return parsedQuery_;
 }
 
@@ -837,25 +865,59 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
                                     " was not bound in the query body."));
     }
   };
-  auto visitTemplateClause = [&ensureVariableIsVisible, this](auto* ctx,
-                                                              auto* target) {
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](
+                                 auto* ctx, auto* target,
+                                 const auto& defaultGraph) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      *target = quads.toTriplesWithGraph();
+      *target = quads.toTriplesWithGraph(defaultGraph);
     }
   };
+
+  using Iri = TripleComponent::Iri;
+  // The graph specified in the `WITH` clause or `std::monostate{}` if there was
+  // no with clause.
+  auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
+    std::optional<Iri> with;
+    if (ctx->iri() && datasetsAreFixed_) {
+      reportError(ctx->iri(),
+                  "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                  "1.1 protocol standard if the `using-graph-uri` or "
+                  "`using-named-graph-uri` http parameters are used");
+    }
+    visitIf(&with, ctx->iri());
+    if (with.has_value()) {
+      return std::move(with.value());
+    }
+    return std::monostate{};
+  }();
+
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->usingClause()));
+
+  // If there is no USING clause, but a WITH clause, then the graph specified in
+  // the WITH clause is used as the default graph in the WHERE clause of this
+  // update.
+  if (const auto* withGraphIri = std::get_if<Iri>(&withGraph);
+      parsedQuery_.datasetClauses_.isUnconstrainedOrWithClause() &&
+      withGraphIri != nullptr) {
+    parsedQuery_.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromWithClause(*withGraphIri);
+  }
+
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
-  visitTemplateClause(ctx->insertClause(), &op.toInsert_);
-  visitTemplateClause(ctx->deleteClause(), &op.toDelete_);
-  visitIf(&op.with_, ctx->iri());
+
+  // If there was a `WITH` clause, then the specified graph is used for all
+  // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH
+  // {}` clauses.
+  visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
+  visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
   return parsedQuery_;
@@ -1380,6 +1442,12 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 
 // ____________________________________________________________________________________
 DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
+  if (datasetsAreFixed_) {
+    reportError(ctx,
+                "`USING [NAMED]` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {

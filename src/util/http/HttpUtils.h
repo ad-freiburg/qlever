@@ -73,6 +73,8 @@ class Url {
   std::string asString() const {
     return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
+
+  bool operator==(const Url&) const = default;
 };
 
 // A concept for `http::request`

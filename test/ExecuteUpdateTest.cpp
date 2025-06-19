@@ -224,10 +224,12 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       QueryPlanner qp{qec, sharedHandle};
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
+      auto result = qet.getResult(false);
       ad_utility::timer::TimeTracer tracer1(
           "ExecuteUpdate::computeGraphUpdateQuads tracer");
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, qet, sharedHandle, metadata, tracer1));
+          index, pq, *result, qet.getVariableColumns(), sharedHandle, metadata,
+          tracer1));
       ad_utility::timer::TimeTracer tracer2(
           "ExecuteUpdate::executeUpdate tracer");
       ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle,

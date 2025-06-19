@@ -716,6 +716,13 @@ inline auto Minus =
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+inline auto Load = [](const TripleComponent::Iri& iri,
+                      bool silent) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Load>(
+      testing::AllOf(AD_FIELD(p::Load, iri_, testing::Eq(iri)),
+                     AD_FIELD(p::Load, silent_, testing::Eq(silent))));
+};
+
 inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
@@ -821,13 +828,14 @@ inline auto SubSelect =
 
 // Return a matcher that matches a `DatasetClause` with given
 inline auto datasetClausesMatcher(
-    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs activeDefaultGraphs =
+        std::nullopt,
     ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
   using DS = ParsedQuery::DatasetClauses;
   using namespace ::testing;
-  return AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
-               Field(&DS::namedGraphs_, Eq(namedGraphs)));
+  return AllOf(AD_PROPERTY(DS, activeDefaultGraphs, Eq(activeDefaultGraphs)),
+               AD_PROPERTY(DS, namedGraphs, Eq(namedGraphs)));
 }
 
 inline auto SelectQuery =
@@ -936,38 +944,26 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto Load = [](bool silent,
-                      const ad_utility::triple_component::Iri& source,
-                      const std::optional<GraphRef>& target)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::Load>(
-      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
-                     AD_FIELD(Load, source_, testing::Eq(source)),
-                     AD_FIELD(Load, target_, testing::Eq(target))));
-};
-
 inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
-       const std::optional<ad_utility::triple_component::Iri>& with)
-    -> Matcher<const updateClause::Operation&> {
-  return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+    -> Matcher<const updateClause::GraphUpdate&> {
+  return testing::AllOf(
       AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
-      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)));
 };
 
 inline auto EmptyDatasets = [] {
-  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
-                        testing::Eq(std::nullopt)),
-               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
-                        testing::Eq(std::nullopt)));
+  return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
+                           testing::Eq(std::nullopt)),
+               AD_PROPERTY(ParsedQuery::DatasetClauses, namedGraphs,
+                           testing::Eq(std::nullopt)));
 };
 
 using Graphs = ad_utility::HashSet<TripleComponent>;
 
 inline auto UpdateClause =
-    [](const Matcher<const updateClause::Operation&>& opMatcher,
+    [](const Matcher<const updateClause::GraphUpdate&>& opMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher,
        const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
            EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {
@@ -1157,18 +1153,16 @@ inline auto Clear = [](const parsedQuery::GroupGraphPattern::GraphSpec& graph,
   return UpdateClause(
       GraphUpdate(
           {{{::Variable("?s")}, {::Variable("?p")}, {::Variable("?o")}, graph}},
-          {}, std::nullopt),
+          {}),
       SelectAllPattern(graph, AD_FWD(filter)));
 };
 
 // Matcher for a `ParsedQuery` with an add of all triples in `from` to `to`.
 inline auto AddAll = [](const SparqlTripleSimpleWithGraph::Graph& from,
                         const SparqlTripleSimpleWithGraph::Graph& to) {
-  return UpdateClause(GraphUpdate({},
-                                  {SparqlTripleSimpleWithGraph(
-                                      ::Variable("?s"), ::Variable("?p"),
-                                      ::Variable("?o"), to)},
-                                  std::nullopt),
+  return UpdateClause(GraphUpdate({}, {SparqlTripleSimpleWithGraph(
+                                          ::Variable("?s"), ::Variable("?p"),
+                                          ::Variable("?o"), to)}),
                       SelectAllPattern(from));
 };
 
