@@ -56,7 +56,7 @@ class SPARQLProtocol {
  public:
   // Parse a HTTP request.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const RequestType& request);
+      RequestType& request);
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLPROTOCOL_H

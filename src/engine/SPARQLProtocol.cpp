@@ -180,7 +180,13 @@ SPARQLProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
 
 // ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
-    const RequestType& request) {
+    RequestType& request) {
+  // Fixup for request target missing the leading slash.
+  std::string target = request.target();
+  if (!target.starts_with("/")) {
+    target = absl::StrCat("/", target);
+  }
+  request.target(target);
   // Graph Store Protocol with direct graph identification
   auto urlResult = boost::urls::parse_origin_form(request.target());
   if (urlResult.has_error()) {

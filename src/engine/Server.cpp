@@ -290,7 +290,7 @@ auto Server::prepareOperation(
 // _____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    Awaitable<void> Server::process(const RequestT& request, ResponseT&& send) {
+    Awaitable<void> Server::process(RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
