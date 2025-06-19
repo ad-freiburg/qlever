@@ -46,7 +46,11 @@ class SPARQLProtocol {
   static ad_utility::url_parser::ParsedRequest parsePOST(
       const RequestType& request);
 
+  // Parse a Graph Store Protocol request with direct or indirect graph
+  // identification.
   static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocol(
+      const RequestType& request);
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolIndirect(
       const RequestType& request);
 
  public:

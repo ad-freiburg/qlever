@@ -154,6 +154,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parsePOST(
       "\" or a valid graph store protocol POST request)"));
 }
 
+// ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
     const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
@@ -168,14 +169,41 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
 }
 
 // ____________________________________________________________________________
+ad_utility::url_parser::ParsedRequest
+SPARQLProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
+  auto parsedRequestBuilder = ParsedRequestBuilder(request);
+  parsedRequestBuilder.extractAccessToken(request);
+  AD_CORRECTNESS_CHECK(parsedRequestBuilder.isGraphStoreOperationIndirect());
+  parsedRequestBuilder.extractGraphStoreOperationIndirect();
+  return std::move(parsedRequestBuilder).build();
+}
+
+// ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
     const RequestType& request) {
+  // Graph Store Protocol with direct graph identification
+  auto urlResult = boost::urls::parse_origin_form(request.target());
+  if (urlResult.has_error()) {
+    throw std::runtime_error(absl::StrCat(
+        "Failed to parse URL: \"", std::string{request.target()}, "\"."));
+  }
+  boost::url url = urlResult.value();
+  // `http-graph-store` is the (currently fixed) prefix for the Graph Store
+  // Protocol with direct graph identification.
+  if (url.segments().front() == "http-graph-store") {
+    return parseGraphStoreProtocolIndirect(request);
+  }
+
+  // SPARQL Query or Graph Store Protocol with indirect graph identification
   if (request.method() == http::verb::get) {
     return parseGET(request);
   }
+  // SPARQL Query, SPARQL Update or Graph Store Protocol with indirect graph
+  // identification
   if (request.method() == http::verb::post) {
     return parsePOST(request);
   }
+  // Graph Store Protocol with indirect graph identification
   if (request.method() == http::verb::put ||
       request.method() == http::verb::delete_ ||
       request.method() == http::verb::post ||
