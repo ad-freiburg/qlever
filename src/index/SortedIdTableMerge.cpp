@@ -10,7 +10,7 @@ namespace SortedIdTableMerge {
 
 // _____________________________________________________________________________
 IdTable mergeIdTables(
-    std::vector<IdTable> tablesToMerge,
+    std::vector<IdTable>&& tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ad_utility::MemorySize& memory,
     const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
@@ -35,9 +35,11 @@ IdTable mergeIdTables(
   generators.reserve(tablesToMerge.size());
   for (const auto& partialResult : tablesToMerge) {
     generators.push_back(makeGenerator(partialResult));
-    AD_CONTRACT_CHECK(
-        partialResult.numColumns() == numColumns,
-        "All idTables to merge should have the same number of columns");
+    AD_CONTRACT_CHECK(partialResult.numColumns() == numColumns,
+                      "All idTables to merge should have the same number of "
+                      "columns. First table had: ",
+                      numColumns, " columns. Failed table had: ",
+                      partialResult.numColumns(), " columns.");
   }
 
   // Merge

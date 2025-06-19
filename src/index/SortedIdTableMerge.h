@@ -11,13 +11,13 @@
 
 namespace SortedIdTableMerge {
 
-// Takes in multiple sorted IdTables, an allocator for the output IdTable, a
-// comparator that evaluates to true iff the first row is smaller or equal to
-// the second row and a MemorySize for the merge. The IdTables should all be
-// sorted by comparator and should all have the same nof columns. If no
-// comparator is given, the row is sorted left to right.
+// Takes in multiple IdTables sorted w.r.t. comparator, an allocator for the
+// output IdTable, a  comparator that evaluates to true iff the first row is
+// smaller or equal to the second row and a MemorySize for the merge. The
+// IdTables should all have the same nof columns. If no comparator is given,
+// the row is sorted left to right.
 IdTable mergeIdTables(
-    std::vector<IdTable> tablesToMerge,
+    std::vector<IdTable>&& tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ad_utility::MemorySize& memory,
     const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
@@ -25,7 +25,8 @@ IdTable mergeIdTables(
         comparator = [](const columnBasedIdTable::Row<ValueId>& a,
                         const columnBasedIdTable::Row<ValueId>& b) {
           if (a.size() != b.size()) {
-            throw std::runtime_error{"Row sizes differ"};
+            // Should be detected during generator creation first
+            AD_FAIL();
           }
           for (auto it1 = a.begin(), it2 = b.begin(); it1 != a.end();
                ++it1, ++it2) {
