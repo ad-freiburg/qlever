@@ -36,7 +36,7 @@ WORKDIR /qlever/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
 RUN if  [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "target is ARM64, don't build tests to avoid timeout"; fi
 RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then cmake --build . --target IndexBuilderMain ServerMain; else cmake --build . ; fi
-# RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "Skipping tests for ARM64" ; else ctest --rerun-failed --output-on-failure ; fi
+RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "Skipping tests for ARM64" ; else ctest --rerun-failed --output-on-failure ; fi
 
 # Install the packages needed for the final image.
 FROM base AS runtime
