@@ -246,9 +246,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    // In the syntax test mode we silently create an expression that always
+    // returns `UNDEF`.
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeUndefined());
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -878,8 +885,14 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   using Iri = TripleComponent::Iri;
   // The graph specified in the `WITH` clause or `std::monostate{}` if there was
   // no with clause.
-  auto withGraph = [&]() -> SparqlTripleSimpleWithGraph::Graph {
+  auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
     std::optional<Iri> with;
+    if (ctx->iri() && datasetsAreFixed_) {
+      reportError(ctx->iri(),
+                  "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                  "1.1 protocol standard if the `using-graph-uri` or "
+                  "`using-named-graph-uri` http parameters are used");
+    }
     visitIf(&with, ctx->iri());
     if (with.has_value()) {
       return std::move(with.value());
@@ -1436,6 +1449,12 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 
 // ____________________________________________________________________________________
 DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
+  if (datasetsAreFixed_) {
+    reportError(ctx,
+                "`USING [NAMED]` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {
