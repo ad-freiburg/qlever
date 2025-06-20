@@ -344,7 +344,10 @@ class TransitivePathImpl : public TransitivePathBase {
     size_t cols = tree->getResultWidth();
     std::optional<ColumnIndex> graphColumn =
         graphVariable_.has_value()
-            ? std::optional{tree->getVariableColumn(graphVariable_.value())}
+            ? std::optional{tree->getVariableColumnOrNullopt(
+                                    internalGraphHelper_)
+                                .value_or(tree->getVariableColumn(
+                                    graphVariable_.value()))}
             : std::nullopt;
     std::vector<ColumnIndex> columnsWithoutJoinColumns =
         computeColumnsWithoutJoinColumns(joinColumn, cols, graphColumn);

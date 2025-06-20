@@ -135,6 +135,11 @@ class TransitivePathBase : public Operation {
   Graphs activeGraphs_;
   std::optional<Variable> graphVariable_;
 
+  // Helper variable to allow joining a graph column without name clashes in
+  // case the graph variable is the same as the join variable when the graph is
+  // bound in `minDist_ == 0` scenarios.
+  static const Variable internalGraphHelper_;
+
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,

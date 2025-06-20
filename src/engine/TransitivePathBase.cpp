@@ -76,8 +76,12 @@ TransitivePathBase::TransitivePathBase(
 
   // Add graph variable to output if present
   if (graphVariable_.has_value()) {
-    variableColumns_[graphVariable_.value()] =
-        makeAlwaysDefinedColumn(resultWidth_);
+    // Don't overwrite entry if the graph variable has the same name as one of
+    // the columns.
+    if (!variableColumns_.contains(graphVariable_.value())) {
+      variableColumns_[graphVariable_.value()] =
+          makeAlwaysDefinedColumn(resultWidth_);
+    }
     resultWidth_ += 1;
   }
 }
@@ -528,13 +532,16 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
         "The column index should not change when applying a filter.");
   }
 
+  bool graphIsJoin = originalVar == graphVariable_;
+
   // If we cannot guarantee the values are part of the graph, we have to join
   // with it first.
   if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
           originalVar)) {
-    auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
-                                          graphVariable_, originalVar);
-    if (graphVariable_.has_value()) {
+    auto completeScan = makeEmptyPathSide(
+        getExecutionContext(), activeGraphs_,
+        graphIsJoin ? internalGraphHelper_ : graphVariable_, originalVar);
+    if (graphVariable_.has_value() && !graphIsJoin) {
       leftOrRightOp = ad_utility::makeExecutionTree<MultiColumnJoin>(
           getExecutionContext(), std::move(leftOrRightOp),
           std::move(completeScan));
@@ -545,6 +552,18 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
           std::move(completeScan), inputCol, 0);
       inputCol = leftOrRightOp->getVariableColumn(originalVar);
     }
+  } else if (graphIsJoin) {
+    // If the join column originates from the knowledge graph and it's the same
+    // as the actuve graph variable we still don't know for sure if the value is
+    // an actual graph name, so we have to join to get a column of genuine graph
+    // columns, which will then be compared for equality in
+    // `TransitivePathImpl::transitiveHull`.
+    auto completeScan = makeEmptyPathSide(getExecutionContext(), activeGraphs_,
+                                          internalGraphHelper_, originalVar);
+    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(leftOrRightOp),
+        std::move(completeScan), inputCol, 0);
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
   }
   return leftOrRightOp;
 }
@@ -630,8 +649,14 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
   size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() +
-                           (graphVariable_.has_value() ? 3 : 2) ==
+  auto extraGraphColumn = [this]() -> uint8_t {
+    return graphVariable_.has_value() &&
+           !((graphVariable_.value() == lhs_.value_ &&
+              lhs_.treeAndCol_.has_value()) ||
+             (graphVariable_.value() == rhs_.value_ &&
+              rhs_.treeAndCol_.has_value()));
+  };
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 + extraGraphColumn() ==
                        outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
@@ -646,3 +671,9 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return variable == lhs_.value_ || variable == rhs_.value_;
 }
+
+// _____________________________________________________________________________
+// Don't check the name because this leads to segfaults during static
+// initialization.
+const Variable TransitivePathBase::internalGraphHelper_{
+    "?_Qlever_internal_transitive_path_graph", false};
