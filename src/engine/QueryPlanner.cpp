@@ -2986,6 +2986,14 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
+  absl::Cleanup resetActiveGraphs{
+      [this, originalVar = planner_.activeGraphVariable_]() {
+        // Reset back to original
+        planner_.activeGraphVariable_ = originalVar;
+      }};
+  // Disable for subqueries
+  planner_.activeGraphVariable_ = std::nullopt;
+
   ParsedQuery& subquery = arg.get();
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
@@ -2995,18 +3003,11 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // For a subquery, make sure that one optimal result for each ordering
   // of the result (by a single column) is contained.
   auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
-  // Make sure that variables that are not selected by the subquery are
-  // not visible.
-  auto setSelectedVariables = [&](SubtreePlan& plan) {
-    auto selectedVariables = arg.get().selectClause().getSelectedVariables();
-    // TODO<C++23> Use `optional::transform`
-    const auto& graphVar = planner_.activeGraphVariable_;
-    if (graphVar.has_value() &&
-        !ad_utility::contains(selectedVariables, graphVar.value())) {
-      selectedVariables.push_back(graphVar.value());
-    }
+  // Make sure that variables that are not selected by the subquery are not
+  // visible.
+  auto setSelectedVariables = [&arg](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        selectedVariables);
+        arg.get().selectClause().getSelectedVariables());
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
