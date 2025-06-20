@@ -1331,14 +1331,14 @@ TEST_P(TransitivePathTest,
   });
 
   auto side = makeIdTableFromVector({
-      {0, 1},
-      {0, 1},
-      {2, 2},
+      {0, 10},
+      {0, 10},
+      {2, 20},
   });
 
   auto expected = makeIdTableFromVector({
-      {0, 0, 0},
-      {0, 0, 0},
+      {0, 0, 10, 0},
+      {0, 0, 10, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
@@ -1354,7 +1354,44 @@ TEST_P(TransitivePathTest,
   assertResultMatchesIdTable(resultTable, expected);
 }
 
-// TODO<RobinTF> repeat previous test case for empty path.
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToGraphOperationGraphVariableBothSidesEmptyPath) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 10},
+      {0, 10},
+      {2, 20},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 10, 0},
+      {0, 0, 10, 0},
+      {2, 2, 20, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?g"}, Variable{"?other"}}, left, right, 0,
+      std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <c> <c> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest,
@@ -1433,14 +1470,14 @@ TEST_P(TransitivePathTest,
   });
 
   auto side = makeIdTableFromVector({
-      {0, 1},
-      {0, 1},
-      {2, 2},
+      {0, 10},
+      {0, 10},
+      {2, 20},
   });
 
   auto expected = makeIdTableFromVector({
-      {0, 1, 0},
-      {0, 1, 0},
+      {0, 1, 10, 0},
+      {0, 1, 10, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
@@ -1456,7 +1493,45 @@ TEST_P(TransitivePathTest,
   assertResultMatchesIdTable(resultTable, expected);
 }
 
-// TODO<RobinTF> repeat previous test case for empty path.
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToGraphOperationGraphVariableSingleSideEmptyPath) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 10},
+      {0, 10},
+      {2, 20},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 10, 0},
+      {0, 1, 10, 0},
+      {0, 0, 10, 0},
+      {0, 1, 10, 0},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?g"}, Variable{"?other"}}, left, right, 0,
+      std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest, graphVariableConstrainedByTwoIris) {

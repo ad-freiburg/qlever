@@ -630,8 +630,12 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     p->variableColumns_[variable] = columnIndexWithType;
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
-  // If we have a graph variable, 2 columns should match instead of one
-  p->resultWidth_ -= graphVariable_.has_value();
+  // If we have a distinct graph variable, 2 columns should match instead of one
+  p->resultWidth_ -=
+      graphVariable_.has_value() &&
+      (leftOrRightOp->getVariableColumnOrNullopt(internalGraphHelper_)
+           .has_value() ||
+       leftOrRightOp->getVariableColumn(graphVariable_.value()) != inputCol);
   return std::move(p);
 }
 
@@ -649,16 +653,11 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
   size_t outCol = 2;
-  auto extraGraphColumn = [this]() -> uint8_t {
-    return graphVariable_.has_value() &&
-           !((graphVariable_.value() == lhs_.value_ &&
-              lhs_.treeAndCol_.has_value()) ||
-             (graphVariable_.value() == rhs_.value_ &&
-              rhs_.treeAndCol_.has_value()));
-  };
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 + extraGraphColumn() ==
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() +
+                           (graphVariable_.has_value() ? 3 : 2) ==
                        outputTable.numColumns());
-  while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
+  while (inCol < inputTable.numColumns()) {
+    AD_CORRECTNESS_CHECK(outCol < outputTable.numColumns());
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;

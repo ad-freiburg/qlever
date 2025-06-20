@@ -255,6 +255,7 @@ class TransitivePathImpl : public TransitivePathBase {
         // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
         // where both `?g` variables are not the same.
         if (startsWithGraphVariable && startNode != graphId) {
+          currentRow++;
           continue;
         }
         if (sameVariableOnBothSides) {
@@ -387,9 +388,9 @@ class TransitivePathImpl : public TransitivePathBase {
       ColumnIndex joinColumn, size_t totalColumns,
       const std::optional<ColumnIndex>& graphColumn) {
     std::vector<ColumnIndex> columnsWithoutJoinColumn;
-    AD_CORRECTNESS_CHECK(totalColumns > graphColumn.has_value());
-    columnsWithoutJoinColumn.reserve(totalColumns -
-                                     (graphColumn.has_value() ? 2 : 1));
+    uint8_t graphPadding = graphColumn.has_value() && joinColumn != graphColumn;
+    AD_CORRECTNESS_CHECK(totalColumns > graphPadding);
+    columnsWithoutJoinColumn.reserve(totalColumns - graphPadding - 1);
     for (ColumnIndex i = 0; i < totalColumns; ++i) {
       if (i == joinColumn || i == graphColumn) {
         continue;
