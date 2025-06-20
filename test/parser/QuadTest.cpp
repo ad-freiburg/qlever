@@ -20,8 +20,12 @@ TEST(QuadTest, getQuads) {
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
+        // TODO<joka921> Properly test this mechanism after properly integrating
+        // it.
+        ad_utility::BlankNodeManager manager;
+        Quads::BlankNodeAdder bn{{}, {}, &manager};
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}),
+        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}, bn),
                     testing::UnorderedElementsAreArray(expected));
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {

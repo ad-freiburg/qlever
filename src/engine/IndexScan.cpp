@@ -211,7 +211,6 @@ Result::Generator IndexScan::chunkedIndexScan() const {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
-
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(

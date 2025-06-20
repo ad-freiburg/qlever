@@ -105,6 +105,8 @@ class SparqlQleverVisitor {
   // anonymous nodes are not treated as internal variables, but as actual blank
   // nodes.
   bool treatBnodesAsBnodesNotAsInternalVariables_ = false;
+  // TODO<joka921> make these two bools a three-way state check.
+  bool bnodesForbidden_ = false;
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
