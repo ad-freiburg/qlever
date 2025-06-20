@@ -3517,12 +3517,63 @@ TEST(QueryPlanner, DatasetClause) {
                      h::UnorderedJoins(
                          scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
           scan("<e>", "?p", "<z3>", {}, g1)));
-  // We currently don't support repeating the graph variable inside the
-  // graph clause
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT * { GRAPH ?x {?x <b> <c>}}", ::testing::_),
-      AllOf(HasSubstr("used as the graph specifier"),
-            HasSubstr("may not appear in the body")));
+}
+// _____________________________________________________________________________
+TEST(QueryPlanner, graphVariablesWithinPattern) {
+  auto scan = h::IndexScanFromStrings;
+  // Single variable
+  h::expect("SELECT * { GRAPH ?x { ?x <b> <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "<b>", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> ?x <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "?x", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> <b> ?x } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "<b>", "?x", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  // Two variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x <c> } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan(internalVar(0), "?x", "<c>", {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x <b> ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("?x", "<b>", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { <a> ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("<a>", "?x", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  // Three variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_2",
+                h::Filter("?_QLever_internal_variable_qp_1=?x",
+                          h::Filter("?_QLever_internal_variable_qp_0=?x",
+                                    scan(internalVar(1), "?x", internalVar(0),
+                                         {}, std::nullopt,
+                                         {Variable{internalVar(2)}}, {3})))));
+  // Three distinct variables
+  h::expect("SELECT * { GRAPH ?x { ?x ?y ?z } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "?y", "?z", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+
+  // Wrapped in subquery (one of the compliance tests)
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
 }
 
 // _____________________________________________________________________________
