@@ -3491,16 +3491,12 @@ TEST(QueryPlanner, DatasetClause) {
             scan("<a>", "<b>", "<c>", {}, noGraphs, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
-  // We use the `UnorderedJoins` matcher, because the index scan has to be
-  // resorted by the graph column.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                 h::UnorderedJoins(
-                     scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
+      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
 
   // A complex example with graph variables.
   h::expect(
@@ -3512,10 +3508,8 @@ TEST(QueryPlanner, DatasetClause) {
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
-          scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                     h::UnorderedJoins(
-                         scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
+          scan("<d>", "?p", "<z2>", {}, g2),
+          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
           scan("<e>", "?p", "<z3>", {}, g1)));
 }
 // _____________________________________________________________________________
