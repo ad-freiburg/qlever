@@ -200,6 +200,12 @@ struct GeoFunctionCall {
   Variable right_;
 };
 
+// Helper to check if the given `SparqlExpression` holds a `geof:sf[Relation]`
+// function call. If yes, a `GeoFunctionCall` is returned.
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr);
+
 // Helper to extract spatial join parameters from a parsed `geof:` function
 // call. Returns `std::nullopt` if the given `SparqlExpression` is not a
 // supported geo function or `geof:distance`/`geof:metricDistance` which is

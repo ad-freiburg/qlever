@@ -76,9 +76,67 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
+template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2) {
+  return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
+                                                           std::move(child2));
+}
+
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
+  auto geoRelExpr = dynamic_cast<const GeoRelationExpression<Relation>*>(&expr);
+  if (geoRelExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+}
+
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
-    const SparqlExpression&) {
-  // TODO<ullingerc> handle geo relation functions in subsequent PR
+    const SparqlExpression& expr) {
+  // Check against all possible geo relation types
+  std::optional<GeoFunctionCall> res;
+  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::INTERSECTS>(
+           expr))) {
+    return res;
+  }
+  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::CONTAINS>(
+           expr))) {
+    return res;
+  }
+  if ((res =
+           getGeoRelationExpressionParameters<SpatialJoinType::COVERS>(expr))) {
+    return res;
+  }
+  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::CROSSES>(
+           expr))) {
+    return res;
+  }
+  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::TOUCHES>(
+           expr))) {
+    return res;
+  }
+  if ((res =
+           getGeoRelationExpressionParameters<SpatialJoinType::EQUALS>(expr))) {
+    return res;
+  }
+  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::OVERLAPS>(
+           expr))) {
+    return res;
+  }
   return std::nullopt;
 }
 
@@ -160,13 +218,6 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 
   const auto& [v1, v2, unit] = distVars.value();
   return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
-}
-
-template <SpatialJoinType Relation>
-SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
-                                                SparqlExpression::Ptr child2) {
-  return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
-                                                           std::move(child2));
 }
 
 }  // namespace sparqlExpression
