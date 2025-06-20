@@ -81,8 +81,8 @@ struct ParsedRequestBuilder {
   // Extract the graph to be acted upon using from the URL query parameters
   // (`Indirect Graph Identification`). See
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
-  static GraphOrDefault extractTargetGraph(
-      const ad_utility::url_parser::ParamValueMap& params);
+  GraphOrDefault extractTargetGraph(
+      const ad_utility::url_parser::ParamValueMap& params) const;
 
   // Determine the access token from the parameters and the requests
   // Authorization header.

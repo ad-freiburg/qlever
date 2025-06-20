@@ -33,12 +33,34 @@ void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
     const string& body, const ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
+  // TODO<joka921> Also fix this.
+  ad_utility::HashMap<string, Id> idMap;
+  ad_utility::BlankNodeManager manager;
+  LocalVocab vocab;
   switch (contentType) {
     case ad_utility::MediaType::turtle:
     case ad_utility::MediaType::ntriples: {
       auto parser = Re2Parser();
       parser.setInputStream(body);
-      return parser.parseAndReturnAllTriples();
+      auto transform = [&](TripleComponent& tc) {
+        if (!tc.isString()) {
+          return;
+        }
+        auto [it, inserted] =
+            idMap.try_emplace(tc.getString(), Id::makeUndefined());
+        if (inserted) {
+          it->second =
+              Id::makeFromBlankNodeIndex(vocab.getBlankNodeIndex(&manager));
+        }
+        tc = it->second;
+      };
+      auto transformTriple = [&](TurtleTriple& triple) {
+        transform(triple.subject_);
+        transform(triple.object_);
+      };
+      auto triples = parser.parseAndReturnAllTriples();
+      ql::ranges::for_each(triples, transformTriple);
+      return triples;
     }
     default: {
       throwUnsupportedMediatype(toString(contentType));
@@ -75,7 +97,8 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
       return absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
                           iri->toStringRepresentation(), " { ?s ?p ?o } }");
     } else {
-      return "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
+      return absl::StrCat("CONSTRUCT { ?s ?p ?o } FROM ", DEFAULT_GRAPH_IRI,
+                          " WHERE { ?s ?p ?o }");
     }
   }();
   return SparqlParser::parseQuery(query);

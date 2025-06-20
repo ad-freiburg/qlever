@@ -128,7 +128,7 @@ template void ParsedRequestBuilder::extractOperationIfSpecified<Update>(
 
 // ____________________________________________________________________________
 GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
-    const ad_utility::url_parser::ParamValueMap& params) {
+    const ad_utility::url_parser::ParamValueMap& params) const {
   const std::optional<std::string> graphIri =
       ad_utility::url_parser::checkParameter(params, "graph", std::nullopt);
   const bool isDefault =
@@ -138,7 +138,20 @@ GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
         R"(Exactly one of the query parameters "default" or "graph" must be set to identify the graph for the graph store protocol request.)");
   }
   if (graphIri.has_value()) {
-    return GraphRef::fromIrirefWithoutBrackets(graphIri.value());
+    auto graph = GraphRef::fromIrirefWithoutBrackets(graphIri.value());
+    if (!host_.empty()) {
+      // TODO<joka921> figure out in which cases the URLs have slashes and have
+      // not, or use a proper library for these shenanigangs.
+      GraphRef hostIri = GraphRef::fromIrirefWithoutBrackets(
+          absl::StrCat("http://", host_, "/"));
+      AD_LOG_INFO << "host iri  is " << hostIri.toStringRepresentation()
+                  << std::endl;
+      graph = GraphRef::fromIrirefConsiderBase(graph.toStringRepresentation(),
+                                               hostIri, hostIri);
+    }
+    AD_LOG_INFO << "extracted graph is " << graph.toStringRepresentation()
+                << std::endl;
+    return graph;
   } else {
     AD_CORRECTNESS_CHECK(isDefault);
     return DEFAULT{};

@@ -157,8 +157,11 @@ class GraphStoreProtocol {
     }();
     drop._originalString = stringRepresentation;
 
+    AD_LOG_INFO << "parsing triples from the following raw PUT REQUEST:\n"
+                << rawRequest.body() << std::endl;
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    AD_LOG_INFO << "parsed " << triples.size() << "triples\n";
     auto convertedTriples = convertTriples(graph, std::move(triples));
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
