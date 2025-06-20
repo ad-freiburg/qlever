@@ -3,12 +3,14 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -2443,6 +2445,317 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto type = SpatialJoinType::WITHIN_DIST;
+
+  // Basic test with 2-argument geof:distance
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Metric distance function
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:metricDistance(?y, ?b) <= 500)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Distance function with unit
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M>) <= 500)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>) <= 1)"
+      " }",
+      h::spatialJoin(1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/KiloM>) <= 0.5)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 500)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 1)"
+      " }",
+      h::spatialJoin(1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 0.5)"
+      " }",
+      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), algo, type,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Two distance filters
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::spatialJoin(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                             PayloadVariables::all(), algo, type,
+                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+              scan("?m", "<p>", "?n")),
+          h::spatialJoin(
+              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                             PayloadVariables::all(), algo, type,
+                             scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+              scan("?a", "<p>", "?b"))));
+
+  // Regression test: two distance filters and unrelated bind operation
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "BIND(1 AS ?unrelated)"
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::Bind(h::spatialJoin(
+                      1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      PayloadVariables::all(), algo, type,
+                      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")),
+                      scan("?m", "<p>", "?n")),
+                  "1", Variable{"?unrelated"}),
+          h::spatialJoin(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::Bind(h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")),
+                      "1", Variable{"?unrelated"}),
+              scan("?m", "<p>", "?n")),
+          h::spatialJoin(
+              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::Bind(h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?m", "<p>", "?n")),
+                      "1", Variable{"?unrelated"}),
+              scan("?a", "<p>", "?b")),
+          h::Bind(h::spatialJoin(
+                      500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                      PayloadVariables::all(), algo, type,
+                      h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     scan("?x", "<p>", "?y"),
+                                     scan("?m", "<p>", "?n")),
+                      scan("?a", "<p>", "?b")),
+                  "1", Variable{"?unrelated"})));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterIsNotRewritten) {
+  auto scan = h::IndexScanFromStrings;
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) > 0.5)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) > 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(\"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter(
+              "geof:distance(\"POINT(50. "
+              "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+              "?b) <= 0.5",
+              h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                      scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(\"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+                  "?b) <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, \"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter("geof:distance(?b, \"POINT(50. "
+                    "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                    ") <= 0.5",
+                    h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                            scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(?b, \"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                  ") <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, ?y, ?a) <= 0.5)"
+      " }",
+      h::Filter("geof:distance(?b, ?y, ?a) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER((?b + ?y) <= 0.5)"
+      " }",
+      h::Filter("(?b + ?y) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= ?a)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= ?a",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= \"abc\")"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= \"abc\"",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType;
+
+  std::vector<std::pair<std::string, SpatialJoinType>>
+      geofFunctionNameAndSJType{
+          {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
+          {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
+          {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
+          {"sfOverlaps", OVERLAPS}};
+
+  // Run basic query planner test for each of the geo relation functions
+  for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER(geof:",
+        funcName, "(?y, ?b))  }");
+    h::expect(query,
+              h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                             PayloadVariables::all(), algo, sjType,
+                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  }
 }
 
 // _____________________________________________________________________________
