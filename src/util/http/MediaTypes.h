@@ -107,16 +107,11 @@ const std::string& getType(MediaType t);
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader);
 
-/// Parse `acceptHeader`, and determine which of the `SUPPORTED_MEDIA_TYPES`
-/// has the highest priority, and return this type. If several mediaTypes have
-/// the same priority (e.g. because of a wildcard in `acceptHeader`) then
-/// media types that appear earlier in the `SUPPORTED_MEDIA_TYPES`. If none of
-/// the `SUPPORTED_MEDIA_TYPES` is accepted by `acceptHeader`, then
-/// `std::nullopt` is returned.
-// TODO: This function never returns `nullopt`, because an exception is thrown
-// if no supported media type is found. Update the docstring and make the return
-// type just `MediaType`.
-std::optional<MediaType> getMediaTypeFromAcceptHeader(
+// Parse `acceptHeader` and create a vector of compatible `MediaType`s from it.
+// Unconstrained wildcards will be ignored, and leave the decision to a
+// different mechanism down the line. The media types will be sorted according
+// to the order created by `parseAcceptHeader`.
+std::vector<MediaType> getMediaTypesFromAcceptHeader(
     std::string_view acceptHeader);
 
 /// Return an error message, which reports that only the `SUPPORTED_MEDIA_TYPES`
