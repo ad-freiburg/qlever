@@ -765,16 +765,16 @@ CPP_template_def(typename RequestT)(
 // _____________________________________________________________________________
 ad_utility::MediaType Server::chooseBestFittingMediaType(
     const std::vector<ad_utility::MediaType>& candidates,
-    const ParsedQuery& plannedQuery) {
+    const ParsedQuery& parsedQuery) {
   if (!candidates.empty()) {
-    auto it = ql::ranges::find_if(candidates, [&plannedQuery](
+    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
                                                   MediaType mediaType) {
-      if (plannedQuery.hasAskClause()) {
+      if (parsedQuery.hasAskClause()) {
         std::array supportedMediaTypes{
             MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
         return ad_utility::contains(supportedMediaTypes, mediaType);
       }
-      if (plannedQuery.hasSelectClause()) {
+      if (parsedQuery.hasSelectClause()) {
         std::array supportedMediaTypes{
             MediaType::octetStream, MediaType::csv,
             MediaType::tsv,         MediaType::qleverJson,
@@ -790,8 +790,8 @@ ad_utility::MediaType Server::chooseBestFittingMediaType(
     }
   }
 
-  return plannedQuery.hasConstructClause() ? MediaType::turtle
-                                           : MediaType::sparqlJson;
+  return parsedQuery.hasConstructClause() ? MediaType::turtle
+                                          : MediaType::sparqlJson;
 }
 
 // ____________________________________________________________________________

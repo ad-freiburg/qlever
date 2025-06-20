@@ -159,7 +159,8 @@ TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
   EXPECT_THAT(result,
               ElementsAre(MediaType::tsv, MediaType::csv, MediaType::turtle));
 
-  // The wildcard matches csv/tsv/turtle, qlever-json has higher precedence;
+  // The wildcard matches csv/tsv/turtle, qlever-json has higher precedence
+  // because it is explicit.
   p = "text/*, application/qlever-results+json";
   result = getMediaTypesFromAcceptHeader(p);
   EXPECT_THAT(result, ElementsAre(MediaType::qleverJson, MediaType::tsv,
