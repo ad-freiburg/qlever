@@ -82,6 +82,29 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
   using namespace ad_utility::use_type_identity;
   using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
 
+  // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
+  // or literal with xsd:anyURI datatype)
+  auto extractUnit =
+      [&](const SparqlExpression* ptr) -> std::optional<UnitOfMeasurement> {
+    // Unit given as IRI
+    auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
+    if (unitExpr != nullptr) {
+      return ad_utility::detail::iriToUnitOfMeasurement(
+          asStringViewUnsafe(unitExpr->value().getContent()));
+    }
+
+    // Unit given as literal expression
+    auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
+    if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
+        asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
+            XSD_ANYURI_TYPE) {
+      return ad_utility::detail::iriToUnitOfMeasurement(
+          asStringViewUnsafe(unitExpr2->value().getContent()));
+    }
+
+    return std::nullopt;
+  };
+
   // Helper lambda to extract the variables and the distance unit from a
   // distance function call
   auto extractArguments = [&](auto ti) -> std::optional<DistArgs> {
@@ -108,24 +131,11 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       unit = UnitOfMeasurement::METERS;
     } else if constexpr (std::is_same_v<T, DistWithUnitExpression>) {
       // If the unit is not fixed, derive it from the user-specified IRI
-      // TODO<ullingerc> clean up this code
-      auto unitExpr =
-          dynamic_cast<const IriExpression*>(distExpr->children()[2].get());
-      if (unitExpr != nullptr) {
-        unit = ad_utility::detail::iriToUnitOfMeasurement(
-            asStringViewUnsafe(unitExpr->value().getContent()));
-      } else {
-        auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(
-            distExpr->children()[2].get());
-        if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
-            asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
-                XSD_ANYURI_TYPE) {
-          unit = ad_utility::detail::iriToUnitOfMeasurement(
-              asStringViewUnsafe(unitExpr2->value().getContent()));
-        } else {
-          return std::nullopt;
-        }
+      auto unitOrNullopt = extractUnit(distExpr->children()[2].get());
+      if (!unitOrNullopt.has_value()) {
+        return std::nullopt;
       }
+      unit = unitOrNullopt.value();
     }
 
     return DistArgs{p1.value(), p2.value(), unit};
