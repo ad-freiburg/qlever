@@ -189,11 +189,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCovers", &makeGeoRelationExpression<COVERS>},
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
       {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
       {"sfEquals", &makeGeoRelationExpression<EQUALS>},
-      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
-  };
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
