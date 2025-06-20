@@ -2991,10 +2991,15 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
         // Reset back to original
         planner_.activeGraphVariable_ = originalVar;
       }};
-  // Disable for subqueries
-  planner_.activeGraphVariable_ = std::nullopt;
 
   ParsedQuery& subquery = arg.get();
+  const auto& select = subquery.selectClause();
+  // Disable for subqueries that do not select the graph variable
+  if (planner_.activeGraphVariable_.has_value() && !select.isAsterisk() &&
+      !ad_utility::contains(select.getSelectedVariables(),
+                            planner_.activeGraphVariable_.value())) {
+    planner_.activeGraphVariable_ = std::nullopt;
+  }
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
   // remove the ORDER BY clauses of a subquery if we can prove that
@@ -3005,9 +3010,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
   // Make sure that variables that are not selected by the subquery are not
   // visible.
-  auto setSelectedVariables = [&arg](SubtreePlan& plan) {
+  auto setSelectedVariables = [&select](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        arg.get().selectClause().getSelectedVariables());
+        select.getSelectedVariables());
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses

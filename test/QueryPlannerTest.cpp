@@ -3502,16 +3502,17 @@ TEST(QueryPlanner, DatasetClause) {
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
       "{ <c> ?p <z> "
-      "{SELECT * {<d> ?p <z2>}}"
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "{SELECT * {<d> ?p <z2>}}"
       "} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
-          scan("<d>", "?p", "<z2>", {}, g2),
           h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
+          scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
           scan("<e>", "?p", "<z3>", {}, g1)));
 }
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, graphVariablesWithinPattern) {
   auto scan = h::IndexScanFromStrings;
@@ -3562,11 +3563,19 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
                       scan("?x", "?y", "?z", {}, std::nullopt,
                            {Variable{internalVar(0)}}, {3})));
 
-  // Wrapped in subquery (one of the compliance tests), this behaviour is
-  // currently not correct, the subquery needs to be joined with all existing
-  // graphs.
+  // Wrapped in subquery (one of the compliance tests)
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
       scan("?x", "?p", "?g"));
 }
 
