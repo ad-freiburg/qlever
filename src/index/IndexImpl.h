@@ -31,6 +31,7 @@
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
+#include "index/TripleInTextIndexFilter.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/RdfParser.h"
@@ -134,8 +135,10 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
+  vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
+  TripleInTextIndexFilter tripleInTextIndexFilter_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -386,7 +389,11 @@ class IndexImpl {
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
-      return "";
+      size_t index = cid.get() - docsDB_._size;
+      if (index >= textIndexIndices_.size()) {
+        return "";
+      }
+      return vocab_[VocabIndex::make(textIndexIndices_[index])];
     }
     return docsDB_.getTextExcerpt(cid);
   }
@@ -396,6 +403,8 @@ class IndexImpl {
   };
 
   void setKbName(const string& name);
+
+  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
 
   void setTextName(const string& name);
 
@@ -428,6 +437,10 @@ class IndexImpl {
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
+
+  const vector<TextLiteralsIndex>& getTextIndexIndices() const {
+    return textIndexIndices_;
+  };
 
   const string& getTextName() const { return textMeta_.getName(); }
   const string& getKbName() const { return pso_.getKbName(); }

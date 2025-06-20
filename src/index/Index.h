@@ -179,6 +179,8 @@ class Index {
 
   void setKbName(const std::string& name);
 
+  void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
+
   void setTextName(const std::string& name);
 
   bool& usePatterns();
@@ -200,6 +202,8 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
+
+  const vector<TextLiteralsIndex>& getTextIndexIndices() const;
 
   const std::string& getTextName() const;
   const std::string& getKbName() const;

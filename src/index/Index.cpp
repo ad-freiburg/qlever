@@ -150,6 +150,12 @@ void Index::setKbName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
+void Index::setTripleInTextIndexFilter(const std::string& regex,
+                                       bool isWhitelist) {
+  return pimpl_->setTripleInTextIndexFilter(regex, isWhitelist);
+}
+
+// ____________________________________________________________________________
 void Index::setTextName(const std::string& name) {
   return pimpl_->setTextName(name);
 }
@@ -203,6 +209,11 @@ void Index::setSettingsFile(const std::string& filename) {
 // ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
+}
+
+// ____________________________________________________________________________
+const vector<TextLiteralsIndex>& Index::getTextIndexIndices() const {
+  return pimpl_->getTextIndexIndices();
 }
 
 // ____________________________________________________________________________

@@ -171,7 +171,8 @@ CPP_template_def(typename C, typename L)(
                   << top.iriOrLiteral() << std::endl;
       }
       lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
+          top.iriOrLiteral(), top.isExternal(), top.inTextIndex(),
+          metaData_.numWordsTotal()};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -183,7 +184,8 @@ CPP_template_def(typename C, typename L)(
         nextWord.index_ = metaData_.getNextBlankNodeIndex();
       } else {
         nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
+            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal(),
+                         nextWord.inTextIndex());
         metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
@@ -194,6 +196,10 @@ CPP_template_def(typename C, typename L)(
       // externalize it.
       bool& external = lastTripleComponent_.value().isExternal();
       external = external || top.isExternal();
+      // Also if a word appears with different values for `inTextIndex`, then
+      // it gets into the text index
+      bool& inText = lastTripleComponent_.value().inTextIndex();
+      inText = inText || top.inTextIndex();
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =
@@ -296,10 +302,12 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   for (const auto& [word, idAndSplitVal] : els) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
+    // belongs to the internal or external vocabulary and the information
+    // whether this word should appear in the text Index or not.
     const auto& [id, splitVal] = idAndSplitVal;
     byteBuffer << word;
     byteBuffer << splitVal.isExternalized_;
+    byteBuffer << splitVal.inTextIndex_;
     byteBuffer << id;
   }
   {
