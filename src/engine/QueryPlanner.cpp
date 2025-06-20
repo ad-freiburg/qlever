@@ -2987,9 +2987,9 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
   absl::Cleanup resetActiveGraphs{
-      [this, originalVar = planner_.activeGraphVariable_]() {
+      [this, originalVar = planner_.activeGraphVariable_]() mutable {
         // Reset back to original
-        planner_.activeGraphVariable_ = originalVar;
+        planner_.activeGraphVariable_ = std::move(originalVar);
       }};
 
   ParsedQuery& subquery = arg.get();
