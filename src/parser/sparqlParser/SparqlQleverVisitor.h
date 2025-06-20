@@ -99,10 +99,14 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
-  // This is set to true if and only if we are only inside the template of a
-  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
-  // meaning of blank and anonymous nodes is different.
-  bool isInsideConstructTriples_ = false;
+  // This is set to true if we are inside the template of a
+  // CONSTRUCT query (the first {} before the WHERE clause) or the template of
+  // an update (`DELETE/INSERT [DATA] {}`). In these sections, blank nodes and
+  // anonymous nodes are not treated as internal variables, but as actual blank
+  // nodes.
+  bool treatBnodesAsBnodesNotAsInternalVariables_ = false;
+  // TODO<joka921> make these two bools a three-way state check.
+  bool bnodesForbidden_ = false;
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -139,7 +143,7 @@ class SparqlQleverVisitor {
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
-    isInsideConstructTriples_ = true;
+    treatBnodesAsBnodesNotAsInternalVariables_ = true;
   }
 
   // ___________________________________________________________________________
