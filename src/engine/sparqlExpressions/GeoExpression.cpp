@@ -109,32 +109,21 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
   std::optional<GeoFunctionCall> res;
-  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::INTERSECTS>(
-           expr))) {
+  using enum SpatialJoinType;
+
+  if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
     return res;
-  }
-  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::CONTAINS>(
-           expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {
     return res;
-  }
-  if ((res =
-           getGeoRelationExpressionParameters<SpatialJoinType::COVERS>(expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<COVERS>(expr))) {
     return res;
-  }
-  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::CROSSES>(
-           expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<CROSSES>(expr))) {
     return res;
-  }
-  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::TOUCHES>(
-           expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<TOUCHES>(expr))) {
     return res;
-  }
-  if ((res =
-           getGeoRelationExpressionParameters<SpatialJoinType::EQUALS>(expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
     return res;
-  }
-  if ((res = getGeoRelationExpressionParameters<SpatialJoinType::OVERLAPS>(
-           expr))) {
+  } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
     return res;
   }
   return std::nullopt;

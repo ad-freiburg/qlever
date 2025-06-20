@@ -2733,15 +2733,14 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType;
 
   std::vector<std::pair<std::string, SpatialJoinType>>
-      geofFunctionNameAndSJType{{"sfIntersects", SpatialJoinType::INTERSECTS},
-                                {"sfContains", SpatialJoinType::CONTAINS},
-                                {"sfCovers", SpatialJoinType::COVERS},
-                                {"sfCrosses", SpatialJoinType::CROSSES},
-                                {"sfTouches", SpatialJoinType::TOUCHES},
-                                {"sfEquals", SpatialJoinType::EQUALS},
-                                {"sfOverlaps", SpatialJoinType::OVERLAPS}};
+      geofFunctionNameAndSJType{
+          {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
+          {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
+          {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
+          {"sfOverlaps", OVERLAPS}};
 
   // Run basic query planner test for each of the geo relation functions
   for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
