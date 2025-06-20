@@ -80,7 +80,7 @@ Result Load::computeResult(bool requestLaziness) {
     // element for this operation (an empty `IdTable`). The `IdTable` is used to
     // fill in the variables in the template triple `?s ?p ?o`. The empty
     // `IdTable` results in no triples being updated.
-    if (loadClause_.silent_) {
+    if (loadClause_.silent_ || RuntimeParameters().get<"syntax-test-mode">()) {
       return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
               resultSortedOn(), LocalVocab{}};
     }
