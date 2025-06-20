@@ -77,6 +77,12 @@ inline auto& RuntimeParameters() {
         // This mode should only be activated when running the syntax tests of
         // the SPARQL conformance test suite.
         Bool<"syntax-test-mode">{false},
+        // If set to `true`, then a division by zero in an expression will lead
+        // to an
+        // expression error, meaning that the result is undefined. If set to
+        // false,
+        // the result will be `NaN` or `infinity` respectively.
+        Bool<"division-by-zero-is-undef">{true},
     };
   }();
   return params;
