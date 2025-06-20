@@ -76,6 +76,12 @@ double kilometerToUnit(double kilometers,
 }
 
 // ____________________________________________________________________________
+double valueInUnitToKilometer(double valueInUnit,
+                              std::optional<UnitOfMeasurement> unit) {
+  return valueInUnit / kilometerToUnit(1.0, unit);
+}
+
+// ____________________________________________________________________________
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& iri) {
   if (iri == UNIT_METER_IRI) {
     return UnitOfMeasurement::METERS;
