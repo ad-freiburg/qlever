@@ -3563,7 +3563,7 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
                            {Variable{internalVar(0)}}, {3})));
 
   // Wrapped in subquery (one of the compliance tests), this behaviour is
-  // currently not correct, the subquery needs to be joined with all exising
+  // currently not correct, the subquery needs to be joined with all existing
   // graphs.
   h::expect(
       "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
