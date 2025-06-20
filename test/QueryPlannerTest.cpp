@@ -3,6 +3,7 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
@@ -2725,6 +2726,37 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:distance(?y, ?b) <= \"abc\"",
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+
+  std::vector<std::pair<std::string, SpatialJoinType>>
+      geofFunctionNameAndSJType{{"sfIntersects", SpatialJoinType::INTERSECTS},
+                                {"sfContains", SpatialJoinType::CONTAINS},
+                                {"sfCovers", SpatialJoinType::COVERS},
+                                {"sfCrosses", SpatialJoinType::CROSSES},
+                                {"sfTouches", SpatialJoinType::TOUCHES},
+                                {"sfEquals", SpatialJoinType::EQUALS},
+                                {"sfOverlaps", SpatialJoinType::OVERLAPS}};
+
+  // Run basic query planner test for each of the geo relation functions
+  for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER(geof:",
+        funcName, "(?y, ?b))  }");
+    h::expect(query,
+              h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                             PayloadVariables::all(), algo, sjType,
+                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  }
 }
 
 // _____________________________________________________________________________
