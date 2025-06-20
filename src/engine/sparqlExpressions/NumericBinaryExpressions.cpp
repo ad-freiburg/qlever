@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -13,18 +14,25 @@ NARY_EXPRESSION(MultiplyExpression, 2,
 
 // Division.
 //
-// TODO<joka921> If `b == 0` this is technically undefined behavior and
-// should lead to an expression error in SPARQL. Fix this as soon as we
-// introduce the proper semantics for expression errors.
-// Update: I checked it, and the standard differentiates between `xsd:decimal`
-// (error) and `xsd:float/xsd:double` where we have `NaN` and `inf` results. We
-// currently implement the latter behavior. Note: The result of a division in
-// SPARQL is always a decimal number, so there is no integer division.
+// TODO<joka921> If `b == 0` the the behavior of the division depends on whether
+// the inputs are `xsd:decimal` or `xsd:double` (`double`s have special values
+// like `NaN` or `infinity`, decimals don't). As we currently make no difference
+// between those two types, we have to choose one of the behaviors. We make the
+// result `UNDEF` in this case to pass the sparql conformance tests that rely on
+// this behavior. The old behavior can be reinstated by a RuntimeParameter.
+// Note: The result of a division in SPARQL is always a decimal number, so there
+// is no integer division.
 [[maybe_unused]] inline auto divideImpl = [](auto x, auto y) {
   return static_cast<double>(x) / static_cast<double>(y);
 };
-inline auto divide = makeNumericExpression<decltype(divideImpl)>();
-NARY_EXPRESSION(DivideExpression, 2, FV<decltype(divide), NumericValueGetter>);
+
+inline auto divide1 = makeNumericExpression<decltype(divideImpl), true>();
+NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
+                FV<decltype(divide1), NumericValueGetter>);
+
+inline auto divide2 = makeNumericExpression<decltype(divideImpl), false>();
+NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
+                FV<decltype(divide2), NumericValueGetter>);
 
 // Addition and subtraction, currently all results are converted to double.
 inline auto add = makeNumericExpression<std::plus<>>();
@@ -356,8 +364,13 @@ SparqlExpression::Ptr makeAddExpression(SparqlExpression::Ptr child1,
 
 SparqlExpression::Ptr makeDivideExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2) {
-  return std::make_unique<DivideExpression>(std::move(child1),
-                                            std::move(child2));
+  if (RuntimeParameters().get<"division-by-zero-is-undef">()) {
+    return std::make_unique<DivideExpressionByZeroIsUndef>(std::move(child1),
+                                                           std::move(child2));
+  } else {
+    return std::make_unique<DivideExpressionByZeroIsNan>(std::move(child1),
+                                                         std::move(child2));
+  }
 }
 SparqlExpression::Ptr makeMultiplyExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2) {

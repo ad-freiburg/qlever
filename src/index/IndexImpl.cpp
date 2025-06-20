@@ -335,6 +335,8 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+
   readIndexBuilderSettingsFromFile();
 
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
@@ -1162,6 +1164,11 @@ void IndexImpl::readConfiguration() {
                  TextScoringMetric::EXPLICIT);
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
+
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;
