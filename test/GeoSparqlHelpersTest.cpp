@@ -8,11 +8,11 @@
 #include <cmath>
 #include <string>
 
-#include "../src/util/GeoSparqlHelpers.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
 #include "util/GTestHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktLatitude;
