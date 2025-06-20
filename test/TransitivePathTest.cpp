@@ -35,14 +35,19 @@ class TransitivePathTest
                                  QueryExecutionContext*>
   makePath(IdTable input, Vars vars, TransitivePathSide left,
            TransitivePathSide right, size_t minDist, size_t maxDist,
-           std::optional<std::string> turtleInput = std::nullopt) {
+           std::optional<std::string> turtleInput = std::nullopt,
+           const std::optional<Variable>& graphVariable = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
-    auto qec = getQec(std::move(turtleInput));
+    ad_utility::testing::TestIndexConfig config;
+    config.turtleInput = std::move(turtleInput);
+    config.indexType = graphVariable.has_value() ? qlever::Filetype::NQuad
+                                                 : qlever::Filetype::Turtle;
+    auto qec = getQec(std::move(config));
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
     return {TransitivePathBase::makeTransitivePath(
                 qec, std::move(subtree), std::move(left), std::move(right),
-                minDist, maxDist, useBinSearch),
+                minDist, maxDist, useBinSearch, {}, graphVariable),
             qec};
   }
 
@@ -50,10 +55,11 @@ class TransitivePathTest
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
       IdTable input, Vars vars, TransitivePathSide left,
       TransitivePathSide right, size_t minDist, size_t maxDist,
-      std::optional<std::string> turtleInput = std::nullopt) {
+      std::optional<std::string> turtleInput = std::nullopt,
+      const std::optional<Variable>& graphVariable = std::nullopt) {
     auto [T, qec] =
         makePath(std::move(input), vars, std::move(left), std::move(right),
-                 minDist, maxDist, std::move(turtleInput));
+                 minDist, maxDist, std::move(turtleInput), graphVariable);
     return T;
   }
 
@@ -64,9 +70,12 @@ class TransitivePathTest
       std::variant<IdTable, std::vector<IdTable>> sideTable,
       size_t sideTableCol, Vars sideVars, TransitivePathSide left,
       TransitivePathSide right, size_t minDist, size_t maxDist,
-      bool forceFullyMaterialized = false) {
-    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
-                             std::move(right), minDist, maxDist);
+      bool forceFullyMaterialized = false,
+      const std::optional<Variable>& graphVariable = std::nullopt,
+      std::optional<std::string> turtleInput = std::nullopt) {
+    auto [T, qec] =
+        makePath(std::move(input), vars, std::move(left), std::move(right),
+                 minDist, maxDist, std::move(turtleInput), graphVariable);
     auto operation =
         std::holds_alternative<IdTable>(sideTable)
             ? ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -1105,6 +1114,338 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
     EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
                  ad_utility::Exception);
   }
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, unboundGraphVariable) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {3, 4, 1},
+      {1, 2, 2},
+      {2, 1, 2},
+      {3, 4, 2},
+      {4, 3, 2},
+      {2, 1, 3},
+      {4, 3, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 2, 1},
+      {3, 4, 1},
+      {1, 1, 2},
+      {1, 2, 2},
+      {2, 1, 2},
+      {2, 2, 2},
+      {3, 3, 2},
+      {3, 4, 2},
+      {4, 3, 2},
+      {4, 4, 2},
+      {2, 1, 3},
+      {4, 3, 3},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 1, std::numeric_limits<size_t>::max(), std::nullopt,
+      {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, unboundGraphVariableEmptyPath) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 1, 0},
+      {0, 0, 0},
+      {0, 0, 2},
+      {2, 3, 0},
+      {2, 2, 0},
+      {2, 2, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 0, std::numeric_limits<size_t>::max(),
+      "<a> <b> <c> <a> . <a> <b> <c> <c> .", {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperation) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 1},
+      {0, 1},
+      {2, 2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 1, 1, 0},
+      {0, 0, 1, 1},
+      {0, 1, 1, 1},
+      {0, 1, 1, 0},
+      {0, 0, 1, 1},
+      {0, 1, 1, 1},
+      {2, 3, 2, 0},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+      1, std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperationEmptyPath) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 1},
+      {0, 1},
+      {2, 2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 1, 0},
+      {0, 1, 1, 0},
+      {0, 0, 1, 1},
+      {0, 1, 1, 1},
+      {0, 0, 1, 0},
+      {0, 1, 1, 0},
+      {0, 0, 1, 1},
+      {0, 1, 1, 1},
+      {2, 2, 2, 0},
+      {2, 3, 2, 0},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+      0, std::numeric_limits<size_t>::max(), false, {Variable{"?g"}},
+      "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableBoundToGraphOperation) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {2, 3, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {2, 3, 1},
+      {3, 2, 1},
+      {1, 0, 2},
+      {3, 2, 2},
+  });
+
+  auto side = makeIdTableFromVector({
+      {0, 1},
+      {0, 1},
+      {2, 2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 1, 1},
+      {0, 0, 1},
+      {0, 1, 1},
+      {0, 0, 1},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathBound(
+      true, std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}},
+      std::move(side), 0, {Variable{"?start"}, Variable{"?g"}}, left, right, 1,
+      std::numeric_limits<size_t>::max(), false, {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToGraphOperationGraphVariableBothSides) {
+  // TODO<RobinTF> write test case for transitive path with variable ?g on both
+  // sides being bound.
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       unboundGraphVariableToGraphOperationGraphVariableBothSides) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {3, 4, 1},
+      {1, 2, 2},
+      {2, 1, 2},
+      {3, 4, 2},
+      {4, 3, 2},
+      {2, 1, 3},
+      {4, 3, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {2, 2, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 1, std::numeric_limits<size_t>::max(), std::nullopt,
+      {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       unboundGraphVariableToGraphOperationGraphVariableSingleSide) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {3, 4, 1},
+      {1, 2, 2},
+      {2, 1, 2},
+      {3, 4, 2},
+      {4, 3, 2},
+      {2, 1, 3},
+      {4, 3, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 2, 1},
+      {2, 1, 2},
+      {2, 2, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?g"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?free"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 1, std::numeric_limits<size_t>::max(), std::nullopt,
+      {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
+       graphVariableBoundToGraphOperationGraphVariableSingleSide) {
+  // TODO<RobinTF> write test case for transitive path with variable ?g on the
+  // bound side and the free variable on the other.
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableConstrainedByTwoIris) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {2, 1, 1},
+      {1, 2, 2},
+      {2, 1, 2},
+      {1, 2, 3},
+      {2, 1, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 1, 1},
+      {1, 1, 2},
+      {1, 1, 3},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, V(1), 0);
+  TransitivePathSide right(std::nullopt, 1, V(1), 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 1, std::numeric_limits<size_t>::max(), std::nullopt,
+      {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, graphVariableConstrainedByTwoIrisEmptyPath) {
+  auto sub = makeIdTableFromVector({
+      {0, 1, 0},
+      {1, 0, 0},
+      {0, 1, 1},
+      {1, 0, 1},
+      {0, 1, 2},
+      {1, 0, 2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {0, 0, 0},
+      {0, 0, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, V(0), 0);
+  TransitivePathSide right(std::nullopt, 1, V(0), 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 0, std::numeric_limits<size_t>::max(),
+      "<a> <b> <c> <a> . <a> <b> <c> <c> .", {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 // _____________________________________________________________________________
