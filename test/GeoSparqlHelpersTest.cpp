@@ -194,30 +194,44 @@ TEST(GeoSparqlHelpers, IriToUnit) {
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
   const auto intersect = WktGeometricRelation<SpatialJoinType::INTERSECTS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(intersect(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      intersect(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto contains = WktGeometricRelation<SpatialJoinType::CONTAINS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(contains(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      contains(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto covers = WktGeometricRelation<SpatialJoinType::COVERS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(covers(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      covers(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto crosses = WktGeometricRelation<SpatialJoinType::CROSSES>();
-  AD_EXPECT_THROW_WITH_MESSAGE(crosses(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      crosses(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto touches = WktGeometricRelation<SpatialJoinType::TOUCHES>();
-  AD_EXPECT_THROW_WITH_MESSAGE(touches(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      touches(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto equals = WktGeometricRelation<SpatialJoinType::EQUALS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(equals(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      equals(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 
   const auto overlaps = WktGeometricRelation<SpatialJoinType::OVERLAPS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(overlaps(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      overlaps(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 }
