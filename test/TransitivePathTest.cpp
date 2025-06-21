@@ -1204,19 +1204,19 @@ TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperation) {
   });
 
   auto side = makeIdTableFromVector({
-      {0, 1},
-      {0, 1},
-      {2, 2},
+      {0, 10},
+      {0, 10},
+      {2, 20},
   });
 
   auto expected = makeIdTableFromVector({
-      {0, 1, 1, 0},
-      {0, 0, 1, 1},
-      {0, 1, 1, 1},
-      {0, 1, 1, 0},
-      {0, 0, 1, 1},
-      {0, 1, 1, 1},
-      {2, 3, 2, 0},
+      {0, 1, 10, 0},
+      {0, 0, 10, 1},
+      {0, 1, 10, 1},
+      {0, 1, 10, 0},
+      {0, 0, 10, 1},
+      {0, 1, 10, 1},
+      {2, 3, 20, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -1246,22 +1246,22 @@ TEST_P(TransitivePathTest, graphVariableBoundToNonGraphOperationEmptyPath) {
   });
 
   auto side = makeIdTableFromVector({
-      {0, 1},
-      {0, 1},
-      {2, 2},
+      {0, 10},
+      {0, 10},
+      {2, 20},
   });
 
   auto expected = makeIdTableFromVector({
-      {0, 0, 1, 0},
-      {0, 1, 1, 0},
-      {0, 0, 1, 1},
-      {0, 1, 1, 1},
-      {0, 0, 1, 0},
-      {0, 1, 1, 0},
-      {0, 0, 1, 1},
-      {0, 1, 1, 1},
-      {2, 2, 2, 0},
-      {2, 3, 2, 0},
+      {0, 0, 10, 0},
+      {0, 1, 10, 0},
+      {0, 0, 10, 1},
+      {0, 1, 10, 1},
+      {0, 0, 10, 0},
+      {0, 1, 10, 0},
+      {0, 0, 10, 1},
+      {0, 1, 10, 1},
+      {2, 2, 20, 0},
+      {2, 3, 20, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
