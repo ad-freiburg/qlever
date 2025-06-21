@@ -16,6 +16,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
+#include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
@@ -145,6 +146,7 @@ int main(int argc, char** argv) {
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
   std::optional<ad_utility::MemorySize> parserBufferSize;
+  std::optional<ad_utility::VocabularyType> vocabType;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -214,6 +216,10 @@ int main(int argc, char** argv) {
   add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
+  auto msg = absl::StrCat(
+      "The vocabulary implementation for strings in qlever, can be any of ",
+      ad_utility::VocabularyType::getListOfSupportedValues());
+  add("vocabulary-type", po::value(&vocabType), msg.c_str());
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&indexMemoryLimit),
@@ -253,6 +259,10 @@ int main(int argc, char** argv) {
   }
   if (parserBufferSize.has_value()) {
     index.parserBufferSize() = parserBufferSize.value();
+  }
+
+  if (vocabType.has_value()) {
+    index.getImpl().setVocabularyTypeForIndexBuilding(vocabType.value());
   }
 
   // If no text index name was specified, take the part of the wordsfile after
