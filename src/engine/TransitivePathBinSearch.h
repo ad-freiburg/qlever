@@ -39,7 +39,7 @@ struct BinSearchMap {
   ql::span<const Id> startIds_;
   ql::span<const Id> targetIds_;
   ql::span<const Id> graphIds_;
-  size_t offset_;
+  size_t offset_ = 0;
   size_t size_;
 
   BinSearchMap(ql::span<const Id> startIds, ql::span<const Id> targetIds,
@@ -47,7 +47,6 @@ struct BinSearchMap {
       : startIds_{startIds},
         targetIds_{targetIds},
         graphIds_{graphIds},
-        offset_{0},
         size_{startIds_.size()} {
     AD_CORRECTNESS_CHECK(startIds.size() == targetIds.size());
     AD_CORRECTNESS_CHECK(startIds.size() == graphIds.size() ||

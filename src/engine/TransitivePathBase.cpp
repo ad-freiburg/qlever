@@ -631,11 +631,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
   // If we have a distinct graph variable, 2 columns should match instead of one
-  p->resultWidth_ -=
+  p->resultWidth_ -= static_cast<uint8_t>(
       graphVariable_.has_value() &&
       (leftOrRightOp->getVariableColumnOrNullopt(internalGraphHelper_)
            .has_value() ||
-       leftOrRightOp->getVariableColumn(graphVariable_.value()) != inputCol);
+       leftOrRightOp->getVariableColumn(graphVariable_.value()) != inputCol));
   return std::move(p);
 }
 

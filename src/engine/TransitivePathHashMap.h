@@ -39,7 +39,7 @@ struct HashMapWrapper {
         map_{nullptr},
         emptySet_{allocator},
         emptyMap_{allocator} {
-    graphMap_.emplace(Id::makeUndefined(), std::move(map));
+    graphMap_.try_emplace(Id::makeUndefined(), std::move(map));
     map_ = &graphMap_.at(Id::makeUndefined());
   }
 
