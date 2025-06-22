@@ -261,6 +261,8 @@ class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
   ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
       currentLocatedTriplesSnapshot_;
+  ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
+      emptyLocatedTriplesSnapshot_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
