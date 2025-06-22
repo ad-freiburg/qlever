@@ -3491,33 +3491,28 @@ TEST(QueryPlanner, DatasetClause) {
             scan("<a>", "<b>", "<c>", {}, noGraphs, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
-  // We use the `UnorderedJoins` matcher, because the index scan has to be
-  // resorted by the graph column.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                 h::UnorderedJoins(
-                     scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
+      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
 
   // A complex example with graph variables.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
       "{ <c> ?p <z> "
-      "{SELECT * {<d> ?p <z2>}}"
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "{SELECT * {<d> ?p <z2>}}"
       "} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
+          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
           scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                     h::UnorderedJoins(
-                         scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
           scan("<e>", "?p", "<z3>", {}, g1)));
 }
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, graphVariablesWithinPattern) {
   auto scan = h::IndexScanFromStrings;
@@ -3574,6 +3569,14 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
       h::Filter("?g = ?_QLever_internal_variable_qp_0",
                 scan("?x", "?p", "?g", {}, std::nullopt,
                      {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
+      scan("?x", "?p", "?g"));
 }
 
 // _____________________________________________________________________________
