@@ -764,7 +764,7 @@ TEST(RdfParserTest, iriref) {
     std::string iriref_1 = "<fine>";
     std::string iriref_2 = "<okay ish>";
     std::string iriref_3 = "<not\x19okay_for_RE2>";
-    std::string iriref_4 = "<throws\"exception>";
+    std::string iriref_4 = "<throws exception";
     std::string iriref_5 = "no iriref at all";
     // The first IRI ref is fine for both parsers.
     parser.setInputStream(iriref_1);
@@ -792,8 +792,8 @@ TEST(RdfParserTest, iriref) {
     } else {
       ASSERT_FALSE(parser.iriref());
     }
-    // The fourth IRI ref throws an exception when parsed (because " is
-    // encountered before the closing >).
+    // The fourth IRI ref throws an exception when parsed (because `<` is
+    // encountered before the closing `>`).
     parser.setInputStream(iriref_4);
     ASSERT_THROW(parser.iriref(), TurtleParser<Tokenizer>::ParseException);
     // The fifth IRI ref is not recognized as an IRI ref.
