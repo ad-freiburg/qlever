@@ -461,6 +461,12 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
     bool mirrored, bool prefilterDateByYear = false);
 
+using Prefilters = absl::InlinedVector<const PrefilterExprVariablePair*, 5>;
+// Retrieve the `PrefilterExprVariablePair`s as an inlined absl vector
+// (`absl::InlinedVector<const PrefilterExprVariablePair*, 5>`).
+Prefilters getPrefiltersExprPairsAsInlinedVec(
+    const std::vector<PrefilterExprVariablePair>& vec);
+
 }  // namespace detail
 }  // namespace prefilterExpressions
 

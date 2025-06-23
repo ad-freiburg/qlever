@@ -193,8 +193,11 @@ const auto testSetAndMakeScanWithPrefilterExpr =
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
       auto variable = pr.second;
+      auto prefilterVec =
+          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr));
       auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
+          prefilterExpressions::detail::getPrefiltersExprPairsAsInlinedVec(
+              prefilterVec));
       if (optUpdatedQet.has_value()) {
         auto updatedQet = optUpdatedQet.value();
         ASSERT_TRUE(prefilterCanBeSet);
@@ -630,8 +633,11 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
                                         IndexScan::PrefilterVariablePair pair,
                                         const size_t estimateSize,
                                         const size_t exactSize) {
+    auto prefilterVec =
+        makeFilterExpression::filterHelper::makePrefilterVec(std::move(pair));
     auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
-        makePrefilterVec(std::move(pair)));
+        prefilterExpressions::detail::getPrefiltersExprPairsAsInlinedVec(
+            prefilterVec));
     ASSERT_TRUE(optUpdatedQet.has_value());
     auto updatedQet = optUpdatedQet.value();
     ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
@@ -681,8 +687,9 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
-  auto updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  auto updatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
+      prefilterExpressions::detail::getPrefiltersExprPairsAsInlinedVec(
+          prefilterPairs));
   // We have a corresponding column for ?x (ColumnIndex 1), which is also the
   // first sorted variable column. Thus, we expect that PrefilterExpression (<
   // 5, ?x) will be set as a prefilter for this IndexScan.
@@ -700,8 +707,9 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   prefilterPairs = makePrefilterVec(pr(lt(IntId(10)), V{"?a"}),
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
-  updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  updatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
+      prefilterExpressions::detail::getPrefiltersExprPairsAsInlinedVec(
+          prefilterPairs));
   // No PrefilterExpression should be set for this IndexScan, we don't expect a
   // updated QueryExecutionTree.
   EXPECT_TRUE(!updatedQet.has_value());
