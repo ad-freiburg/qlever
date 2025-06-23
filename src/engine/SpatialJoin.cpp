@@ -36,8 +36,11 @@
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-    std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec), config_{std::move(config)} {
+    std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+    bool substitutesFilterOp)
+    : Operation(qec),
+      config_{std::move(config)},
+      substitutesFilterOp_{substitutesFilterOp} {
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }

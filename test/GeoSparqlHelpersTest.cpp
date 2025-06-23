@@ -8,13 +8,15 @@
 #include <cmath>
 #include <string>
 
-#include "../src/util/GeoSparqlHelpers.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
 #include "util/GTestHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
 using ad_utility::WktDistGeoPoints;
+using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
@@ -137,6 +139,38 @@ TEST(GeoSparqlHelpers, KmToUnit) {
       ::testing::HasSubstr("Unsupported unit"));
 }
 
+TEST(GeoSparqlHelpers, UnitToKm) {
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(0.0, std::nullopt),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::KILOMETERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::METERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::valueInUnitToKilometer(0.0, UnitOfMeasurement::MILES),
+      0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  -500.0, UnitOfMeasurement::KILOMETERS),
+              -500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(-500.0, std::nullopt),
+              -500.0, 0.0001);
+
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  500000.0, UnitOfMeasurement::METERS),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  310.685595, UnitOfMeasurement::MILES),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.62137119, UnitOfMeasurement::MILES),
+              1.0, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::detail::valueInUnitToKilometer(
+                                   1.0, UnitOfMeasurement::UNKNOWN),
+                               ::testing::HasSubstr("Unsupported unit"));
+}
+
 TEST(GeoSparqlHelpers, IriToUnit) {
   ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(""),
             UnitOfMeasurement::UNKNOWN);
@@ -155,4 +189,49 @@ TEST(GeoSparqlHelpers, IriToUnit) {
   ASSERT_EQ(ad_utility::detail::iriToUnitOfMeasurement(
                 "http://qudt.org/vocab/unit/MI"),
             UnitOfMeasurement::MILES);
+}
+
+TEST(GeoSparqlHelpers, WktGeometricRelation) {
+  // Currently the geometric relation functions are only a dummy implementation
+  const auto intersect = WktGeometricRelation<SpatialJoinType::INTERSECTS>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      intersect(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto contains = WktGeometricRelation<SpatialJoinType::CONTAINS>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      contains(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto covers = WktGeometricRelation<SpatialJoinType::COVERS>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      covers(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto crosses = WktGeometricRelation<SpatialJoinType::CROSSES>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      crosses(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto touches = WktGeometricRelation<SpatialJoinType::TOUCHES>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      touches(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto equals = WktGeometricRelation<SpatialJoinType::EQUALS>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      equals(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
+
+  const auto overlaps = WktGeometricRelation<SpatialJoinType::OVERLAPS>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      overlaps(GeoPoint(1, 1), GeoPoint(2, 2)),
+      ::testing::HasSubstr(
+          "currently only implemented for queries of the form `FILTER"));
 }
