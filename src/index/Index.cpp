@@ -156,6 +156,11 @@ void Index::setTripleInTextIndexFilter(const std::string& regex,
 }
 
 // ____________________________________________________________________________
+void Index::setAddWordsFromAllLiterals(bool value) {
+  return pimpl_->setAddWordsFromAllLiterals(value);
+}
+
+// ____________________________________________________________________________
 void Index::setTextName(const std::string& name) {
   return pimpl_->setTextName(name);
 }

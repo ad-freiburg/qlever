@@ -11,8 +11,7 @@
 
 class TripleInTextIndexFilter {
  public:
-  // Delete standard constructor to prevent empty regex by mistake
-  TripleInTextIndexFilter() : regex_{"*"}, isWhitelist_{true} {};
+  TripleInTextIndexFilter() : regex_{"(?s).*"}, isWhitelist_{true} {};
 
   /**
    * @brief Class to determine whether the literal of a triple should be part of

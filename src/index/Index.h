@@ -181,6 +181,8 @@ class Index {
 
   void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
 
+  void setAddWordsFromAllLiterals(bool value);
+
   void setTextName(const std::string& name);
 
   bool& usePatterns();

@@ -1039,6 +1039,11 @@ void IndexImpl::setTripleInTextIndexFilter(const std::string& regex,
   tripleInTextIndexFilter_ = TripleInTextIndexFilter(regex, isWhitelist);
 }
 
+// _____________________________________________________________________________
+void IndexImpl::setAddWordsFromAllLiterals(bool value) {
+  addWordsFromAllLiterals_ = value;
+}
+
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   onDiskBase_ = onDiskBase;
@@ -1216,8 +1221,10 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   auto& resultTriple = result.triple_;
   resultTriple[0] = std::move(triple.subject_);
   // Here changes can be made whether literals should be in the text index
-  bool inTextIndex =
-      tripleInTextIndexFilter_(triple.predicate_, triple.object_);
+  bool inTextIndex = addWordsFromAllLiterals_;
+  if (!addWordsFromAllLiterals_) {
+    inTextIndex = tripleInTextIndexFilter_(triple.predicate_, triple.object_);
+  }
   resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
   if (triple.object_.isLiteral()) {
     const auto& lit = triple.object_.getLiteral();
@@ -1266,8 +1273,14 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     // TODO<joka921> Perform this normalization right at the beginning of the
     // parsing. iriOrLiteral =
     // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (inTextIndex && index == 2) {
-      component.inTextIndex_ = true;
+    if (addWordsFromAllLiterals_) {
+      if (vocab_.stringIsLiteral(iriOrLiteral.toString())) {
+        component.inTextIndex_ = true;
+      }
+    } else {
+      if (inTextIndex && index == 2) {
+        component.inTextIndex_ = true;
+      }
     }
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;

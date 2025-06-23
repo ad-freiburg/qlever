@@ -139,6 +139,7 @@ class IndexImpl {
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
   TripleInTextIndexFilter tripleInTextIndexFilter_;
+  bool addWordsFromAllLiterals_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -405,6 +406,8 @@ class IndexImpl {
   void setKbName(const string& name);
 
   void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
+
+  void setAddWordsFromAllLiterals(bool value);
 
   void setTextName(const string& name);
 
