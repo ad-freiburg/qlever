@@ -2794,6 +2794,28 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
                       scan("?a", "<p>", "?b"))));
   }
 
+  // Two geo relation filters on the same variables: The second one may not be
+  // substituted by a spatial join as this spatial join would be incomplete
+  // (that is: have only one child).
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?m <p> ?n ."
+      "FILTER geof:sfCovers(?n, ?b) ."
+      "FILTER geof:sfContains(?n, ?b) .  }",
+      ::testing::AnyOf(
+          h::Filter(
+              "geof:sfCovers(?n, ?b)",
+              h::spatialJoin(-1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                             PayloadVariables::all(), algo, CONTAINS,
+                             scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
+          h::Filter("geof:sfContains(?n, ?b)",
+                    h::spatialJoin(-1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                                   PayloadVariables::all(), algo, COVERS,
+                                   scan("?m", "<p>", "?n"),
+                                   scan("?a", "<p>", "?b")))));
+
   // Combination of geo relation filter and geo distance filter
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
