@@ -364,12 +364,17 @@ class QueryPlanner {
   std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
+  // Extract the join columns from `jcs` that are not the graph.
+  static std::optional<std::tuple<size_t, size_t>>
+  getJoinColumnsForTransitivePath(const JoinColumns& jcs,
+                                  bool leftSideTransitivePath);
+
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`.
-  static std::optional<SubtreePlan> createJoinWithTransitivePath(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
+  std::optional<SubtreePlan> createJoinWithTransitivePath(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate

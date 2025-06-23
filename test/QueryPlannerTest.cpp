@@ -4017,8 +4017,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   {
     TransitivePathSide left{std::nullopt, 0, Var{"?a"}, 0};
     TransitivePathSide right{std::nullopt, 1, Var{"?b"}, 1};
-    // TODO<RobinTF> implement bind when graph is active.
-    /*h::expect(
+    h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . ?a <is-a> ?c } }",
         h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
                           h::IndexScanFromStrings("?a", "<is-a>", "?c", {}, {},
@@ -4029,19 +4028,18 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                               "?_QLever_internal_variable_qp_1", {}, {},
                               {Variable{"?g"}}, {3}))));
 
- h::expect(
-        "SELECT * WHERE { GRAPH ?g { OPTIONAL { ?a <is-a> ?c } ?a <label>+ ?b "
-        "} }",
+    h::expect(
+        "SELECT * { GRAPH ?g { OPTIONAL { ?a <is-a> ?c } ?a <label>+ ?b } }",
         h::transitivePath(
             left, right, 1, std::numeric_limits<size_t>::max(),
-            h::Filter("BOUND(?a)",
-                      h::IndexScanFromStrings("?a", "<is-a>", "?c", {}, {},
-                                              {Variable{"?g"}}, {3})),
+            h::Filter("BOUND(?g)", h::NeutralOptional(h::IndexScanFromStrings(
+                                       "?a", "<is-a>", "?c", {}, {},
+                                       {Variable{"?g"}}, {3}))),
             // Sort by ?g
             h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
                                             "<label>",
                                             "?_QLever_internal_variable_qp_1",
-                                            {}, {}, {Variable{"?g"}}, {3}))));*/
+                                            {}, {}, {Variable{"?g"}}, {3}))));
     h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
         h::transitivePath(

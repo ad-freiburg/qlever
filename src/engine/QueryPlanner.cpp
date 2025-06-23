@@ -2106,15 +2106,22 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // Test if one of `a` or `b` is a transitive path to which we can bind the
+  // other one.
+  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+  }
+
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
     try {
       SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
       mergeSubtreePlanIds(plan, a, b);
-      return {plan};
-    } catch (const std::exception& e) {
-      return {};
+      candidates.push_back(plan);
+      return candidates;
+    } catch (const std::exception&) {
+      return candidates;
     }
   }
 
@@ -2132,12 +2139,6 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   // applied individually.
   for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
     candidates.push_back(std::move(plan));
-  }
-
-  // Test if one of `a` or `b` is a transitive path to which we can bind the
-  // other one.
-  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
   }
 
   // "NORMAL" CASE:
@@ -2307,11 +2308,38 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
   findCandidates(b, a, true);
   return candidates;
 }
+std::optional<std::tuple<size_t, size_t>>
+QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
+                                              bool leftSideTransitivePath) {
+  if (jcs.size() > 2) {
+    return std::nullopt;
+  }
+  if (jcs.size() == 1) {
+    size_t transitiveCol = jcs[0][!leftSideTransitivePath];
+    size_t otherCol = jcs[0][leftSideTransitivePath];
+    // We can't bind if the only matching column is the graph col.
+    if (transitiveCol >= 2) {
+      return std::nullopt;
+    }
+    return std::tuple{transitiveCol, otherCol};
+  }
+  size_t transitiveColA = jcs[0][!leftSideTransitivePath];
+  size_t otherColA = jcs[0][leftSideTransitivePath];
+  size_t transitiveColB = jcs[1][!leftSideTransitivePath];
+  size_t otherColB = jcs[1][leftSideTransitivePath];
+  if (transitiveColA <= 1) {
+    AD_CORRECTNESS_CHECK(transitiveColB == 2);
+    return std::tuple{transitiveColA, otherColA};
+  }
+  AD_CORRECTNESS_CHECK(transitiveColB <= 2);
+  AD_CORRECTNESS_CHECK(transitiveColA == 2);
+  return std::tuple{transitiveColB, otherColB};
+}
 
 // __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
-                                                const JoinColumns& jcs)
+                                                const JoinColumns& jcs) const
     -> std::optional<SubtreePlan> {
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
@@ -2321,21 +2349,21 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   if (!(aTransPath || bTransPath)) {
     return std::nullopt;
   }
-  std::shared_ptr<QueryExecutionTree> otherTree = aTransPath ? b._qet : a._qet;
-  auto transPathOperation = aTransPath ? aTransPath : bTransPath;
+  const std::shared_ptr<QueryExecutionTree>& otherTree =
+      aTransPath ? b._qet : a._qet;
+  const auto& transPathOperation = aTransPath ? aTransPath : bTransPath;
 
-  // TODO: Handle the case of two or more common variables
-  if (jcs.size() > 1) {
-    AD_THROW(
-        "Transitive Path operation with more than"
-        " two common variables is not supported");
-  }
-  const size_t otherCol = aTransPath ? jcs[0][1] : jcs[0][0];
-  const size_t thisCol = aTransPath ? jcs[0][0] : jcs[0][1];
-  // Do not bind the side of a path twice and don't bind on graph variable
-  if (transPathOperation->isBoundOrId() || thisCol == 2) {
+  // Do not bind the side of a path twice
+  if (transPathOperation->isBoundOrId()) {
     return std::nullopt;
   }
+
+  auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
+  // Do not bind the side of a path twice and don't bind on graph variable
+  if (!joinCols.has_value()) {
+    return std::nullopt;
+  }
+  const auto& [thisCol, otherCol] = joinCols.value();
   // An unbound transitive path has at most two columns we can bind to.
   AD_CONTRACT_CHECK(thisCol <= 1);
   // The left or right side is a TRANSITIVE_PATH and its join column
