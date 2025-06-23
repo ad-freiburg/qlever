@@ -8,11 +8,11 @@
 #include <cmath>
 #include <string>
 
-#include "../src/util/GeoSparqlHelpers.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
 #include "util/GTestHelpers.h"
+#include "util/GeoSparqlHelpers.h"
 
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktLatitude;
@@ -135,6 +135,38 @@ TEST(GeoSparqlHelpers, KmToUnit) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       ad_utility::detail::kilometerToUnit(1.0, UnitOfMeasurement::UNKNOWN),
       ::testing::HasSubstr("Unsupported unit"));
+}
+
+TEST(GeoSparqlHelpers, UnitToKm) {
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(0.0, std::nullopt),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::KILOMETERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.0, UnitOfMeasurement::METERS),
+              0.0, 0.0001);
+  ASSERT_NEAR(
+      ad_utility::detail::valueInUnitToKilometer(0.0, UnitOfMeasurement::MILES),
+      0.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  -500.0, UnitOfMeasurement::KILOMETERS),
+              -500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(-500.0, std::nullopt),
+              -500.0, 0.0001);
+
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  500000.0, UnitOfMeasurement::METERS),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  310.685595, UnitOfMeasurement::MILES),
+              500.0, 0.0001);
+  ASSERT_NEAR(ad_utility::detail::valueInUnitToKilometer(
+                  0.62137119, UnitOfMeasurement::MILES),
+              1.0, 0.0001);
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::detail::valueInUnitToKilometer(
+                                   1.0, UnitOfMeasurement::UNKNOWN),
+                               ::testing::HasSubstr("Unsupported unit"));
 }
 
 TEST(GeoSparqlHelpers, IriToUnit) {
