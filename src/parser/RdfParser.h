@@ -212,7 +212,10 @@ class TurtleParser : public RdfParserBase {
   static inline std::atomic<size_t> numParsers_ = 0;
   size_t blankNodePrefix_ = numParsers_.fetch_add(1);
 
-  bool prefixAndBaseDisabled_ = false;
+  // Used to restrict a worker for the parallel turtle parser to a simpler
+  // grammar that can be parsed in parallel. This disallows re-definitions of
+  // @base and @prefix as well as usage of multiline literals.
+  bool useSimplifiedGrammar_ = false;
 
  public:
   TurtleParser() = default;
@@ -272,14 +275,14 @@ class TurtleParser : public RdfParserBase {
   bool rdfLiteralImpl(bool allowMultilineStrings);
   bool rdfLiteral() {
     // Turtle allows for multiline strings.
-    return rdfLiteralImpl(true);
+    return rdfLiteralImpl(!useSimplifiedGrammar_);
   }
   bool numericLiteral();
   bool booleanLiteral();
   bool prefixedName();
   // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
   bool stringParseImpl(bool allowMultilineStrings);
-  bool stringParse() { return stringParseImpl(true); }
+  bool stringParse() { return stringParseImpl(!useSimplifiedGrammar_); }
 
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
@@ -480,8 +483,9 @@ CPP_template(typename Parser)(
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
 
-  // Disable prefix parsing for turtle parsers during parallel parsing.
-  void disablePrefixParsing() { this->prefixAndBaseDisabled_ = true; }
+  // Disable use of @base, @prefix and multiline string literals for turtle
+  // parsers during parallel parsing.
+  void useSimplifiedGrammar() { this->useSimplifiedGrammar_ = true; }
 
   FRIEND_TEST(RdfParserTest, prefixedName);
   FRIEND_TEST(RdfParserTest, prefixID);
