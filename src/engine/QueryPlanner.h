@@ -373,8 +373,8 @@ class QueryPlanner {
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`.
-  std::optional<SubtreePlan> createJoinWithTransitivePath(
-      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
+  static std::optional<SubtreePlan> createJoinWithTransitivePath(
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate

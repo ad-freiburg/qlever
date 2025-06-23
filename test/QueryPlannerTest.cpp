@@ -4027,6 +4027,31 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                               "?_QLever_internal_variable_qp_0", "<label>",
                               "?_QLever_internal_variable_qp_1", {}, {},
                               {Variable{"?g"}}, {3}))));
+    // Verify query planning also works when ?g is the first variable.
+    h::expect(
+        "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>+ ?b } }",
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?g\t?a) { (1 1) }"),
+                          // Sort by ?g
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, {},
+                              {Variable{"?g"}}, {3}))));
+
+    // Ensure join with too many columns doesn't result in an exception. (This
+    // could be optimized in the future.)
+    h::expect(
+        "SELECT * "
+        "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
+        h::MultiColumnJoin(
+            h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
+            h::Sort(h::transitivePath(
+                left, right, 1, std::numeric_limits<size_t>::max(),
+                // Sort by ?g
+                h::Sort(h::IndexScanFromStrings(
+                    "?_QLever_internal_variable_qp_0", "<label>",
+                    "?_QLever_internal_variable_qp_1", {}, {}, {Variable{"?g"}},
+                    {3}))))));
 
     h::expect(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -4119,8 +4144,36 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                                             "?_QLever_internal_variable_qp_1",
                                             {}, {}, {Variable{"?g"}}, {3}))));
 
+    h::expectWithGivenBudgets(
+        "SELECT * { VALUES (?g ?a) { (1 1) } GRAPH ?g { ?a <label>* ?b } }",
+        h::transitivePath(
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            h::MultiColumnJoin(
+                h::Sort(h::ValuesClause("VALUES (?g\t?a) { (1 1) }")),
+                h::Distinct(
+                    {0, 1},
+                    // The sorts of index scans are because of missing graph
+                    // permutations.
+                    h::Union(h::Sort(h::IndexScanFromStrings(
+                                 "?a", "?internal_property_path_variable_y",
+                                 "?internal_property_path_variable_z", {}, {},
+                                 {Variable{"?g"}}, {3})),
+                             h::Sort(h::IndexScanFromStrings(
+                                 "?internal_property_path_variable_z",
+                                 "?internal_property_path_variable_y", "?a", {},
+                                 {}, {Variable{"?g"}}, {3}))))),
+            // Sort by ?g
+            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
+                                            "<label>",
+                                            "?_QLever_internal_variable_qp_1",
+                                            {}, {}, {Variable{"?g"}}, {3}))),
+        std::nullopt, {4, 16, 64'000'000});
+
     // TODO<RobinTF> add tests that verify correct query planning when ?g is
     // used in pattern, once query planning allows this.
+    // Queries:
+    // SELECT * { VALUES (?g) { (1) } GRAPH ?g { ?g <label>* ?b } }
+    // SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }
   }
 }
 

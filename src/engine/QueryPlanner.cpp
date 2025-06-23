@@ -2115,14 +2115,10 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
-    try {
-      SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
-      mergeSubtreePlanIds(plan, a, b);
-      candidates.push_back(plan);
-      return candidates;
-    } catch (const std::exception&) {
-      return candidates;
-    }
+    SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    candidates.push_back(plan);
+    return candidates;
   }
 
   // CASE: JOIN ON ONE COLUMN ONLY.
@@ -2331,7 +2327,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
     AD_CORRECTNESS_CHECK(transitiveColB == 2);
     return std::tuple{transitiveColA, otherColA};
   }
-  AD_CORRECTNESS_CHECK(transitiveColB <= 2);
+  AD_CORRECTNESS_CHECK(transitiveColB <= 1);
   AD_CORRECTNESS_CHECK(transitiveColA == 2);
   return std::tuple{transitiveColB, otherColB};
 }
@@ -2339,7 +2335,7 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
 // __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
                                                 const SubtreePlan& b,
-                                                const JoinColumns& jcs) const
+                                                const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
