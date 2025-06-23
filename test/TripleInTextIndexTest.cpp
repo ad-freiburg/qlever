@@ -11,15 +11,6 @@
 
 namespace {
 
-auto makeTurtleTripleFromStrings = [](std::string_view s, std::string_view p,
-                                      std::string_view o) {
-  TurtleTriple triple;
-  triple.subject_ = TripleComponent{s};
-  triple.predicate_ = TripleComponent{p}.getIri();
-  triple.object_ = TripleComponent{o};
-  return triple;
-};
-
 auto testMultipleTriples = [](const TripleInTextIndexFilter& filter,
                               const std::vector<TurtleTriple>& triplesToTest,
                               const std::vector<bool>& equality) {
