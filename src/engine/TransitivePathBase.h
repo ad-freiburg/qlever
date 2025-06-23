@@ -260,12 +260,6 @@ class TransitivePathBase : public Operation {
       const std::optional<Variable>& graphVariable,
       std::optional<Variable> variable = std::nullopt);
 
-  // Add a `Filter` operation to `leftOrRightOp` that removes any unbound
-  // values.
-  static std::shared_ptr<QueryExecutionTree> filterUndefVariable(
-      std::shared_ptr<QueryExecutionTree> leftOrRightOp,
-      const Variable& dataVariable);
-
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
   // found in the knowledge graph. In many cases we can statically guarantee
   // this and just return the `leftOrRightOp` unchanged, in all other cases the

@@ -252,6 +252,8 @@ class TransitivePathImpl : public TransitivePathBase {
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
       for (const auto& [startNode, graphId] : tableColumn.column_) {
+        // TODO<RobinTF> make sure undef matches all nodes for queries of
+        // the form SELECT * { VALUES ?a { UNDEF } ?a a+ ?b}
         // Skip generation of values for `SELECT * { GRAPH ?g { ?g a* ?x } }`
         // where both `?g` variables are not the same.
         if (startsWithGraphVariable && startNode != graphId) {
