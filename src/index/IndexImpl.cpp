@@ -11,6 +11,7 @@
 #include <future>
 #include <numeric>
 #include <optional>
+#include <utility>
 
 #include "CompilationInfo.h"
 #include "backports/algorithm.h"
@@ -21,7 +22,9 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
+#include "util/GeneratorConverters.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
@@ -217,19 +220,39 @@ IndexImpl::buildOspWithPatterns(
         queue.finish();
       }};
 
-  // Set up a generator that yields blocks with the following columns:
-  // S P O PatternOfS PatternOfO, sorted by OPS.
-  auto blockGenerator =
-      [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-    // If an exception occurs in the block that is consuming the blocks yielded
-    // from this generator, we have to explicitly finish the `queue`, otherwise
-    // there will be a deadlock because the threads involved in the queue can
-    // never join.
-    absl::Cleanup cl{[&queue]() { queue.finish(); }};
-    while (auto block = queue.pop()) {
-      co_yield fixBlockAfterPatternJoin(std::move(block));
-    }
-  }(queue);
+  /*
+// Set up a generator that yields blocks with the following columns:
+// S P O PatternOfS PatternOfO, sorted by OPS.
+auto blockGenerator =
+  [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+// If an exception occurs in the block that is consuming the blocks yielded
+// from this generator, we have to explicitly finish the `queue`, otherwise
+// there will be a deadlock because the threads involved in the queue can
+// never join.
+absl::Cleanup cl{[&queue]() { queue.finish(); }};
+while (auto block = queue.pop()) {
+  co_yield fixBlockAfterPatternJoin(std::move(block));
+}
+}(queue);
+*/
+  struct BlockGenerator
+      : public ad_utility::InputRangeFromGet<IdTableStatic<0>> {
+    BlockGenerator(ad_utility::data_structures::ThreadSafeQueue<IdTable>& queue)
+        : queue{queue} {}
+
+    std::optional<IdTableStatic<0>> get() override {
+      if (auto block = queue.pop()) {
+        return fixBlockAfterPatternJoin(std::move(block));
+      }
+
+      return std::nullopt;
+    };
+
+    ad_utility::data_structures::ThreadSafeQueue<IdTable>& queue;
+  };
+
+  auto blockGenerator{ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
+      BlockGenerator{queue}}};
 
   // Actually create the permutations.
   auto thirdSorter =
@@ -265,10 +288,12 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
-  auto internalTriplesUnique = ad_utility::uniqueBlockView(
-      internalTriplesPsoSorter.template getSortedBlocks<0>());
-  createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
-                      false);
+
+  auto sortedBlockView{internalTriplesPsoSorter.template getSortedBlocks<0>()};
+  auto internalTriplesUnique =
+      ad_utility::uniqueBlockView(std::move(sortedBlockView));
+  auto inputRange{fromGenerator(std::move(internalTriplesUnique))};
+  createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(inputRange), false);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
@@ -363,13 +388,14 @@ void IndexImpl::createFromFiles(
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
+  auto firstSorterWithUniqueIR{fromGenerator(std::move(firstSorterWithUnique))};
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
+                               std::move(firstSorterWithUniqueIR));
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -377,30 +403,39 @@ void IndexImpl::createFromFiles(
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique), secondSorter);
+                               std::move(firstSorterWithUniqueIR),
+                               secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
+    auto secondSorterBlocksG{secondSorter.getSortedBlocks<0>()};
+    auto secondSorterBlocks{fromGenerator(std::move(secondSorterBlocksG))};
     createSecondPermutationPair(NumColumnsIndexBuilding,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
+                                std::move(secondSorterBlocks), thirdSorter);
     secondSorter.clear();
+
+    auto thirdSorterBlocksG{thirdSorter.getSortedBlocks<0>()};
+    auto thirdSorterBlocks{fromGenerator(std::move(thirdSorterBlocksG))};
     createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+                               std::move(thirdSorterBlocks));
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
     auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
+        NumColumnsIndexBuilding, std::move(firstSorterWithUniqueIR));
     firstSorter.clearUnderlying();
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
-                               thirdSorterPtr->template getSortedBlocks<0>());
+    auto thirdSorterBlocksG{thirdSorterPtr->template getSortedBlocks<0>()};
+    auto thirdSorterBlocks{fromGenerator(std::move(thirdSorterBlocksG))};
+
+    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+                               std::move(thirdSorterBlocks));
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -811,10 +846,11 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
+  auto sortedTriplesG{fromInputRange(AD_FWD(sortedTriples))};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
-          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+          std::move(sortedTriplesG), permutation, perBlockCallbacks);
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -1277,9 +1313,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

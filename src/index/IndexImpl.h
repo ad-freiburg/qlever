@@ -41,6 +41,7 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Iterators.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/MmapVector.h"
 #include "util/json.h"
@@ -613,7 +614,8 @@ class IndexImpl {
   // the input).
   NumNormalAndInternal numTriples() const;
 
-  using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
+  // using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
+  using BlocksOfTriples = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
