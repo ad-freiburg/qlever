@@ -142,7 +142,8 @@ IdTable Minus::computeMinus(
           markForRemoval(leftIt);
         }
       },
-      ad_utility::findSmallerUndefRanges, ad_utility::findSmallerUndefRanges);
+      ad_utility::findSmallerUndefRanges, ad_utility::findSmallerUndefRanges,
+      {}, [this]() { checkCancellation(); });
 
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
