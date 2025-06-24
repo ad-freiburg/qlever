@@ -68,6 +68,11 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Return a reference to currently underlying vocabulary, as a variant of the
+  // possible types.
+  Variant& getUnderlyingVocabulary() { return vocab_; }
+  const Variant& getUnderlyingVocabulary() const { return vocab_; }
+
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
   template <typename String, typename Comp>
   WordAndIndex lower_bound(const String& word, Comp comp) const {
