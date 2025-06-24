@@ -2986,11 +2986,20 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   auto allVariables = std::exchange(boundVariables_, originalVariables);
 
   handleChild(arg._child2);
-  const auto& rightPlans = candidatePlans_;
+  auto& rightPlans = candidatePlans_;
   // Merge variables
   allVariables.insert(boundVariables_.begin(), boundVariables_.end());
   // Set back to original to prevent conflicts with `visitGroupOptionalOrMinus`.
   boundVariables_ = std::move(originalVariables);
+
+  if (leftPlans.at(0).empty()) {
+    leftPlans.at(0).push_back(
+        makeSubtreePlan<NeutralElementOperation>(planner_._qec));
+  }
+  if (rightPlans.at(0).empty()) {
+    rightPlans.at(0).push_back(
+        makeSubtreePlan<NeutralElementOperation>(planner_._qec));
+  }
 
   std::vector<SubtreePlan> newCandidates;
 
