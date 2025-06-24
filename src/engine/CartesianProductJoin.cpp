@@ -7,6 +7,12 @@
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
+namespace {
+constexpr std::string_view recomputeMessage =
+    "After limits have been applied to the children, we can't compute the "
+    "results again in case the index changed.";
+}
+
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
     QueryExecutionContext* executionContext, Children children,
@@ -136,9 +142,6 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   }
-  // Make sure the children are reset back to their initial state after
-  // computing the results.
-  auto cleanup = resetChildLimitsAndOffsetOnDestruction();
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
   LocalVocab staticMergedVocab{};
@@ -248,6 +251,7 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
 std::pair<std::vector<std::shared_ptr<const Result>>,
           std::shared_ptr<const Result>>
 CartesianProductJoin::calculateSubResults(bool requestLaziness) {
+  AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
   std::vector<std::shared_ptr<const Result>> subResults;
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -266,6 +270,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() && childTree->supportsLimit()) {
       childTree->applyLimit(limitIfPresent.value());
+      forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child
@@ -405,6 +410,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
+  AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
   Children copy;
   copy.reserve(children_.size());
   for (const auto& operation : children_) {
