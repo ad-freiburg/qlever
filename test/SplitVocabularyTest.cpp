@@ -15,9 +15,6 @@ using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
 
-// TODO<ullingerc> Re-add ItemAt and SplitWordWriter tests after integration of
-// SplitVocabulary in Vocabulary
-
 [[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
   return s.starts_with("\"a");
 };
@@ -260,7 +257,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv[1ull << 58], "\"xyz\"^^<http://example.com>");
 }
 
-TEST(VocabularyTest, ItemAt) {
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyItemAt) {
   ad_utility::HashSet<string> s;
   s.insert("a");
   s.insert("ab");
@@ -298,7 +296,8 @@ TEST(VocabularyTest, ItemAt) {
   ad_utility::deleteFile(filename);
 }
 
-TEST(Vocabulary, SplitWordWriter) {
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyWordWriter) {
   // The word writer in the Vocabulary class runs the SplitGeoVocabulary word
   // writer. Its task is to split words to two different vocabularies for geo
   // and non-geo words. This split is tested here.
