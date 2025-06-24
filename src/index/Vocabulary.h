@@ -99,8 +99,7 @@ class Vocabulary {
   vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
-      UnicodeVocabulary<SplitGeoVocabulary<UnderlyingVocabulary>,
-                        ComparatorType>;
+      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
   VocabularyWithUnicodeComparator vocabulary_;
 
@@ -238,6 +237,7 @@ class Vocabulary {
   // a prefix of it (which could change the result of a split).
   std::pair<IndexType, IndexType> getPositionOfWord(
       const std::string& word, SortLevel level = SortLevel::QUARTERNARY) const {
+    // TODO
     uint8_t marker =
         vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
     return {boundImpl<false>(word, level, marker),
