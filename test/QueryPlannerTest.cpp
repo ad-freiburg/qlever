@@ -4171,9 +4171,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
 
     // TODO<RobinTF> add tests that verify correct query planning when ?g is
     // used in pattern, once query planning allows this.
-    // Queries:
-    // SELECT * { VALUES (?g) { (1) } GRAPH ?g { ?g <label>* ?b } }
-    // SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }
+    // Query: SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }
   }
 }
 

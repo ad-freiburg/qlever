@@ -1462,6 +1462,38 @@ TEST_P(TransitivePathTest,
 
 // _____________________________________________________________________________
 TEST_P(TransitivePathTest,
+       unboundGraphVariableToGraphOperationGraphVariableSingleOtherSide) {
+  auto sub = makeIdTableFromVector({
+      {1, 2, 1},
+      {3, 4, 1},
+      {1, 2, 2},
+      {2, 1, 2},
+      {3, 4, 2},
+      {4, 3, 2},
+      {2, 1, 3},
+      {4, 3, 3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 2, 2},
+      {2, 2, 2},
+      {4, 3, 3},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?free"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?g"}, 1);
+  auto T = makePathUnbound(
+      std::move(sub),
+      {Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}}, left,
+      right, 1, std::numeric_limits<size_t>::max(), std::nullopt,
+      {Variable{"?g"}});
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest,
        graphVariableBoundToGraphOperationGraphVariableSingleSide) {
   auto sub = makeIdTableFromVector({
       {0, 1, 0},
