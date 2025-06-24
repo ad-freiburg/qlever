@@ -74,26 +74,6 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
 template <typename T, typename... List>
 struct TypeContainedImpl : std::disjunction<std::is_same<T, List>...> {};
 
-// Make a variadic type unique (std::tuple containing each type once)
-template <typename...>
-struct UniqueTypesTupleImpl;
-
-template <>
-struct UniqueTypesTupleImpl<> {
-  using type = std::tuple<>;
-};
-
-template <typename T, typename... List>
-struct UniqueTypesTupleImpl<T, List...> {
- private:
-  using tail = typename UniqueTypesTupleImpl<List...>::type;
-
- public:
-  using type =
-      std::conditional_t<TypeContainedImpl<T, List...>::value, tail,
-                         decltype(std::tuple_cat(std::tuple<T>{}, tail{}))>;
-};
-
 // Implementation for Last
 template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};

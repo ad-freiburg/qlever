@@ -102,8 +102,7 @@ class Vocabulary {
   vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
-      UnicodeVocabulary<SplitGeoVocabulary<UnderlyingVocabulary>,
-                        ComparatorType>;
+      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
   VocabularyWithUnicodeComparator vocabulary_;
 
@@ -251,15 +250,6 @@ class Vocabulary {
   // vocabulary.
   auto makeWordWriterPtr(const std::string& filename) const {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
-  }
-
-  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
-  // vocabulary and set the type of the vocabulary according to the `type`
-  // argument (see the `PolymorphicVocabulary` class for details).
-  void resetToType(ad_utility::VocabularyType type) {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
-      vocabulary_.getUnderlyingVocabulary().resetToType(type);
-    }
   }
 
   // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
