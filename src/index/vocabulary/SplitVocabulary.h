@@ -22,29 +22,30 @@
 // the SplitVocabulary should be used. The underlying vocabularies except 0
 // should not hold conventional string literals (that is, without a special data
 // type) or IRIs. Thus the function should return 0 for these inputs.
-template <const auto& T>
+template <typename T>
 CPP_concept SplitFunctionT =
-    ad_utility::InvocableWithExactReturnType<decltype(T), uint8_t,
-                                             std::string_view>;
+    ad_utility::InvocableWithExactReturnType<T, uint8_t, std::string_view>;
 
 // The signature of the SplitFilenameFunction for a SplitVocabulary. For a given
 // base filename the function should construct readable filenames for each of
 // the underlying vocabularies. This should usually happen by appending a suffix
 // for each vocabulary.
-template <const auto& T, uint8_t N>
-CPP_concept SplitFilenameFunctionT = ad_utility::InvocableWithExactReturnType<
-    decltype(T), std::array<std::string, N>, std::string_view>;
+template <typename T, uint8_t N>
+CPP_concept SplitFilenameFunctionT =
+    ad_utility::InvocableWithExactReturnType<T, std::array<std::string, N>,
+                                             std::string_view>;
 
 // A SplitVocabulary is a vocabulary layer that divides words into different
 // underlying vocabularies. It is templated on the UnderlyingVocabularies as
 // well as a SplitFunction that decides which underlying vocabulary is used for
 // each word and a SplitFilenameFunction that assigns filenames to underlying
 // vocabularies.
-CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
-             class... UnderlyingVocabularies)(
-    requires SplitFunctionT<SplitFunction> CPP_and SplitFilenameFunctionT<
-        SplitFilenameFunction,
-        sizeof...(UnderlyingVocabularies)>) class SplitVocabulary {
+template <typename SplitFunction, typename SplitFilenameFunction,
+          typename... UnderlyingVocabularies>
+requires SplitFunctionT<SplitFunction> &&
+         SplitFilenameFunctionT<SplitFilenameFunction,
+                                sizeof...(UnderlyingVocabularies)>
+class SplitVocabulary {
  public:
   // A SplitVocabulary must have at least two and at most 255 underlying
   // vocabularies. Note that this limit is very large and there should not be a
@@ -77,13 +78,18 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   static constexpr uint64_t vocabIndexBitMask =
       ad_utility::bitMaskForLowerBits(markerShift);
 
+  // Instances of the functions used for implementing the specific split logic
+  static constexpr SplitFunction splitFunction_{};
+  static constexpr SplitFilenameFunction splitFilenameFunction_{};
+
  private:
   // Array that holds all underlying vocabularies.
   UnderlyingVocabsArray underlying_;
 
  public:
-  // Check validity of vocabIndex and marker, then return a 64 bit index that
-  // contains the marker and vocabIndex, but leaves the ValueId datatype bits 0.
+  // Check validity of vocabIndex and marker, then return a new 64 bit index
+  // that contains the marker and vocabIndex. The result is guaranteed to be
+  // zero in all ValueId datatype bits.
   static uint64_t addMarker(uint64_t vocabIndex, uint8_t marker) {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs &&
                          vocabIndex <= vocabIndexBitMask);
@@ -100,7 +106,7 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
   // Use the SplitFunction to determine the marker for a given word (that is, in
   // which vocabulary this word would go)
   static uint8_t getMarkerForWord(const std::string_view& word) {
-    return SplitFunction(word);
+    return splitFunction_(word);
   };
 
   // Helper to detect if a "special" vocabulary is used.
@@ -242,19 +248,24 @@ CPP_template(const auto& SplitFunction, const auto& SplitFilenameFunction,
 };
 
 // Concrete implementations of split function and split filename function
+namespace detail::splitVocabulary {
 
 // Split function for Well-Known Text Literals: All words are written to
 // vocabulary 0 except WKT literals, which go to vocabulary 1.
-inline uint8_t geoSplitFunc(std::string_view word) {
+[[maybe_unused]] inline auto geoSplitFunc =
+    [](std::string_view word) -> uint8_t {
   return word.starts_with("\"") && word.ends_with(GEO_LITERAL_SUFFIX);
 };
 
 // Split filename function for Well-Known Text Literals: The vocabulary 0 is
 // saved under the base filename and WKT literals are saved with a suffix
 // ".geometry"
-inline std::array<std::string, 2> geoFilenameFunc(std::string_view base) {
+[[maybe_unused]] inline auto geoFilenameFunc =
+    [](std::string_view base) -> std::array<std::string, 2> {
   return {std::string(base), absl::StrCat(base, ".geometry")};
 };
+
+}  // namespace detail::splitVocabulary
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
 // vocabulary. This can be used for precomputations for spatial features.
@@ -262,7 +273,8 @@ inline std::array<std::string, 2> geoFilenameFunc(std::string_view base) {
 // after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
-    SplitVocabulary<geoSplitFunc, geoFilenameFunc, UnderlyingVocabulary,
-                    UnderlyingVocabulary>;
+    SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
+                    decltype(detail::splitVocabulary::geoFilenameFunc),
+                    UnderlyingVocabulary, UnderlyingVocabulary>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

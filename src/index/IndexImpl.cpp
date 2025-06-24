@@ -3,25 +3,22 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
+
+#include <absl/strings/str_join.h>
 
 #include <cstdio>
 #include <future>
 #include <numeric>
 #include <optional>
-#include <unordered_map>
 
 #include "CompilationInfo.h"
-#include "Index.h"
-#include "absl/strings/str_join.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
+#include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -337,6 +334,8 @@ void IndexImpl::createFromFiles(
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
+
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
 
@@ -1165,6 +1164,11 @@ void IndexImpl::readConfiguration() {
                  TextScoringMetric::EXPLICIT);
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
+
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;

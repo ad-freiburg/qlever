@@ -100,7 +100,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ad_utility::OwningView{leftRes->idTables()} |
                 ql::views::transform([exists = !right.empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
@@ -236,4 +236,17 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+// _____________________________________________________________________________
+bool ExistsJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable == existsVariable_) {
+    // NOTE: We could in theory check if the literals true and false are
+    // contained in the knowledge graph, but that would makes things more
+    // complicated for almost no benefit.
+    return false;
+  }
+  return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
 }

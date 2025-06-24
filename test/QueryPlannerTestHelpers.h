@@ -381,7 +381,7 @@ inline auto ValuesClause = [](string cacheKey) {
 // Match a SpatialJoin operation, set arguments to ignore to -1
 struct SpatialJoin {
   template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
-  auto operator()(size_t maxDist, size_t maxResults, Variable left,
+  auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
                   PayloadVariables payloadVariables,
                   SpatialJoinAlgorithm algorithm,

@@ -84,7 +84,8 @@ CachingTransformInputRange(Range&&, F)
 
 namespace loopControl {
 // A class to represent control flows in generator-like state machines,
-// like `break`, `continue`, or `yield a value`.
+// like `break`, `continue`, `yield a value`, or `yield all values of a given
+// range`.
 template <typename T>
 struct LoopControl {
  private:
@@ -99,12 +100,22 @@ struct LoopControl {
 
  public:
   using type = T;
-  using V = std::variant<T, Continue, Break, BreakWithValue>;
+  using Range = InputRangeTypeErased<T>;
+  using V = std::variant<T, Continue, Break, BreakWithValue, Range>;
   V v_;
   bool isContinue() const { return std::holds_alternative<Continue>(v_); }
   bool isBreak() const {
     return std::holds_alternative<Break>(v_) ||
            std::holds_alternative<BreakWithValue>(v_);
+  }
+
+  // If the variant holds a `Range<T>`, return the range by moving it out,
+  // else `nullopt`.
+  std::optional<Range> moveRangeIfPresent() {
+    if (std::holds_alternative<Range>(v_)) {
+      return std::move(std::get<Range>(v_));
+    }
+    return std::nullopt;
   }
 
   // If the variant either holds a `T` or a `BreakWithValue`, return the `T` by
@@ -116,6 +127,8 @@ struct LoopControl {
         return std::nullopt;
       } else if constexpr (ad_utility::SimilarTo<U, T>) {
         return std::move(v);
+      } else if constexpr (ad_utility::SimilarTo<U, InputRangeTypeErased<T>>) {
+        AD_FAIL();
       } else {
         static_assert(ad_utility::SimilarTo<U, BreakWithValue>);
         return std::move(v.value_);
@@ -131,6 +144,14 @@ struct LoopControl {
     return LoopControl{BreakWithValue{std::move(t)}};
   }
   static LoopControl yieldValue(T t) { return LoopControl{std::move(t)}; }
+
+  // Note: If the input is an lvalue, then by default the range will
+  // often be taken by reference. Make sure to `std::move` if it would be
+  // dangling.
+  template <typename R>
+  static LoopControl yieldAll(R&& r) {
+    return LoopControl{InputRangeTypeErased{ad_utility::allView(AD_FWD(r))}};
+  };
 };
 
 // `loopControlValueT` is a helper variable to get the stored type out of a
@@ -167,7 +188,9 @@ using LoopControl = loopControl::LoopControl<T>;
 // 4. If the value of `F(curElement)` is a `BreakWithValue` object, then the
 // value is yielded, but the iteration stops afterward (this is similar to a
 // `return` statement in a for-loop).
-// 5. Otherwise, the value of `F(curElement)` is a plain value, then that value
+// 5. If the value of `F(curElement)` is a `yieldAll(Range)` object, then all
+//    the elements of the range are yielded.
+// 6. Otherwise, the value of `F(curElement)` is a plain value, then that value
 // is yielded and the iteration resumes.
 
 // First some small helpers to get the actual value types of the classes below.
@@ -186,7 +209,9 @@ CPP_class_template(typename F)(
     requires std::is_object_v<F>) struct InputRangeFromLoopControlGet
     : InputRangeFromGet<detail::ResFromFunction<F>> {
  private:
+  using T = detail::ResFromFunction<F>;
   F getFunction_;
+  std::optional<InputRangeTypeErased<T>> innerRange_;
   using Res = detail::ResFromFunction<F>;
   static_assert(std::is_object_v<Res>,
                 "The functor of `InputRangeFromLoopControlGet` must yield an "
@@ -209,12 +234,25 @@ CPP_class_template(typename F)(
     // This loop is executed exactly once unless there is a `continue`
     // statement.
     while (true) {
+      if (innerRange_.has_value()) {
+        auto res = innerRange_.value().get();
+        if (!res.has_value()) {
+          innerRange_.reset();
+        } else {
+          return res;
+        }
+      }
       auto loopControl = getFunction_();
       if (loopControl.isContinue()) {
         continue;
       }
       if (loopControl.isBreak()) {
         receivedBreak_ = true;
+      }
+
+      innerRange_ = loopControl.moveRangeIfPresent();
+      if (innerRange_.has_value()) {
+        continue;
       }
       return loopControl.moveValueIfPresent();
     }
@@ -241,6 +279,7 @@ CPP_class_template(typename View, typename F)(requires(
   // If set to true then we have seen a `break` statement and no more values
   // are yielded.
   bool receivedBreak_ = false;
+  std::optional<InputRangeTypeErased<Res>> innerRange_;
 
  public:
   // Constructor.
@@ -257,6 +296,14 @@ CPP_class_template(typename View, typename F)(requires(
     // This loop is executed exactly once unless there is a `continue`
     // statement.
     while (true) {
+      if (innerRange_.has_value()) {
+        auto res = innerRange_.value().get();
+        if (!res.has_value()) {
+          innerRange_.reset();
+        } else {
+          return res;
+        }
+      }
       auto opt = impl_.get();
       if (!opt.has_value()) {
         return std::nullopt;
@@ -267,6 +314,10 @@ CPP_class_template(typename View, typename F)(requires(
       }
       if (loopControl.isBreak()) {
         receivedBreak_ = true;
+      }
+      innerRange_ = loopControl.moveRangeIfPresent();
+      if (innerRange_.has_value()) {
+        continue;
       }
       return loopControl.moveValueIfPresent();
     }

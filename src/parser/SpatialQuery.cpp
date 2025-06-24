@@ -36,12 +36,15 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
     maxResults_ = object.getInt();
   } else if (predString == "maxDistance") {
-    if (!object.isInt()) {
+    if (object.isInt()) {
+      maxDist_ = static_cast<double>(object.getInt());
+    } else if (object.isDouble()) {
+      maxDist_ = object.getDouble();
+    } else {
       throw SpatialSearchException(
-          "The parameter `<maxDistance>` expects an integer (the maximum "
-          "distance in meters)");
+          "The parameter `<maxDistance>` expects an integer or decimal (the "
+          "maximum distance in meters)");
     }
-    maxDist_ = object.getInt();
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "joinType") {

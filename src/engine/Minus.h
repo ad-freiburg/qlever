@@ -53,6 +53,9 @@ class Minus : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
   /**
    * @brief Joins a and b using the column defined int joinColumns, storing the
    *        result in result. R should have width resultWidth (or be a vector

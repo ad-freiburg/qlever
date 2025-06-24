@@ -7,19 +7,16 @@
 #ifndef QLEVER_DURATION_H
 #define QLEVER_DURATION_H
 
-#include <inttypes.h>
-#include <util/Exception.h>
+#include <absl/strings/str_cat.h>
 
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <exception>
-#include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 
-#include "absl/strings/str_cat.h"
+#include "util/Exception.h"
 
 //______________________________________________________________________________
 class DurationOverflowException : public std::exception {
