@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/LocalVocab.h"
@@ -51,20 +53,18 @@ inline void checkLiteralContentAndDatatype(
     const std::optional<ad_utility::triple_component::Literal>& literal,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype) {
-  if (literal.has_value()) {
-    ASSERT_EQ(asStringViewUnsafe(literal.value().getContent()),
-              expectedContent.value_or(""));
-
-    if (literal.value().hasDatatype()) {
-      ASSERT_TRUE(expectedDatatype.has_value());
-      ASSERT_EQ(asStringViewUnsafe(literal.value().getDatatype()),
-                expectedDatatype.value());
-    } else {
-      ASSERT_FALSE(expectedDatatype.has_value());
-    }
-  } else {
-    ASSERT_FALSE(expectedContent.has_value());
+  ASSERT_EQ(literal.has_value(), expectedContent.has_value());
+  if (!literal.has_value()) {
+    return;
   }
+  auto expected = ad_utility::triple_component::Literal::literalWithoutQuotes(
+      expectedContent.value());
+  if (expectedDatatype.has_value()) {
+    expected.addDatatype(
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            expectedDatatype.value()));
+  }
+  ASSERT_EQ(literal.value(), expected);
 };
 
 // Helper function to get literal from Id and then check its content and
@@ -165,7 +165,6 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   TestContextWithGivenTTl testContext{unitTtl};
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
 
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
@@ -176,20 +175,18 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   };
 
   // Test xsd:anyURI literal method
-  auto litTest = [&](const std::string& lit, bool expectSuccess) {
-    doTest(LiteralOrIri{Literal::fromStringRepresentation(lit)}, expectSuccess);
+  auto litTest = [&](const std::string& lit, const std::optional<Iri>& datatype,
+                     bool expectSuccess) {
+    doTest(LiteralOrIri::literalWithoutQuotes(lit, datatype), expectSuccess);
   };
 
-  auto litWithDatatype = "\"" + unitIriWithoutBrackets +
-                         "\"^^<http://www.w3.org/2001/XMLSchema#anyURI>";
-  litTest(litWithDatatype, true);
-
-  auto litWithoutDatatype = "\"" + unitIriWithoutBrackets + "\"";
-  litTest(litWithoutDatatype, false);
-
-  auto litWrongDatatype =
-      "\"" + unitIriWithoutBrackets + "\"^^<http://example.com/>";
-  litTest(litWrongDatatype, false);
+  litTest(
+      unitIriWithoutBrackets,
+      Iri::fromIrirefWithoutBrackets("http://www.w3.org/2001/XMLSchema#anyURI"),
+      true);
+  litTest(unitIriWithoutBrackets, std::nullopt, false);
+  litTest(unitIriWithoutBrackets,
+          Iri::fromIrirefWithoutBrackets("http://example.com/"), false);
 
   // Test IRI method
   doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets)},
