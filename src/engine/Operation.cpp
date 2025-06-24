@@ -249,7 +249,6 @@ CacheValue Operation::runComputationAndPrepareForCache(
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
-    AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize](
             const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
@@ -261,12 +260,12 @@ CacheValue Operation::runComputationAndPrepareForCache(
           return maxSize >=
                  currentSize + CacheValue::getSize(newIdTable.idTable_);
         },
-        [runtimeInfo = getRuntimeInfoPointer(), &cache,
-         cacheKey](Result aggregatedResult) {
+        [runtimeInfo = getRuntimeInfoPointer(), &cache, cacheKey,
+         pinned](Result aggregatedResult) {
           auto copy = *runtimeInfo;
           copy.status_ = RuntimeInformation::Status::fullyMaterialized;
           cache.tryInsertIfNotPresent(
-              false, cacheKey,
+              pinned, cacheKey,
               std::make_shared<CacheValue>(std::move(aggregatedResult),
                                            std::move(copy)));
         });
