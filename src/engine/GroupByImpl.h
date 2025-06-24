@@ -73,7 +73,10 @@ class GroupByImpl : public Operation {
   virtual float getMultiplicity(size_t col) override;
 
  public:
+  // Overrides Operation::getSizeEstimateBeforeLimit()
   uint64_t getSizeEstimateBeforeLimit() override;
+  // Const overload for internal use
+  uint64_t getSizeEstimateBeforeLimit() const;
   size_t getCostEstimate() override;
 
   /**

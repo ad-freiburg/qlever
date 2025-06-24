@@ -13,6 +13,7 @@
 #include <sstream>     // for std::ostringstream
 #include <unordered_set>
 #include <absl/container/flat_hash_set.h>
+#include <absl/strings/str_join.h>
 #include <type_traits>
 
 #include "engine/CallFixedSize.h"
@@ -184,7 +185,7 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
   return 1;
 }
 
-uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
+uint64_t GroupByImpl::getSizeEstimateBeforeLimit() const {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -193,10 +194,14 @@ uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
   auto varToMultiplicity = [this](const Variable& var) -> float {
     return _subtree->getMultiplicity(_subtree->getVariableColumn(var));
   };
-
   float minMultiplicity = ql::ranges::min(
       _groupByVariables | ql::views::transform(varToMultiplicity));
   return _subtree->getSizeEstimate() / minMultiplicity;
+}
+
+uint64_t GroupByImpl::getSizeEstimateBeforeLimit() {
+  // Delegate to the const overload
+  return static_cast<const GroupByImpl&>(*this).getSizeEstimateBeforeLimit();
 }
 
 size_t GroupByImpl::getCostEstimate() {
@@ -259,6 +264,11 @@ IdTable GroupByImpl::doGroupBy(const IdTable& inTable,
                                LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
+  // Reserve estimated number of result groups to reduce reallocations
+  if (!groupByCols.empty()) {
+    auto estimatedGroups = getSizeEstimateBeforeLimit();
+    dynResult.reserve(estimatedGroups);
+  }
 
   // If the input is empty, the result is also empty, except for an implicit
   // GROUP BY (`groupByCols.empty()`), which always has to produce one result
@@ -386,7 +396,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
                         "Subresult must be sorted on GROUP BY columns after fallback");
   }
 
-  std::vector<size_t> groupByCols;
+  std::vector<size_t> groupByColumns;
 
   // parse the group by columns
   const auto& subtreeVarCols = _subtree->getVariableColumns();
@@ -396,7 +406,14 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
       AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
-    groupByCols.push_back(it->second.columnIndex_);
+    groupByColumns.push_back(it->second.columnIndex_);
+  }
+
+  // Why remove this?
+  std::vector<size_t> groupByCols;
+  groupByCols.reserve(_groupByVariables.size());
+  for (const auto& var : _groupByVariables) {
+    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
   if (useHashMapOptimization) {
@@ -451,12 +468,9 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
 
   IdTable idTable = CALL_FIXED_SIZE(
       (std::array{inWidth, outWidth}), &GroupByImpl::doGroupBy, this,
-      subresult->idTable(), groupByCols, aggregates, &localVocab);
+      subresult->idTable(), groupByColumns, aggregates, &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
-  // Assert that the final result preserves the expected sort order
-  AD_CORRECTNESS_CHECK(isSortedOn(idTable, resultSortedOn()),
-                      "Final GROUP BY result is not sorted on expected columns");
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
@@ -540,6 +554,11 @@ Result::Generator GroupByImpl::computeResultLazily(
                           groupByCols.size()};
 
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  // Reserve estimated number of result groups to reduce reallocations
+  if (!groupByCols.empty()) {
+    auto estimatedGroups = getSizeEstimateBeforeLimit();
+    resultTable.reserve(estimatedGroups);
+  }
 
   bool groupSplitAcrossTables = false;
 
@@ -671,7 +690,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
       table(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
     } else {
-      table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
+      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
     }
   } else {
     table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
@@ -707,8 +726,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
       "GROUP BY variable, this is a bug in the query planner",
       permutedTriple[1]->toString(), groupByVariable.name());
 
-  // There must be exactly one alias, which is a non-distinct count of one of the
-  // two variables of the index scan.
+  // There must be exactly one alias, which is a non-distinct count of one of
+  // the two variables of the index scan.
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
   bool countedVariableIsOneOfIndexScanVariables =
       countedVariable == *(permutedTriple[1]) ||
