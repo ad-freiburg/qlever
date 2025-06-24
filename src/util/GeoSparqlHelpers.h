@@ -94,11 +94,11 @@ class WktMetricDistGeoPoints {
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
-  ValueId operator()(const std::optional<GeometryInfo>& geom) const {
+  ValueId operator()(const std::optional<Centroid>& geom) const {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().getCentroid());
+    return ValueId::makeFromGeoPoint(geom.value().centroid_);
   }
 };
 

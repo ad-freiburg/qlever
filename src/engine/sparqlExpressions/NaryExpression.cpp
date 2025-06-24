@@ -9,6 +9,7 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -18,8 +19,11 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(
     LatitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
-NARY_EXPRESSION(CentroidExpression, 1,
-                FV<ad_utility::WktCentroid, GeometryInfoValueGetter>);
+
+NARY_EXPRESSION(
+    CentroidExpression, 1,
+    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
+
 NARY_EXPRESSION(DistExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
                    GeoPointValueGetter>);
