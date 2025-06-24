@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
 #include "index/LocalVocabEntry.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "util/GeometryInfo.h"
@@ -30,7 +31,9 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
   )";
 struct TestContextWithGivenTTl {
   std::string turtleInput;
-  QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
+  std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
+  QueryExecutionContext* qec =
+      ad_utility::testing::getQec(turtleInput, vocabularyType);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
@@ -44,8 +47,10 @@ struct TestContextWithGivenTTl {
       sparqlExpression::EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
-  TestContextWithGivenTTl(std::string turtle)
-      : turtleInput{std::move(turtle)} {}
+  TestContextWithGivenTTl(
+      std::string turtle,
+      std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt)
+      : turtleInput{std::move(turtle)}, vocabularyType{vocabularyType} {}
 };
 
 // Helper function to check literal value and datatype
@@ -237,7 +242,10 @@ inline void checkGeoInfoFromVocab(
     Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
-  TestContextWithGivenTTl testContext{geoInfoTtl};
+  TestContextWithGivenTTl testContext{
+      geoInfoTtl,
+      // Disable vocabulary type fuzzy testing here
+      VocabularyType{VocabularyType::Enum::OnDiskCompressed}};
   VocabIndex idx;
   ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
   auto id = ValueId::makeFromVocabIndex(idx);
