@@ -22,21 +22,18 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
-#include "index/vocabulary/VocabularyOnDisk.h"
 #include "util/Exception.h"
 #include "util/GeometryInfo.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
-#include "util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -135,9 +132,6 @@ class Vocabulary {
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
   AccessReturnType operator[](IndexType idx) const;
-
-  // AccessReturnType_t<StringType> at(IndexType idx) const { return
-  // operator[](id); }
 
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
@@ -256,13 +250,40 @@ class Vocabulary {
   // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
   auto makeWordWriterPtr(const std::string& filename) const {
-    return vocabulary_.getUnderlyingVocabulary().makeWordWriterPtr(filename);
+    return vocabulary_.getUnderlyingVocabulary().makeDiskWriterPtr(filename);
+  }
+
+  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
+  // vocabulary and set the type of the vocabulary according to the `type`
+  // argument (see the `PolymorphicVocabulary` class for details).
+  void resetToType(ad_utility::VocabularyType type) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
+  }
+
+  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
+  // vocabulary and set the type of the vocabulary according to the `type`
+  // argument (see the `PolymorphicVocabulary` class for details).
+  void resetToType(ad_utility::VocabularyType type) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
   }
 };
 
 namespace detail {
-using UnderlyingVocabRdfsVocabulary =
-    CompressedVocabulary<VocabularyInternalExternal>;
+// Thecompile-time definitions `QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be
+// used to disable the external vocab and the compression of the vocab at
+// compile time. NOTE: These change the binary format of QLever's index, so
+// changing them requires rebuilding of the indices.
+
+#ifdef QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY
+using UnderlyingVocabRdfsVocabulary = VocabularyInMemory;
+#else
+using UnderlyingVocabRdfsVocabulary = PolymorphicVocabulary;
+#endif
+
 using UnderlyingVocabTextVocabulary = VocabularyInMemory;
 }  // namespace detail
 

@@ -10,4 +10,8 @@ addLinkAndDiscoverTestNoLibs(VocabularyInternalExternalTest vocabulary)
 
 addLinkAndDiscoverTestNoLibs(VocabularyInMemoryBinSearchTest vocabulary)
 
+addLinkAndDiscoverTestNoLibs(PolymorphicVocabularyTest vocabulary)
+
+addLinkAndDiscoverTestNoLibs(VocabularyTypeTest)
+
 addLinkAndDiscoverTest(GeoVocabularyTest vocabulary)

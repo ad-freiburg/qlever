@@ -2,22 +2,35 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
 #include "parser/GeoPoint.h"
+#include "util/GTestHelpers.h"
 #include "util/GeometryInfo.h"
+
 namespace {
 
-using ad_utility::GeometryInfo;
+using namespace ad_utility;
+using namespace geoInfoTestHelpers;
+
+// Example WKT literals for the tests below
+constexpr std::string_view lit =
+    "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view lit2 =
+    "\"LINESTRING(2 2, 4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view lit3 =
+    "\"POLYGON(2 4, 4 4, 4 "
+    "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
   GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}};
-  ASSERT_EQ(g.getWktType(), 5);
-  ASSERT_NEAR(g.getCentroid().getLat(), 1.5, 0.0001);
-  ASSERT_NEAR(g.getCentroid().getLng(), 1.5, 0.0001);
+  ASSERT_EQ(g.getWktType().type_, 5);
+  ASSERT_NEAR(g.getCentroid().centroid_.getLat(), 1.5, 0.0001);
+  ASSERT_NEAR(g.getCentroid().centroid_.getLng(), 1.5, 0.0001);
   auto [lowerLeft, upperRight] = g.getBoundingBox();
   ASSERT_NEAR(lowerLeft.getLat(), 1, 0.0001);
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
@@ -25,34 +38,25 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
 
   // Too large wkt type value
-  ASSERT_ANY_THROW(GeometryInfo(
-      120, std::pair<GeoPoint, GeoPoint>(GeoPoint(1, 1), GeoPoint(2, 2)),
-      GeoPoint(1.5, 1.5)));
+  AD_EXPECT_THROW_WITH_MESSAGE(GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}),
+                               ::testing::HasSubstr("WKT Type out of range"));
 
   // Wrong bounding box point ordering
-  ASSERT_ANY_THROW(GeometryInfo(
-      1, std::pair<GeoPoint, GeoPoint>(GeoPoint(2, 2), GeoPoint(1, 1)),
-      GeoPoint(1.5, 1.5)));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}),
+      ::testing::HasSubstr("Bounding box coordinates invalid"));
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
-  std::string lit =
-      "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g = GeometryInfo::fromWktLiteral(lit);
   GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
   checkGeoInfo(g, exp);
 
-  std::string lit2 =
-      "\"LINESTRING(2 2, 4 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g2 = GeometryInfo::fromWktLiteral(lit2);
   GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}};
   checkGeoInfo(g2, exp2);
 
-  std::string lit3 =
-      "\"POLYGON(2 4, 4 4, 4 "
-      "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
   auto g3 = GeometryInfo::fromWktLiteral(lit3);
   GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
   checkGeoInfo(g3, exp3);
@@ -69,6 +73,20 @@ TEST(GeometryInfoTest, FromGeoPoint) {
   auto g2 = GeometryInfo::fromGeoPoint(p2);
   GeometryInfo exp2{1, {p2, p2}, p2};
   checkGeoInfo(g2, exp2);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, RequestedInfoInstance) {
+  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit2));
+  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit3));
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, RequestedInfoLiteral) {
+  checkRequestedInfoForWktLiteral(lit);
+  checkRequestedInfoForWktLiteral(lit2);
+  checkRequestedInfoForWktLiteral(lit3);
 }
 
 }  // namespace

@@ -50,8 +50,9 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(const string& filename) {
-  vocabulary_.getUnderlyingVocabulary().readFromFile(filename);
+void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
+  vocabulary_.close();
+  vocabulary_.open(fileName);
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -97,6 +98,8 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
+  // TODO<joka921> We should have a completely separate layer that handles the
+  // externalization, not the Vocab.
   if (!stringIsLiteral(s)) {
     return shouldEntityBeExternalized(s);
   } else {
@@ -277,8 +280,9 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::operator[](IndexType idx) const -> AccessReturnType {
+template <typename UnderlyingVocabulary, typename C, typename I>
+auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
+    -> AccessReturnType {
   return vocabulary_[idx.get()];
 }
 

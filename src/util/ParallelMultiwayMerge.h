@@ -5,6 +5,8 @@
 #ifndef QLEVER_PARALLELMULTIWAYMERGE_H
 #define QLEVER_PARALLELMULTIWAYMERGE_H
 
+#include <absl/functional/bind_front.h>
+
 #include "util/AsyncStream.h"
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
@@ -86,8 +88,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
   };
 
   auto pushToBuffer =
-      std::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
-                      std::ref(buffer), std::ref(sizeOfCurrentBlock));
+      absl::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
+                       std::ref(buffer), std::ref(sizeOfCurrentBlock));
 
   auto isBufferLargeEnough = [&] {
     return buffer.size() >= maxBlockSize || sizeOfCurrentBlock >= maxMem;

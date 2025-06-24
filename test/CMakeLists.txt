@@ -256,6 +256,8 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
+addLinkAndDiscoverTest(SplitVocabularyTest index)
+
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
@@ -304,9 +306,11 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
+addLinkAndDiscoverTestSerial(LoadTest engine)
+
 addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
-addLinkAndDiscoverTest(CallFixedSizeTest)
+addLinkAndDiscoverTestNoLibs(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 

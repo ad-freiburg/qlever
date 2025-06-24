@@ -72,7 +72,7 @@ void testCartesianProductImpl(VectorTable expected,
     for (size_t offset = 0; offset < expected.size(); ++offset) {
       LimitOffsetClause limitClause{limit, 0, offset};
       auto join = makeJoin(inputs, useLimitInSuboperations);
-      join.setLimit(limitClause);
+      join.applyLimitOffset(limitClause);
       VectorTable partialResult;
       std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
                 expected.begin() + limitClause.upperBound(expected.size()),
@@ -274,7 +274,7 @@ class CartesianProductJoinLazyTest
     auto* qec = ad_utility::testing::getQec();
     size_t counter = 0;
     CartesianProductJoin::Children children{};
-    for (IdTable& table : std::span{tables}.subspan(0, tables.size() - 1)) {
+    for (IdTable& table : ql::span{tables}.subspan(0, tables.size() - 1)) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
       // Make sure size estimates are increasing to ensure the order stays the
@@ -297,7 +297,8 @@ class CartesianProductJoinLazyTest
         children.back()->getRootOperation())
         ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
-    join.setLimit(LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
+    join.applyLimitOffset(
+        LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
     return join;
   }
 
@@ -465,7 +466,7 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
       {1, 11, 102, 1000, 10001, 100001},
   });
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 6);
+  auto materializedResult = aggregateTables(result.idTables(), 6);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -513,7 +514,7 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   fillWithVocabValue(2, 12);
   reference.insertAtEnd(bigTable);
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 4);
+  auto materializedResult = aggregateTables(result.idTables(), 4);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -590,7 +591,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 
@@ -613,7 +614,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 

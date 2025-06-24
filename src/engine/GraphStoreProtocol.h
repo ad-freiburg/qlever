@@ -46,14 +46,16 @@ class GraphStoreProtocol {
       // content.
       throw UnknownMediatypeError("Mediatype empty or not set.");
     }
-    const auto mediatype =
-        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    auto mediaTypes =
+        ad_utility::getMediaTypesFromAcceptHeader(contentTypeString);
+
     // A media type is set but not one of the supported ones as per the QLever
-    // MediaType code.
-    if (!mediatype.has_value()) {
+    // MediaType code. Content-Type is only allowed to return a single value, so
+    // wildcards are also correctly discarded here.
+    if (mediaTypes.size() != 1) {
       throwUnsupportedMediatype(rawRequest.at(field::content_type));
     }
-    return mediatype.value();
+    return mediaTypes.front();
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 

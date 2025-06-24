@@ -3,31 +3,29 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014-2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexImpl.h"
+#include "index/IndexImpl.h"
+
+#include <absl/strings/str_join.h>
 
 #include <cstdio>
 #include <future>
 #include <numeric>
 #include <optional>
-#include <unordered_map>
 
 #include "CompilationInfo.h"
-#include "Index.h"
-#include "absl/strings/str_join.h"
 #include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
+#include "index/Index.h"
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
+#include "util/Timer.h"
 #include "util/TypeTraits.h"
 
 using std::array;
@@ -337,6 +335,8 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+
   readIndexBuilderSettingsFromFile();
 
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
@@ -454,10 +454,23 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
 
+  // Show progress and statistics for the number of triples parsed, in
+  // particular, the average processing time for a batch of 10M triples (see
+  // `DEFAULT_PROGRESS_BAR_BATCH_SIZE`).
+  //
+  // NOTE: Some input generation processes (for example, `osm2rdf` for the OSM
+  // data) have a long startup time before they produce the first triple, but
+  // then produce triples fast. If we would count that startup time towards the
+  // first batch, the reported average batch processing time would be
+  // distorted. We therefore stop the timer here, and then start it when the
+  // first triple is parsed (see `numTriplesParsedTimer.cont()` below).
+  size_t numTriplesParsed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesParsed, "Triples parsed: "};
+  ad_utility::Timer& numTriplesParsedTimer = progressBar.getTimer();
+  numTriplesParsedTimer.stop();
+
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
-  size_t numTriplesProcessed = 0;
-  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples parsed: "};
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -483,13 +496,14 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                   this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
+        numTriplesParsedTimer.cont();
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
           }
         }
-        numTriplesProcessed++;
+        numTriplesParsed++;
         if (progressBar.update()) {
           AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
@@ -528,7 +542,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(
-            numTriplesProcessed, numFiles, actualCurrentPartialSize,
+            numTriplesParsed, numFiles, actualCurrentPartialSize,
             std::move(oldItemPtr), std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
@@ -1138,6 +1152,7 @@ void IndexImpl::readConfiguration() {
     }
   };
 
+  loadDataMember("git-hash", gitShortHash_);
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
   loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.
@@ -1149,6 +1164,11 @@ void IndexImpl::readConfiguration() {
                  TextScoringMetric::EXPLICIT);
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
+
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;

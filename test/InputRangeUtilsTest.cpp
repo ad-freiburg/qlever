@@ -80,6 +80,25 @@ TEST(CachingTransformInputRange, BasicTests) {
                                                             firstPlusTwo);
 }
 
+// Test for iterating past the end of a CachingTransformInput range
+TEST(CachingTransformInputRange, IteratePastEnd) {
+  // This test ensures that nullopt is returned repeatedly after all elements
+  // have already been iterated
+  std::vector<int> view{42};
+  auto simpleMove = [](auto& p) { return std::move(p); };
+  ad_utility::CachingTransformInputRange range{view, simpleMove};
+  std::optional<int> element = range.get();
+
+  // The first element shall be returned
+  ASSERT_TRUE(element.has_value());
+  EXPECT_EQ(42, element.value());
+
+  // Subsequent calls shall return nullopt
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+  EXPECT_FALSE(range.get().has_value());
+}
+
 // Tests for the generator with additional control flow.
 TEST(CachingContinuableTransformInputRange, BreakAndContinue) {
   // This function will move the vector if possible (i.e. if it is not const)
@@ -127,6 +146,34 @@ TEST(CachingContinuableTransformInputRange, BreakWithValue) {
   TransformViewTestHelpers<std::vector<int>> helpers;
   helpers.input_ = {{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
   helpers.expected_ = {{3, 2}, {5, 4}, {5, 8}};
+  helpers.elementwiseMoved_ = {{}, {1, 3}, {}, {}, {1, 2}};
+  testTransformView<ad_utility::CachingContinuableTransformInputRange>(
+      helpers, firstPlusTwo);
+}
+
+// _____________________________________________________________________________
+TEST(CachingContinuableTransformInputRange, yieldAll) {
+  // This function will move the vector if possible (i.e. if it is not const)
+  // and then increment the first element by `2`. All but the last input
+  // will be yielded twice to test the `yieldAll` facility.
+  using namespace ad_utility;
+  using L = LoopControl<std::vector<int>>;
+  auto firstPlusTwo = [](auto& vec) -> L {
+    if (vec.at(1) % 2 == 1) {
+      return L::makeContinue();
+    }
+    auto copy = std::move(vec);
+    copy.at(0) += 2;
+    if (copy.at(1) > 5) {
+      return L::breakWithValue(std::move(copy));
+    }
+    std::array arr{copy, copy};
+    return L::yieldAll(std::move(arr));
+  };
+
+  TransformViewTestHelpers<std::vector<int>> helpers;
+  helpers.input_ = {{1, 2}, {1, 3}, {3, 4}, {3, 8}, {1, 2}};
+  helpers.expected_ = {{3, 2}, {3, 2}, {5, 4}, {5, 4}, {5, 8}};
   helpers.elementwiseMoved_ = {{}, {1, 3}, {}, {}, {1, 2}};
   testTransformView<ad_utility::CachingContinuableTransformInputRange>(
       helpers, firstPlusTwo);
@@ -194,5 +241,55 @@ TEST(CachingContinuableTransformInputRange, StatefulFunctor) {
   helpers.elementwiseMoved_ = {{1, 2}, {}, {}, {}, {9, 10}};
   testTransformView<ad_utility::CachingContinuableTransformInputRange>(
       helpers, applyLimit4Offset3);
+}
+
+// Tests for `InputRangeFromLoopControlGet`.
+TEST(InputRangeFromLoopControlGet, BasicTests) {
+  using namespace ad_utility;
+  using namespace testing;
+  using L = LoopControl<int>;
+  auto f = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(0);
+    }
+    if (val == 1) {
+      return L::makeContinue();
+    }
+    return L::breakWithValue(42);
+  };
+
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f)), ElementsAre(0, 42));
+
+  // Also add a test with a simple break;
+  auto f2 = [i = 0]() mutable -> L {
+    auto val = i++;
+    if (val == 0) {
+      return L::yieldValue(0);
+    }
+    if (val == 1) {
+      return L::yieldValue(42);
+    }
+    if (val < 37) {
+      return L::makeContinue();
+    }
+    if (val == 38) {
+      return L::yieldValue(123);
+    }
+    if (val == 42) {
+      return L::yieldAll(std::array{13, 18});
+    }
+
+    if (val == 45) {
+      return L::yieldValue(9);
+    }
+
+    if (val < 47) {
+      return L::makeContinue();
+    }
+    return L::makeBreak();
+  };
+  EXPECT_THAT(toVec(InputRangeFromLoopControlGet(f2)),
+              ElementsAre(0, 42, 123, 13, 18, 9));
 }
 }  // namespace
