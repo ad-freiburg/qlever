@@ -9,6 +9,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
@@ -117,8 +118,8 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
-        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+           limitOffset.upperBound(idTable.numRows())](ql::span<Id> column) {
+        ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
   size_t targetSize = limitOffset.actualSize(idTable.numRows());
@@ -134,7 +135,7 @@ void Result::applyLimitOffset(
         limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
-  // `O(1)` (see the docs for `std::shift_left`).
+  // `O(1)` (see the docs for `ql::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
   if (limitOffset.isUnconstrained()) {
     return;
@@ -146,10 +147,9 @@ void Result::applyLimitOffset(
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     ad_utility::CachingContinuableTransformInputRange generator{
-        std::move(idTables()),
-        [limitOffset = limitOffset,
-         limitTimeCallback = std::move(limitTimeCallback)](
-            Result::IdTableVocabPair& pair) mutable {
+        idTables(), [limitOffset = limitOffset,
+                     limitTimeCallback = std::move(limitTimeCallback)](
+                        Result::IdTableVocabPair& pair) mutable {
           if (limitOffset._limit.value_or(1) == 0) {
             return IdTableLoopControl::makeBreak();
           }
@@ -183,9 +183,8 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
     ad_utility::CachingTransformInputRange generator{
-        std::move(idTables()),
-        [limit = limitOffset._limit,
-         elementCount = uint64_t{0}](Result::IdTableVocabPair& pair) mutable {
+        idTables(), [limit = limitOffset._limit, elementCount = uint64_t{0}](
+                        Result::IdTableVocabPair& pair) mutable {
           elementCount += pair.idTable_.numRows();
           AD_CONTRACT_CHECK(!limit.has_value() ||
                             elementCount <= limit.value());
@@ -213,7 +212,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
         varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
   } else {
     ad_utility::CachingTransformInputRange generator{
-        std::move(idTables()),
+        idTables(),
         [varColMap = varColMap, performCheck = std::move(performCheck)](
             Result::IdTableVocabPair& pair) {
           // The lambda capture is only required when expensive checks are
@@ -233,7 +232,7 @@ void Result::runOnNewChunkComputed(
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto inputAsGet = ad_utility::CachingTransformInputRange(
-      std::move(idTables()), [](auto& input) { return std::move(input); });
+      idTables(), [](auto& input) { return std::move(input); });
   using namespace ad_utility::timer;
   // We need the shared pointer, because we cannot easily have a lambda capture
   // refer to another lambda capture.
@@ -273,11 +272,11 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-Result::LazyResult& Result::idTables() const {
+Result::LazyResult Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);
   AD_CONTRACT_CHECK(!container.consumed_->exchange(true));
-  return container.generator_;
+  return std::move(container.generator_);
 }
 
 // _____________________________________________________________________________
@@ -293,7 +292,7 @@ void Result::cacheDuringConsumption(
     std::function<void(Result)> storeInCache) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   data_.emplace<GenContainer>(ad_utility::wrapGeneratorWithCache(
-      std::move(idTables()),
+      idTables(),
       [fitInCache = std::move(fitInCache)](
           std::optional<IdTableVocabPair>& aggregate,
           const IdTableVocabPair& newTablePair) {

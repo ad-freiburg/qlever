@@ -5,10 +5,9 @@
 #ifndef QLEVER_DATES_AND_DURATION_H
 #define QLEVER_DATES_AND_DURATION_H
 
-#include <util/Date.h>
-#include <util/Duration.h>
-
 #include "global/Constants.h"
+#include "util/Date.h"
+#include "util/Duration.h"
 #include "util/NBitInteger.h"
 
 // This class either encodes a `Date`, a year that is outside the range that
@@ -52,12 +51,12 @@ class DateYearOrDuration {
 
   // Construct from a `Date`.
   explicit DateYearOrDuration(Date d) {
-    bits_ = std::bit_cast<uint64_t>(d) | (datetime << numPayloadDateBits);
+    bits_ = absl::bit_cast<uint64_t>(d) | (datetime << numPayloadDateBits);
   }
 
   // Construct a `DateYearOrDuration` given a `DayTimeDuration` object.
   explicit DateYearOrDuration(DayTimeDuration dayTimeDuration) {
-    bits_ = std::bit_cast<uint64_t>(dayTimeDuration) |
+    bits_ = absl::bit_cast<uint64_t>(dayTimeDuration) |
             (daytimeDuration << numPayloadDurationBits);
   }
 
@@ -86,7 +85,7 @@ class DateYearOrDuration {
 
   // Return the underlying `Date` object. The behavior is undefined if
   // `isDate()` is `false`.
-  Date getDateUnchecked() const { return std::bit_cast<Date>(bits_); }
+  Date getDateUnchecked() const { return absl::bit_cast<Date>(bits_); }
 
   // Return the underlying `Date` object. An assertion fails if `isDate()` is
   // `false`.
@@ -98,7 +97,7 @@ class DateYearOrDuration {
   // Return the underlying `DayTimeDuration` object. The behavior is undefined
   // if `isDayTimeDuration()` is `false`.
   DayTimeDuration getDayTimeDurationUnchecked() const {
-    return std::bit_cast<DayTimeDuration>(bits_);
+    return absl::bit_cast<DayTimeDuration>(bits_);
   }
 
   // Return the underlying `DayTimeDuration` object, with assertion check.

@@ -23,6 +23,13 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
   // Make sure that the left and right input are sorted on the join columns.
   std::tie(left_, right_) = QueryExecutionTree::createSortedTrees(
       std::move(left_), std::move(right_), joinColumns_);
+
+  if (joinColumns_.empty()) {
+    // For non-lazy results applying the limit introduces some overhead, but for
+    // lazy results it ensures that we don't have to compute the whole result,
+    // so we consider this a tradeoff worth to make.
+    right_->applyLimit({1});
+  }
 }
 
 // _____________________________________________________________________________
@@ -85,12 +92,6 @@ size_t ExistsJoin::getCostEstimate() {
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
   auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
-  if (noJoinNecessary) {
-    // For non-lazy results applying the limit introduces some overhead, but for
-    // lazy results it ensures that we don't have to compute the whole result,
-    // so we consider this a tradeoff worth to make.
-    right_->setLimit({1});
-  }
   auto rightRes = right_->getResult();
   const auto& right = rightRes->idTable();
 
@@ -99,7 +100,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ad_utility::OwningView{leftRes->idTables()} |
                 ql::views::transform([exists = !right.empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
@@ -155,23 +156,23 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
   // Boolean column) should be `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
-  // Helper lambda for computing the exists join with `callFixedSize`, which
+  // Helper lambda for computing the exists join with `callFixedSizeVi`, which
   // makes the number of join columns a template parameter.
   auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
                             &colsLeftDynamic = joinColumnsLeft,
                             &colsRightDynamic = joinColumnsRight,
-                            this]<int NumJoinCols>() {
-    // The `actionForNotExisting` callback gets iterators as input, but should
-    // output indices, hence the pointer arithmetic.
+                            this](auto NumJoinCols) {
+    // The `actionForNotExisting` callback gets iterators as input, but
+    // should output indices, hence the pointer arithmetic.
     auto joinColumnsLeft = colsLeftDynamic.asStaticView<NumJoinCols>();
     auto joinColumnsRight = colsRightDynamic.asStaticView<NumJoinCols>();
     auto actionForNotExisting =
         [&notExistsIndices, begin = joinColumnsLeft.begin()](
             const auto& itLeft) { notExistsIndices.push_back(itLeft - begin); };
 
-    // Run `zipperJoinWithUndef` with the described callbacks and the mentioned
-    // optimization in case we know that there are no UNDEF values in the join
-    // columns.
+    // Run `zipperJoinWithUndef` with the described callbacks and the
+    // mentioned optimization in case we know that there are no UNDEF values
+    // in the join columns.
     auto checkCancellationLambda = [this] { checkCancellation(); };
     auto runZipperJoin = [&](auto findUndef) {
       [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
@@ -185,7 +186,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
       runZipperJoin(ad_utility::findSmallerUndefRanges);
     }
   };
-  ad_utility::callFixedSize(numJoinColumns, runForNumJoinCols);
+  ad_utility::callFixedSizeVi(numJoinColumns, runForNumJoinCols);
 
   // Add the result column from the computed `notExistsIndices` (which tell us
   // where the value should be `false`).
@@ -235,4 +236,17 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+// _____________________________________________________________________________
+bool ExistsJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable == existsVariable_) {
+    // NOTE: We could in theory check if the literals true and false are
+    // contained in the knowledge graph, but that would makes things more
+    // complicated for almost no benefit.
+    return false;
+  }
+  return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
 }

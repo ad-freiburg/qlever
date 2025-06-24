@@ -60,6 +60,9 @@ class OptionalJoin : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
@@ -68,12 +71,18 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+  // Joins two results on a single join column lazily, inserting the special
+  // value `Id::makeUndefined()` for any entries marked as optional.
+  Result lazyOptionalJoin(std::shared_ptr<const Result> left,
+                          std::shared_ptr<const Result> right,
+                          bool requestLaziness);
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   void computeSizeEstimateAndMultiplicities();
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

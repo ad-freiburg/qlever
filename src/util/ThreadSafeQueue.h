@@ -6,17 +6,17 @@
 #ifndef QLEVER_SRC_UTIL_THREADSAFEQUEUE_H
 #define QLEVER_SRC_UTIL_THREADSAFEQUEUE_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <condition_variable>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <ranges>
 
-#include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/Generator.h"
-#include "util/Log.h"
 #include "util/jthread.h"
 
 namespace ad_utility::data_structures {

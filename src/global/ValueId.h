@@ -85,13 +85,13 @@ class ValueId {
 
   /// The maximum value for the unsigned types that are used as indices
   /// (currently VocabIndex, LocalVocabIndex and Text).
-  static constexpr T maxIndex = 1ull << (numDataBits - 1);
+  static constexpr T maxIndex = (1ull << numDataBits) - 1;
 
   /// The smallest double > 0 that will not be rounded to zero by the precision
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
   static constexpr double minPositiveDouble =
-      std::bit_cast<double>(1ull << numDatatypeBits);
+      absl::bit_cast<double>(1ull << numDatatypeBits);
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
@@ -233,13 +233,13 @@ class ValueId {
   /// precision of the mantissa of an IEEE double precision floating point
   /// number from 53 to 49 significant bits.
   static ValueId makeFromDouble(double d) {
-    auto shifted = std::bit_cast<T>(d) >> numDatatypeBits;
+    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   /// Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   /// Double` then the result is unspecified.
   [[nodiscard]] double getDouble() const noexcept {
-    return std::bit_cast<double>(_bits << numDatatypeBits);
+    return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   /// Create a `ValueId` for a signed integer value. Integers in the range
@@ -262,9 +262,28 @@ class ValueId {
     return addDatatypeBits(bits, Datatype::Bool);
   }
 
+  /// Create a `ValueId` for a boolean value, represented as "0" or "1" instead
+  /// of "false" or "true".
+  static constexpr ValueId makeBoolFromZeroOrOne(bool b) noexcept {
+    auto bits = static_cast<T>(b);
+    bits |= static_cast<T>(true) << 1;
+    return addDatatypeBits(bits, Datatype::Bool);
+  }
+
   // Obtain the boolean value.
   [[nodiscard]] bool getBool() const noexcept {
-    return static_cast<bool>(removeDatatypeBits(_bits));
+    return static_cast<bool>(removeDatatypeBits(_bits) & 1);
+  }
+
+  // Obtain the boolean value as a string view. In particular, return either
+  // `true`, `false`, `0` , or `1`, depending on whether the value was created
+  // via `makeFromBool` or `makeBoolFromZeroOrOne` (see above).
+  std::string_view getBoolLiteral() const noexcept {
+    bool value = getBool();
+    if (_bits & 0b10) {
+      return value ? "1" : "0";
+    }
+    return value ? "true" : "false";
   }
 
   /// Create a `ValueId` for an unsigned index of type
@@ -313,11 +332,11 @@ class ValueId {
 
   // Store or load a `Date` object.
   static ValueId makeFromDate(DateYearOrDuration d) noexcept {
-    return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
+    return addDatatypeBits(absl::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
   DateYearOrDuration getDate() const noexcept {
-    return std::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
+    return absl::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -415,7 +434,7 @@ class ValueId {
 
     auto visitor = [&ostr](auto&& value) {
       using T = decltype(value);
-      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
+      if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||

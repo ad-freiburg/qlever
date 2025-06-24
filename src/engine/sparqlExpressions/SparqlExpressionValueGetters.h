@@ -54,15 +54,15 @@ CPP_concept ValueAsNumericId =
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
-// from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
-// values will become `Id::makeUndefined()`.
-CPP_template(bool NanToUndef = false,
+// from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
+// point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
+CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanToUndef) {
-    return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+    return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
+  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
@@ -151,8 +151,8 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
-// all datatypes except for xsd:string are removed, language tags are preserved,
-// see ExportQueryExecutionTrees::idToLiteral for details.
+// all datatypes are removed, language tags are preserved,
+// see `ExportQueryExecutionTrees::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
   using Mixin<LiteralValueGetterWithStrFunction>::operator();
@@ -164,7 +164,7 @@ struct LiteralValueGetterWithStrFunction
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// Same as above but only literals with 'xsd:string' datatype or no datatype are
+// Same as above but only literals no datatype are
 // returned. This is used in the string expressions in `StringExpressions.cpp`.
 struct LiteralValueGetterWithoutStrFunction
     : Mixin<LiteralValueGetterWithoutStrFunction> {
@@ -176,7 +176,6 @@ struct LiteralValueGetterWithoutStrFunction
   std::optional<ad_utility::triple_component::Literal> operator()(
       const LiteralOrIri& s, const EvaluationContext*) const;
 };
-
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
 template <Datatype datatype>
@@ -395,16 +394,24 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
 };
 
-// Value getter for `GeometryInfo` objects. If a `ValueId` pointing to a literal
-// in the geometry vocabulary is given, the object is fetched from the
-// precomputed file. For `GeoPoint`s (trivial) and string literals it is
-// computed ad hoc.
-struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter> {
-  using Mixin<GeometryInfoValueGetter>::operator();
-  std::optional<ad_utility::GeometryInfo> operator()(
+// Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
+// pointing to a literal in the geometry vocabulary is given, the object is
+// fetched from the precomputed file and the `RequestedInfo` is extracted from
+// it. For Well Known Text literals only the `RequestedInfo` is computed ad
+// hoc.
+template <typename RequestedInfo = ad_utility::GeometryInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
+  std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
-  std::optional<ad_utility::GeometryInfo> operator()(
+  std::optional<RequestedInfo> operator()(
       const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
+
+  // Helper: This function returns a `GeometryInfo` object if it can be fetched
+  // from a precomputation result. Otherwise `std::nullopt` is returned.
+  static std::optional<ad_utility::GeometryInfo> getPrecomputedGeometryInfo(
+      ValueId id, const EvaluationContext* context);
 };
 
 // Defines the return type for value-getter `StringOrDateGetter`.

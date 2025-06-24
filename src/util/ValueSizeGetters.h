@@ -5,9 +5,9 @@
 #ifndef QLEVER_VALUESIZEGETTERS_H
 #define QLEVER_VALUESIZEGETTERS_H
 
-#include <util/MemorySize/MemorySize.h>
-
 #include <string>
+
+#include "util/MemorySize/MemorySize.h"
 
 // Callables that determine the actual size (in terms of memory used on stack +
 // heap) for various types. They are used to limit the memory consumption of

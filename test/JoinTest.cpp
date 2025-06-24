@@ -20,7 +20,8 @@
 #include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
-#include "engine/OptionalJoin.h"
+#include "engine/JoinHelpers.h"
+#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
@@ -34,6 +35,8 @@
 
 using ad_utility::testing::makeAllocator;
 namespace {
+
+using qlever::joinHelpers::CHUNK_SIZE;
 
 using Vars = std::vector<std::optional<Variable>>;
 auto iri = [](std::string_view s) {
@@ -209,13 +212,6 @@ std::vector<JoinTestCase> createJoinTestSet() {
 
   return myTestSet;
 }
-
-IdTable createIdTableOfSizeWithValue(size_t size, Id value) {
-  IdTable idTable{1, ad_utility::testing::makeAllocator()};
-  idTable.resize(size);
-  ql::ranges::fill(idTable.getColumn(0), value);
-  return idTable;
-}
 }  // namespace
 
 TEST(JoinTest, joinTest) {
@@ -235,7 +231,7 @@ namespace {
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
     Variable,
-    std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -259,8 +255,7 @@ void testJoinOperation(Join& join, const ExpectedColumns& expected,
   IdTable table =
       res->isFullyMaterialized()
           ? res->idTable().clone()
-          : aggregateTables(std::move(res->idTables()), join.getResultWidth())
-                .first;
+          : aggregateTables(res->idTables(), join.getResultWidth()).first;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
     const auto& [colIndex, undefStatus] = varToCols.at(var);
@@ -310,7 +305,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
+      qec, PSO, SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}});
   auto valuesTree =
       makeValuesForSingleVariable(qec, "?p", {iri("<o>"), iri("<a>")});
 
@@ -336,9 +331,9 @@ TEST(JoinTest, joinWithFullScanPSO) {
   // A `Join` of two full scans.
   {
     auto fullScanSPO = ad_utility::makeExecutionTree<IndexScan>(
-        qec, SPO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
+        qec, SPO, SparqlTripleSimple{Var{"?s"}, Var{"?p"}, Var{"?o"}});
     auto fullScanOPS = ad_utility::makeExecutionTree<IndexScan>(
-        qec, OPS, SparqlTriple{Var{"?s2"}, "?p2", Var{"?s"}});
+        qec, OPS, SparqlTripleSimple{Var{"?s2"}, Var{"?p2"}, Var{"?s"}});
     // The knowledge graph is "<x> <p> 1 . <x> <o> <x> . <x> <a> 3 ."
     auto expected = makeIdTableFromVector(
         {{x, a, I(3), o, x}, {x, o, x, o, x}, {x, p, I(1), o, x}});
@@ -364,7 +359,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
             materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto valuesTree = makeValuesForSingleVariable(qec, "?s", {iri("<x>")});
 
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
@@ -397,7 +392,7 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
             materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto valuesTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
             qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}}, false,
@@ -433,7 +428,7 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
             materializationThreshold);
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto U = Id::makeUndefined();
     auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}}, false,
@@ -481,9 +476,9 @@ TEST(JoinTest, joinTwoScans) {
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
             materializationThreshold);
     auto scanP = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Var{"?s"}, "<p2>", Var{"?q"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p2>"), Var{"?q"}});
     auto join = Join{qec, scanP2, scanP, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
@@ -529,11 +524,13 @@ TEST(JoinTest, joinTwoScansWithDifferentGraphs) {
       setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(0);
   using ad_utility::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
-      qec, POS, SparqlTriple{Var{"?s"}, "<p1>", Iri::fromIriref("<1>")},
+      qec, POS,
+      SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<1>")},
       std::optional{
           ad_utility::HashSet<TripleComponent>{Iri::fromIriref("<g1>")}});
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
-      qec, POS, SparqlTriple{Var{"?s"}, "<p1>", Iri::fromIriref("<2>")},
+      qec, POS,
+      SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Iri::fromIriref("<2>")},
       std::optional{
           ad_utility::HashSet<TripleComponent>{Iri::fromIriref("<g2>")}});
   auto join = Join{qec, scanP2, scanP, 0, 0};
@@ -565,9 +562,9 @@ TEST(JoinTest, joinTwoScansWithSubjectInMultipleBlocks) {
       setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(0);
   using ad_utility::triple_component::Iri;
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "<p1>", Var{"?o1"}});
+      qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p1>"), Var{"?o1"}});
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
-      qec, PSO, SparqlTriple{Var{"?s"}, "<p2>", Var{"?o2"}});
+      qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p2>"), Var{"?o2"}});
   auto join = Join{qec, scanP2, scanP, 0, 0};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
@@ -674,9 +671,16 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
 
   leftTables.push_back(makeIdTableFromVector({{U}}));
   leftTables.push_back(makeIdTableFromVector({{I(2)}}));
-  rightTables.push_back(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
+  rightTables.push_back(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)));
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
   performJoin(std::move(leftTables), std::move(rightTables), expected7, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  auto expected8 = createIdTableOfSizeWithValue(2, I(2));
+  performJoin(std::move(leftTables), std::move(rightTables), expected8, false);
 }
 
 // _____________________________________________________________________________
@@ -752,8 +756,8 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
 
   rightTables.push_back(makeIdTableFromVector({{U}}));
   rightTables.push_back(makeIdTableFromVector({{I(2)}}));
-  auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
-  performJoin(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)),
+  auto expected7 = createIdTableOfSizeWithValue(CHUNK_SIZE, I(1));
+  performJoin(createIdTableOfSizeWithValue(CHUNK_SIZE, I(1)),
               std::move(rightTables), expected7, false);
 }
 
@@ -774,7 +778,7 @@ TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
   auto result = join.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
 
-  auto& idTables = result->idTables();
+  auto idTables = result->idTables();
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(idTables.begin(),
                                         testing::StrEq("AlwaysFailOperation"),
                                         std::runtime_error);
@@ -818,7 +822,7 @@ TEST(JoinTest, verifyColumnPermutationsAreAppliedCorrectly) {
         Vars{Variable{"?p"}, Variable{"?q"}, Variable{"?s"}}, false,
         std::vector<ColumnIndex>{2}, LocalVocab{}, std::nullopt, true);
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-        qec, PSO, SparqlTriple{Variable{"?s"}, "<p>", Var{"?o"}});
+        qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?p"}, makeAlwaysDefinedColumn(1)},
@@ -856,4 +860,77 @@ TEST(JoinTest, clone) {
   ASSERT_TRUE(clone);
   EXPECT_THAT(join, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
+}
+
+// _____________________________________________________________________________
+TEST(JoinTest, columnOriginatesFromGraphOrUndef) {
+  using ad_utility::triple_component::Iri;
+  auto* qec = ad_utility::testing::getQec();
+  // Not in graph no undef
+  auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0, 1}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  // Not in graph, potentially undef
+  auto values3 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?c"}});
+  auto values4 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{Id::makeUndefined(), Id::makeUndefined()}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
+  // In graph, no undef
+  auto index1 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?c"}});
+  auto index2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                         Variable{"?b"}});
+  // In graph, potential undef
+  auto index3 = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::PSO,
+               SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                                  Variable{"?c"}}));
+  auto index4 = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::PSO,
+               SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
+                                  Variable{"?b"}}));
+
+  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
+                             std::shared_ptr<QueryExecutionTree> right, bool a,
+                             bool b, bool c,
+                             ad_utility::source_location location =
+                                 ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(location);
+
+    Join join{qec, std::move(left), std::move(right), 0, 0, false};
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
+    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+    EXPECT_THROW(
+        join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+        ad_utility::Exception);
+  };
+
+  testWithTrees(index3, index4, true, true, true);
+  testWithTrees(index3, index2, true, true, true);
+  testWithTrees(index3, values4, false, false, true);
+  testWithTrees(index3, values2, false, false, true);
+  testWithTrees(index1, index4, true, true, true);
+  testWithTrees(index1, index2, true, true, true);
+  testWithTrees(index1, values4, true, false, true);
+  testWithTrees(index1, values2, true, false, true);
+  testWithTrees(values4, index3, false, false, true);
+  testWithTrees(values4, index1, true, false, true);
+  testWithTrees(values4, values3, false, false, false);
+  testWithTrees(values4, values1, false, false, false);
+  testWithTrees(values2, index3, false, false, true);
+  testWithTrees(values2, index1, true, false, true);
+  testWithTrees(values2, values3, false, false, false);
+  testWithTrees(values2, values1, false, false, false);
 }
