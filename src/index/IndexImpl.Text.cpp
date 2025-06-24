@@ -126,43 +126,34 @@ IdTable IndexImpl::mergeTextBlockResults(
     partialResults.push_back(std::move(partialResult));
   }
   return SortedIdTableMerge::mergeIdTables(std::move(partialResults), allocator,
-                                           memoryLimitIndexBuilding());
+                                           memoryLimitIndexBuilding(),
+                                           isEntitySearch);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
     const vector<string>& terms) const {
-  // It is beneficial to choose a term where no filtering by regular word id
-  // is needed. Then the entity lists can be read directly from disk.
-  // For others it is always necessary to reach wordlist and filter them
-  // if such an entity list is taken, another intersection is necessary.
-
   // Apart from that, entity lists are usually larger by a factor.
   // Hence it makes sense to choose the smallest.
 
-  // Heuristic: Always prefer no-filtering terms over others, then
-  // pick the one with the smallest EL block to be read.
-  std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
+  // Heuristic: Pick the one with the smallest EL block sum to be read.
+  std::vector<std::tuple<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
     auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
     if (!optTbmd.has_value()) {
       return i;
     }
+    size_t sumOfEntityLists = 0;
     for (const auto& tbmdAndWordInfo : optTbmd.value()) {
       const auto& tbmd = tbmdAndWordInfo.tbmd_;
-      toBeSorted.emplace_back(i, tbmd._firstWordId == tbmd._lastWordId,
-                              tbmd._entityCl._nofElements);
+      sumOfEntityLists += tbmd._entityCl._nofElements;
     }
+    toBeSorted.emplace_back(i, sumOfEntityLists);
   }
-  std::sort(toBeSorted.begin(), toBeSorted.end(),
-            [](const std::tuple<size_t, bool, size_t>& a,
-               const std::tuple<size_t, bool, size_t>& b) {
-              if (std::get<1>(a) == std::get<1>(b)) {
-                return std::get<2>(a) < std::get<2>(b);
-              } else {
-                return std::get<1>(a);
-              }
-            });
+  ql::ranges::sort(toBeSorted, [](const std::tuple<size_t, size_t>& a,
+                                  const std::tuple<size_t, size_t>& b) {
+    return std::get<1>(a) < std::get<1>(b);
+  });
   return std::get<0>(toBeSorted[0]);
 }
 
@@ -222,6 +213,11 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
+
+// _____________________________________________________________________________
+void IndexImpl::setTextBlockSize(size_t blockSize) {
+  textBlockSize_ = blockSize;
+}
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)

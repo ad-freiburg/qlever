@@ -12,7 +12,7 @@ namespace SortedIdTableMerge {
 IdTable mergeIdTables(
     std::vector<IdTable>&& tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const ad_utility::MemorySize& memory,
+    const ad_utility::MemorySize& memory, bool distinct,
     const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
                              const columnBasedIdTable::Row<ValueId>&)>&
         comparator) {
@@ -50,8 +50,28 @@ IdTable mergeIdTables(
   IdTable output{allocator};
   output.setNumColumns(numColumns);
 
-  for (const auto& row : ql::views::join(mergedRows)) {
-    output.push_back(row);
+  if (distinct) {
+    auto view = ql::views::join(mergedRows);
+    auto it = view.begin();
+    auto end = view.end();
+
+    if (it == end) {
+      return output;
+    }
+    auto current = it;
+    ++it;
+    output.push_back(*current);
+    for (; it != end; ++it, ++current) {
+      const auto& currentRow = *current;
+      const auto& nextRow = *it;
+      if (currentRow != nextRow) {
+        output.push_back(nextRow);
+      }
+    }
+  } else {
+    for (const auto& row : ql::views::join(mergedRows)) {
+      output.push_back(row);
+    }
   }
   return output;
 }

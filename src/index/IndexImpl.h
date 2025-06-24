@@ -136,6 +136,7 @@ class IndexImpl {
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
+  size_t textBlockSize_ = DEFAULT_TEXT_BLOCK_SIZE;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -399,6 +400,8 @@ class IndexImpl {
 
   void setTextName(const string& name);
 
+  void setTextBlockSize(size_t blockSize);
+
   bool& usePatterns();
 
   bool& loadAllPermutations();
@@ -588,7 +591,7 @@ class IndexImpl {
 
   // This method is used to combine the multiple blocks returned from a word or
   // prefix scan into one IdTable. The parameter isEntitySearch is necessary
-  // to prevent filtering.
+  // to prevent filtering and remove duplicates.
   template <typename Reader>
   IdTable mergeTextBlockResults(
       Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,

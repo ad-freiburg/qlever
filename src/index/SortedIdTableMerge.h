@@ -19,7 +19,7 @@ namespace SortedIdTableMerge {
 IdTable mergeIdTables(
     std::vector<IdTable>&& tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    const ad_utility::MemorySize& memory,
+    const ad_utility::MemorySize& memory, bool distinct = false,
     const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
                              const columnBasedIdTable::Row<ValueId>&)>&
         comparator = [](const columnBasedIdTable::Row<ValueId>& a,

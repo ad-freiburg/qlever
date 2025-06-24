@@ -155,6 +155,11 @@ void Index::setTextName(const std::string& name) {
 }
 
 // ____________________________________________________________________________
+void Index::setTextBlockSize(size_t blockSize) {
+  return pimpl_->setTextBlockSize(blockSize);
+}
+
+// ____________________________________________________________________________
 bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________

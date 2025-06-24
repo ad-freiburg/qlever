@@ -88,6 +88,44 @@ auto qecWithOnlyLiteralTextIndex = []() {
   TestIndexConfig config{kg};
   config.createTextIndex = true;
   return getQec(std::move(config));
+  // Block structure looks like the following
+  // +--------+----------+----------------------------------------+---------+
+  // | WordId | Word     | Entities                               | BlockId |
+  // +--------+----------+----------------------------------------+---------+
+  // | 0      | can      | \"testing can help\"                   | 0       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 1      | failed   | \"he failed the test\"                 | 0       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 2      | friday   | \"the test on friday was really hard\" | 1       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 3      | hard     | \"the test on friday was really hard\" | 1       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 4      | he       | \"he failed the test\"                 | 2       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 5      | help     | \"testing can help\"                   | 2       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 6      | on       | \"the test on friday was really hard\" | 3       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 7      | other    | \"some other sentence\"                | 3       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 8      | really   | \"the test on friday was really hard\" | 4       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 9      | sentence | \"some other sentence\"                | 4       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 10     | some     | \"some other sentence\"                | 5       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 11     | test     | \"he failed the test\"                 | 5       |
+  // +--------+----------+----------------------------------------+---------+
+  // |        |          | \"the test on friday was really hard\" |         |
+  // +--------+----------+----------------------------------------+---------+
+  // | 12     | testing  | \"testing can help\"                   | 6       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 13     | the      | \"he failed the test\"                 | 6       |
+  // +--------+----------+----------------------------------------+---------+
+  // |        |          | \"the test on friday was really hard\" | 6       |
+  // +--------+----------+----------------------------------------+---------+
+  // | 14     | was      | \"the test on friday was really hard\" | 7       |
+  // +--------+----------+----------------------------------------+---------+
 };
 
 // Return a `QueryExecutionContext` from the turtle `kg` (see above) that has a
@@ -97,12 +135,12 @@ auto qecWithOnlyLiteralTextIndex = []() {
 auto getQecWithTextIndex(
     std::optional<TextScoringMetric> textScoring = std::nullopt) {
   using namespace ad_utility::testing;
-  kg =
+  auto kg2 =
       "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
       "\"some other sentence\" . <b> <p> \"the test on friday was really "
       "hard\" "
       ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
-  TestIndexConfig config{kg};
+  TestIndexConfig config{kg2};
   config.createTextIndex = true;
   config.contentsOfWordsFileAndDocsfile = contentsOfWordsFileAndDocsFile;
   if (textScoring.has_value()) {
@@ -122,16 +160,20 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 
   auto result = s1.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
 
   // NOTE: because of the way the graph above is constructed, the entities are
   // texts
+  // Note the Text Block size while testing is 2, so both blocks are retrieved
+  // and merged. The texts appear in alphabetical order.
   ASSERT_EQ("\"he failed the test\"",
             h::getEntityFromResultTable(qec, result, 0));
-  ASSERT_EQ("\"testing can help\"",
+  ASSERT_EQ("\"some other sentence\"",
             h::getEntityFromResultTable(qec, result, 1));
-  ASSERT_EQ("\"the test on friday was really hard\"",
+  ASSERT_EQ("\"testing can help\"",
             h::getEntityFromResultTable(qec, result, 2));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getEntityFromResultTable(qec, result, 3));
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{

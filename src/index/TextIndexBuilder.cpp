@@ -366,106 +366,27 @@ static bool areFourLetterPrefixesSorted(T comparator) {
 
 template <typename I, typename BlockBoundaryAction>
 void TextIndexBuilder::calculateBlockBoundariesImpl(
-    I&& index, const BlockBoundaryAction& blockBoundaryAction) {
+    I&& index, size_t blockSize,
+    const BlockBoundaryAction& blockBoundaryAction) {
   LOG(TRACE) << "BEGIN IndexImpl::calculateBlockBoundaries" << std::endl;
-  // Go through the vocabulary
-  // Start a new block whenever a word is
-  // 1) The last word in the corpus
-  // 2) shorter than the minimum prefix length
-  // 3) The next word is shorter than the minimum prefix length
-  // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
-  // Note that the evaluation of 4) is difficult to perform in a meaningful way
-  // for all corner cases of Unicode. E.g. vivae and vivæ  compare equal on the
-  // PRIMARY level which is relevant, but have a different length (5 vs 4).
-  // We currently use several workarounds to get as close as possible to the
-  // desired behavior.
-  // A block boundary is always the last WordId in the block.
-  // this way std::lower_bound will point to the correct bracket.
+  // The blocks are set in a way that all blocks contain blockSize nof elements
+  // except the last one which could contain less.
 
-  if (!areFourLetterPrefixesSorted(index.textVocab_.getCaseComparator())) {
-    LOG(ERROR) << "You have chosen a locale where the prefixes aaaa, aaab, "
-                  "..., zzzz are not alphabetically ordered. This is currently "
-                  "unsupported when building a text index";
-    AD_FAIL();
-  }
-
-  if (index.textVocab_.size() == 0) {
+  size_t vocabSize = index.textVocab_.size();
+  if (vocabSize == 0) {
     LOG(WARN) << "You are trying to call calculateBlockBoundaries on an empty "
                  "text vocabulary\n";
     return;
   }
-  size_t numBlocks = 0;
-  const auto& locManager = index.textVocab_.getLocaleManager();
-
-  // iterator over aaaa, ...,  zzzz
-  auto forcedBlockStarts = fourLetterPrefixes();
-  auto forcedBlockStartsIt = forcedBlockStarts.begin();
-
-  // If there is a four letter prefix aaaa, ...., zzzz in `forcedBlockStarts`
-  // the `SortKey` of which is a prefix of `prefixSortKey`, then set
-  // `prefixSortKey` to that `SortKey` and `prefixLength` to
-  // `MIN_WORD_PREFIX_SIZE` (4). This ensures that the blocks corresponding to
-  // these prefixes are never split up because of Unicode ligatures.
-  auto adjustPrefixSortKey = [&](auto& prefixSortKey, auto& prefixLength) {
-    while (true) {
-      if (forcedBlockStartsIt == forcedBlockStarts.end()) {
-        break;
-      }
-      auto forcedBlockStartSortKey = locManager.getSortKey(
-          *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
-      if (forcedBlockStartSortKey >= prefixSortKey) {
-        break;
-      }
-      if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
-        prefixSortKey = std::move(forcedBlockStartSortKey);
-        prefixLength = MIN_WORD_PREFIX_SIZE;
-        return;
-      }
-      forcedBlockStartsIt++;
-    }
-  };
-
-  auto getLengthAndPrefixSortKey = [&](WordVocabIndex i) {
-    auto word = index.textVocab_[i];
-    auto [len, prefixSortKey] =
-        locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
-    if (len > MIN_WORD_PREFIX_SIZE) {
-      LOG(DEBUG) << "The prefix sort key for word \"" << word
-                 << "\" and prefix length " << MIN_WORD_PREFIX_SIZE
-                 << " actually refers to a prefix of size " << len << '\n';
-    }
-    // If we are in a block where one of the fourLetterPrefixes are contained,
-    // use those as the block start.
-    adjustPrefixSortKey(prefixSortKey, len);
-    return std::tuple{std::move(len), std::move(prefixSortKey)};
-  };
-  auto [currentLen, prefixSortKey] =
-      getLengthAndPrefixSortKey(WordVocabIndex::make(0));
-  for (size_t i = 0; i < index.textVocab_.size() - 1; ++i) {
-    // we need foo.value().get() because the vocab returns
-    // a std::optional<std::reference_wrapper<string>> and the "." currently
-    // doesn't implicitly convert to a true reference (unlike function calls)
-    const auto& [nextLen, nextPrefixSortKey] =
-        getLengthAndPrefixSortKey(WordVocabIndex::make(i + 1));
-
-    bool tooShortButNotEqual =
-        (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
-        (prefixSortKey != nextPrefixSortKey);
-    // The `startsWith` also correctly handles the case where
-    // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
-    // of unicode ligatures.
-    bool samePrefix = nextPrefixSortKey.starts_with(prefixSortKey);
-    if (tooShortButNotEqual || !samePrefix) {
-      blockBoundaryAction(i);
-      numBlocks++;
-      currentLen = nextLen;
-      prefixSortKey = nextPrefixSortKey;
-    }
+  size_t numBlocks =
+      std::ceil(static_cast<float>(vocabSize) / static_cast<float>(blockSize));
+  for (size_t currentId = blockSize - 1; currentId < vocabSize - 1;
+       currentId += blockSize) {
+    blockBoundaryAction(currentId);
   }
-  blockBoundaryAction(index.textVocab_.size() - 1);
-  numBlocks++;
+  blockBoundaryAction(vocabSize - 1);
   LOG(DEBUG) << "Block boundaries computed: #blocks = " << numBlocks
-             << ", #words = " << index.textVocab_.size() << std::endl;
+             << ", #words = " << vocabSize << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -474,7 +395,8 @@ void TextIndexBuilder::calculateBlockBoundaries() {
   auto addToBlockBoundaries = [this](size_t i) {
     blockBoundaries_.push_back(i);
   };
-  return calculateBlockBoundariesImpl(*this, addToBlockBoundaries);
+  return calculateBlockBoundariesImpl(*this, textBlockSize_,
+                                      addToBlockBoundaries);
 }
 
 // _____________________________________________________________________________
