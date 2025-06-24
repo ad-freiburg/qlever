@@ -53,15 +53,15 @@ CPP_concept ValueAsNumericId =
     ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
 
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
-// from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
-// values will become `Id::makeUndefined()`.
-CPP_template(bool NanToUndef = false,
+// from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
+// point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
+CPP_template(bool NanOrInfToUndef = false,
              typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && NanToUndef) {
-    return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-  } else if constexpr (ad_utility::FloatingPoint<T> && !NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && NanOrInfToUndef) {
+    return std::isfinite(t) ? Id::makeFromDouble(t) : Id::makeUndefined();
+  } else if constexpr (ad_utility::FloatingPoint<T> && !NanOrInfToUndef) {
     return Id::makeFromDouble(t);
   } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();

@@ -133,6 +133,9 @@ Result Service::computeResult(bool requestLaziness) {
 // ____________________________________________________________________________
 Result Service::computeResultImpl(bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    return makeNeutralElementResultForSilentFail();
+  }
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
