@@ -15,6 +15,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
@@ -214,23 +216,44 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
   return std::nullopt;
 }
 
+// _______________________________________________________________
+template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::upper_bound(const string& word,
+                                      const SortLevel level) const
+    -> IndexType {
+  auto wordAndIndex = vocabulary_.upper_bound(word, level);
+  return IndexType::make(wordAndIndex.indexOrDefault(size()));
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
+                                      const SortLevel level) const
+    -> IndexType {
+  auto wordAndIndex = vocabulary_.lower_bound(word, level);
+  return IndexType::make(wordAndIndex.indexOrDefault(size()));
+}
+
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
-  auto marker = vocabulary_.getUnderlyingVocabulary().getMarker(idx.get());
-  AD_CORRECTNESS_CHECK(marker == 1);
-  auto geoIndex =
-      vocabulary_.getUnderlyingVocabulary().getVocabIndex(idx.get());
-  return std::visit(
-      [&geoIndex](auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
-        using T = std::decay_t<decltype(vocab)>;
-        if constexpr (std::is_same_v<T, GeoVocabulary<S>>) {
-          return vocab.getGeoInfo(geoIndex);
-        }
-        return std::nullopt;
-      },
-      vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary(1));
+  if constexpr (std::is_same_v<S, PolymorphicVocabulary>) {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (std::is_same_v<T, SplitGeoVocabulary<S>>) {
+            auto marker = vocab.getUnderlyingVocabulary().getMarker(idx.get());
+            AD_CORRECTNESS_CHECK(marker == 1);
+            auto geoIndex =
+                vocab.getUnderlyingVocabulary().getVocabIndex(idx.get());
+            return vocab.getUnderylingVocabulary(1).getGeoInfo(geoIndex);
+          }
+          return std::nullopt;
+        },
+        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary());
+  }
+  return std::nullopt;
 };
 
 // _____________________________________________________________________________
@@ -247,25 +270,33 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // Helper lambda to lookup a the word in a given vocabulary and pass
-  // arguments to the underlying vocabulary below the unicode support layer.
-  auto checkWord = [this, &word, &idx](uint8_t splitIdx) -> bool {
-    // We need the TOTAL level because we want the unique word.
-    WordAndIndex wordAndIndex =
-        vocabulary_.lower_bound(word, SortLevel::TOTAL, splitIdx);
-    if (wordAndIndex.isEnd()) {
-      return false;
-    }
-    idx->get() = wordAndIndex.index();
-    return wordAndIndex.word() == word;
-  };
+  // need the TOTAL level because we want the unique word.
+  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
+  if (wordAndIndex.isEnd()) {
+    return false;
+  }
+  idx->get() = wordAndIndex.index();
+  return wordAndIndex.word() == word;
+  /* // Helper lambda to lookup a the word in a given vocabulary and pass
+   // arguments to the underlying vocabulary below the unicode support layer.
+   auto checkWord = [this, &word, &idx](uint8_t splitIdx) -> bool {
+     // We need the TOTAL level because we want the unique word.
+     WordAndIndex wordAndIndex =
+         vocabulary_.lower_bound(word, SortLevel::TOTAL, splitIdx);
+     if (wordAndIndex.isEnd()) {
+       return false;
+     }
+     idx->get() = wordAndIndex.index();
+     return wordAndIndex.word() == word;
+   };
 
-  // Since the UnderlyingVocabulary is a SplitVocabulary, we need to tell it
-  // which vocabulary should be used to lookup the given word. This is
-  // determined by the getMarkerForWord method provided by the SplitVocabulary
-  // class.
-  return checkWord(
-      vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word));
+   // Since the UnderlyingVocabulary is a SplitVocabulary, we need to tell it
+   // which vocabulary should be used to lookup the given word. This is
+   // determined by the getMarkerForWord method provided by the SplitVocabulary
+   // class.
+   return checkWord(
+       vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word));
+       */
 }
 
 // ___________________________________________________________________________

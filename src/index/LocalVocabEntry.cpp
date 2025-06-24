@@ -16,9 +16,9 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   using SortLevel = Index::Vocab::SortLevel;
   // Template parameter applySplit=true for correct result on SplitVocabulary
   positionInVocab.lowerBound_ =
-      vocab.lower_bound<true>(toStringRepresentation(), SortLevel::TOTAL);
+      vocab.lower_bound(toStringRepresentation(), SortLevel::TOTAL);
   positionInVocab.upperBound_ =
-      vocab.upper_bound<true>(toStringRepresentation(), SortLevel::TOTAL);
+      vocab.upper_bound(toStringRepresentation(), SortLevel::TOTAL);
   AD_CORRECTNESS_CHECK(positionInVocab.upperBound_.get() -
                            positionInVocab.lowerBound_.get() <=
                        1);
