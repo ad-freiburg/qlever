@@ -8,6 +8,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <type_traits>
 #include <variant>
 
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -24,7 +25,6 @@ class PolymorphicVocabulary {
  public:
   using VocabularyType = ad_utility::VocabularyType;
 
- private:
   // Type aliases for all the currently supported vocabularies. To add another
   // vocabulary,
   // 1. Add an enum value to the `VocabularyTypeEnum`.
@@ -42,6 +42,7 @@ class PolymorphicVocabulary {
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
                    InMemoryCompressed, OnDiskCompressedGeoSplit>;
 
+ private:
   // In this variant we store the actual vocabulary.
   Variant vocab_;
 
@@ -68,21 +69,38 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Return a reference to currently underlying vocabulary, as a variant of the
+  // possible types.
+  Variant& getUnderlyingVocabulary() { return vocab_; }
+  const Variant& getUnderlyingVocabulary() const { return vocab_; }
+
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
-  template <typename String, typename Comp>
-  WordAndIndex lower_bound(const String& word, Comp comp) const {
+  template <typename String, typename Comp, typename... Args>
+  WordAndIndex lower_bound(const String& word, Comp comp,
+                           Args&&... args) const {
     return std::visit(
-        [&word, &comp](auto& vocab) {
+        [&word, &comp, &args...](auto& vocab) {
+          // TODO find a better solution here
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (std::is_same_v<T, OnDiskCompressedGeoSplit>) {
+            return vocab.lower_bound(word, std::move(comp), AD_FWD(args)...);
+          }
           return vocab.lower_bound(word, std::move(comp));
         },
         vocab_);
   }
 
   // Analogous to `lower_bound` (see above).
-  template <typename String, typename Comp>
-  WordAndIndex upper_bound(const String& word, Comp comp) const {
+  template <typename String, typename Comp, typename... Args>
+  WordAndIndex upper_bound(const String& word, Comp comp,
+                           Args&&... args) const {
     return std::visit(
-        [&word, &comp](auto& vocab) {
+        [&word, &comp, &args...](auto& vocab) {
+          // TODO find a better solution here
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (std::is_same_v<T, OnDiskCompressedGeoSplit>) {
+            return vocab.upper_bound(word, std::move(comp), AD_FWD(args)...);
+          }
           return vocab.upper_bound(word, std::move(comp));
         },
         vocab_);

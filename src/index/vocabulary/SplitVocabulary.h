@@ -198,6 +198,22 @@ class SplitVocabulary {
                                                            marker);
   }
 
+  template <typename InternalStringType, typename Comparator>
+  WordAndIndex lower_bound(const InternalStringType& word,
+                           Comparator comparator, bool autoMarker) const {
+    // TODO
+    return boundImpl<InternalStringType, Comparator, false>(
+        word, comparator, autoMarker ? getMarkerForWord(word) : 0);
+  }
+
+  template <typename InternalStringType, typename Comparator>
+  WordAndIndex upper_bound(const InternalStringType& word,
+                           Comparator comparator, bool autoMarker) const {
+    // TODO
+    return boundImpl<InternalStringType, Comparator, true>(
+        word, comparator, autoMarker ? getMarkerForWord(word) : 0);
+  }
+
   // Shortcut to retrieve the first underlying vocabulary
   AnyUnderlyingVocab& getUnderlyingMainVocabulary() { return underlying_[0]; }
   const AnyUnderlyingVocab& getUnderlyingMainVocabulary() const {

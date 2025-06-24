@@ -27,6 +27,7 @@
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -235,13 +236,15 @@ class Vocabulary {
   // and lower bound methods in that it can reliably use the split of
   // SplitVocabulary because the word is guaranteed to be a full word, not only
   // a prefix of it (which could change the result of a split).
-  std::pair<IndexType, IndexType> getPositionOfWord(
+  using PositionOfWord = std::pair<IndexType, IndexType>;
+  PositionOfWord getPositionOfWord(
       const std::string& word, SortLevel level = SortLevel::QUARTERNARY) const {
-    // TODO
-    uint8_t marker =
-        vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word);
-    return {boundImpl<false>(word, level, marker),
-            boundImpl<true>(word, level, marker)};
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+      // TODO
+      return {boundImpl<false>(word, level, true),
+              boundImpl<true>(word, level, true)};
+    }
+    return {boundImpl<false>(word, level), boundImpl<true>(word, level)};
   };
 
   // Get a writer for the vocab that has an `operator()` method to
