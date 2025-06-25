@@ -22,7 +22,7 @@ ad_utility::InputRangeTypeErased<ValueType> fromGenerator(
 
     std::optional<ValueType> get() override {
       if (iterator != end) {
-        const auto value{*iterator};
+        auto value{std::move(*iterator)};
         iterator++;
         return value;
       }
