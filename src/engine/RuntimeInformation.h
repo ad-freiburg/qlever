@@ -7,16 +7,12 @@
 #ifndef QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
 #define QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
 
-#include <iostream>
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_join.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "parser/data/Variable.h"
 #include "util/ConcurrentCache.h"
-#include "util/HashMap.h"
 #include "util/json.h"
 
 /// A class to store information about the status of an operation (result size,

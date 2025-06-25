@@ -3,11 +3,12 @@
 // Authors: Florian Kramer [2018 - 2020]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "MultiColumnJoin.h"
+#include "engine/MultiColumnJoin.h"
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/JoinHelpers.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -16,10 +17,12 @@ using std::string;
 // _____________________________________________________________________________
 MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2)
+                                 std::shared_ptr<QueryExecutionTree> t2,
+                                 bool allowSwappingChildrenOnlyForTesting)
     : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1->getCacheKey() > t2->getCacheKey()) {
+  if (allowSwappingChildrenOnlyForTesting &&
+      t1->getCacheKey() > t2->getCacheKey()) {
     std::swap(t1, t2);
   }
   std::tie(_left, _right, _joinColumns) =
@@ -294,4 +297,18 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join columns we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (_left->getVariableColumnOrNullopt(variable).has_value() &&
+      _right->getVariableColumnOrNullopt(variable).has_value()) {
+    using namespace qlever::joinHelpers;
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+  }
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
 }

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <iomanip>
 #include <thread>
 
 #include "engine/SortPerformanceEstimator.h"

@@ -104,7 +104,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ad_utility::OwningView{leftRes->idTables()} |
                 ql::views::transform([exists = !rightRes->idTable().empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
@@ -247,6 +247,19 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   return newJoin;
 }
 
+// _____________________________________________________________________________
+bool ExistsJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable == existsVariable_) {
+    // NOTE: We could in theory check if the literals true and false are
+    // contained in the knowledge graph, but that would makes things more
+    // complicated for almost no benefit.
+    return false;
+  }
+  return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+}
+
 namespace {
 
 // Implementation to add the `EXISTS` column to the result of a child operation
@@ -291,26 +304,23 @@ struct LazyExistsJoinImpl
     }
     return ad_utility::InputRangeTypeErased<Result::IdTableVocabPair>{
         ad_utility::CachingTransformInputRange{
-            std::move(result->idTables()),
-            [](auto& value) { return std::move(value); }}};
+            result->idTables(), [](auto& value) { return std::move(value); }}};
   }
 
   // Convert result to a view of `IdTable`s. This is used for the right side.
   static ad_utility::InputRangeTypeErased<std::reference_wrapper<const IdTable>>
   toRangeView(const std::shared_ptr<const Result>& result) {
     if (result->isFullyMaterialized()) {
-      return ad_utility::InputRangeTypeErased<
-          std::reference_wrapper<const IdTable>>{
+      return ad_utility::InputRangeTypeErased{
           ad_utility::CachingTransformInputRange{
               std::array{std::cref(result->idTable())},
               [](auto wrapper) -> std::reference_wrapper<const IdTable> {
                 return wrapper;
               }}};
     }
-    return ad_utility::InputRangeTypeErased<
-        std::reference_wrapper<const IdTable>>{
+    return ad_utility::InputRangeTypeErased{
         ad_utility::CachingTransformInputRange{
-            std::move(result->idTables()),
+            result->idTables(),
             [](const auto& pair) { return std::cref(pair.idTable_); }}};
   }
 

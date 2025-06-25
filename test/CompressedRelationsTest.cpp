@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
-#include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -446,6 +446,25 @@ TEST(CompressedRelationWriter, SmallRelations) {
   testWithDifferentBlockSizes(inputs, "smallRelations");
 }
 
+// Internal matchers for the following two tests.
+namespace {
+// A matcher for a `PermutedTriple`. The `int`s are converted to VocabIds.
+auto matchPermutedTriple = [](int a, int b, int c) {
+  using P = CompressedBlockMetadata::PermutedTriple;
+  return AllOf(AD_FIELD(P, col0Id_, V(a)), AD_FIELD(P, col1Id_, V(b)),
+               AD_FIELD(P, col2Id_, V(c)));
+};
+
+// A matcher for a `FirstAndLastTriple object` where  `(a, b, c)` is the first
+// triple, and `(d, e, f)` is the last triple.
+auto matchFirstAndLastTriple = [](int a, int b, int c, int d, int e, int f) {
+  using F =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple;
+  return Optional(
+      AllOf(AD_FIELD(F, firstTriple_, matchPermutedTriple(a, b, c)),
+            AD_FIELD(F, lastTriple_, matchPermutedTriple(d, e, f))));
+};
+}  // namespace
 // _____________________________________________________________________________
 TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   using namespace ::testing;
@@ -457,6 +476,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
     inputs.push_back(RelationInput{
         i, {{i - 1, i + 1, g2}, {i - 1, i + 2, g2}, {i + 1, i - 1, g2}}});
   }
+
   auto filename = "getFirstAndLastTriple.dat";
   auto [blocks, metaData, readerPtr] =
       writeAndOpenRelations(inputs, filename, 40_B);
@@ -464,28 +484,17 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
-  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
+  using Loc = ad_utility::source_location;
+  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
+                                   const LocatedTriplesPerBlock& =
+                                       emptyLocatedTriples,
+                                   Loc loc = Loc::current()) {
+    auto trace = generateLocationTrace(loc);
     auto firstAndLastTriple = readerPtr->getFirstAndLastTriple(
         {spec, blockMetadata}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
-  // A matcher for a `PermutedTriple`. The `int`s are converted to VocabIds.
-  auto matchPermutedTriple = [](int a, int b, int c) {
-    using P = CompressedBlockMetadata::PermutedTriple;
-    return AllOf(AD_FIELD(P, col0Id_, V(a)), AD_FIELD(P, col1Id_, V(b)),
-                 AD_FIELD(P, col2Id_, V(c)));
-  };
-
-  // A matcher for a `FirstAndLastTriple object` where  `(a, b, c)` is the first
-  // triple, and `(d, e, f)` is the last triple.
-  auto matchFirstAndLastTriple = [&](int a, int b, int c, int d, int e, int f) {
-    using F = CompressedRelationReader::ScanSpecAndBlocksAndBounds::
-        FirstAndLastTriple;
-    return Optional(
-        AllOf(AD_FIELD(F, firstTriple_, matchPermutedTriple(a, b, c)),
-              AD_FIELD(F, lastTriple_, matchPermutedTriple(d, e, f))));
-  };
   // Test for scans with nonempty results with 0, 1, 2, and 3 variables.
   testFirstAndLastBlock({std::nullopt, std::nullopt, std::nullopt},
                         matchFirstAndLastTriple(1, 0, 2, 199, 200, 198));
@@ -502,6 +511,60 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   // For this scan there is a matching block, but the scan would still be empty.
   testFirstAndLastBlock({V(3), V(3), std::nullopt},
                         ::testing::Eq(std::nullopt));
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
+  // A dummy graph ID.
+
+  // Set up a permutation with three triple: (1, 2, 3) (1, 3, 4) (1, 4, 5), all
+  // in the same graph. Each triple will be stored in its own block, to make the
+  // manual playing with locatedTriples easier.
+  int g2 = 120349;
+  std::vector<RelationInput> inputs;
+  inputs.push_back(RelationInput{1, {{2, 3, g2}, {3, 4, g2}, {4, 5, g2}}});
+
+  auto filename = "getFirstAndLastTriple2.dat";
+  auto [blocks, metaData, readerPtr] =
+      writeAndOpenRelations(inputs, filename, 0_B);
+
+  // Set up located triples that delete the first triple. This has the
+  // consequence that the first triple of the relation `1` actually lies in the
+  // second block of that relation, because the first block is completely empty
+  // after the update.
+  LocatedTriplesPerBlock locatedTriples;
+  std::vector<LocatedTriple> deleteTriples;
+  deleteTriples.emplace_back(
+      LocatedTriple{0, IdTriple{{V(1), V(2), V(3), V(g2)}}, false});
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.add(deleteTriples);
+
+  // Test infrastructure.
+  using Loc = ad_utility::source_location;
+  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
+                                   Loc loc = Loc::current()) {
+    auto trace = generateLocationTrace(loc);
+    auto blockMetadata =
+        getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
+    auto firstAndLastTriple =
+        readerPtr->getFirstAndLastTriple({spec, blockMetadata}, locatedTriples);
+    EXPECT_THAT(firstAndLastTriple, matcher);
+  };
+
+  // The first triple has been deleted, so the second and third triple are
+  // `first` and `last` respectively.
+  testFirstAndLastBlock({V(1), std::nullopt, std::nullopt},
+                        matchFirstAndLastTriple(1, 3, 4, 1, 4, 5));
+
+  // Also delete the last triple (1, 4, 5). Now the `first` and `last` triple
+  // both are the original middle triple (1, 3, 4), and which are in the same
+  // block.
+  deleteTriples.clear();
+  deleteTriples.emplace_back(
+      LocatedTriple{2, IdTriple{{V(1), V(4), V(5), V(g2)}}, false});
+  locatedTriples.add(deleteTriples);
+  testFirstAndLastBlock({V(1), std::nullopt, std::nullopt},
+                        matchFirstAndLastTriple(1, 3, 4, 1, 3, 4));
 }
 
 // Test for larger relations that span over several blocks. There are no

@@ -42,7 +42,7 @@ void expectBindYieldsIdTable(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
     EXPECT_EQ(iterator->idTable_, expected);
@@ -123,7 +123,7 @@ TEST(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
     ASSERT_FALSE(result->isFullyMaterialized());
-    auto& idTables = result->idTables();
+    auto idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
     EXPECT_EQ(iterator->idTable_, table);
