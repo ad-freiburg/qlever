@@ -1,8 +1,12 @@
-// Copyright 2023 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include <gtest/gtest.h>
 
@@ -144,7 +148,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
                   {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
@@ -155,7 +159,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
+                  {{1, {3, 3}}, {2, {2, 2}}, {3, {1, 1}}, {4, {3, 3}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre({{1, {LT1, LT2, LT3}},
                                  {2, {LT4, LT5}},
@@ -163,12 +167,13 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
                                  {4, {LT6, LT7, LT9}}}));
 
   locatedTriplesPerBlock.erase(3, handles[0]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
@@ -177,25 +182,27 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
                ad_utility::Exception);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   // Nothing changed.
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {3, 3}}}));
   EXPECT_THAT(
       locatedTriplesPerBlock,
       locatedTriplesAre(
           {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
 
   locatedTriplesPerBlock.erase(4, handles[1]);
+  locatedTriplesPerBlock.updateAugmentedMetadata();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
               numTriplesBlockwise(
-                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+                  {{1, {3, 3}}, {2, {2, 2}}, {3, {0, 0}}, {4, {2, 2}}}));
   EXPECT_THAT(locatedTriplesPerBlock,
               locatedTriplesAre(
                   {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
@@ -787,6 +794,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // Erasing the update of T4 restores the beginning of block 4.
     locatedTriplesPerBlock.erase(4, handles[0]);
+    locatedTriplesPerBlock.updateAugmentedMetadata();
 
     expectedAugmentedMetadata[4] = CBM(PT8, PT8);
     // The block 4 has no more updates, so we restore the info about the block

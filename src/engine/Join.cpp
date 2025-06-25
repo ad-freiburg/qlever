@@ -380,7 +380,7 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-CPP_template_2(typename ActionT)(
+CPP_template_def(typename ActionT)(
     requires ad_utility::InvocableWithExactReturnType<
         ActionT, Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>>)
@@ -475,40 +475,38 @@ void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
    * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
    *  of the tables
    */
-  auto performHashJoin = [&idTableToHashMap,
-                          &result]<bool leftIsLarger, typename LargerTableType,
-                                   typename SmallerTableType>(
-                             const LargerTableType& largerTable,
-                             const ColumnIndex largerTableJoinColumn,
-                             const SmallerTableType& smallerTable,
-                             const ColumnIndex smallerTableJoinColumn) {
-    // Put the smaller table into the hash table.
-    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+  auto performHashJoin = ad_utility::ApplyAsValueIdentity{
+      [&idTableToHashMap, &result](auto leftIsLarger, const auto& largerTable,
+                                   const ColumnIndex largerTableJoinColumn,
+                                   const auto& smallerTable,
+                                   const ColumnIndex smallerTableJoinColumn) {
+        // Put the smaller table into the hash table.
+        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
 
-    // Create cross product by going through the larger table.
-    for (size_t i = 0; i < largerTable.size(); i++) {
-      // Skip, if there is no matching entry for the join column.
-      auto entry = map.find(largerTable(i, largerTableJoinColumn));
-      if (entry == map.end()) {
-        continue;
-      }
+        // Create cross product by going through the larger table.
+        for (size_t i = 0; i < largerTable.size(); i++) {
+          // Skip, if there is no matching entry for the join column.
+          auto entry = map.find(largerTable(i, largerTableJoinColumn));
+          if (entry == map.end()) {
+            continue;
+          }
 
-      for (const auto& row : entry->second) {
-        // Based on which table was larger, the arguments of
-        // addCombinedRowToIdTable are different.
-        // However this information is known at compile time, so the other
-        // branch gets discarded at compile time, which makes this
-        // condition have constant runtime.
-        if constexpr (leftIsLarger) {
-          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
-                                  &result);
-        } else {
-          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
-                                  &result);
+          for (const auto& row : entry->second) {
+            // Based on which table was larger, the arguments of
+            // addCombinedRowToIdTable are different.
+            // However this information is known at compile time, so the other
+            // branch gets discarded at compile time, which makes this
+            // condition have constant runtime.
+            if constexpr (leftIsLarger) {
+              addCombinedRowToIdTable(largerTable[i], row,
+                                      smallerTableJoinColumn, &result);
+            } else {
+              addCombinedRowToIdTable(row, largerTable[i],
+                                      largerTableJoinColumn, &result);
+            }
+          }
         }
-      }
-    }
-  };
+      }};
 
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
@@ -636,8 +634,7 @@ Result Join::computeResultForIndexScanAndIdTable(
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
             AD_CORRECTNESS_CHECK(
                 !indexScanResult.value()->isFullyMaterialized());
-            return convertGenerator(
-                std::move(indexScanResult.value()->idTables()));
+            return convertGenerator(indexScanResult.value()->idTables());
           } else {
             auto rightBlocksInternal =
                 scan->lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
@@ -692,8 +689,8 @@ Result Join::computeResultForIndexScanAndLazyOperation(
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         auto rowAdder = makeRowAdder(std::move(yieldTable));
 
-        auto [joinSide, indexScanSide] = scan->prefilterTables(
-            std::move(resultWithIdTable->idTables()), _leftJoinCol);
+        auto [joinSide, indexScanSide] =
+            scan->prefilterTables(resultWithIdTable->idTables(), _leftJoinCol);
 
         // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
         // switches to a more efficient implementation if there are no UNDEF
@@ -749,4 +746,15 @@ std::unique_ptr<Operation> Join::cloneImpl() const {
   copy->_left = _left->clone();
   copy->_right = _right->clone();
   return copy;
+}
+
+// _____________________________________________________________________________
+bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // For the join column we don't union the elements, we intersect them so we
+  // can have a more efficient implementation.
+  if (variable == _joinVar) {
+    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+  }
+  return Operation::columnOriginatesFromGraphOrUndef(variable);
 }

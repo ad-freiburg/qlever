@@ -76,12 +76,11 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
-  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped unless
-  // they are 'xsd:string', so for literals with non-'xsd:string' datatypes
-  // (this includes IDs that directly store their value, like Doubles) the
-  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is false,
-  // IRIs are converted to literals without a datatype, which is equivalent to
-  // the behavior of the SPARQL STR(...) function. If
+  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped, so for
+  // literals (this includes IDs that directly store their value, like Doubles)
+  // the datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is
+  // false, IRIs are converted to literals without a datatype, which is
+  // equivalent to the behavior of the SPARQL STR(...) function. If
   // 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with
   // non'-xsd:string' datatypes (including encoded IDs) return 'std::nullopt'.
   // These semantics are useful for the string expressions in
@@ -158,6 +157,14 @@ class ExportQueryExecutionTrees {
       ad_utility::streams::stream_generator streamGenerator);
 
  private:
+  // Make sure that the offset is not applied again when exporting the
+  // result (it is already applied by the root operation in the query
+  // execution tree). Note that we don't need this for the limit because
+  // applying a fixed limit is idempotent. This only works because the query
+  // planner does the exact same `supportsLimit()` check.
+  static void compensateForLimitOffsetClause(
+      LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet);
+
   // Generate the bindings of the result of a SELECT or CONSTRUCT query in the
   // `application/qlever-results+json` format.
   //
@@ -276,6 +283,7 @@ class ExportQueryExecutionTrees {
   FRIEND_TEST(ExportQueryExecutionTrees,
               ensureGeneratorIsNotConsumedWhenNotRequired);
   FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
+  FRIEND_TEST(ExportQueryExecutionTrees, compensateForLimitOffsetClause);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXPORTQUERYEXECUTIONTREES_H

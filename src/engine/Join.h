@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
+#include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
@@ -67,6 +68,9 @@ class Join : public Operation {
     return {_left.get(), _right.get()};
   }
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
   /**
    * @brief Joins IdTables a and b on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows.
@@ -96,7 +100,7 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  CPP_template_2(typename ActionT)(
+  CPP_template(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>>) Result

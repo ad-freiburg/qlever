@@ -518,6 +518,44 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
 }
 
 // _____________________________________________________________________________
+// Brief explanation why we ignore the argument `isNegated` here.
+// (1) In the case of `isNegated = false`, the correct `IsInExpression` is
+// constructed by default here, since its default parameter for `isNegated` is
+// false as well.
+// (2) `isNegated = true` implies that a parent node is a NOT expression (see
+// `UnaryNegateExpressionImpl` in NumericUnaryExpressions.cpp). In this case,
+// the `UnaryNegateExpressionImpl` will subsequently correctly negate the here
+// returned `IsInExpression` by implicitly calling `->logicalComplement()` on
+// it (see `NotExpression` in PrefilterExpressionIndex.h).
+std::vector<PrefilterExprVariablePair>
+InExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  AD_CORRECTNESS_CHECK(children_.size() >= 1);
+  auto var = children_.front()->getVariableOrNullopt();
+  if (!var.has_value()) {
+    return {};
+  }
+
+  std::vector<prefilterExpressions::IdOrLocalVocabEntry> referenceValues;
+  referenceValues.reserve(children_.size());
+  for (const auto& expr : children_ | ql::ranges::views::drop(1)) {
+    auto optReferenceValue =
+        sparqlExpression::detail::getIdOrLocalVocabEntryFromLiteralExpression(
+            expr.get());
+    if (!optReferenceValue.has_value()) {
+      return {};
+    }
+    referenceValues.push_back(optReferenceValue.value());
+  }
+
+  std::vector<PrefilterExprVariablePair> resPrefilter;
+  resPrefilter.emplace_back(
+      std::make_unique<prefilterExpressions::IsInExpression>(referenceValues),
+      var.value());
+  return resPrefilter;
+}
+
+// _____________________________________________________________________________
 auto InExpression::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {

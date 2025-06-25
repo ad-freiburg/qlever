@@ -13,11 +13,6 @@
  */
 class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
  public:
-  virtual void enterQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
-  virtual void exitQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
-
   virtual void enterQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
   virtual void exitQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
 

@@ -352,6 +352,29 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   testUndefHelper(doubleVec.clone(), stringVec.clone());
 }
 
+namespace {
+template <typename T, typename U>
+struct ExpressionEvaluator {
+  T& leftValue;
+  U& rightValue;
+  sparqlExpression::EvaluationContext* context;
+
+  template <auto comp>
+  auto operator()() const {
+    auto expression =
+        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
+    auto resultAsVariant = expression.evaluate(context);
+    auto expressionInverted =
+        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
+    auto resultAsVariantInverted = expressionInverted.evaluate(context);
+    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
+    auto& resultInverted =
+        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
+    return std::pair{std::move(result), std::move(resultInverted)};
+  }
+};
+}  // namespace
+
 // At least one of `leftValue`, `rightValue` must be a vector, the other one may
 // be a constant or also a vector. The vectors must have 9 elements each. When
 // comparing the `leftValue` and `rightValue` elementwise, the following has to
@@ -369,18 +392,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
   context->_beginIndex = 0;
   context->_endIndex = 9;
 
-  auto m = [&]<auto comp>() {
-    auto expression =
-        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(context);
-    auto expressionInverted =
-        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted = expressionInverted.evaluate(context);
-    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-    auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
-    return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
@@ -490,18 +502,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   context._beginIndex = 0;
   context._endIndex = 5;
 
-  auto m = [&]<auto comp>() {
-    auto expression =
-        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
-    auto resultAsVariant = expression.evaluate(&context);
-    auto expressionInverted =
-        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
-    auto resultAsVariantInverted = expressionInverted.evaluate(&context);
-    auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-    auto& resultInverted =
-        std::get<VectorWithMemoryLimit<Id>>(resultAsVariantInverted);
-    return std::pair{std::move(result), std::move(resultInverted)};
-  };
+  ExpressionEvaluator<T, U> m{leftValue, rightValue, &context};
   auto [resultLT, invertedLT] = m.template operator()<LT>();
   auto [resultLE, invertedLE] = m.template operator()<LE>();
   auto [resultEQ, invertedEQ] = m.template operator()<EQ>();

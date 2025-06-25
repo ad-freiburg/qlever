@@ -265,43 +265,24 @@ CPP_template(typename NaryOperation)(
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
-    AD_CORRECTNESS_CHECK(this->N == 2);
-    const SparqlExpression* child0 = this->getChildAtIndex(0).value();
-    const SparqlExpression* child1 = this->getChildAtIndex(1).value();
+    std::vector<PrefilterExprVariablePair> prefilterVec;
+    const auto& children = this->children();
+    AD_CORRECTNESS_CHECK(children.size() == 2);
 
-    const auto getPrefilterExprVariableVec =
-        [](const SparqlExpression* child0, const SparqlExpression* child1,
-           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
-      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
-      if (!varExpr) {
-        return {};
-      }
-
-      const auto& optReferenceValue =
-          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
-      if (optReferenceValue.has_value()) {
-        return prefilterExpressions::detail::makePrefilterExpressionVec<
-            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
-                                              varExpr->value(), startsWithVar);
-      }
-      return {};
-    };
-    // Remark: With the current implementation we only prefilter w.r.t. one
-    // bound.
-    // TODO: It is technically possible to pre-filter more precisely by
-    // introducing a second bound.
-    //
-    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
-    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
-    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
-    if (!resVec.empty()) {
-      return resVec;
+    auto var = children[0].get()->getVariableOrNullopt();
+    if (!var.has_value()) {
+      return prefilterVec;
     }
-    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
-    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
-    // Option 3:
-    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
-    return getPrefilterExprVariableVec(child1, child0, true);
+    auto prefixStr = getLiteralFromLiteralExpression(children[1].get());
+    if (!prefixStr.has_value()) {
+      return prefilterVec;
+    }
+
+    prefilterVec.emplace_back(
+        std::make_unique<prefilterExpressions::PrefixRegexExpression>(
+            prefixStr.value()),
+        var.value());
+    return prefilterVec;
   }
 };
 
@@ -333,35 +314,43 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::optional<ad_utility::triple_component::Literal> literal,
+    [](std::optional<ad_utility::triple_component::Literal> optLiteral,
        std::optional<ad_utility::triple_component::Literal> optPattern)
     -> IdOrLiteralOrIri {
-  if (!optPattern.has_value() || !literal.has_value()) {
+  if (!optPattern.has_value() || !optLiteral.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto& literal = optLiteral.value();
+  const auto& patternLit = optPattern.value();
+  // Check if arguments are compatible with their language tags.
+  if (patternLit.hasLanguageTag() &&
+      (!literal.hasLanguageTag() ||
+       literal.getLanguageTag() != patternLit.getLanguageTag())) {
     return Id::makeUndefined();
   }
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
   //  Required by the SPARQL standard.
   if (pattern.empty()) {
     if (isStrAfter) {
-      return LiteralOrIri(std::move(literal.value()));
+      return LiteralOrIri(std::move(literal));
     } else {
-      literal.value().setSubstr(0, 0);
-      return LiteralOrIri(std::move(literal.value()));
+      literal.setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal));
     }
   }
-  auto literalContent = literal.value().getContent();
+  auto literalContent = literal.getContent();
   auto pos = asStringViewUnsafe(literalContent).find(pattern);
   if (pos >= literalContent.size()) {
     return toLiteral("");
   }
   if constexpr (isStrAfter) {
-    literal.value().setSubstr(pos + pattern.size(),
-                              literalContent.size() - pos - pattern.size());
+    literal.setSubstr(pos + pattern.size(),
+                      literalContent.size() - pos - pattern.size());
   } else {
     // STRBEFORE
-    literal.value().setSubstr(0, pos);
+    literal.setSubstr(0, pos);
   }
-  return LiteralOrIri(std::move(literal.value()));
+  return LiteralOrIri(std::move(literal));
 };
 
 auto strAfter = strAfterOrBeforeImpl<true>;
@@ -584,39 +573,37 @@ using LangMatches =
 
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
-    [](std::optional<std::string> input,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        std::optional<std::string> langTag) -> IdOrLiteralOrIri {
-  if (!input.has_value() || !langTag.has_value()) {
+  if (!literal.has_value() || !langTag.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else if (!ad_utility::strIsLangTag(langTag.value())) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(input.value()),
-            std::move(langTag.value()));
-    return LiteralOrIri{lit};
+    literal.value().addLanguageTag(std::move(langTag.value()));
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
-using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
+using StrLangTagged =
+    LiteralExpressionImpl<2, decltype(strLangTag), StringValueGetter>;
 
 // STRING WITH DATATYPE IRI
 [[maybe_unused]] inline auto strIriDtTag =
-    [](std::optional<std::string> inputStr,
+    [](std::optional<ad_utility::triple_component::Literal> literal,
        OptIri inputIri) -> IdOrLiteralOrIri {
-  if (!inputStr.has_value() || !inputIri.has_value()) {
+  if (!literal.has_value() || !inputIri.has_value() ||
+      !literal.value().isPlain()) {
     return Id::makeUndefined();
   } else {
-    auto lit =
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
-    return LiteralOrIri{lit};
+    literal.value().addDatatype(inputIri.value());
+    return LiteralOrIri{std::move(literal.value())};
   }
 };
 
 using StrIriTagged =
-    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+    LiteralExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
 
 // HASH
 template <auto HashFunc>

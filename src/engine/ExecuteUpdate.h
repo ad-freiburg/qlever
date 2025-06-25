@@ -69,7 +69,8 @@ class ExecuteUpdate {
   // must be a GraphUpdate.
   static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
-                          const QueryExecutionTree& qet,
+                          const Result& result,
+                          const VariableToColumnMap& variableColumns,
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);

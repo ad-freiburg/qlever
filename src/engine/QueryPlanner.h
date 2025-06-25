@@ -15,6 +15,7 @@
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
+#include "parser/data/Types.h"
 
 class QueryPlanner {
   using TextLimitMap =
@@ -57,13 +58,13 @@ class QueryPlanner {
       Node(size_t id, SparqlTriple t,
            std::optional<Variable> graphVariable = std::nullopt)
           : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_.s_)) {
+        if (triple_.s_.isVariable()) {
           _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_.iri_});
+        if (auto predicate = triple_.getPredicateVariable()) {
+          _variables.insert(predicate.value());
         }
-        if (isVariable(triple_.o_)) {
+        if (triple_.o_.isVariable()) {
           _variables.insert(triple_.o_.getVariable());
         }
         if (graphVariable.has_value()) {
@@ -318,9 +319,10 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(const TripleComponent& left,
                                             const PropertyPath& path,
                                             const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromIri(const TripleComponent& left,
-                                               const PropertyPath& path,
-                                               const TripleComponent& right);
+  static ParsedQuery::GraphPattern seedFromVarOrIri(
+      const TripleComponent& left,
+      const ad_utility::sparql_types::VarOrIri& varOrIri,
+      const TripleComponent& right);
 
   Variable generateUniqueVarName();
 
@@ -418,15 +420,32 @@ class QueryPlanner {
       const parsedQuery::Values& values,
       const std::vector<SubtreePlan>& currentPlans) const;
 
-  bool connected(const SubtreePlan& a, const SubtreePlan& b,
-                 const TripleGraph& graph) const;
+  JoinColumns connected(const SubtreePlan& a, const SubtreePlan& b,
+                        boost::optional<const TripleGraph&> tg) const;
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
   string getPruningKey(const SubtreePlan& plan,
                        const vector<ColumnIndex>& orderedOnColumns) const;
 
-  template <bool replaceInsteadOfAddPlans>
+  // Configure the behavior of the `applyFiltersIfPossible` function below.
+  enum class FilterMode {
+    // Only apply matching filters, that is filters are only added to plans that
+    // already bind all the variables that are used in the filter. The plans
+    // with the added filters are added to the candidate set. This mode is used
+    // in the dynamic programming approach, where we don't apply the filters
+    // greedily.
+    KeepUnfiltered,
+    // Only apply matching filters (see above), but the plans with added filters
+    // replace the plans without filters. This is used in the greedy approach,
+    // where filters are always applied as early as possible.
+    ReplaceUnfiltered,
+    // Apply all filters (also the nonmatching ones) and replace the unfiltered
+    // plans. This has to be called at the end of parsing a group graph pattern
+    // where we have to make sure that all filters are applied.
+    ApplyAllFiltersAndReplaceUnfiltered,
+  };
+  template <FilterMode mode = FilterMode::KeepUnfiltered>
   void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
                               const std::vector<SparqlFilter>& filters) const;
 
