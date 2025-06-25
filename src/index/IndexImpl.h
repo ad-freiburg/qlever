@@ -106,7 +106,7 @@ class IndexImpl {
  public:
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // Block Id, Context Id, Word Id, Score, entity
+  // Block Id, entity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
