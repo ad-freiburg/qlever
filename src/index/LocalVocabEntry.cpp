@@ -4,23 +4,25 @@
 
 #include "LocalVocabEntry.h"
 
+#include "global/VocabIndex.h"
 #include "index/IndexImpl.h"
 
 // ___________________________________________________________________________
 auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // Lookup the lower and upper bound from the vocabulary of the index,
-  // cache and return them.
+  // cache and return them. This represents the place in the vocabulary where
+  // this word would be stored if it were present.
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
-  using SortLevel = Index::Vocab::SortLevel;
-  auto [lower, upper] =
-      vocab.getPositionOfWord(toStringRepresentation(), SortLevel::TOTAL);
-  positionInVocab.lowerBound_ = lower;
-  positionInVocab.upperBound_ = upper;
-  AD_CORRECTNESS_CHECK(positionInVocab.upperBound_.get() -
-                           positionInVocab.lowerBound_.get() <=
-                       1);
+  VocabIndex vocabIdx;
+  auto isPresent = vocab.getId(toStringRepresentation(), &vocabIdx);
+  positionInVocab.lowerBound_ = vocabIdx;
+  if (isPresent) {
+    positionInVocab.upperBound_ = vocabIdx;
+  } else {
+    positionInVocab.upperBound_ = vocabIdx.incremented();
+  }
   lowerBoundInVocab_.store(positionInVocab.lowerBound_,
                            std::memory_order_relaxed);
   upperBoundInVocab_.store(positionInVocab.upperBound_,

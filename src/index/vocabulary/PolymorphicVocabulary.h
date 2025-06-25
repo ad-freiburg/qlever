@@ -75,36 +75,41 @@ class PolymorphicVocabulary {
   const Variant& getUnderlyingVocabulary() const { return vocab_; }
 
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
-  template <typename String, typename Comp, typename... Args>
-  WordAndIndex lower_bound(const String& word, Comp comp,
-                           Args&&... args) const {
+  template <typename String, typename Comp>
+  WordAndIndex lower_bound(const String& word, Comp comp) const {
     return std::visit(
-        [&word, &comp, &args...](auto& vocab) {
-          // TODO find a better solution here
-          using T = std::decay_t<decltype(vocab)>;
-          if constexpr (std::is_same_v<T, OnDiskCompressedGeoSplit>) {
-            return vocab.lower_bound(word, std::move(comp), AD_FWD(args)...);
-          }
+        [&word, &comp](auto& vocab) {
           return vocab.lower_bound(word, std::move(comp));
         },
         vocab_);
   }
 
   // Analogous to `lower_bound` (see above).
-  template <typename String, typename Comp, typename... Args>
-  WordAndIndex upper_bound(const String& word, Comp comp,
-                           Args&&... args) const {
+  template <typename String, typename Comp>
+  WordAndIndex upper_bound(const String& word, Comp comp) const {
     return std::visit(
-        [&word, &comp, &args...](auto& vocab) {
-          // TODO find a better solution here
-          using T = std::decay_t<decltype(vocab)>;
-          if constexpr (std::is_same_v<T, OnDiskCompressedGeoSplit>) {
-            return vocab.upper_bound(word, std::move(comp), AD_FWD(args)...);
-          }
+        [&word, &comp](auto& vocab) {
           return vocab.upper_bound(word, std::move(comp));
         },
         vocab_);
   }
+
+  // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
+  // word, not a prefix, this function can respect the split of an underlying
+  // `SplitVocabulary`.
+  template <typename String, typename Comp>
+  WordAndIndex getPositionOfWord(const String& word, Comp comp) const {
+    return std::visit(
+        [&word, &comp](auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return vocab.getPositionOfWord(word, std::move(comp));
+          }
+          return vocab.lower_bound(word, std::move(comp));
+        },
+        vocab_);
+  }
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(

@@ -8,6 +8,7 @@
 
 #include "index/Vocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
+#include "index/vocabulary/VocabularyType.h"
 
 namespace splitVocabTestHelpers {
 
@@ -55,6 +56,9 @@ using ThreeSplitVocabulary =
 
 namespace {
 using namespace splitVocabTestHelpers;
+using namespace ad_utility;
+const VocabularyType geoSplitVocabType{
+    VocabularyType::Enum::OnDiskCompressedGeoSplit};
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitGeoVocab) {
@@ -259,7 +263,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyItemAt) {
-  ad_utility::HashSet<string> s;
+  HashSet<string> s;
   s.insert("a");
   s.insert("ab");
   s.insert(
@@ -272,6 +276,7 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
       "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   RdfsVocabulary v;
+  v.resetToType(geoSplitVocabType);
   auto filename = "vocTest6.dat";
   v.createFromSet(s, filename);
 
@@ -293,7 +298,7 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
             "\"POLYGON((1 2, 3 "
             "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
-  ad_utility::deleteFile(filename);
+  deleteFile(filename);
 }
 
 // _____________________________________________________________________________
@@ -302,6 +307,7 @@ TEST(Vocabulary, SplitVocabularyWordWriter) {
   // writer. Its task is to split words to two different vocabularies for geo
   // and non-geo words. This split is tested here.
   RdfsVocabulary vocabulary;
+  vocabulary.resetToType(geoSplitVocabType);
   auto wordCallback = vocabulary.makeWordWriterPtr("vocTest7.dat");
 
   // Call word writer

@@ -199,19 +199,10 @@ class SplitVocabulary {
   }
 
   template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator, bool autoMarker) const {
-    // TODO
+  WordAndIndex getPositionOfWord(const InternalStringType& word,
+                                 Comparator comparator) const {
     return boundImpl<InternalStringType, Comparator, false>(
-        word, comparator, autoMarker ? getMarkerForWord(word) : 0);
-  }
-
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator, bool autoMarker) const {
-    // TODO
-    return boundImpl<InternalStringType, Comparator, true>(
-        word, comparator, autoMarker ? getMarkerForWord(word) : 0);
+        word, comparator, getMarkerForWord(word));
   }
 
   // Shortcut to retrieve the first underlying vocabulary
