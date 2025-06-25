@@ -25,6 +25,7 @@ class PolymorphicVocabulary {
  public:
   using VocabularyType = ad_utility::VocabularyType;
 
+ private:
   // Type aliases for all the currently supported vocabularies. To add another
   // vocabulary,
   // 1. Add an enum value to the `VocabularyTypeEnum`.
@@ -42,7 +43,6 @@ class PolymorphicVocabulary {
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
                    InMemoryCompressed, OnDiskCompressedGeoSplit>;
 
- private:
   // In this variant we store the actual vocabulary.
   Variant vocab_;
 
