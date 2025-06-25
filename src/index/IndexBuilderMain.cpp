@@ -205,7 +205,9 @@ int main(int argc, char** argv) {
       "text-words-input-file).");
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
-      "the same `index-basename` already exists.");
+      "the same `index-basename` already exists. Also if Literals should be"
+      "added to the text index those have to be precomputed during the normal"
+      "index building.");
   add("bm25-b", po::value(&bScoringParam),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
@@ -267,6 +269,12 @@ int main(int argc, char** argv) {
           "Either choose to add all literals or choose"
           "a regex that evaluates predicates of triples"
           "with literals as object.");
+    }
+    if (optionsMap.count("text-index-regex") &&
+        optionsMap.count("add-text-index")) {
+      throw std::invalid_argument(
+          "The regex to filter literals with a regex on predicates only works"
+          "when building the normal index.");
     }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
