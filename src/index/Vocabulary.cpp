@@ -6,19 +6,11 @@
 
 #include "index/Vocabulary.h"
 
-#include <filesystem>
 #include <iostream>
-#include <type_traits>
 
-#include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/UnicodeVocabulary.h"
-#include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
-#include "util/Exception.h"
-#include "util/Forward.h"
 #include "util/HashSet.h"
 #include "util/json.h"
 
@@ -45,7 +37,6 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 }
 
 // _____________________________________________________________________________
-
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
