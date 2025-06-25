@@ -17,6 +17,7 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   const auto& vocab = index.getVocab();
 
   auto [lower, upper] = vocab.getBoundsForWord(toStringRepresentation());
+  AD_CORRECTNESS_CHECK(upper.get() - lower.get() <= 1);
   positionInVocab.lowerBound_ = lower;
   positionInVocab.upperBound_ = upper;
 
