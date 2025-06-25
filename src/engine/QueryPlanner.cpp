@@ -2965,6 +2965,8 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   auto originalVariables = boundVariables_;
 
   auto handleChild = [this](auto& pattern) {
+    // TODO<RobinTF> This is basically planner._optimize(), but without a new
+    // instance of GraphPatternPlanner
     for (auto& child : pattern._graphPatterns) {
       child.visit([this](auto& arg) {
         return this->graphPatternOperationVisitor(arg);
@@ -2974,6 +2976,26 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
     // Make sure we only have a single vector of subtree plans to deal with.
     optimizeCommutatively();
     AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+    planner_.applyFiltersIfPossible<
+        FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(candidatePlans_.at(0),
+                                                         pattern._filters);
+    planner_.applyTextLimitsIfPossible(
+        candidatePlans_.at(0),
+        TextLimitVec{pattern.textLimits_.begin(), pattern.textLimits_.end()},
+        true);
+    planner_.checkCancellation();
+
+    AD_CONTRACT_CHECK(candidatePlans_.size() == 1);
+    if (candidatePlans_.at(0).empty()) {
+      // This happens if either graph pattern is an empty group,
+      // or it only consists of a MINUS clause (which then has no effect).
+      candidatePlans_.at(0).push_back(
+          makeSubtreePlan<NeutralElementOperation>(planner_._qec));
+      // Neutral element can potentially still get filtered out
+      planner_.applyFiltersIfPossible<
+          FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+          candidatePlans_.at(0), pattern._filters);
+    }
   };
 
   // Replace with cloned plan to avoid clashes.
@@ -2991,15 +3013,6 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   allVariables.insert(boundVariables_.begin(), boundVariables_.end());
   // Set back to original to prevent conflicts with `visitGroupOptionalOrMinus`.
   boundVariables_ = std::move(originalVariables);
-
-  if (leftPlans.at(0).empty()) {
-    leftPlans.at(0).push_back(
-        makeSubtreePlan<NeutralElementOperation>(planner_._qec));
-  }
-  if (rightPlans.at(0).empty()) {
-    rightPlans.at(0).push_back(
-        makeSubtreePlan<NeutralElementOperation>(planner_._qec));
-  }
 
   std::vector<SubtreePlan> newCandidates;
 
