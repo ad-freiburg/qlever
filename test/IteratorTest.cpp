@@ -10,6 +10,7 @@
 #include <string>
 
 #include "backports/algorithm.h"
+#include "util/GeneratorConverters.h"
 #include "util/Iterators.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
@@ -258,4 +259,30 @@ TEST(Iterator, IteratorRange) {
   EXPECT_EQ(**beg, 1);
   EXPECT_EQ(beg[3], v.begin() + 3);
   EXPECT_EQ(*beg[3], 7);
+}
+
+cppcoro::generator<int> simpleGenerator(const int max) {
+  for (int i{0}; i < max; ++i) {
+    co_yield i;
+  }
+}
+
+TEST(Iterator, fromGenerator) {
+  const int max{10};
+
+  auto generator{simpleGenerator(max)};
+
+  ad_utility::InputRangeTypeErased<int> range{
+      fromGenerator(std::move(generator))};
+  auto iterator{range.begin()};
+
+  for (int i{0}; i < 10; ++i) {
+    auto value{*iterator};
+
+    EXPECT_EQ(i, value);
+
+    iterator++;
+  }
+
+  EXPECT_EQ(iterator, range.end());
 }

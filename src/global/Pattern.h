@@ -9,7 +9,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -128,7 +130,8 @@ class CompactVectorOfStrings {
 
   // Forward iterator for a `CompactVectorOfStrings` that reads directly from
   // disk without buffering the whole `Vector`.
-  static cppcoro::generator<vector_type> diskIterator(string filename);
+  static ad_utility::InputRangeTypeErased<vector_type> diskIterator(
+      string filename);
 
   using Iterator = ad_utility::IteratorForAccessOperator<
       CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,
@@ -254,7 +257,8 @@ static_assert(
 // Forward iterator for a `CompactVectorOfStrings` that reads directly from
 // disk without buffering the whole `Vector`.
 template <typename DataT>
-cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
+ad_utility::InputRangeTypeErased<
+    typename CompactVectorOfStrings<DataT>::vector_type>
 CompactVectorOfStrings<DataT>::diskIterator(string filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
@@ -276,16 +280,43 @@ CompactVectorOfStrings<DataT>::diskIterator(string filename) {
   size_t offset;
   indexFile.read(&offset, sizeof(offset));
 
-  for (size_t i = 0; i < size; ++i) {
-    size_t nextOffset;
-    indexFile.read(&nextOffset, sizeof(nextOffset));
-    auto currentSize = nextOffset - offset;
-    vector_type result;
-    result.resize(currentSize);
-    dataFile.read(result.data(), currentSize * sizeof(DataT));
-    co_yield result;
-    offset = nextOffset;
-  }
+  struct Generator : public ad_utility::InputRangeFromGet<
+                         typename CompactVectorOfStrings<DataT>::vector_type> {
+    explicit Generator(ad_utility::File&& dataFile,
+                       ad_utility::File&& indexFile, const std::size_t a_size,
+                       const std::size_t an_offset)
+        : data{std::move(dataFile)},
+          index{std::move(indexFile)},
+          size{a_size},
+          offset{an_offset} {}
+
+    std::optional<CompactVectorOfStrings<DataT>::vector_type> get() override {
+      if (i < size) {
+        size_t nextOffset;
+        index.read(&nextOffset, sizeof(nextOffset));
+        auto currentSize = nextOffset - offset;
+        vector_type result;
+        result.resize(currentSize);
+        data.read(result.data(), currentSize * sizeof(DataT));
+        offset = nextOffset;
+        ++i;
+
+        return result;
+      }
+
+      return std::nullopt;
+    }
+
+    ad_utility::File data;
+    ad_utility::File index;
+    std::size_t i{0};
+    const std::size_t size;
+    size_t offset;
+  };
+
+  return ad_utility::InputRangeTypeErased<
+      typename CompactVectorOfStrings<DataT>::vector_type>{
+      Generator(std::move(dataFile), std::move(indexFile), size, offset)};
 }
 
 // Hashing support for the `Pattern` class.
