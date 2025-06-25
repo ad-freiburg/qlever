@@ -7,12 +7,8 @@
 #include <cstdio>
 #include <vector>
 
-#include "global/IndexTypes.h"
-#include "index/Vocabulary.h"
-#include "util/json.h"
-
-// Anonymous namespace for the normal tests
-namespace {
+#include "../src/index/Vocabulary.h"
+#include "../src/util/json.h"
 
 using json = nlohmann::json;
 using std::string;
@@ -92,18 +88,15 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ab");
   s.insert("ba");
   s.insert("car");
-
   TextVocabulary v;
   auto filename = "vocTest4.dat";
   v.createFromSet(s, filename);
-
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
   ASSERT_FALSE(v.getId("foo", &idx));
-
   ad_utility::deleteFile(filename);
 }
 
@@ -132,5 +125,3 @@ TEST(Vocabulary, PrefixFilter) {
   ASSERT_EQ(ranges, expectedRanges);
   ad_utility::deleteFile(filename);
 }
-
-}  // namespace
