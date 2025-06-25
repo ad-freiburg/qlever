@@ -7,8 +7,17 @@
 
 #include <type_traits>
 
+#include "concepts/concepts.hpp"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+
+// Only the `SplitVocabulary` currently needs a special handling for
+// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
+// dynamically hold a `SplitVocabulary`)
+template <typename T>
+CPP_concept HasSpecialGetPositionOfWord =
+    std::is_same_v<T, PolymorphicVocabulary> ||
+    ad_utility::isInstantiation<T, SplitVocabulary>;
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -63,23 +72,32 @@ class UnicodeVocabulary {
     return _underlyingVocabulary.upper_bound(word, actualComparator);
   }
 
-  // Same as lower_bound, except that word is known to be a full word, not a
-  // prefix. Special handling may be applied in the presence of a
+  // Same as lower_bound or upper_bound, except that word is known to be a full
+  // word, not a prefix. Special handling may be applied in the presence of a
   // SplitVocabulary.
   template <typename T>
-  WordAndIndex getPositionOfWord(const T& word) const {
-    auto actualComparator = [this](const auto& a, const auto& b) {
+  auto getPositionOfWordComparator(const T&) const {
+    return [this](const auto& a, const auto& b) {
       return _comparator(a, b, SortLevel::TOTAL);
     };
-    // Only the `SplitVocabulary` currently needs a special handling (this
-    // includes the `PolymorphicVocabulary` which may dynamically hold a
-    // `SplitVocabulary`)
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary> ||
-                  ad_utility::isInstantiation<UnderlyingVocabulary,
-                                              SplitVocabulary>) {
-      return _underlyingVocabulary.getPositionOfWord(word, actualComparator);
+  }
+  template <typename T>
+  WordAndIndex getPositionOfWordLower(const T& word) const {
+    auto actualComparator = getPositionOfWordComparator(word);
+    if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
+      return _underlyingVocabulary.getPositionOfWordLower(word,
+                                                          actualComparator);
     }
     return _underlyingVocabulary.lower_bound(word, actualComparator);
+  }
+  template <typename T>
+  WordAndIndex getPositionOfWordUpper(const T& word) const {
+    auto actualComparator = getPositionOfWordComparator(word);
+    if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
+      return _underlyingVocabulary.getPositionOfWordUpper(word,
+                                                          actualComparator);
+    }
+    return _underlyingVocabulary.upper_bound(word, actualComparator);
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the

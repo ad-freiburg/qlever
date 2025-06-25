@@ -92,18 +92,34 @@ class PolymorphicVocabulary {
   // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
   // word, not a prefix, this function can respect the split of an underlying
   // `SplitVocabulary`.
-  template <typename String, typename Comp>
+  template <typename String, typename Comp, bool getUpperBound>
   WordAndIndex getPositionOfWord(const String& word, Comp comp) const {
     return std::visit(
         [&word, &comp](auto& vocab) {
           using T = std::decay_t<decltype(vocab)>;
           if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
-            return vocab.getPositionOfWord(word, std::move(comp));
+            return vocab
+                .template getPositionOfWord<String, Comp, getUpperBound>(
+                    word, std::move(comp));
           }
-          return vocab.lower_bound(word, std::move(comp));
+          if constexpr (getUpperBound) {
+            return vocab.upper_bound(word, std::move(comp));
+          } else {
+            return vocab.lower_bound(word, std::move(comp));
+          }
         },
         vocab_);
   }
+
+  template <typename String, typename Comp>
+  WordAndIndex getPositionOfWordLower(const String& word, Comp comp) const {
+    return getPositionOfWord<String, Comp, false>(word, comp);
+  };
+
+  template <typename String, typename Comp>
+  WordAndIndex getPositionOfWordUpper(const String& word, Comp comp) const {
+    return getPositionOfWord<String, Comp, true>(word, comp);
+  };
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.

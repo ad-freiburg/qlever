@@ -233,8 +233,18 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::getBoundsForWord(std::string_view word) const
+    -> std::pair<IndexType, IndexType> {
+  auto wordAndIndexL = vocabulary_.getPositionOfWordLower(word);
+  auto wordAndIndexU = vocabulary_.getPositionOfWordUpper(word);
+  return {IndexType::make(wordAndIndexL.indexOrDefault(size())),
+          IndexType::make(wordAndIndexU.indexOrDefault(size()))};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  auto wordAndIndex = vocabulary_.getPositionOfWord(word);
+  auto wordAndIndex = vocabulary_.getPositionOfWordLower(word);
   if (wordAndIndex.isEnd()) {
     return false;
   }

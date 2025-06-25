@@ -211,6 +211,11 @@ class Vocabulary {
   IndexType upper_bound(const string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
 
+  // The position where a word is stored or would be stored if it does not
+  // exist. Unlike `lower_bound` and `upper_bound`, this function works with
+  // full words, not prefixes. Currently used for `LocalVocabEntry`.
+  std::pair<IndexType, IndexType> getBoundsForWord(std::string_view word) const;
+
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
   // the internal vocabulary  have to be pushed one by one to add words to the

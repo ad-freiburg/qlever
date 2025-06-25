@@ -15,14 +15,11 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
-  VocabIndex vocabIdx;
-  auto isPresent = vocab.getId(toStringRepresentation(), &vocabIdx);
-  positionInVocab.lowerBound_ = vocabIdx;
-  if (isPresent) {
-    positionInVocab.upperBound_ = vocabIdx;
-  } else {
-    positionInVocab.upperBound_ = vocabIdx.incremented();
-  }
+
+  auto [lower, upper] = vocab.getBoundsForWord(toStringRepresentation());
+  positionInVocab.lowerBound_ = lower;
+  positionInVocab.upperBound_ = upper;
+
   lowerBoundInVocab_.store(positionInVocab.lowerBound_,
                            std::memory_order_relaxed);
   upperBoundInVocab_.store(positionInVocab.upperBound_,
