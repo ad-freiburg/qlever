@@ -248,17 +248,17 @@ CacheValue Operation::runComputationAndPrepareForCache(
              : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
-      !unlikelyToFitInCache(maxSize)) {
+      (pinned || !unlikelyToFitInCache(maxSize))) {
     result.cacheDuringConsumption(
-        [maxSize](
+        [maxSize, pinned](
             const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
             const Result::IdTableVocabPair& newIdTable) {
           auto currentSize =
               currentIdTablePair.has_value()
                   ? CacheValue::getSize(currentIdTablePair.value().idTable_)
                   : 0_B;
-          return maxSize >=
-                 currentSize + CacheValue::getSize(newIdTable.idTable_);
+          return pinned || maxSize >= currentSize + CacheValue::getSize(
+                                                        newIdTable.idTable_);
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache, cacheKey,
          pinned](Result aggregatedResult) {

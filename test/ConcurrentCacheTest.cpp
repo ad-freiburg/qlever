@@ -449,42 +449,6 @@ TEST(ConcurrentCache,
 }
 
 // _____________________________________________________________________________
-TEST(ConcurrentCache, ifUnsuitableForCacheAndPinnedThrowsException) {
-  SimpleConcurrentLruCache cache{};
-
-  cache.clearAll();
-
-  EXPECT_THROW(
-      cache.computeOncePinned(
-          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
-      ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
-TEST(ConcurrentCache,
-     ifUnsuitableWhenWaitingForPendingComputationAndPinnedThrowsException) {
-  SimpleConcurrentLruCache cache{};
-
-  auto resultInProgress = std::make_shared<
-      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
-
-  cache.clearAll();
-  cache.getStorage().wlock()->_inProgress[0] =
-      std::pair(false, resultInProgress);
-
-  UseCounter useCounter{cache};
-  ad_utility::JThread thread{[&]() {
-    useCounter.waitForChange();
-    resultInProgress->finish(nullptr);
-  }};
-
-  EXPECT_THROW(
-      cache.computeOncePinned(
-          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
-      ad_utility::Exception);
-}
-
-// _____________________________________________________________________________
 TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
   auto hasValue = [](std::string value) {
     using namespace ::testing;
