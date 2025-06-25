@@ -116,4 +116,12 @@ class WordWriterBase {
   virtual void finishImpl() = 0;
 };
 
+// Only the `SplitVocabulary` currently needs a special handling for
+// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
+// dynamically hold a `SplitVocabulary`)
+template <typename T>
+CPP_concept HasSpecialGetPositionOfWord =
+    std::is_same_v<T, PolymorphicVocabulary> ||
+    ad_utility::isInstantiation<T, SplitVocabulary>;
+
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_VOCABULARYTYPES_H

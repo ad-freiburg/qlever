@@ -11,14 +11,6 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
-// Only the `SplitVocabulary` currently needs a special handling for
-// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
-// dynamically hold a `SplitVocabulary`)
-template <typename T>
-CPP_concept HasSpecialGetPositionOfWord =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary>;
-
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
 /// stricter level can be all equal on a weaker level. The
