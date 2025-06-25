@@ -71,9 +71,12 @@ class UnicodeVocabulary {
     auto actualComparator = [this](const auto& a, const auto& b) {
       return _comparator(a, b, SortLevel::TOTAL);
     };
-    // Only the polymorphic vocabulary currently needs a special handling (if it
-    // holds a SplitVocabulary)
-    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
+    // Only the `SplitVocabulary` currently needs a special handling (this
+    // includes the `PolymorphicVocabulary` which may dynamically hold a
+    // `SplitVocabulary`)
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary> ||
+                  ad_utility::isInstantiation<UnderlyingVocabulary,
+                                              SplitVocabulary>) {
       return _underlyingVocabulary.getPositionOfWord(word, actualComparator);
     }
     return _underlyingVocabulary.lower_bound(word, actualComparator);
