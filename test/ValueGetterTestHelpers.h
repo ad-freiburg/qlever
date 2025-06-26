@@ -242,11 +242,7 @@ inline void checkGeoInfoFromVocab(
     Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
   sparqlExpression::detail::GeometryInfoValueGetter getter;
-  TestContextWithGivenTTl testContext{
-      geoInfoTtl,
-      // Disable vocabulary type fuzzy testing here
-      // TODO<ullingerc> Can be re-enabled after merge of #1983
-      VocabularyType{VocabularyType::Enum::OnDiskCompressed}};
+  TestContextWithGivenTTl testContext{geoInfoTtl};
   VocabIndex idx;
   ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(wktInput, &idx));
   auto id = ValueId::makeFromVocabIndex(idx);
