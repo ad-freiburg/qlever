@@ -97,7 +97,7 @@ class PolymorphicVocabulary {
   // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
   // word, not a prefix, this function can respect the split of an underlying
   // `SplitVocabulary`.
-  template <typename String, typename Comp, bool getUpperBound>
+  template <bool getUpperBound, typename String, typename Comp>
   WordAndIndex getPositionOfWord(const String& word, Comp comp) const {
     return std::visit(
         [&word, &comp](auto& vocab) {
@@ -118,12 +118,12 @@ class PolymorphicVocabulary {
 
   template <typename String, typename Comp>
   WordAndIndex getPositionOfWordLower(const String& word, Comp comp) const {
-    return getPositionOfWord<String, Comp, false>(word, comp);
+    return getPositionOfWord<false>(word, comp);
   };
 
   template <typename String, typename Comp>
   WordAndIndex getPositionOfWordUpper(const String& word, Comp comp) const {
-    return getPositionOfWord<String, Comp, true>(word, comp);
+    return getPositionOfWord<true>(word, comp);
   };
 
   // Retrieve GeometryInfo from an underlying vocabulary, if it is a

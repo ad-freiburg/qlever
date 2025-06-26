@@ -33,8 +33,6 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 
   for (size_t i = 0; i < a.size(); ++i) {
     if (a[i] != b[i]) {
-      LOG(ERROR) << a[i].first << " " << a[i].second << " != " << b[i].first
-                 << " " << b[i].second << std::endl;
       return false;
     }
   }
@@ -94,8 +92,8 @@ class MergeVocabularyTest : public ::testing::Test {
         {"\"ape\"", false, 0},
         {"\"bla\"", true, 2},
         {"\"gorilla\"", false, 3},
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"LINESTRING(1 2, 3 4)\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, 0},
         {"\"monkey\"", false, 4},
         {"_:blank", false, 0},
@@ -103,8 +101,8 @@ class MergeVocabularyTest : public ::testing::Test {
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
         {"\"monkey\"", true, 4},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"POLYGON((1 2, 3 4))\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, 1},
         {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
@@ -116,11 +114,11 @@ class MergeVocabularyTest : public ::testing::Test {
         {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
         {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
     expectedMergedGeoVocabulary_ = ExpectedVocabulary{
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"LINESTRING(1 2, 3 4)\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"POLYGON((1 2, 3 4))\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true}};
 
     // open files for partial Vocabularies
@@ -190,10 +188,10 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   std::vector<std::pair<std::string, bool>> mergeResult;
   std::vector<std::pair<std::string, bool>> geoMergeResult;
   {
-    // Simulate Vocabulary::WordWriter::operation() for testing purposes
-    auto internalVocabularyAction =
-        [&mergeResult, &geoMergeResult](
-            const auto& word, [[maybe_unused]] bool isExternal) -> uint64_t {
+    // Simulate `Vocabulary::WordWriter::operation()` for testing purposes
+    auto internalVocabularyAction = [&mergeResult, &geoMergeResult](
+                                        const auto& word,
+                                        bool isExternal) -> uint64_t {
       if (word.starts_with("\"") &&
           word.ends_with(
               "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")) {
