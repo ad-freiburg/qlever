@@ -15,6 +15,7 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
@@ -22,6 +23,7 @@
 #include "util/Forward.h"
 #include "util/GeometryInfo.h"
 #include "util/HashSet.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 using std::string;
@@ -234,20 +236,11 @@ auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
 template <typename S, typename C, typename I>
 std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
     IndexType idx) const {
-  if constexpr (std::is_same_v<S, PolymorphicVocabulary>) {
-    return std::visit(
-        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
-          using T = std::decay_t<decltype(vocab)>;
-          if constexpr (std::is_same_v<T, SplitGeoVocabulary<S>>) {
-            auto marker = vocab.getUnderlyingVocabulary().getMarker(idx.get());
-            AD_CORRECTNESS_CHECK(marker == 1);
-            auto geoIndex =
-                vocab.getUnderlyingVocabulary().getVocabIndex(idx.get());
-            return vocab.getUnderylingVocabulary(1).getGeoInfo(geoIndex);
-          }
-          return std::nullopt;
-        },
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary());
+  // PolymorphicVocabulary or SplitVocabulary may have an underlying
+  // GeoVocabulary, which provides the GeometryInfo
+  if constexpr (std::is_same_v<S, PolymorphicVocabulary> ||
+                ad_utility::isInstantiation<S, SplitVocabulary>) {
+    return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
   }
   return std::nullopt;
 };

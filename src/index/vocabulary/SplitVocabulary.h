@@ -254,6 +254,11 @@ class SplitVocabulary {
       const std::string& filename) const {
     return std::make_unique<WordWriter>(underlying_, filename);
   }
+
+  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
+  // GeoVocabulary.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(
+      uint64_t indexWithMarker) const;
 };
 
 // Concrete implementations of split function and split filename function

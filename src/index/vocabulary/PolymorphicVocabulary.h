@@ -126,6 +126,20 @@ class PolymorphicVocabulary {
     return getPositionOfWord<String, Comp, true>(word, comp);
   };
 
+  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
+  // GeoVocabulary.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(uint64_t index) const {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return vocab.getGeoInfo(index);
+          }
+          return std::nullopt;
+        },
+        vocab_);
+  };
+
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.
   static std::unique_ptr<WordWriterBase> makeDiskWriterPtr(
