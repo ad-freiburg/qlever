@@ -135,8 +135,10 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
-  //! Get an Id from the vocabulary for some "normal" word.
-  //! Return value signals if something was found at all.
+  // Get an Id from the vocabulary for some full word (not prefix of a word).
+  // Return a boolean value that signals if the word was found. If the word was
+  // not found, the lower bound for the word is stored in idx, otherwise the
+  // index of the word.
   bool getId(std::string_view word, IndexType* idx) const;
 
   // Retrieve a `GeometryInfo` object from the (possibly) underlying
@@ -218,6 +220,11 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
+
+  // The position where a word is stored or would be stored if it does not
+  // exist. Unlike `lower_bound` and `upper_bound`, this function works with
+  // full words, not prefixes. Currently used for `LocalVocabEntry`.
+  std::pair<IndexType, IndexType> getBoundsForWord(std::string_view word) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in

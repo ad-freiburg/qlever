@@ -8,15 +8,13 @@
 
 #include "index/Vocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
+#include "index/vocabulary/VocabularyType.h"
 
 namespace splitVocabTestHelpers {
 
 using SGV =
     SplitGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 using VocabOnSGV = Vocabulary<SGV, TripleComponentComparator, VocabIndex>;
-
-// TODO<ullingerc> Re-add ItemAt and SplitWordWriter tests after integration of
-// SplitVocabulary in Vocabulary
 
 [[maybe_unused]] auto testSplitTwoFunction = [](std::string_view s) -> uint8_t {
   return s.starts_with("\"a");
@@ -58,6 +56,9 @@ using ThreeSplitVocabulary =
 
 namespace {
 using namespace splitVocabTestHelpers;
+using namespace ad_utility;
+const VocabularyType geoSplitVocabType{
+    VocabularyType::Enum::OnDiskCompressedGeoSplit};
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitGeoVocab) {
@@ -258,6 +259,112 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   ASSERT_EQ(sv[2ull << 58], "\"xyz\"^^<blabliblu>");
   ASSERT_EQ(sv[(2ull << 58) | 1], "\"zzz\"^^<blabliblu>");
   ASSERT_EQ(sv[1ull << 58], "\"xyz\"^^<http://example.com>");
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyItemAt) {
+  HashSet<string> s;
+  s.insert("a");
+  s.insert("ab");
+  s.insert(
+      "\"POLYGON((1 2, 3 "
+      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  s.insert("ba");
+  s.insert("car");
+  s.insert(
+      "\"LINESTRING(1 2, 3 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  RdfsVocabulary v;
+  v.resetToType(geoSplitVocabType);
+  auto filename = "vocTest6.dat";
+  v.createFromSet(s, filename);
+
+  ASSERT_EQ(v[VocabIndex::make(0)], "a");
+  ASSERT_EQ(v[VocabIndex::make(1)], "ab");
+  ASSERT_EQ(v[VocabIndex::make(2)], "ba");
+  ASSERT_EQ(v[VocabIndex::make(3)], "car");
+
+  // Out of range indices
+  EXPECT_ANY_THROW(v[VocabIndex::make(42)]);
+  EXPECT_ANY_THROW(v[VocabIndex::make((1ull << 59) | 42)]);
+
+  auto idx = VocabIndex::make(1ull << 59);
+  ASSERT_EQ(v[idx],
+            "\"LINESTRING(1 2, 3 "
+            "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  idx = VocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
+  ASSERT_EQ(v[idx],
+            "\"POLYGON((1 2, 3 "
+            "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(Vocabulary, SplitVocabularyWordWriter) {
+  // The word writer in the Vocabulary class runs the SplitGeoVocabulary word
+  // writer. Its task is to split words to two different vocabularies for geo
+  // and non-geo words. This split is tested here.
+  RdfsVocabulary vocabulary;
+  vocabulary.resetToType(geoSplitVocabType);
+  auto wordCallback = vocabulary.makeWordWriterPtr("vocTest7.dat");
+
+  // Call word writer
+  ASSERT_EQ((*wordCallback)("a", true), 0);
+  ASSERT_EQ((*wordCallback)("ab", true), 1);
+  ASSERT_EQ(
+      (*wordCallback)("\"LINESTRING(1 2, 3 "
+                      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                      true),
+      (1ull << 59));
+  ASSERT_EQ((*wordCallback)("ba", true), 2);
+  ASSERT_EQ((*wordCallback)("car", true), 3);
+  ASSERT_EQ((*wordCallback)(
+                "\"POLYGON((1 2, 3 "
+                "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                true),
+            (1ull << 59) | 1);
+
+  wordCallback->finish();
+
+  vocabulary.readFromFile("vocTest7.dat");
+
+  // Check that the resulting vocabulary is correct
+  VocabIndex idx;
+  ASSERT_TRUE(vocabulary.getId("a", &idx));
+  ASSERT_EQ(idx.get(), 0);
+  ASSERT_EQ(vocabulary[VocabIndex::make(0)], "a");
+  ASSERT_TRUE(vocabulary.getId("ab", &idx));
+  ASSERT_EQ(idx.get(), 1);
+  ASSERT_EQ(vocabulary[VocabIndex::make(1)], "ab");
+  ASSERT_TRUE(vocabulary.getId("ba", &idx));
+  ASSERT_EQ(idx.get(), 2);
+  ASSERT_EQ(vocabulary[VocabIndex::make(2)], "ba");
+  ASSERT_TRUE(vocabulary.getId("car", &idx));
+  ASSERT_EQ(idx.get(), 3);
+  ASSERT_EQ(vocabulary[VocabIndex::make(3)], "car");
+
+  ASSERT_TRUE(vocabulary.getId(
+      "\"LINESTRING(1 2, 3 "
+      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      &idx));
+  ASSERT_EQ(idx.get(), 1ull << 59);
+  ASSERT_EQ(vocabulary[VocabIndex::make(1ull << 59)],
+            "\"LINESTRING(1 2, 3 "
+            "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  ASSERT_TRUE(vocabulary.getId(
+      "\"POLYGON((1 2, 3 "
+      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      &idx));
+  ASSERT_EQ(idx.get(), (1ull << 59) | 1);
+  ASSERT_EQ(vocabulary[VocabIndex::make((1ull << 59) | 1)],
+            "\"POLYGON((1 2, 3 "
+            "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+
+  ASSERT_FALSE(vocabulary.getId("xyz", &idx));
+  ASSERT_ANY_THROW(vocabulary[VocabIndex::make(42)]);
 }
 
 }  // namespace

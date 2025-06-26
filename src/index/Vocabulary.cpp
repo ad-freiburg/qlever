@@ -7,11 +7,8 @@
 
 #include "index/Vocabulary.h"
 
-#include <filesystem>
 #include <iostream>
-#include <type_traits>
 
-#include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/GeoVocabulary.h"
@@ -50,7 +47,6 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 }
 
 // _____________________________________________________________________________
-
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   vocabulary_.close();
@@ -269,34 +265,23 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::getBoundsForWord(std::string_view word) const
+    -> std::pair<IndexType, IndexType> {
+  return {IndexType::make(
+              vocabulary_.getPositionOfWordLower(word).indexOrDefault(size())),
+          IndexType::make(
+              vocabulary_.getPositionOfWordUpper(word).indexOrDefault(size()))};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // need the TOTAL level because we want the unique word.
-  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
+  auto wordAndIndex = vocabulary_.getPositionOfWordLower(word);
   if (wordAndIndex.isEnd()) {
     return false;
   }
   idx->get() = wordAndIndex.index();
   return wordAndIndex.word() == word;
-  /* // Helper lambda to lookup a the word in a given vocabulary and pass
-   // arguments to the underlying vocabulary below the unicode support layer.
-   auto checkWord = [this, &word, &idx](uint8_t splitIdx) -> bool {
-     // We need the TOTAL level because we want the unique word.
-     WordAndIndex wordAndIndex =
-         vocabulary_.lower_bound(word, SortLevel::TOTAL, splitIdx);
-     if (wordAndIndex.isEnd()) {
-       return false;
-     }
-     idx->get() = wordAndIndex.index();
-     return wordAndIndex.word() == word;
-   };
-
-   // Since the UnderlyingVocabulary is a SplitVocabulary, we need to tell it
-   // which vocabulary should be used to lookup the given word. This is
-   // determined by the getMarkerForWord method provided by the SplitVocabulary
-   // class.
-   return checkWord(
-       vocabulary_.getUnderlyingVocabulary().getMarkerForWord(word));
-       */
 }
 
 // ___________________________________________________________________________

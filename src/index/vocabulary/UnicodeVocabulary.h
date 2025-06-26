@@ -5,7 +5,19 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
+#include <type_traits>
+
+#include "concepts/concepts.hpp"
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
+
+// Only the `SplitVocabulary` currently needs a special handling for
+// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
+// dynamically hold a `SplitVocabulary`)
+template <typename T>
+CPP_concept HasSpecialGetPositionOfWord =
+    std::is_same_v<T, PolymorphicVocabulary> ||
+    ad_utility::isInstantiation<T, SplitVocabulary>;
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -38,14 +50,12 @@ class UnicodeVocabulary {
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T, typename... Args>
-  WordAndIndex lower_bound(const T& word, SortLevel level,
-                           Args&&... args) const {
+  template <typename T>
+  WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.lower_bound(word, actualComparator,
-                                             AD_FWD(args)...);
+    return _underlyingVocabulary.lower_bound(word, actualComparator);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -54,14 +64,40 @@ class UnicodeVocabulary {
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
-  template <typename T, typename... Args>
-  WordAndIndex upper_bound(const T& word, SortLevel level,
-                           Args&&... args) const {
+  template <typename T>
+  WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
-    return _underlyingVocabulary.upper_bound(word, actualComparator,
-                                             AD_FWD(args)...);
+    return _underlyingVocabulary.upper_bound(word, actualComparator);
+  }
+
+  // Same as lower_bound or upper_bound, except that word is known to be a full
+  // word, not a prefix. Special handling may be applied in the presence of a
+  // SplitVocabulary.
+  template <typename T>
+  auto getPositionOfWordComparator(const T&) const {
+    return [this](const auto& a, const auto& b) {
+      return _comparator(a, b, SortLevel::TOTAL);
+    };
+  }
+  template <typename T>
+  WordAndIndex getPositionOfWordLower(const T& word) const {
+    auto actualComparator = getPositionOfWordComparator(word);
+    if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
+      return _underlyingVocabulary.getPositionOfWordLower(word,
+                                                          actualComparator);
+    }
+    return _underlyingVocabulary.lower_bound(word, actualComparator);
+  }
+  template <typename T>
+  WordAndIndex getPositionOfWordUpper(const T& word) const {
+    auto actualComparator = getPositionOfWordComparator(word);
+    if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
+      return _underlyingVocabulary.getPositionOfWordUpper(word,
+                                                          actualComparator);
+    }
+    return _underlyingVocabulary.upper_bound(word, actualComparator);
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the
