@@ -664,6 +664,41 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 }
 
 // _____________________________________________________________________________
+TEST(Operation, checkLazyOperationIsCachedIfTooLargeButPinned) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  std::optional<CacheValue> cacheValue = std::nullopt;
+  {
+    // Too small for storage, make sure to change back before consuming
+    // generator to additionally assert sure it is not re-read on every
+    // iteration.
+    auto cleanup =
+        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
+
+    cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+        timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
+        true, false);
+    EXPECT_FALSE(
+        qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
+  }
+
+  for ([[maybe_unused]] Result::IdTableVocabPair& _ :
+       cacheValue->resultTable().idTables()) {
+  }
+
+  EXPECT_TRUE(
+      qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
+}
+
+// _____________________________________________________________________________
 TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();
@@ -686,6 +721,32 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
   }
 
   EXPECT_FALSE(
+      qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
+}
+
+// _____________________________________________________________________________
+TEST(Operation, checkLazyOperationIsCachedIfUnlikelyToFitInCacheButPinned) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+      timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
+      true, false);
+  EXPECT_FALSE(
+      qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
+
+  for ([[maybe_unused]] Result::IdTableVocabPair& _ :
+       cacheValue.resultTable().idTables()) {
+  }
+
+  EXPECT_TRUE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 }
 
