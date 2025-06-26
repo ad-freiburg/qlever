@@ -74,7 +74,8 @@ class GeometryInfo {
       bitMaskForLowerBits(ValueId::numDataBits);
 
  public:
-  GeometryInfo(uint8_t wktType, BoundingBox boundingBox, Centroid centroid);
+  GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
+               Centroid centroid);
 
   // Parse an arbitrary WKT literal and compute all attributes.
   static GeometryInfo fromWktLiteral(const std::string_view& wkt);

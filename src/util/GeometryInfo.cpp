@@ -77,18 +77,18 @@ ParseResult parseWkt(const std::string_view& wkt) {
 }
 
 // ____________________________________________________________________________
-GeoPoint utilPointToGeoPoint(Point<CoordType>& point) {
+GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
   return GeoPoint(point.getY(), point.getX());
 }
 
 // ____________________________________________________________________________
-Centroid centroidAsGeoPoint(ParsedWkt& geometry) {
+Centroid centroidAsGeoPoint(const ParsedWkt& geometry) {
   auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
   return utilPointToGeoPoint(uPoint);
 };
 
 // ____________________________________________________________________________
-BoundingBox boundingBoxAsGeoPoints(ParsedWkt& geometry) {
+BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
   auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
   auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
   auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
@@ -98,8 +98,10 @@ BoundingBox boundingBoxAsGeoPoints(ParsedWkt& geometry) {
 }  // namespace detail
 
 // ____________________________________________________________________________
-GeometryInfo::GeometryInfo(uint8_t wktType, BoundingBox boundingBox,
-                           Centroid centroid) {
+GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
+                           Centroid centroid)
+    : boundingBox_{boundingBox.lowerLeft_.toBitRepresentation(),
+                   boundingBox.upperRight_.toBitRepresentation()} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -117,8 +119,6 @@ GeometryInfo::GeometryInfo(uint8_t wktType, BoundingBox boundingBox,
           boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng(),
       "Bounding box coordinates invalid: first point must be lower "
       "left and second point must be upper right of a rectangle.");
-  boundingBox_ = {boundingBox.lowerLeft_.toBitRepresentation(),
-                  boundingBox.upperRight_.toBitRepresentation()};
 };
 
 // ____________________________________________________________________________
