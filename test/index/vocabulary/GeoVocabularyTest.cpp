@@ -13,6 +13,8 @@
 
 namespace {
 
+using namespace geoInfoTestHelpers;
+
 // A function to test that a GeoVocabulary can correctly insert and
 // lookup literals and precompute geometry information. This function is generic
 // because the GeoVocabulary should behave exactly the same no matter which
