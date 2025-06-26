@@ -118,7 +118,7 @@ SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
   return std::visit(
       [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
-        using T = std::decay_t<decltype(vocab)>;
+        using T = std::decay_t<decltype(v)>;
         if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
           return v.getGeoInfo(getVocabIndex(indexWithMarker));
         }
