@@ -221,7 +221,7 @@ class [[nodiscard]] basic_stream_generator {
   static basic_stream_generator noOpGenerator() { co_return; }
 
  public:
-  basic_stream_generator() : basic_stream_generator(noOpGenerator()) {};
+  basic_stream_generator() : basic_stream_generator(noOpGenerator()) {}
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
       : coroutine_{other.coroutine_} {
