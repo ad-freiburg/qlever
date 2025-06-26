@@ -181,6 +181,8 @@ class Index {
 
   void setTextName(const std::string& name);
 
+  void setTextBlockSize(size_t blockSize);
+
   bool& usePatterns();
 
   bool& loadAllPermutations();

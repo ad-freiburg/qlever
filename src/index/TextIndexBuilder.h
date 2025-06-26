@@ -76,7 +76,8 @@ class TextIndexBuilder : public IndexImpl {
   /// `calculateBlockBoundariesImpl`.
   template <typename I, typename BlockBoundaryAction>
   static void calculateBlockBoundariesImpl(
-      I&& index, const BlockBoundaryAction& blockBoundaryAction);
+      I&& index, size_t blockSize,
+      const BlockBoundaryAction& blockBoundaryAction);
 
   /// Calculate the block boundaries for the text index, and store them in the
   /// blockBoundaries_ member.
