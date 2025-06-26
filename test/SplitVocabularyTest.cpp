@@ -64,12 +64,12 @@ const VocabularyType geoSplitVocabType{
 TEST(Vocabulary, SplitGeoVocab) {
   // Test check: Is a geo literal?
   ASSERT_EQ(SGV::getMarkerForWord(
-                "\"POLYGON((1 2, 3 "
-                "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+                "\"POLYGON((1 2, 3 4))\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
             1);
   ASSERT_EQ(SGV::getMarkerForWord(
-                "\"LINESTRING(1 2, 3 "
-                "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+                "\"LINESTRING(1 2, 3 4)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
             1);
   ASSERT_EQ(SGV::getMarkerForWord(""), 0);
   ASSERT_EQ(SGV::getMarkerForWord("\"abc\""), 0);
@@ -267,13 +267,13 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
   s.insert("a");
   s.insert("ab");
   s.insert(
-      "\"POLYGON((1 2, 3 "
-      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+      "\"POLYGON((1 2, 3 4))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   s.insert("ba");
   s.insert("car");
   s.insert(
-      "\"LINESTRING(1 2, 3 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+      "\"LINESTRING(1 2, 3 4)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   RdfsVocabulary v;
   v.resetToType(geoSplitVocabType);
@@ -292,12 +292,12 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
 
   auto idx = VocabIndex::make(1ull << 59);
   ASSERT_EQ(v[idx],
-            "\"LINESTRING(1 2, 3 "
-            "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+            "\"LINESTRING(1 2, 3 4)\""
+            "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   idx = VocabIndex::make(static_cast<uint64_t>(1) << 59 | 1);
   ASSERT_EQ(v[idx],
-            "\"POLYGON((1 2, 3 "
-            "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+            "\"POLYGON((1 2, 3 4))\""
+            "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 }
 
 // _____________________________________________________________________________
@@ -313,17 +313,17 @@ TEST(Vocabulary, SplitVocabularyWordWriter) {
   ASSERT_EQ((*wordCallback)("a", true), 0);
   ASSERT_EQ((*wordCallback)("ab", true), 1);
   ASSERT_EQ(
-      (*wordCallback)("\"LINESTRING(1 2, 3 "
-                      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      (*wordCallback)("\"LINESTRING(1 2, 3 4)\""
+                      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
                       true),
       (1ull << 59));
   ASSERT_EQ((*wordCallback)("ba", true), 2);
   ASSERT_EQ((*wordCallback)("car", true), 3);
-  ASSERT_EQ((*wordCallback)(
-                "\"POLYGON((1 2, 3 "
-                "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-                true),
-            (1ull << 59) | 1);
+  ASSERT_EQ(
+      (*wordCallback)("\"POLYGON((1 2, 3 4))\""
+                      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                      true),
+      (1ull << 59) | 1);
 
   wordCallback->finish();
 
@@ -344,23 +344,23 @@ TEST(Vocabulary, SplitVocabularyWordWriter) {
   ASSERT_EQ(idx.get(), 3);
   ASSERT_EQ(vocabulary[VocabIndex::make(3)], "car");
 
-  ASSERT_TRUE(vocabulary.getId(
-      "\"LINESTRING(1 2, 3 "
-      "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      &idx));
+  ASSERT_TRUE(
+      vocabulary.getId("\"LINESTRING(1 2, 3 4)\""
+                       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                       &idx));
   ASSERT_EQ(idx.get(), 1ull << 59);
   ASSERT_EQ(vocabulary[VocabIndex::make(1ull << 59)],
-            "\"LINESTRING(1 2, 3 "
-            "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+            "\"LINESTRING(1 2, 3 4)\""
+            "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
-  ASSERT_TRUE(vocabulary.getId(
-      "\"POLYGON((1 2, 3 "
-      "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      &idx));
+  ASSERT_TRUE(
+      vocabulary.getId("\"POLYGON((1 2, 3 4))\""
+                       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+                       &idx));
   ASSERT_EQ(idx.get(), (1ull << 59) | 1);
   ASSERT_EQ(vocabulary[VocabIndex::make((1ull << 59) | 1)],
-            "\"POLYGON((1 2, 3 "
-            "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+            "\"POLYGON((1 2, 3 4))\""
+            "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
   ASSERT_FALSE(vocabulary.getId("xyz", &idx));
   ASSERT_ANY_THROW(vocabulary[VocabIndex::make(42)]);
