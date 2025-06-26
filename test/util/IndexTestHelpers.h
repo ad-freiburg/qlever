@@ -53,6 +53,10 @@ struct TestIndexConfig {
   ad_utility::MemorySize blocksizePermutations = 16_B;
   bool createTextIndex = false;
   bool addWordsFromLiterals = true;
+  // The regex used to filter the predicates with object literals to determine
+  // whether a literal should appear in the text index or not
+  std::optional<std::string> literalRegex = std::nullopt;
+  bool literalRegexIsWhitelist = true;
   std::optional<std::pair<std::string, std::string>>
       contentsOfWordsFileAndDocsfile = std::nullopt;
   // The following buffer size can be increased, if larger triples are to be
@@ -76,8 +80,9 @@ struct TestIndexConfig {
     return H::combine(
         std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
         c.usePrefixCompression, c.blocksizePermutations, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType);
+        c.addWordsFromLiterals, c.literalRegex, c.literalRegexIsWhitelist,
+        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
+        c.bAndKParam, c.indexType);
   }
   bool operator==(const TestIndexConfig&) const = default;
 };
