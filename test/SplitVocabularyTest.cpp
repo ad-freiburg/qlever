@@ -279,6 +279,7 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
   v.resetToType(geoSplitVocabType);
   auto filename = "vocTest6.dat";
   v.createFromSet(s, filename);
+  absl::Cleanup del = [&]() { deleteFile(filename); };
 
   ASSERT_EQ(v[VocabIndex::make(0)], "a");
   ASSERT_EQ(v[VocabIndex::make(1)], "ab");
@@ -297,8 +298,6 @@ TEST(Vocabulary, SplitVocabularyItemAt) {
   ASSERT_EQ(v[idx],
             "\"POLYGON((1 2, 3 "
             "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-
-  deleteFile(filename);
 }
 
 // _____________________________________________________________________________
