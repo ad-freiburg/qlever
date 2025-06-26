@@ -527,6 +527,9 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
   FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
+  FRIEND_TEST(Operation,
+              checkLazyOperationIsCachedIfUnlikelyToFitInCacheButPinned);
+  FRIEND_TEST(Operation, checkLazyOperationIsCachedIfTooLargeButPinned);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

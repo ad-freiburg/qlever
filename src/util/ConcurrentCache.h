@@ -423,7 +423,6 @@ class ConcurrentCache {
           // Signal other threads who are waiting for the results.
           resultInProgress->finish(result);
         } else {
-          AD_CONTRACT_CHECK(!pinned);
           _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
           resultInProgress->finish(nullptr);
         }
@@ -446,8 +445,6 @@ class ConcurrentCache {
         auto mutablePointer = make_shared<Value>(computeFunction());
         if (suitableForCache(*mutablePointer)) {
           tryInsertIfNotPresent(pinned, key, mutablePointer);
-        } else {
-          AD_CONTRACT_CHECK(!pinned);
         }
         resultPointer = std::move(mutablePointer);
       }
