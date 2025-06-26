@@ -40,7 +40,7 @@ static std::ostream& operator<<(
 }  // namespace boost
 
 // _____________________________________________________________________________
-TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
+TEST(StreamableBody, InitReturnsNoErrorCode) {
   cppcoro::generator<std::string> generator{};
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
@@ -51,7 +51,7 @@ TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
 }
 
 // _____________________________________________________________________________
-TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
+TEST(StreamableBody, GeneratorExceptionResultsInErrorCode) {
   auto generator = []() -> cppcoro::generator<std::string> {
     throw std::runtime_error("Test Exception");
     co_return;
@@ -66,7 +66,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 }
 
 // _____________________________________________________________________________
-TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
+TEST(StreamableBody, EmptyGeneratorReturnsEmptyResult) {
   auto generator = []() -> cppcoro::generator<std::string> { co_return; }();
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
@@ -78,7 +78,7 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
 }
 
 // _____________________________________________________________________________
-TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
+TEST(StreamableBody, GeneratorReturnsBufferedResults) {
   auto generator = []() -> cppcoro::generator<std::string> {
     co_yield "AAAAAAAAAA";
     co_yield "1Abc";
