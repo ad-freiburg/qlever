@@ -101,6 +101,8 @@ class VocabularyType {
     static thread_local ad_utility::FastRandomIntGenerator<size_t> r;
     return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
+
+  bool operator==(const VocabularyType&) const = default;
 };
 }  // namespace ad_utility
 

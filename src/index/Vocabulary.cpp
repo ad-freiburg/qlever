@@ -1,17 +1,29 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "index/Vocabulary.h"
 
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/GeometryInfo.h"
 #include "util/HashSet.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 using std::string;
@@ -221,6 +233,19 @@ auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
 }
 
 // _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+    IndexType idx) const {
+  // PolymorphicVocabulary or SplitVocabulary may have an underlying
+  // GeoVocabulary, which provides the GeometryInfo
+  if constexpr (std::is_same_v<S, PolymorphicVocabulary> ||
+                ad_utility::isInstantiation<S, SplitVocabulary>) {
+    return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
+  }
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
@@ -233,9 +258,18 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::getBoundsForWord(std::string_view word) const
+    -> std::pair<IndexType, IndexType> {
+  return {IndexType::make(
+              vocabulary_.getPositionOfWordLower(word).indexOrDefault(size())),
+          IndexType::make(
+              vocabulary_.getPositionOfWordUpper(word).indexOrDefault(size()))};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // need the TOTAL level because we want the unique word.
-  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
+  auto wordAndIndex = vocabulary_.getPositionOfWordLower(word);
   if (wordAndIndex.isEnd()) {
     return false;
   }
