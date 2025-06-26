@@ -85,7 +85,7 @@ class SplitVocabulary {
 
  private:
   // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_;
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
