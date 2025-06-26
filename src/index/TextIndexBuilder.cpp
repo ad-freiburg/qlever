@@ -338,32 +338,6 @@ void TextIndexBuilder::createTextIndex(const string& filename, TextVec& vec) {
   LOG(INFO) << "Text index build completed" << std::endl;
 }
 
-/// yields  aaaa, aaab, ..., zzzz
-static auto fourLetterPrefixes() {
-  static_assert(
-      MIN_WORD_PREFIX_SIZE == 4,
-      "If you need this to be changed, please contact the developers");
-  auto aToZ = ::ranges::views::iota(char{'a'}, char{'z' + 1});
-  return ::ranges::views::cartesian_product(aToZ, aToZ, aToZ, aToZ) |
-         ::ranges::views::transform([](const auto& x) {
-           auto [a, b, c, d] = x;
-           return std::string{a, b, c, d};
-         });
-}
-
-/// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-template <typename T>
-static bool areFourLetterPrefixesSorted(T comparator) {
-  std::string first;
-  for (const auto& second : fourLetterPrefixes()) {
-    if (!comparator(first, second)) {
-      return false;
-    }
-    first = std::move(second);
-  }
-  return true;
-}
-
 template <typename I, typename BlockBoundaryAction>
 void TextIndexBuilder::calculateBlockBoundariesImpl(
     I&& index, size_t blockSize,

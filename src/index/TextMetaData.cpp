@@ -28,13 +28,6 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
 
-  // if (upper > *it) {
-  //   AD_THROW(
-  //       "No words found for the given prefix. This usually means that the "
-  //       "prefix is smaller than the configured minimum prefix size. This
-  //       range " "spans over " + std::to_string(upperIt - it) + " blocks");
-  // }
-
   // Use the info to retrieve an index.
   vector<std::reference_wrapper<const TextBlockMetaData>> output;
   size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());

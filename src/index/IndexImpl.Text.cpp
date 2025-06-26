@@ -136,7 +136,8 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
   // Apart from that, entity lists are usually larger by a factor.
   // Hence it makes sense to choose the smallest.
 
-  // Heuristic: Pick the one with the smallest EL block sum to be read.
+  // Heuristic: Pick the one with the smallest EL block sum to be read. Can be
+  // faulty since duplicates are later filtered.
   std::vector<std::tuple<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
     auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
