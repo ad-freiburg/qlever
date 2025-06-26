@@ -69,8 +69,8 @@ TEST(SortedIdTableMerge, StandardComparator) {
 }
 
 TEST(SortedIdTableMerge, CustomComparator) {
-  auto comparator = [](const columnBasedIdTable::Row<ValueId>& a,
-                       const columnBasedIdTable::Row<ValueId>& b) {
+  auto comparator = [](const std::vector<ValueId>& a,
+                       const std::vector<ValueId>& b) {
     if (a[1].getBits() < b[1].getBits()) {
       return true;
     } else if (a[1].getBits() > b[1].getBits()) {

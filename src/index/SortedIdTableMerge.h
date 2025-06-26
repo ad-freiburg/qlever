@@ -11,6 +11,10 @@
 
 namespace SortedIdTableMerge {
 
+constexpr static auto sizeOfRow = [](const std::vector<ValueId>& row) {
+  return ad_utility::MemorySize::bytes(row.size() * sizeof(ValueId));
+};
+
 // Takes in multiple IdTables sorted w.r.t. comparator, an allocator for the
 // output IdTable, a  comparator that evaluates to true iff the first row is
 // smaller or equal to the second row and a MemorySize for the merge. The
@@ -20,10 +24,9 @@ IdTable mergeIdTables(
     std::vector<IdTable>&& tablesToMerge,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const ad_utility::MemorySize& memory, bool distinct = false,
-    const std::function<bool(const columnBasedIdTable::Row<ValueId>&,
-                             const columnBasedIdTable::Row<ValueId>&)>&
-        comparator = [](const columnBasedIdTable::Row<ValueId>& a,
-                        const columnBasedIdTable::Row<ValueId>& b) {
+    const std::function<bool(const std::vector<ValueId>&,
+                             const std::vector<ValueId>&)>& comparator =
+        [](const std::vector<ValueId>& a, const std::vector<ValueId>& b) {
           if (a.size() != b.size()) {
             // Should be detected during generator creation first
             AD_FAIL();
