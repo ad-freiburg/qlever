@@ -49,32 +49,11 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
 
 // ____________________________________________________________________________
 template <typename V>
-void GeoVocabulary<V>::WordWriter::finish() {
-  // Don't close file twice.
-  if (std::exchange(isFinished_, true)) {
-    return;
-  }
-
+void GeoVocabulary<V>::WordWriter::finishImpl() {
+  // WordWriterBase ensures that this is not called twice and we thus don't try
+  // to close the file handle twice
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
-}
-
-// _____________________________________________________________________________
-template <typename V>
-GeoVocabulary<V>::WordWriter::~WordWriter() {
-  throwInDestructorIfSafe_([this]() { finish(); },
-                           "`~GeoVocabulary::WordWriter`");
-}
-
-// ____________________________________________________________________________
-template <typename V>
-std::string& GeoVocabulary<V>::WordWriter::readableName() {
-  if constexpr (std::is_same_v<V, VocabularyInternalExternal>) {
-    return underlyingWordWriter_.readableName();
-  }
-  // TODO<ullingerc> Remove this dummy as soon as possible.
-  static std::string dummy;
-  return dummy;
 }
 
 // ____________________________________________________________________________

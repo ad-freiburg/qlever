@@ -77,29 +77,23 @@ class GeoVocabulary {
 
   void open(const std::string& filename);
 
-  class WordWriter {
+  class WordWriter : public WordWriterBase {
    private:
     using UV = UnderlyingVocabulary;
     using WW = std::unique_ptr<typename UnderlyingVocabulary::WordWriter>;
     WW underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
-    ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
-    bool isFinished_ = false;
 
    public:
     WordWriter(const UV& vocabulary, const std::string& filename);
 
     // Add the next literal to the vocabulary, precompute additional information
     // and return the literal's new index.
-    uint64_t operator()(std::string_view word, bool isExternal);
+    uint64_t operator()(std::string_view word, bool isExternal) override;
 
     // Finish the writing on the underlying writers. After this no more
     // calls to `operator()` are allowed.
-    void finish();
-
-    std::string& readableName();
-
-    ~WordWriter();
+    void finishImpl() override;
   };
 
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
