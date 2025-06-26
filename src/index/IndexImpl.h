@@ -135,6 +135,8 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
+  // A list of all Ids of all Literals that have been added to the text index.
+  // (In the textIndexBuilder this is used to add them)
   vector<TextLiteralsIndex> textIndexIndices_;
   Index::TextVocab textVocab_;
   ScoreData scoreData_;
@@ -388,6 +390,9 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  // Returns the Text for a given TextRecordIndex. If the index is in the docsDB
+  // return the corresponding entry. If the index is bigger than the docsDB
+  // return the matching literal.
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
       size_t index = cid.get() - docsDB_._size;
@@ -440,10 +445,6 @@ class IndexImpl {
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
-
-  const vector<TextLiteralsIndex>& getTextIndexIndices() const {
-    return textIndexIndices_;
-  };
 
   const string& getTextName() const { return textMeta_.getName(); }
   const string& getKbName() const { return pso_.getKbName(); }

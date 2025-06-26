@@ -179,8 +179,13 @@ class Index {
 
   void setKbName(const std::string& name);
 
+  // Sets the regex used to filter which literals are added to the text index.
+  // The regex is applied on the predicate of the literal and is either used
+  // as whitelist (standard) or blacklist.
   void setTripleInTextIndexFilter(const std::string& regex, bool isWhitelist);
 
+  // If this is set to true all literals no matter if they appear as subject
+  // predicate or object are added to the text index.
   void setAddWordsFromAllLiterals(bool value);
 
   void setTextName(const std::string& name);
@@ -204,8 +209,6 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
-
-  const vector<TextLiteralsIndex>& getTextIndexIndices() const;
 
   const std::string& getTextName() const;
   const std::string& getKbName() const;

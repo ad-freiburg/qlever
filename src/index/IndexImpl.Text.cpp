@@ -38,13 +38,14 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
+  // Read the Ids of all Literals that have been added to the text index.
+  ad_utility::serialization::FileReadSerializer reader{onDiskBase_ +
+                                                       TEXT_INDEX_LITERAL_IDS};
+  reader >> textIndexIndices_;
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
   // literals from our RDF vocabulary.
-  ad_utility::serialization::FileReadSerializer reader{onDiskBase_ +
-                                                       TEXT_INDEX_LITERAL_IDS};
-  reader >> textIndexIndices_;
   std::string docsDbFileName = onDiskBase_ + ".text.docsDB";
   std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
