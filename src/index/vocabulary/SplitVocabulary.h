@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
