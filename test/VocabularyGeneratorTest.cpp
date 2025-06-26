@@ -92,8 +92,8 @@ class MergeVocabularyTest : public ::testing::Test {
         {"\"ape\"", false, 0},
         {"\"bla\"", true, 2},
         {"\"gorilla\"", false, 3},
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"LINESTRING(1 2, 3 4)\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, 0},
         {"\"monkey\"", false, 4},
         {"_:blank", false, 0},
@@ -101,8 +101,8 @@ class MergeVocabularyTest : public ::testing::Test {
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
         {"\"monkey\"", true, 4},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"POLYGON((1 2, 3 4))\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true, 1},
         {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
@@ -114,11 +114,11 @@ class MergeVocabularyTest : public ::testing::Test {
         {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
         {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
     expectedMergedGeoVocabulary_ = ExpectedVocabulary{
-        {"\"LINESTRING(1 2, 3 "
-         "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"LINESTRING(1 2, 3 4)\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true},
-        {"\"POLYGON((1 2, 3 "
-         "4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        {"\"POLYGON((1 2, 3 4))\""
+         "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
          true}};
 
     // open files for partial Vocabularies
