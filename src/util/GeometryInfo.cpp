@@ -33,15 +33,15 @@ using ParsedWkt =
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
 // ____________________________________________________________________________
-std::string removeDatatype(const std::string_view& wkt) {
+std::string_view removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
-  return std::string{asStringViewUnsafe(lit.getContent())};
+  return asStringViewUnsafe(lit.getContent());
 }
 
 // ____________________________________________________________________________
 ParseResult parseWkt(const std::string_view& wkt) {
-  auto wktLiteral = removeDatatype(wkt);
+  std::string wktLiteral{removeDatatype(wkt)};
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
 
@@ -145,7 +145,8 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
-  return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
+  return static_cast<uint8_t>(
+      detail::getWKTType(std::string{detail::removeDatatype(wkt)}));
 };
 
 // ____________________________________________________________________________
