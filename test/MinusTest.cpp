@@ -76,6 +76,36 @@ TEST(Minus, computeMinus) {
 }
 
 // _____________________________________________________________________________
+TEST(Minus, computeMinusWithEmptyTables) {
+  IdTable nonEmpty = makeIdTableFromVector({{1, 2}, {3, 3}, {1, 8}});
+  IdTable empty = IdTable{2, nonEmpty.getAllocator()};
+
+  std::vector<std::array<ColumnIndex, 2>> jcls;
+  jcls.push_back(std::array<ColumnIndex, 2>{{0, 0}});
+
+  auto* qec = ad_utility::testing::getQec();
+  Minus m{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, empty.clone(),
+          std::vector<std::optional<Variable>>{Variable{"?a"}, std::nullopt}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, nonEmpty.clone(),
+          std::vector<std::optional<Variable>>{Variable{"?a"}, std::nullopt})};
+
+  {
+    IdTable res = m.computeMinus(empty, nonEmpty, jcls);
+
+    EXPECT_EQ(res, empty);
+  }
+  {
+    IdTable res = m.computeMinus(nonEmpty, empty, jcls);
+
+    EXPECT_EQ(res, nonEmpty);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Minus, computeMinusWithUndefined) {
   auto U = Id::makeUndefined();
   IdTable a =
