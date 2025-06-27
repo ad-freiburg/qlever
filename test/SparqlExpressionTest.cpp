@@ -1363,13 +1363,11 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 
-  // auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
-  // checkCentroid(
-  //     IdOrLiteralOrIri{
-  //         lit("\"POLYGON((2 4, 4 4, 4 "
-  //             "2, 2
-  //             2))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-  //     polygonCentroid);
+  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  checkCentroid(IdOrLiteralOrIri{lit(
+                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                polygonCentroid);
 }
 
 // ________________________________________________________________________________________
