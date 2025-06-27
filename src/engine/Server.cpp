@@ -920,7 +920,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   ad_utility::timer::TimeTracer tracer =
       ad_utility::timer::TimeTracer("update");
-  tracer.beginTrace("planning");
+  tracer.beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -932,9 +932,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
        &plannedUpdate, &tracer]() {
+        tracer.endTrace("waitingForUpdateThread");
         std::vector<UpdateMetadata> results;
         std::vector<DeltaTriplesModifyTimings> timings;
         for (ParsedQuery& update : updates) {
+          tracer.beginTrace("planning");
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
           tracer.endTrace("planning");
@@ -962,12 +964,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                   true, tracer);
           results.push_back(updateMetadata);
           timings.push_back(updateTiming);
+          tracer.endTrace("execution");
         }
         return std::make_pair(results, timings);
       },
       cancellationHandle);
   auto [updateMetadata, timings] = co_await std::move(coroutine);
-  tracer.endTrace("execution");
   tracer.endTrace("update");
   AD_LOG(INFO) << "TimeTracer output: " << tracer.getJSONShort().dump()
                << std::endl;
