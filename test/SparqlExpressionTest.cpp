@@ -72,6 +72,11 @@ auto idOrLitOrStringVec =
       return result;
     };
 
+auto geoLit = [](std::string_view content) {
+  return IdOrLiteralOrIri{
+      lit(content, "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")};
+};
+
 // All the helper functions `testUnaryExpression` etc. below internally evaluate
 // the given expressions using the `TestContext` class, so it is possible to use
 // IDs from the global and local vocab of this class to test expressions. For
@@ -1331,6 +1336,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
+  auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1358,6 +1364,12 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
+
+  checkEnvelope(
+      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+                          geoLit("LINESTRING(2 4, 8 8)")},
+      IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
+                          geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
 }
 
 // ________________________________________________________________________________________

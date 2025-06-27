@@ -32,6 +32,8 @@ struct Centroid {
 struct BoundingBox {
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
+
+  std::string asWkt() const;
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
