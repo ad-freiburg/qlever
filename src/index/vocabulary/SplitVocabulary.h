@@ -198,6 +198,14 @@ class SplitVocabulary {
                                                            marker);
   }
 
+  template <typename InternalStringType, typename Comparator,
+            bool getUpperBound>
+  WordAndIndex getPositionOfWord(const InternalStringType& word,
+                                 Comparator comparator) const {
+    return boundImpl<InternalStringType, Comparator, getUpperBound>(
+        word, comparator, getMarkerForWord(word));
+  }
+
   // Shortcut to retrieve the first underlying vocabulary
   AnyUnderlyingVocab& getUnderlyingMainVocabulary() { return underlying_[0]; }
   const AnyUnderlyingVocab& getUnderlyingMainVocabulary() const {
