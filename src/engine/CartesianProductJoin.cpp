@@ -9,8 +9,10 @@
 
 namespace {
 constexpr std::string_view recomputeMessage =
-    "After limits have been applied to the children, we can't compute the "
-    "results again in case the index changed.";
+    "Cannot re-evaluate child results after applying limits, as the result set "
+    "may have changed (which could result in different limits being applied). "
+    "Cloning is also forbidden, as it would preserve potentially incorrect "
+    "limits.";
 }
 
 // ____________________________________________________________________________
