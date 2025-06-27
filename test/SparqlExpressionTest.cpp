@@ -1374,6 +1374,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                     "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
                 polygonCentroid);
+
   checkEnvelope(
       IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
                           geoLit("LINESTRING(2 4, 8 8)")},
