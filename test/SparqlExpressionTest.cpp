@@ -21,6 +21,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "parser/GeoPoint.h"
@@ -1330,6 +1331,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
+  auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1349,15 +1351,23 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
+  checkCentroid(v, v);
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkCentroid(IdOrLiteralOrIri{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLiteralOrIri{I(12)});
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
+
+  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  checkCentroid(IdOrLiteralOrIri{lit(
+                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                polygonCentroid);
 }
 
 // ________________________________________________________________________________________
