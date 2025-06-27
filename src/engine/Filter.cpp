@@ -6,7 +6,10 @@
 
 #include "./Filter.h"
 
+#include <memory>
+#include <optional>
 #include <sstream>
+#include <vector>
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
@@ -59,6 +62,50 @@ void Filter::setPrefilterExpressionForChildren() {
   }
 }
 
+namespace {
+// An input range that lazily applies a `FILTER` operation to a fully
+// materialized subresult.
+class LazyFilterForMaterializedInput
+    : public ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult idTables_;
+  const std::vector<ColumnIndex> sortedBy_;
+  Filter const* filter_;
+  bool done_;
+  std::optional<Result::LazyResult::iterator> idTablesItr_;
+
+ public:
+  LazyFilterForMaterializedInput(Result::LazyResult idTables,
+                                 const std::vector<ColumnIndex>& sortedBy,
+                                 Filter const* filter)
+      : idTables_{std::move(idTables)},
+        sortedBy_(sortedBy),
+        filter_{filter},
+        done_{false},
+        idTablesItr_{std::nullopt} {}
+
+  std::optional<Result::IdTableVocabPair> get() override {
+    if (idTablesItr_) {
+      ++(idTablesItr_.value());
+    } else {
+      idTablesItr_ = idTables_.begin();
+    }
+
+    while (*idTablesItr_ != idTables_.end()) {
+      auto& [idTable, localVocab] = *(idTablesItr_.value());
+      IdTable result = filter_->filterIdTable(sortedBy_, idTable, localVocab);
+      if (result.empty()) {
+        ++(idTablesItr_.value());
+        continue;
+      }
+      return std::optional{
+          Result::IdTableVocabPair{std::move(result), localVocab.clone()}};
+    }
+    done_ = true;
+    return std::nullopt;
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________
 Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
@@ -75,15 +122,9 @@ Result Filter::computeResult(bool requestLaziness) {
   }
 
   if (requestLaziness) {
-    return {[](auto subRes, auto* self) -> Result::Generator {
-              for (auto& [idTable, localVocab] : subRes->idTables()) {
-                IdTable result = self->filterIdTable(subRes->sortedBy(),
-                                                     idTable, localVocab);
-                if (!result.empty()) {
-                  co_yield {std::move(result), std::move(localVocab)};
-                }
-              }
-            }(std::move(subRes), this),
+    return {Result::LazyResult{LazyFilterForMaterializedInput{
+                std::move(subRes->idTables()), std::move(subRes->sortedBy()),
+                this}},
             resultSortedOn()};
   }
 
