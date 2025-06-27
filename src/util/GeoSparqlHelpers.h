@@ -12,9 +12,11 @@
 #include <optional>
 #include <string_view>
 
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
+#include "util/GeometryInfo.h"
 
 namespace ad_utility {
 
@@ -86,6 +88,29 @@ class WktMetricDistGeoPoints {
   double operator()(const std::optional<GeoPoint>& point1,
                     const std::optional<GeoPoint>& point2) const {
     return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
+  }
+};
+
+// Compute the distance between two WKT points in meters.
+class WktGeometryType {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeometryType>& geometryType) const {
+    if (!geometryType.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto typeIri = geometryType.value().asIri();
+    if (!typeIri.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // The geometry type should be returned as an xsd:anyURI literal according
+    // to the GeoSPARQL standard.
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return {LiteralOrIri{lit}};
   }
 };
 
