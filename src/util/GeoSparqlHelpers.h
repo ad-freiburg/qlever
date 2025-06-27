@@ -83,6 +83,7 @@ class WktDistGeoPoints {
     if (!point1.has_value() || !point2.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
+
     return detail::kilometerToUnit(
         detail::wktDistImpl(point1.value(), point2.value()), unit);
   }
@@ -97,7 +98,18 @@ class WktMetricDistGeoPoints {
   }
 };
 
-// Retrieve the bounding box (envelope) of a WKT literal.
+// Get the centroid of a geometry.
+class WktCentroid {
+ public:
+  ValueId operator()(const std::optional<Centroid>& geom) const {
+    if (!geom.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromGeoPoint(geom.value().centroid_);
+  }
+};
+
+// Get the bounding box of a geometry.
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
