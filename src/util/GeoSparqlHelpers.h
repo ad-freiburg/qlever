@@ -12,8 +12,12 @@
 #include <optional>
 #include <string_view>
 
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
+#include "index/LocalVocabEntry.h"
 #include "parser/GeoPoint.h"
+#include "parser/Iri.h"
+#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/GeometryInfo.h"
 
@@ -41,6 +45,9 @@ double kilometerToUnit(double kilometers,
 
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
+
+const auto wktLiteralIri =
+    triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
 
 }  // namespace detail
 
@@ -99,6 +106,21 @@ class WktCentroid {
       return ValueId::makeUndefined();
     }
     return ValueId::makeFromGeoPoint(geom.value().centroid_);
+  }
+};
+
+// Get the bounding box of a geometry.
+class WktEnvelope {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{lit}};
   }
 };
 

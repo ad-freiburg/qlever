@@ -35,6 +35,10 @@ NARY_EXPRESSION(
     FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
        GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
 
+NARY_EXPRESSION(EnvelopeExpression, 1,
+                FV<ad_utility::WktEnvelope,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
 }  // namespace detail
 
 using namespace detail;
@@ -68,6 +72,10 @@ SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
 }
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
   return std::make_unique<CentroidExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeExpression>(std::move(child));
 }
 
 }  // namespace sparqlExpression

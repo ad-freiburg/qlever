@@ -95,6 +95,19 @@ BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
   return {lowerLeft, upperRight};
 }
 
+// ____________________________________________________________________________
+Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
+  return {point.getLng(), point.getLat()};
+}
+
+// ____________________________________________________________________________
+std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
+                             const GeoPoint& upperRight) {
+  util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
+                                geoPointToUtilPoint(upperRight)};
+  return getWKT(box);
+}
+
 }  // namespace detail
 
 // ____________________________________________________________________________
@@ -171,6 +184,11 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return detail::boundingBoxAsGeoPoints(parsed.value());
+}
+
+// ____________________________________________________________________________
+std::string BoundingBox::asWkt() const {
+  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
 
 // ____________________________________________________________________________
