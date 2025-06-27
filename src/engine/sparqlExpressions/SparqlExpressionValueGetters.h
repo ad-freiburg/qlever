@@ -395,10 +395,12 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 };
 
 // Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
-// pointing to a literal in the geometry vocabulary is given, the object is
-// fetched from the precomputed file and the `RequestedInfo` is extracted from
-// it. For Well Known Text literals only the `RequestedInfo` is computed ad
-// hoc.
+// holding a `VocabIndex` is given and QLever's index is built using the
+// `GeoVocabulary`, the `GeometryInfo` is fetched from the precomputed file
+// and the `RequestedInfo` is extracted from it. If no precomputed
+// `GeometryInfo` is available, the WKT literal is parsed and only the
+// `RequestedInfo` is computed ad hoc (for example the bounding box is not
+// calculated, when requesting the centroid).
 template <typename RequestedInfo = ad_utility::GeometryInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
