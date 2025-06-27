@@ -11,7 +11,7 @@
 #include <absl/functional/bind_front.h>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "util/Generator.h"
+#include "util/Iterators.h"
 
 namespace sparqlExpression::detail {
 
@@ -51,14 +51,30 @@ inline ql::span<const ValueId> getIdsFromVariable(
 CPP_template(typename T, typename Transformation = std::identity)(
     requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
         ranges::invocable<Transformation, T>)
-    cppcoro::generator<const std::decay_t<std::invoke_result_t<
+    ad_utility::InputRangeTypeErased<std::decay_t<std::invoke_result_t<
         Transformation, T>>> resultGenerator(T constant, size_t numItems,
                                              Transformation transformation =
                                                  {}) {
-  auto transformed = transformation(constant);
-  for (size_t i = 0; i < numItems; ++i) {
-    co_yield transformed;
-  }
+  using ResultType = std::decay_t<std::invoke_result_t<Transformation, T>>;
+  struct State {
+    ResultType value_;
+    size_t remaining_;
+
+    State(T constant, size_t numItems, Transformation transformation)
+        : value_(transformation(constant)), remaining_(numItems) {}
+  };
+  auto state =
+      std::make_shared<State>(constant, numItems, std::move(transformation));
+  auto valueProducer = [state]() mutable -> std::optional<ResultType> {
+    if (state->remaining_ == 0) {
+      return std::nullopt;
+    }
+    --state->remaining_;
+    return state->value_;
+  };
+
+  return ad_utility::InputRangeTypeErased<ResultType>{
+      ad_utility::InputRangeFromGetCallable(std::move(valueProducer))};
 }
 
 CPP_template(typename T, typename Transformation = std::identity)(
@@ -71,26 +87,53 @@ CPP_template(typename T, typename Transformation = std::identity)(
 }
 
 template <typename Transformation = std::identity>
-inline cppcoro::generator<
-    const std::decay_t<std::invoke_result_t<Transformation, Id>>>
+inline ad_utility::InputRangeTypeErased<
+    std::decay_t<std::invoke_result_t<Transformation, Id>>>
 resultGenerator(ad_utility::SetOfIntervals set, size_t targetSize,
                 Transformation transformation = {}) {
-  size_t i = 0;
-  const auto trueTransformed = transformation(Id::makeFromBool(true));
-  const auto falseTransformed = transformation(Id::makeFromBool(false));
-  for (const auto& [begin, end] : set._intervals) {
-    while (i < begin) {
-      co_yield falseTransformed;
-      ++i;
+  using ResultType = std::decay_t<std::invoke_result_t<Transformation, Id>>;
+  struct State {
+    ad_utility::SetOfIntervals set_;
+    size_t targetSize_;
+    ResultType trueTransformed_;
+    ResultType falseTransformed_;
+    size_t currentIndex_ = 0;
+    size_t currentIntervalIdx_ = 0;
+    State(ad_utility::SetOfIntervals set, size_t targetSize,
+          Transformation transformation)
+        : set_(std::move(set)),
+          targetSize_(targetSize),
+          trueTransformed_(transformation(Id::makeFromBool(true))),
+          falseTransformed_(transformation(Id::makeFromBool(false))) {}
+  };
+
+  auto state = std::make_shared<State>(std::move(set), targetSize,
+                                       std::move(transformation));
+
+  auto valueProducer = [state]() mutable -> std::optional<ResultType> {
+    if (state->currentIndex_ >= state->targetSize_) {
+      return std::nullopt;
     }
-    while (i < end) {
-      co_yield trueTransformed;
-      ++i;
+
+    while (state->currentIntervalIdx_ < state->set_._intervals.size() &&
+           state->currentIndex_ >=
+               state->set_._intervals[state->currentIntervalIdx_].second) {
+      state->currentIntervalIdx_++;
     }
-  }
-  while (i++ < targetSize) {
-    co_yield falseTransformed;
-  }
+
+    bool inInterval =
+        state->currentIntervalIdx_ < state->set_._intervals.size() &&
+        state->currentIndex_ >=
+            state->set_._intervals[state->currentIntervalIdx_].first &&
+        state->currentIndex_ <
+            state->set_._intervals[state->currentIntervalIdx_].second;
+
+    state->currentIndex_++;
+    return inInterval ? state->trueTransformed_ : state->falseTransformed_;
+  };
+
+  return ad_utility::InputRangeTypeErased<ResultType>{
+      ad_utility::InputRangeFromGetCallable(std::move(valueProducer))};
 }
 
 /// Return a generator that yields `numItems` many items for the various
@@ -124,27 +167,59 @@ inline auto valueGetterGenerator =
   return makeGenerator(AD_FWD(input), numElements, context, transformation);
 };
 
+template <typename FunctionType, typename... Generators>
+struct ApplyFunctionState {
+  using ResultType = std::decay_t<std::invoke_result_t<
+      FunctionType, ql::ranges::range_value_t<Generators>...>>;
+
+  std::decay_t<FunctionType> function_;
+  std::tuple<std::decay_t<Generators>...> generators_;
+  std::tuple<ql::ranges::iterator_t<std::decay_t<Generators>>...> iterators_;
+  size_t remaining_;
+
+  ApplyFunctionState(FunctionType f, size_t n, Generators... gens)
+      : function_(std::move(f)),
+        generators_(std::move(gens)...),
+        remaining_(n) {
+    iterators_ = std::apply(
+        [](auto&... gens) { return std::tuple{gens.begin()...}; }, generators_);
+  }
+};
+
+template <typename StateType>
+auto createValueProducer(std::shared_ptr<StateType> state) {
+  using ResultType = typename StateType::ResultType;
+  return [state]() mutable -> std::optional<ResultType> {
+    if (state->remaining_ == 0) {
+      return std::nullopt;
+    }
+    auto functionOnIterators = [&](auto&&... its) {
+      return state->function_(AD_MOVE(*its)...);
+    };
+    ResultType result = std::apply(functionOnIterators, state->iterators_);
+    std::apply([](auto&&... its) { (..., ++its); }, state->iterators_);
+    --state->remaining_;
+    return result;
+  };
+}
+
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
 /// generator.
 inline auto applyFunction = [](auto&& function, size_t numItems,
-                               auto... generators)
-    -> cppcoro::generator<std::invoke_result_t<
-        decltype(function),
-        ql::ranges::range_value_t<decltype(generators)>...>> {
-  // A tuple holding one iterator to each of the generators.
-  std::tuple iterators{generators.begin()...};
+                               auto... generators) {
+  using StateType =
+      ApplyFunctionState<decltype(function), decltype(generators)...>;
+  using ResultType = typename StateType::ResultType;
 
-  auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(AD_MOVE(*iterators)...);
-  };
+  auto state =
+      std::make_shared<StateType>(std::forward<decltype(function)>(function),
+                                  numItems, std::move(generators)...);
 
-  for (size_t i = 0; i < numItems; ++i) {
-    co_yield std::apply(functionOnIterators, iterators);
+  auto valueProducer = createValueProducer(state);
 
-    // Increase all the iterators.
-    std::apply([](auto&&... its) { (..., ++its); }, iterators);
-  }
+  return ad_utility::InputRangeTypeErased<ResultType>{
+      ad_utility::InputRangeFromGetCallable(std::move(valueProducer))};
 };
 
 /// Return a generator that returns the `numElements` many results of the
