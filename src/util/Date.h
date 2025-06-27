@@ -325,6 +325,7 @@ class Date {
   std::pair<std::string, const char*> toStringAndType() const;
 
   // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
+  // For example: 100 -> "0100" and -100 -> "-0100".
   std::string getFormattedYear() const;
 };
 
