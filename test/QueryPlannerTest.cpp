@@ -4223,9 +4223,35 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
                                             {}, {}, {Variable{"?g"}}, {3}))),
         std::nullopt, {4, 16, 64'000'000});
 
-    // TODO<RobinTF> add tests that verify correct query planning when ?g is
-    // used in pattern, once query planning allows this.
-    // Query: SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }
+    TransitivePathSide left2{std::nullopt, 0, Var{"?g"}, 0};
+    h::expect(
+        "SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }",
+        h::transitivePath(
+            left2, right, 0, std::numeric_limits<size_t>::max(),
+            h::Join(
+                h::IndexScanFromStrings("?g", "?h", "?i"),
+                h::Distinct(
+                    {0, 1},
+                    // The sorts of index scans are because of missing graph
+                    // permutations.
+                    h::Union(
+                        h::Sort(h::IndexScanFromStrings(
+                            "?g", "?internal_property_path_variable_y",
+                            "?internal_property_path_variable_z", {}, {},
+                            {Variable{
+                                "?_Qlever_internal_transitive_path_graph"}},
+                            {3})),
+                        h::Sort(h::IndexScanFromStrings(
+                            "?internal_property_path_variable_z",
+                            "?internal_property_path_variable_y", "?g", {}, {},
+                            {Variable{
+                                "?_Qlever_internal_transitive_path_graph"}},
+                            {3}))))),
+            // Sort by ?g
+            h::Sort(h::IndexScanFromStrings("?_QLever_internal_variable_qp_0",
+                                            "<label>",
+                                            "?_QLever_internal_variable_qp_1",
+                                            {}, {}, {Variable{"?g"}}, {3}))));
   }
 }
 
