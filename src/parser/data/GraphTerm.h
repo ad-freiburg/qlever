@@ -43,8 +43,10 @@ class GraphTerm : public GraphTermBase,
 
   // ___________________________________________________________________________
   // Constructs a TripleComponent from the GraphTerm.
-  [[nodiscard]] TripleComponent toTripleComponent() const {
-    return visit([](const auto& element) -> TripleComponent {
+  [[nodiscard]] TripleComponent toTripleComponent(
+      bool blankNodesAreInternalVariables = true) const {
+    return visit([blankNodesAreInternalVariables](
+                     const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
@@ -53,7 +55,17 @@ class GraphTerm : public GraphTermBase,
         return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             element.toSparql());
       } else {
-        return element.toSparql();
+        static_assert(std::is_same_v<T, BlankNode>);
+        const auto& blankNode = element.toSparql();
+        if (blankNodesAreInternalVariables) {
+          AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+          return Variable{absl::StrCat(
+              QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, blankNode.substr(2))};
+
+        } else {
+          return RdfStringParser<
+              TurtleParser<TokenizerCtre>>::parseTripleObject(blankNode);
+        }
       }
     });
   }
