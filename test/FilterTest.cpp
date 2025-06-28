@@ -49,10 +49,13 @@ void checkSetPrefilterExpressionVariablePair(
   auto subtree =
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple);
   Filter filter{qec, subtree, {std::move(sparqlExpr), "Expression ?x"}};
+  const auto& optUpdatedSubtree = filter.getSubtree();
   if (prefilterIsApplicable) {
-    EXPECT_NE(subtree, filter.getSubtree());
+    EXPECT_NE(subtree, optUpdatedSubtree);
+    EXPECT_FALSE(optUpdatedSubtree->getRootOperation()->canResultBeCached());
   } else {
-    EXPECT_EQ(subtree, filter.getSubtree());
+    EXPECT_EQ(subtree, optUpdatedSubtree);
+    EXPECT_TRUE(optUpdatedSubtree->getRootOperation()->canResultBeCached());
   }
 }
 

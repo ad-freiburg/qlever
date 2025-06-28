@@ -381,14 +381,14 @@ using OrExpression = prefilterExpressions::LogicalExpression<
 namespace detail {
 //______________________________________________________________________________
 namespace logicalOps {
-// (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
-// (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
-// (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`
-// (`logical-and &&)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges
-// r2`.
-template <bool GetUnion>
-BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
-                                               const BlockMetadataRanges& r2);
+
+// Performs a `logical-And` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getIntersectionOfBlockRanges(const BlockMetadataRanges& r1,
+                                                 const BlockMetadataRanges& r2);
+// Performs a `logical-Or` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2);
+
 }  // namespace logicalOps
 
 //______________________________________________________________________________

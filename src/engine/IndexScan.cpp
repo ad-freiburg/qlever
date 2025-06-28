@@ -39,6 +39,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       graphsToFilter_{std::move(graphsToFilter)},
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
+      scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value() ? true
+                                                                    : false},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
@@ -68,7 +70,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks)
+                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
+                     bool scanSpecAndBlocksIsPrefiltered)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
@@ -76,6 +79,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
+      scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)) {
@@ -122,7 +126,7 @@ string IndexScan::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 bool IndexScan::canResultBeCachedImpl() const {
-  return !scanSpecAndBlocks_.blockMetadataIsPrefiltered_;
+  return !scanSpecAndBlocksIsPrefiltered_;
 };
 
 // _____________________________________________________________________________
@@ -175,17 +179,13 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     // retrieved via the newly passed prefilter. This corresponds logically to a
     // conjunction over the prefilters applied for this `IndexScan`.
     const auto& blockMetadataRanges =
-        scanSpecAndBlocks_.blockMetadataIsPrefiltered_
-            ? prefilterExpressions::detail::logicalOps::
-                  mergeRelevantBlockItRanges<false>(
-                      it->first->evaluate(
-                          vocab, getScanSpecAndBlocks().getBlockMetadataSpan(),
-                          colIdx),
-                      scanSpecAndBlocks_.blockMetadata_)
-            : it->first->evaluate(
-                  vocab, scanSpecAndBlocks_.getBlockMetadataSpan(), colIdx);
-    return makeCopyWithAddedPrefilters(ScanSpecAndBlocks(
-        scanSpecAndBlocks_.scanSpec_, blockMetadataRanges, true));
+        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+            it->first->evaluate(
+                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIdx),
+            scanSpecAndBlocks_.blockMetadata_);
+
+    return makeCopyWithPrefilteredScanSpecAndBlocks(
+        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
   }
   return std::nullopt;
 }
@@ -210,19 +210,17 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 //______________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
+std::shared_ptr<QueryExecutionTree>
+IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
     ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(scanSpecAndBlocks));
+      std::move(scanSpecAndBlocks), true);
 }
 
 // _____________________________________________________________________________
 Result::Generator IndexScan::chunkedIndexScan() const {
-  if (scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
-    co_return;
-  }
   for (IdTable& idTable : getLazyScan()) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
@@ -630,10 +628,10 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
-  return std::make_unique<IndexScan>(_executionContext, permutation_, subject_,
-                                     predicate_, object_, additionalColumns_,
-                                     additionalVariables_, graphsToFilter_,
-                                     scanSpecAndBlocks_);
+  return std::make_unique<IndexScan>(
+      _executionContext, permutation_, subject_, predicate_, object_,
+      additionalColumns_, additionalVariables_, graphsToFilter_,
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_);
 }
 
 // _____________________________________________________________________________

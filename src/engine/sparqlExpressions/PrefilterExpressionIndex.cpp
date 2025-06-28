@@ -172,9 +172,8 @@ BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
 
 }  // namespace mapping
 
-// SECTION HELPER LOGICAL OPERATORS
 namespace logicalOps {
-
+// SECTION HELPER LOGICAL OPERATORS
 //______________________________________________________________________________
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
 // (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
@@ -245,6 +244,15 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
   return mergedRanges;
 }
 
+BlockMetadataRanges getIntersectionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<false>(r1, r2);
+}
+
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<true>(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 

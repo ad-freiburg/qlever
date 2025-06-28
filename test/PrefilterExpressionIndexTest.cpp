@@ -521,10 +521,17 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                                   IdxPairRanges&& rExpected) {
     ql::span<const CompressedBlockMetadata> blockSpan(allTestBlocksIsDatatype);
     auto spanBegin = blockSpan.begin();
-    auto mergedBlockItRanges =
-        prefilterExpressions::detail::logicalOps::mergeRelevantBlockItRanges<
-            TestUnion>(convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1),
-                       convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2));
+    BlockMetadataRanges mergedBlockItRanges;
+    const auto& br1 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r1);
+    const auto& br2 = convertFromSpanIdxToSpanBlockItRanges(spanBegin, r2);
+    if constexpr (TestUnion) {
+      mergedBlockItRanges =
+          prefilterExpressions::detail::logicalOps::getUnionOfBlockRanges(br1,
+                                                                          br2);
+    } else {
+      mergedBlockItRanges = prefilterExpressions::detail::logicalOps::
+          getIntersectionOfBlockRanges(br1, br2);
+    }
     auto expectedBlockItRanges =
         convertFromSpanIdxToSpanBlockItRanges(spanBegin, rExpected);
     ASSERT_EQ(mergedBlockItRanges.size(), expectedBlockItRanges.size());

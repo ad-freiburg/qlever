@@ -24,6 +24,7 @@ class IndexScan final : public Operation {
   TripleComponent object_;
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
+  bool scanSpecAndBlocksIsPrefiltered_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -46,7 +47,8 @@ class IndexScan final : public Operation {
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
-            ScanSpecAndBlocks scanSpecAndBlocks);
+            ScanSpecAndBlocks scanSpecAndBlocks,
+            bool scanSpecAndBlocksIsPrefiltered);
 
   ~IndexScan() override = default;
 
@@ -204,7 +206,7 @@ class IndexScan final : public Operation {
   // a copy of this (`IndexScan`), but with added corresponding
   // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
   // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
-  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
+  std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
       ScanSpecAndBlocks scanSpecAndBlocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
