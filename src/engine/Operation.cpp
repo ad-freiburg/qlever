@@ -572,25 +572,6 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
   return variableToColumnMap_.value();
 }
 
-// _____________________________________________________________________________
-absl::Cleanup<absl::cleanup_internal::Tag, std::function<void()>>
-Operation::resetChildLimitsAndOffsetOnDestruction() {
-  // We estimate that most operations will have 3 or fewer children.
-  absl::InlinedVector<std::pair<QueryExecutionTree*, LimitOffsetClause>, 3>
-      childrenClauses;
-  const auto& children = getChildren();
-  childrenClauses.reserve(children.size());
-  for (QueryExecutionTree* qet : children) {
-    childrenClauses.emplace_back(qet,
-                                 qet->getRootOperation()->getLimitOffset());
-  }
-  return absl::Cleanup{std::function{[original = std::move(childrenClauses)]() {
-    for (auto& [qet, originalLimit] : original) {
-      qet->getRootOperation()->limitOffset_ = originalLimit;
-    }
-  }}};
-}
-
 // ___________________________________________________________________________
 const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
     const {
@@ -687,6 +668,7 @@ std::unique_ptr<Operation> Operation::clone() const {
                      std::back_inserter(visibleVariables));
     result->setSelectedVariablesForSubquery(visibleVariables);
   }
+  result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;

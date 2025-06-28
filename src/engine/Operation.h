@@ -59,7 +59,7 @@ class Operation {
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimit()`
+  //    efficient calculation of the limit (see also the `supportsLimitOffset()`
   //    function).
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
@@ -291,7 +291,7 @@ class Operation {
   [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
  private:
-  // This function is called each time `applyLimit` is called. It can be
+  // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
@@ -396,13 +396,6 @@ class Operation {
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
 
-  // Helper function to allow dynamic modification of LIMIT/OFFSET from child
-  // operations. It returns an object that restores the original LIMIT + OFFSET
-  // the child operations haven when calling this function on destruction.
-  [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
-                                      std::function<void()>>
-  resetChildLimitsAndOffsetOnDestruction() final;
-
  private:
   //! Compute the result of the query-subtree rooted at this element..
   virtual Result computeResult(bool requestLaziness) = 0;
@@ -412,10 +405,10 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimit() == true`, then the operation does already
-  // track the limit stats correctly and there's no need to keep track of both.
-  // Otherwise `externalLimitApplied_` decides how stat tracking should be
-  // handled.
+  // operation. If `supportsLimitOffset() == true`, then the operation does
+  // already track the limit stats correctly and there's no need to keep track
+  // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
+  // be handled.
   void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
                           std::chrono::microseconds duration) const;
 
@@ -526,7 +519,6 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
-  FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

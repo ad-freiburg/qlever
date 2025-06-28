@@ -688,3 +688,58 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
                 ::testing::ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
   }
 }
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = getQec();
+  // Without supported limit it should always work
+  {
+    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{3, 4}}),
+        Vars{Variable{"?x"}, std::nullopt}));
+
+    CartesianProductJoin join{qec, std::move(subtrees)};
+
+    // Should work with and without limit
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    join.applyLimitOffset({1});
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+  }
+  // With supported limit it should stop working the second time
+  {
+    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{3, 4}}),
+        Vars{Variable{"?x"}, std::nullopt}, true));
+
+    CartesianProductJoin join{qec, std::move(subtrees)};
+
+    // Should work without limit
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    // Should not work with limit
+    join.applyLimitOffset({1});
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_THROW(join.clone(), ad_utility::Exception);
+    EXPECT_THROW(join.computeResultOnlyForTesting(), ad_utility::Exception);
+  }
+}
