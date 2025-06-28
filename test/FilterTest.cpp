@@ -82,7 +82,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 
   auto result = filter.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isFullyMaterialized());
-  auto& generator = result->idTables();
+  auto generator = result->idTables();
 
   auto referenceTable1 =
       makeIdTableFromVector({{true}, {true}, {true}}, asBool);
