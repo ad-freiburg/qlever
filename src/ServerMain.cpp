@@ -143,6 +143,10 @@ int main(int argc, char** argv) {
       "erroneous silently into empty results (e.g. LOAD or SERVICE requests to "
       "nonexisting endpoints). This mode should only be used for running the "
       "syntax tests from the W3C SPARQL 1.1 test suite.");
+  add("disable-prefilter-for-filter-clauses",
+      optionFactory.getProgramOption<"disable-prefilter-for-filter-clauses">(),
+      "If set to true, the prefilter procedures for FILTER expressions are "
+      "disabled.");
   po::variables_map optionsMap;
 
   try {
