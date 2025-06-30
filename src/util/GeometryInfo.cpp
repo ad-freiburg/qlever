@@ -33,15 +33,15 @@ using ParsedWkt =
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
 // ____________________________________________________________________________
-std::string_view removeDatatype(const std::string_view& wkt) {
+std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string{wkt});
-  return asStringViewUnsafe(lit.getContent());
+  return std::string{asStringViewUnsafe(lit.getContent())};
 }
 
 // ____________________________________________________________________________
 ParseResult parseWkt(const std::string_view& wkt) {
-  std::string wktLiteral{removeDatatype(wkt)};
+  auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
 
@@ -119,19 +119,20 @@ constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();
 }
 
+constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
+    std::nullopt,
+    addSfPrefix<"Point">(),
+    addSfPrefix<"LineString">(),
+    addSfPrefix<"Polygon">(),
+    addSfPrefix<"MultiPoint">(),
+    addSfPrefix<"MultiLineString">(),
+    addSfPrefix<"MultiPolygon">(),
+    addSfPrefix<"GeometryCollection">()};
+
 // ____________________________________________________________________________
 std::optional<std::string_view> wktTypeToIri(uint8_t type) {
-  constexpr std::optional<std::string_view> sfIris[8]{
-      std::nullopt,
-      addSfPrefix<"Point">(),
-      addSfPrefix<"LineString">(),
-      addSfPrefix<"Polygon">(),
-      addSfPrefix<"MultiPoint">(),
-      addSfPrefix<"MultiLineString">(),
-      addSfPrefix<"MultiPolygon">(),
-      addSfPrefix<"GeometryCollection">()};
   if (type < 8) {
-    return sfIris[type];
+    return SF_WKT_TYPE_IRI[type];
   }
   return std::nullopt;
 }
@@ -174,8 +175,7 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
-  return static_cast<uint8_t>(
-      detail::getWKTType(std::string{detail::removeDatatype(wkt)}));
+  return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
 };
 
 // ____________________________________________________________________________
