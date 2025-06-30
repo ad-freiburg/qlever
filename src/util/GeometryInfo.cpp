@@ -45,22 +45,35 @@ ParseResult parseWkt(const std::string_view& wkt) {
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
 
-  // Remove redundant code using macro
-#undef AD_CASE
-#define AD_CASE(nameInEnum, parseFunctionName)         \
-  case WKTType::nameInEnum: {                          \
-    parsed = parseFunctionName<CoordType>(wktLiteral); \
-    break;                                             \
-  }
-
   switch (type) {
-    AD_CASE(POINT, pointFromWKT)
-    AD_CASE(LINESTRING, lineFromWKT)
-    AD_CASE(POLYGON, polygonFromWKT)
-    AD_CASE(MULTIPOINT, multiPointFromWKT)
-    AD_CASE(MULTILINESTRING, multiLineFromWKT)
-    AD_CASE(MULTIPOLYGON, multiPolygonFromWKT)
-    AD_CASE(COLLECTION, collectionFromWKT)
+    case WKTType::POINT: {
+      parsed = pointFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::LINESTRING: {
+      parsed = lineFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::POLYGON: {
+      parsed = polygonFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::MULTIPOINT: {
+      parsed = multiPointFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::MULTILINESTRING: {
+      parsed = multiLineFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::MULTIPOLYGON: {
+      parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
+      break;
+    }
+    case WKTType::COLLECTION: {
+      parsed = collectionFromWKT<CoordType>(wktLiteral);
+      break;
+    }
     case WKTType::NONE:
       break;
   }
