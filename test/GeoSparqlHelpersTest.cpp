@@ -15,6 +15,7 @@
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
+using ad_utility::source_location;
 using ad_utility::WktDistGeoPoints;
 using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
@@ -159,33 +160,24 @@ TEST(GeoSparqlHelpers, IriToUnit) {
             UnitOfMeasurement::MILES);
 }
 
+template <SpatialJoinType SJType>
+void checkGeoRelationDummyImpl(
+    source_location sourceLocation = source_location::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  const auto geoRelationFunction = WktGeometricRelation<SJType>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
+      ::testing::HasSubstr("not yet implemented"));
+}
+
 TEST(GeoSparqlHelpers, WktGeometricRelation) {
   // Currently the geometric relation functions are only a dummy implementation
-  const auto intersect = WktGeometricRelation<SpatialJoinType::INTERSECTS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(intersect(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto contains = WktGeometricRelation<SpatialJoinType::CONTAINS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(contains(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto covers = WktGeometricRelation<SpatialJoinType::COVERS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(covers(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto crosses = WktGeometricRelation<SpatialJoinType::CROSSES>();
-  AD_EXPECT_THROW_WITH_MESSAGE(crosses(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto touches = WktGeometricRelation<SpatialJoinType::TOUCHES>();
-  AD_EXPECT_THROW_WITH_MESSAGE(touches(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto equals = WktGeometricRelation<SpatialJoinType::EQUALS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(equals(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
-
-  const auto overlaps = WktGeometricRelation<SpatialJoinType::OVERLAPS>();
-  AD_EXPECT_THROW_WITH_MESSAGE(overlaps(GeoPoint(1, 1), GeoPoint(2, 2)),
-                               ::testing::HasSubstr("not yet implemented"));
+  using enum SpatialJoinType;
+  checkGeoRelationDummyImpl<INTERSECTS>();
+  checkGeoRelationDummyImpl<CONTAINS>();
+  checkGeoRelationDummyImpl<COVERS>();
+  checkGeoRelationDummyImpl<CROSSES>();
+  checkGeoRelationDummyImpl<TOUCHES>();
+  checkGeoRelationDummyImpl<EQUALS>();
+  checkGeoRelationDummyImpl<OVERLAPS>();
 }
