@@ -26,28 +26,15 @@ struct GeneratorCore {
                 Producer producer, MakeQueueTask makeQueueTask)
       : queue{queueSize},
         numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
-    std::cout << "GeneratorCore starting threads " << numThreads << "\n";
     for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
       threads.emplace_back(
           makeQueueTask(queue, producer, numUnfinishedThreads));
     }
   }
 
-  ~GeneratorCore() {
-    std::cout << "GeneratorCore finish\n";
-    queue.finish();
-  }
+  ~GeneratorCore() { queue.finish(); }
 
-  std::optional<typename Queue::value_type> get() {
-    std::optional<typename Queue::value_type> value{queue.pop()};
-    static int a{0};
-    if (value.has_value()) {
-      std::cout << "GeneratorCore::get " << a++ << "\n";
-      return value;
-    }
-    std::cout << "GeneratorCore::get nullopt " << a++ << "\n";
-    return std::nullopt;
-  }
+  std::optional<typename Queue::value_type> get() { return queue.pop(); }
 
   Queue queue;
   std::vector<ad_utility::JThread> threads;
