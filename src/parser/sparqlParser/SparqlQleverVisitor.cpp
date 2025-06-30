@@ -183,12 +183,13 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
+  static const UnaryFuncTable geoUnaryFuncs{
+      {"longitude", &makeLongitudeExpression},
+      {"latitude", &makeLatitudeExpression},
+      {"centroid", &makeCentroidExpression},
+      {"envelope", &makeEnvelopeExpression}};
   using enum SpatialJoinType;
-  UnaryFuncTable geoUnaryFuncs{{"longitude", &makeLongitudeExpression},
-                               {"latitude", &makeLatitudeExpression},
-                               {"centroid", &makeCentroidExpression},
-                               {"envelope", &makeEnvelopeExpression}};
-  BinaryFuncTable geoBinaryFuncs{
+  static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
@@ -209,7 +210,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   }
 
   // Math functions.
-  UnaryFuncTable mathFuncs{
+  static const UnaryFuncTable mathFuncs{
       {"log", &makeLogExpression},   {"exp", &makeExpExpression},
       {"sqrt", &makeSqrtExpression}, {"sin", &makeSinExpression},
       {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
@@ -223,7 +224,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   }
 
   // XSD conversion functions.
-  UnaryFuncTable convertFuncs{
+  static const UnaryFuncTable convertFuncs{
       {"integer", &makeConvertToIntExpression},
       {"int", &makeConvertToIntExpression},
       {"decimal", &makeConvertToDecimalExpression},
