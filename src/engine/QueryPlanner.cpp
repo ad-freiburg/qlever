@@ -1390,11 +1390,12 @@ void QueryPlanner::applyFiltersIfPossible(
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
                                     mode == FilterMode::ReplaceUnfiltered;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
-          ql::ranges::any_of(
-              filterAndSubst.filter_.expression_.containedVariables(),
-              [&plan](const auto& variable) {
-                return plan._qet->isVariableCovered(*variable);
-              })) {
+          (filterAndSubst.filter_.expression_.containedVariables().empty() ||
+           ql::ranges::any_of(
+               filterAndSubst.filter_.expression_.containedVariables(),
+               [&plan](const auto& variable) {
+                 return plan._qet->isVariableCovered(*variable);
+               }))) {
         // Apply filter substitution
         auto jcs = getJoinColumns(filterAndSubst.substitute_.value(), plan);
         auto substPlans =
@@ -1684,7 +1685,7 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
   };
 
   Plans result;
-  for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
+  for (size_t i : ad_utility::integerRange(numSeeds - 1)) {
     greedyStep(result, i == 0, i == numSeeds - 2);
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
@@ -1695,9 +1696,10 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     const std::vector<SparqlFilter>& filters) const {
   FiltersAndOptionalSubstitutes plans;
+  plans.reserve(filters.size());
 
   // Currently, no filter substitutes are implemented. This will follow in
-  // #1935.
+  // #1935 and #2140.
   for (const auto& filterExpression : filters) {
     plans.emplace_back(filterExpression, std::nullopt);
   }

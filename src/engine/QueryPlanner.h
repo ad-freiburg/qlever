@@ -252,9 +252,10 @@ class QueryPlanner {
   std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq,
                                                 bool isSubquery = false);
 
- private:
+ protected:
   QueryExecutionContext* _qec;
 
+ private:
   // Used to count the number of unique variables created using
   // generateUniqueVarName
   size_t _internalVarCount = 0;
@@ -315,7 +316,7 @@ class QueryPlanner {
   // Function for optimization query rewrites: The function returns pairs of
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
-  FiltersAndOptionalSubstitutes seedFilterSubstitutes(
+  virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters) const;
 
   /**

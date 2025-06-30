@@ -4475,3 +4475,11 @@ TEST(QueryPlanner, filtersWithUnboundVariables) {
   h::expect("SELECT * { FILTER(?c = 1) }",
             h::Filter("?c = 1", h::NeutralElement()));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
+  // Test the query planner's ability to substitute filters with alternative
+  // subtree plans using the `QueryPlannerWithMockFilterSubstitute` class.
+  h::expect<h::QueryPlannerWithMockFilterSubstitute>(
+      "SELECT * { ?a ?b ?c . FILTER(\"Test\") }", h::NeutralElement());
+}
