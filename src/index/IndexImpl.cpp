@@ -292,8 +292,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto sortedBlockView{internalTriplesPsoSorter.template getSortedBlocks<0>()};
   auto internalTriplesUnique =
       ad_utility::uniqueBlockView(std::move(sortedBlockView));
-  auto inputRange{fromGenerator(std::move(internalTriplesUnique))};
-  createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(inputRange), false);
+  createPSOAndPOSImpl(NumColumnsIndexBuilding, BlocksOfTriples{std::move(internalTriplesUnique)}, false);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
