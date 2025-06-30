@@ -16,6 +16,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 // A vocabulary that can at runtime choose between different vocabulary
@@ -92,34 +93,27 @@ class PolymorphicVocabulary {
   // Analogous to `lower_bound`, but since `word` is guaranteed to be a full
   // word, not a prefix, this function can respect the split of an underlying
   // `SplitVocabulary`.
-  template <bool getUpperBound, typename String, typename Comp>
-  WordAndIndex getPositionOfWord(const String& word, Comp comp) const {
+  template <typename String, typename Comp>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(const String& word,
+                                                  Comp comp) const {
     return std::visit(
-        [&word, &comp](auto& vocab) {
+        [&word, &comp, this](auto& vocab) -> std::pair<uint64_t, uint64_t> {
           using T = std::decay_t<decltype(vocab)>;
           if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
-            return vocab
-                .template getPositionOfWord<String, Comp, getUpperBound>(
-                    word, std::move(comp));
-          }
-          if constexpr (getUpperBound) {
-            return vocab.upper_bound(word, std::move(comp));
+            return vocab.getPositionOfWord(word, std::move(comp));
           } else {
-            return vocab.lower_bound(word, std::move(comp));
+            // TODO<ullingerc>
+            static_assert(
+                ad_utility::SameAsAny<T, InMemoryUncompressed,
+                                      OnDiskUncompressed, InMemoryCompressed,
+                                      OnDiskCompressed>);
+            return vocab.lower_bound(word, comp)
+                .positionOfWord(word)
+                .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
           }
         },
         vocab_);
   }
-
-  template <typename String, typename Comp>
-  WordAndIndex getPositionOfWordLower(const String& word, Comp comp) const {
-    return getPositionOfWord<false>(word, comp);
-  };
-
-  template <typename String, typename Comp>
-  WordAndIndex getPositionOfWordUpper(const String& word, Comp comp) const {
-    return getPositionOfWord<true>(word, comp);
-  };
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.

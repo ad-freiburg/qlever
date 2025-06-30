@@ -198,12 +198,13 @@ class SplitVocabulary {
                                                            marker);
   }
 
-  template <typename InternalStringType, typename Comparator,
-            bool getUpperBound>
-  WordAndIndex getPositionOfWord(const InternalStringType& word,
-                                 Comparator comparator) const {
-    return boundImpl<InternalStringType, Comparator, getUpperBound>(
-        word, comparator, getMarkerForWord(word));
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    return boundImpl<InternalStringType, Comparator, false>(
+               word, comparator, getMarkerForWord(word))
+        .positionOfWord(word)
+        .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
   }
 
   // Shortcut to retrieve the first underlying vocabulary
