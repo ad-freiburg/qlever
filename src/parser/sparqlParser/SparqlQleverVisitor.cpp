@@ -184,7 +184,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   // Geo functions.
   using enum SpatialJoinType;
-  BinaryFuncTable geoFuncs{
+  UnaryFuncTable geoUnaryFuncs{{"longitude", &makeLongitudeExpression},
+                               {"latitude", &makeLatitudeExpression},
+                               {"centroid", &makeCentroidExpression},
+                               {"envelope", &makeEnvelopeExpression}};
+  BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
@@ -197,12 +201,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
-    } else if (functionName == "longitude") {
-      return createUnary(&makeLongitudeExpression);
-    } else if (functionName == "latitude") {
-      return createUnary(&makeLatitudeExpression);
-    } else if (geoFuncs.contains(functionName)) {
-      return createBinary(geoFuncs.at(functionName));
+    } else if (geoUnaryFuncs.contains(functionName)) {
+      return createUnary(geoUnaryFuncs.at(functionName));
+    } else if (geoBinaryFuncs.contains(functionName)) {
+      return createBinary(geoBinaryFuncs.at(functionName));
     }
   }
 
