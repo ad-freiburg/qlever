@@ -90,6 +90,18 @@ TEST(GeometryInfoTest, RequestedInfoLiteral) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, BoundingBoxAsWKT) {
+  BoundingBox bb1{{0, 0}, {1, 1}};
+  ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
+  BoundingBox bb2{{0, 0}, {0, 0}};
+  ASSERT_EQ(bb2.asWkt(), "POLYGON((0 0,0 0,0 0,0 0,0 0))");
+  auto bb3 = GeometryInfo::getBoundingBox(
+      "\"LINESTRING(2 4,8 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryTypeAsIri) {
   ASSERT_EQ(GeometryType{1}.asIri().value(),
             "http://www.opengis.net/ont/sf#Point");

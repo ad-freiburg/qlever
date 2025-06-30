@@ -182,6 +182,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
       return createUnary(&makeLatitudeExpression);
+    } else if (functionName == "centroid") {
+      return createUnary(&makeCentroidExpression);
+    } else if (functionName == "envelope") {
+      return createUnary(&makeEnvelopeExpression);
     } else if (functionName == "geometryType") {
       return createUnary(&makeGeometryTypeExpression);
     }

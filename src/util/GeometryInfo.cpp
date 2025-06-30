@@ -88,6 +88,19 @@ BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
 }
 
 // ____________________________________________________________________________
+Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
+  return {point.getLng(), point.getLat()};
+}
+
+// ____________________________________________________________________________
+std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
+                             const GeoPoint& upperRight) {
+  util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
+                                geoPointToUtilPoint(upperRight)};
+  return getWKT(box);
+}
+
+// ____________________________________________________________________________
 std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 // Remove redundant code using macro
 #undef AD_CASE
@@ -189,6 +202,11 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return detail::boundingBoxAsGeoPoints(parsed.value());
+}
+
+// ____________________________________________________________________________
+std::string BoundingBox::asWkt() const {
+  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
 
 // ____________________________________________________________________________
