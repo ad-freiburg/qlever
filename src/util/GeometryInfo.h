@@ -32,6 +32,8 @@ struct Centroid {
 struct BoundingBox {
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
+
+  std::string asWkt() const;
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
@@ -74,7 +76,8 @@ class GeometryInfo {
       bitMaskForLowerBits(ValueId::numDataBits);
 
  public:
-  GeometryInfo(uint8_t wktType, BoundingBox boundingBox, Centroid centroid);
+  GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
+               Centroid centroid);
 
   // Parse an arbitrary WKT literal and compute all attributes.
   static GeometryInfo fromWktLiteral(const std::string_view& wkt);
