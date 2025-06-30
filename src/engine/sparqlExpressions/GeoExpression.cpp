@@ -81,12 +81,6 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
-template <SpatialJoinType Relation>
-SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
-                                                SparqlExpression::Ptr child2) {
-  return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
-                                                           std::move(child2));
-}
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
   return std::make_unique<CentroidExpression>(std::move(child));
 }
