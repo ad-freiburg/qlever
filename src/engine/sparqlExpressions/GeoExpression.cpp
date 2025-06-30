@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -24,6 +25,11 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(
     LatitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
+
+NARY_EXPRESSION(
+    CentroidExpression, 1,
+    FV<ad_utility::WktCentroid, GeometryInfoValueGetter<ad_utility::Centroid>>);
+
 NARY_EXPRESSION(DistExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
                    GeoPointValueGetter>);
@@ -34,6 +40,10 @@ NARY_EXPRESSION(
     DistWithUnitExpression, 3,
     FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
        GeoPointValueGetter, GeoPointValueGetter, UnitOfMeasurementValueGetter>);
+
+NARY_EXPRESSION(EnvelopeExpression, 1,
+                FV<ad_utility::WktEnvelope,
+                   GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
 }  // namespace detail
 
@@ -69,6 +79,14 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     return std::make_unique<DistExpression>(std::move(child1),
                                             std::move(child2));
   }
+}
+
+SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<CentroidExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<EnvelopeExpression>(std::move(child));
 }
 
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
