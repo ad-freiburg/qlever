@@ -114,21 +114,24 @@ std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 }
 
 // ____________________________________________________________________________
-std::optional<std::string_view> wktTypeToIri(uint8_t type) {
-// Remove redundant code using macro
-#undef AD_CASE
-#define AD_CASE(nameInEnum, nameAsString) \
-  case WKTType::nameInEnum:               \
-    return constexprStrCat<SF_PREFIX, nameAsString>();
+template <detail::constexpr_str_cat_impl::ConstexprString suffix>
+constexpr std::string_view addSfPrefix() {
+  return constexprStrCat<SF_PREFIX, suffix>();
+}
 
-  switch (type) {
-    AD_CASE(POINT, "Point")
-    AD_CASE(LINESTRING, "LineString")
-    AD_CASE(POLYGON, "Polygon")
-    AD_CASE(MULTIPOINT, "MultiPoint")
-    AD_CASE(MULTILINESTRING, "MultiLineString")
-    AD_CASE(MULTIPOLYGON, "MultiPolygon")
-    AD_CASE(COLLECTION, "GeometryCollection")
+// ____________________________________________________________________________
+std::optional<std::string_view> wktTypeToIri(uint8_t type) {
+  constexpr std::optional<std::string_view> sfIris[8]{
+      std::nullopt,
+      addSfPrefix<"Point">(),
+      addSfPrefix<"LineString">(),
+      addSfPrefix<"Polygon">(),
+      addSfPrefix<"MultiPoint">(),
+      addSfPrefix<"MultiLineString">(),
+      addSfPrefix<"MultiPolygon">(),
+      addSfPrefix<"GeometryCollection">()};
+  if (type < 8) {
+    return sfIris[type];
   }
   return std::nullopt;
 }
