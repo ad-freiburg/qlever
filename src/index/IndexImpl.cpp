@@ -221,44 +221,25 @@ IndexImpl::buildOspWithPatterns(
       }};
 
   /*
-// Set up a generator that yields blocks with the following columns:
-// S P O PatternOfS PatternOfO, sorted by OPS.
-auto blockGenerator =
-  [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-// If an exception occurs in the block that is consuming the blocks yielded
-// from this generator, we have to explicitly finish the `queue`, otherwise
-// there will be a deadlock because the threads involved in the queue can
-// never join.
-absl::Cleanup cl{[&queue]() { queue.finish(); }};
-while (auto block = queue.pop()) {
-  co_yield fixBlockAfterPatternJoin(std::move(block));
-}
-}(queue);
-*/
-  struct BlockGenerator
-      : public ad_utility::InputRangeFromGet<IdTableStatic<0>> {
-    BlockGenerator(ad_utility::data_structures::ThreadSafeQueue<IdTable>& queue)
-        : queue{queue} {}
+  // Set up a generator that yields blocks with the following columns:
+  // S P O PatternOfS PatternOfO, sorted by OPS.
+  */
+  auto get{[&queue]() -> std::optional<IdTableStatic<0>> {
+    if (auto block = queue.pop()) {
+      return fixBlockAfterPatternJoin(std::move(block));
+    }
 
-    std::optional<IdTableStatic<0>> get() override {
-      if (auto block = queue.pop()) {
-        return fixBlockAfterPatternJoin(std::move(block));
-      }
-
-      return std::nullopt;
-    };
-
-    ad_utility::data_structures::ThreadSafeQueue<IdTable>& queue;
-  };
-
-  auto blockGenerator{ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
-      BlockGenerator{queue}}};
+    return std::nullopt;
+  }};
 
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-  createSecondPermutationPair(NumColumnsIndexBuilding + 2,
-                              std::move(blockGenerator), *thirdSorter);
+  createSecondPermutationPair(
+      NumColumnsIndexBuilding + 2,
+      ad_utility::InputRangeTypeErased{
+          ad_utility::InputRangeFromGetCallable{std::move(get)}},
+      *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
@@ -292,7 +273,8 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto sortedBlockView{internalTriplesPsoSorter.template getSortedBlocks<0>()};
   auto internalTriplesUnique =
       ad_utility::uniqueBlockView(std::move(sortedBlockView));
-  createPSOAndPOSImpl(NumColumnsIndexBuilding, BlocksOfTriples{std::move(internalTriplesUnique)}, false);
+  createPSOAndPOSImpl(NumColumnsIndexBuilding,
+                      BlocksOfTriples{std::move(internalTriplesUnique)}, false);
   onDiskBase_ = std::move(onDiskBaseBackup);
   // The "normal" triples from the "internal" index builder are actually
   // internal.
@@ -1312,9 +1294,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
+                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
+                << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
