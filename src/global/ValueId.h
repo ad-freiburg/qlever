@@ -29,6 +29,7 @@ enum struct Datatype {
   Bool,
   Int,
   Double,
+  EncodedVal,
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
@@ -54,6 +55,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Double";
     case Datatype::Int:
       return "Int";
+    case Datatype::EncodedVal:
+      return "Encoded Iri or Literal";
     case Datatype::VocabIndex:
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
@@ -293,6 +296,11 @@ class ValueId {
   static ValueId makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
+
+  static ValueId makeFromEncodedVal(uint64_t idx) {
+    return makeFromIndex(idx, Datatype::EncodedVal);
+  }
+
   static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
@@ -316,6 +324,11 @@ class ValueId {
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(removeDatatypeBits(_bits));
   }
+
+  [[nodiscard]] constexpr uint64_t getEncodedVal() const noexcept {
+    return removeDatatypeBits(_bits);
+  }
+
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
@@ -395,6 +408,7 @@ class ValueId {
   /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
   /// `uint64_t` and the visitor cannot distinguish between them. Create strong
   /// types for these indices and make the `ValueId` class use them.
+  /// TODO<joka921> Same goes for the `EncodedVal` type.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
@@ -406,6 +420,8 @@ class ValueId {
         return std::invoke(visitor, getDouble());
       case Datatype::Int:
         return std::invoke(visitor, getInt());
+      case Datatype::EncodedVal:
+        return std::invoke(visitor, getEncodedVal());
       case Datatype::VocabIndex:
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
@@ -437,8 +453,8 @@ class ValueId {
       if constexpr (ad_utility::isSimilar<T, UndefinedType>) {
         // already handled above
         AD_FAIL();
-      } else if constexpr (ad_utility::isSimilar<T, double> ||
-                           ad_utility::isSimilar<T, int64_t>) {
+      } else if constexpr (ad_utility::SimilarToAny<T, double, int64_t,
+                                                    uint64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");

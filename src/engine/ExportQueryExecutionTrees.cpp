@@ -12,6 +12,7 @@
 
 #include <ranges>
 
+#include "index/EncodedValues.h"
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/ValueIdentity.h"
@@ -496,6 +497,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case LocalVocabIndex:
       return handleIriOrLiteral(
           getLiteralOrIriFromVocabIndex(index, id, localVocab));
+    case EncodedVal:
+      return handleIriOrLiteral(EncodedValues::toLiteralOrIri(id));
     case TextRecordIndex:
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
@@ -516,6 +519,9 @@ ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
   switch (datatype) {
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
+    case EncodedVal:
+      return handleIriOrLiteral(EncodedValues::toLiteralOrIri(id),
+                                onlyReturnLiteralsWithXsdString);
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
@@ -580,6 +586,8 @@ ExportQueryExecutionTrees::idToLiteralOrIri(const Index& index, Id id,
   switch (id.getDatatype()) {
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
+    case EncodedVal:
+      return EncodedValues::toLiteralOrIri(id);
     case VocabIndex:
     case LocalVocabIndex:
       return getLiteralOrIriFromVocabIndex(index, id, localVocab);

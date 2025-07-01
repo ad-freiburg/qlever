@@ -14,6 +14,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
+#include "index/EncodedValues.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
@@ -699,7 +700,16 @@ template <class T>
 bool TurtleParser<T>::iri() {
   // irirefs always start with "<", prefixedNames never, so the lookahead always
   // works
-  return iriref() || prefixedName();
+  auto res = iriref() || prefixedName();
+  if (!res) {
+    return res;
+  }
+  const auto& s = lastParseResult_.getIri().toStringRepresentation();
+  auto optId = EncodedValues::encode(s);
+  if (optId.has_value()) {
+    lastParseResult_ = optId.value();
+  }
+  return res;
 }
 
 // _____________________________________________________________________
