@@ -9,8 +9,6 @@
 #ifndef QLEVER_SRC_ENGINE_SERVER_H
 #define QLEVER_SRC_ENGINE_SERVER_H
 
-#include <util/http/websocket/MessageSender.h>
-
 #include <string>
 #include <vector>
 
@@ -20,13 +18,13 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "index/Index.h"
-#include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/streamable_body.h"
+#include "util/http/websocket/MessageSender.h"
 #include "util/http/websocket/QueryHub.h"
 #include "util/json.h"
 
@@ -150,6 +148,15 @@ class Server {
           VisitorT visitor, const ad_utility::Timer& requestTimer,
           const RequestT& request, ResponseT& send,
           const std::optional<PlannedQuery>& plannedQuery);
+
+  // Out of a list of allowed media types, choose the one that best fits the
+  // given query type. Currently it just chooses the first from the list. If the
+  // list is empty, just choose one that works for the given query type.
+  static ad_utility::MediaType chooseBestFittingMediaType(
+      const std::vector<ad_utility::MediaType>& candidates,
+      const ParsedQuery& parsedQuery);
+  FRIEND_TEST(ServerTest, chooseBestFittingMediaType);
+
   // Do the actual execution of a query.
   CPP_template(typename RequestT, typename ResponseT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -178,13 +185,15 @@ class Server {
           QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate);
 
-  // Determine the media type to be used for the result. The media type is
+  // Determine media type candidates to be used for the result. Media types are
   // determined (in this order) by the current action (e.g.,
-  // "action=csv_export") and by the "Accept" header of the request.
-  CPP_template(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
-                                  RequestT>) static ad_utility::MediaType
-      determineMediaType(const ad_utility::url_parser::ParamValueMap& params,
-                         const RequestT& request);
+  // "action=csv_export") and by the "Accept" header of the request. The latter
+  // option can produce multiple candidates.
+  CPP_template(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      vector<ad_utility::MediaType> determineMediaTypes(
+          const ad_utility::url_parser::ParamValueMap& params,
+          const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
   // Determine whether the subtrees and the result should be pinned.
   static std::pair<bool, bool> determineResultPinning(

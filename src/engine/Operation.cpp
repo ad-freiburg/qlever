@@ -572,25 +572,6 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
   return variableToColumnMap_.value();
 }
 
-// _____________________________________________________________________________
-absl::Cleanup<absl::cleanup_internal::Tag, std::function<void()>>
-Operation::resetChildLimitsAndOffsetOnDestruction() {
-  // We estimate that most operations will have 3 or fewer children.
-  absl::InlinedVector<std::pair<QueryExecutionTree*, LimitOffsetClause>, 3>
-      childrenClauses;
-  const auto& children = getChildren();
-  childrenClauses.reserve(children.size());
-  for (QueryExecutionTree* qet : children) {
-    childrenClauses.emplace_back(qet,
-                                 qet->getRootOperation()->getLimitOffset());
-  }
-  return absl::Cleanup{std::function{[original = std::move(childrenClauses)]() {
-    for (auto& [qet, originalLimit] : original) {
-      qet->getRootOperation()->limitOffset_ = originalLimit;
-    }
-  }}};
-}
-
 // ___________________________________________________________________________
 const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
     const {
@@ -687,6 +668,7 @@ std::unique_ptr<Operation> Operation::clone() const {
                      std::back_inserter(visibleVariables));
     result->setSelectedVariablesForSubquery(visibleVariables);
   }
+  result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
@@ -735,4 +717,22 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
     const vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // Returning false does never lead to a wrong result, but it might be
+  // inefficient.
+  if (ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
+        return child->getVariableColumnOrNullopt(variable).has_value();
+      })) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [&variable](const auto* child) {
+    return !child->getVariableColumnOrNullopt(variable).has_value() ||
+           child->getRootOperation()->columnOriginatesFromGraphOrUndef(
+               variable);
+  });
 }

@@ -7,6 +7,14 @@
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
+namespace {
+constexpr std::string_view recomputeMessage =
+    "Cannot re-evaluate child results after applying limits, as the result set "
+    "may have changed (which could result in different limits being applied). "
+    "Cloning is also forbidden, as it would preserve potentially incorrect "
+    "limits.";
+}
+
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
     QueryExecutionContext* executionContext, Children children,
@@ -136,9 +144,6 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   }
-  // Make sure the children are reset back to their initial state after
-  // computing the results.
-  auto cleanup = resetChildLimitsAndOffsetOnDestruction();
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
   LocalVocab staticMergedVocab{};
@@ -248,6 +253,7 @@ CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
 std::pair<std::vector<std::shared_ptr<const Result>>,
           std::shared_ptr<const Result>>
 CartesianProductJoin::calculateSubResults(bool requestLaziness) {
+  AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
   std::vector<std::shared_ptr<const Result>> subResults;
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -266,6 +272,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
     if (limitIfPresent.has_value() && childTree->supportsLimit()) {
       childTree->applyLimit(limitIfPresent.value());
+      forbiddenToRecompute_ = true;
     }
     auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child
@@ -311,71 +318,101 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::Generator
+CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::LazyResult
     CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
                                               R idTables, size_t offset,
                                               size_t limit,
                                               size_t lastTableOffset) const {
-  while (limit > 0) {
-    uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
-    IdTable idTable = writeAllColumns(ql::ranges::ref_view(idTables), offset,
-                                      limitWithChunkSize, lastTableOffset);
-    size_t tableSize = idTable.size();
+  using Lc = Result::IdTableLoopControl;
+  auto get = [self = this, mergedVocab = std::move(mergedVocab),
+              idTables = std::move(idTables), offset, limit,
+              lastTableOffset]() mutable -> Result::IdTableLoopControl {
+    if (limit == 0) {
+      return Lc::makeBreak();
+    }
+    auto limitWithChunkSize = std::min(limit, self->chunkSize_);
+    IdTable idTable =
+        self->writeAllColumns(ql::ranges::ref_view(idTables), offset,
+                              limitWithChunkSize, lastTableOffset);
+    auto tableSize = idTable.size();
     AD_CORRECTNESS_CHECK(tableSize <= limit);
-    if (!idTable.empty()) {
-      offset += tableSize;
-      limit -= tableSize;
-      co_yield {std::move(idTable), mergedVocab.clone()};
+    if (idTable.empty()) {
+      return Lc::makeBreak();
     }
-    if (tableSize < limitWithChunkSize) {
-      break;
+    offset += tableSize;
+    limit -= tableSize;
+    auto makeRes = [&]() {
+      return Result::IdTableVocabPair{std::move(idTable), mergedVocab.clone()};
+    };
+    // If limit was reduced to 0, or the last produced table was smaller
+    // than the remaining limit, then all results have been produced
+    if (limit > 0 && tableSize >= limitWithChunkSize) {
+      // Not the last value
+      return Lc::yieldValue(makeRes());
+    } else {
+      // This value is the last. BreakWithValue to end the loop.
+      return Lc::breakWithValue(makeRes());
     }
-  }
+  };
+  return Result::LazyResult(
+      ad_utility::InputRangeFromLoopControlGet(std::move(get)));
 }
 
 // _____________________________________________________________________________
-Result::Generator CartesianProductJoin::createLazyConsumer(
+Result::LazyResult CartesianProductJoin::createLazyConsumer(
     LocalVocab staticMergedVocab,
-    std::vector<std::shared_ptr<const Result>> subresults,
+    ql::span<const std::shared_ptr<const Result>> subresults,
     std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
-  size_t limit = getLimitOffset().limitOrDefault();
-  size_t offset = getLimitOffset()._offset;
   std::vector<std::reference_wrapper<const IdTable>> idTables;
   idTables.reserve(subresults.size() + 1);
   for (const auto& result : subresults) {
     idTables.emplace_back(result->idTable());
   }
-  size_t lastTableOffset = 0;
-  for (auto& [idTable, localVocab] : lazyResult->idTables()) {
-    if (idTable.empty()) {
-      continue;
+  auto get = [self = this, staticMergedVocab = std::move(staticMergedVocab),
+              limit = getLimitOffset().limitOrDefault(),
+              offset = getLimitOffset()._offset, idTables = std::move(idTables),
+              lastTableOffset = size_t{0}, producedTableSize = size_t{0},
+              idTableOpt = std::optional<Result::IdTableVocabPair>{}](
+                 auto& idTableVocabPair) mutable {
+    // These things have to be done after handling a single input, so we do them
+    // at the beginning of each but the last iteration.
+    if (idTableOpt.has_value()) {
+      idTables.pop_back();
+      lastTableOffset += idTableOpt->idTable_.size();
+      limit -= producedTableSize;
+      offset += producedTableSize;
+      producedTableSize = 0;
     }
+
+    idTableOpt = std::move(idTableVocabPair);
+    auto& [idTable, localVocab] = idTableOpt.value();
+    if (idTable.empty()) {
+      return Result::IdTableLoopControl::makeContinue();
+    }
+
     idTables.emplace_back(idTable);
     localVocab.mergeWith(staticMergedVocab);
-    size_t producedTableSize = 0;
-    for (auto& idTableAndVocab : produceTablesLazily(
-             std::move(localVocab),
-             ql::views::transform(
-                 idTables,
-                 [](const auto& wrapper) -> const IdTable& { return wrapper; }),
-             offset, limit, lastTableOffset)) {
-      producedTableSize += idTableAndVocab.idTable_.size();
-      co_yield idTableAndVocab;
-    }
-    AD_CORRECTNESS_CHECK(limit >= producedTableSize);
-    limit -= producedTableSize;
-    if (limit == 0) {
-      break;
-    }
-    offset += producedTableSize;
-    lastTableOffset += idTable.size();
-    idTables.pop_back();
-  }
+
+    return Result::IdTableLoopControl::yieldAll(
+        ad_utility::InputRangeTypeErased{
+            ad_utility::OwningView{self->produceTablesLazily(
+                std::move(localVocab),
+                ql::views::transform(idTables,
+                                     ad_utility::staticCast<const IdTable&>),
+                offset, limit, lastTableOffset)} |
+            ql::views::transform([&producedTableSize](auto& tableAndVocab) {
+              producedTableSize += tableAndVocab.idTable_.size();
+              return std::move(tableAndVocab);
+            })});
+  };
+  return Result::LazyResult(ad_utility::CachingContinuableTransformInputRange(
+      lazyResult->idTables(), std::move(get)));
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
+  AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
   Children copy;
   copy.reserve(children_.size());
   for (const auto& operation : children_) {

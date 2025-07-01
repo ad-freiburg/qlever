@@ -10,7 +10,6 @@
 
 #include "index/LocatedTriples.h"
 
-#include "absl/strings/str_join.h"
 #include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"

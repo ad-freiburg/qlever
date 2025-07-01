@@ -5,21 +5,23 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
 #include "parser/GeoPoint.h"
@@ -70,6 +72,11 @@ auto idOrLitOrStringVec =
       }
       return result;
     };
+
+auto geoLit = [](std::string_view content) {
+  return IdOrLiteralOrIri{
+      lit(content, "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")};
+};
 
 // All the helper functions `testUnaryExpression` etc. below internally evaluate
 // the given expressions using the `TestContext` class, so it is possible to use
@@ -402,8 +409,10 @@ TEST(SparqlExpression, arithmeticOperators) {
   V<Id> bMinusD{{D(0), D(2.0), D(naN), D(1)}, alloc};
   V<Id> dMinusB{{D(0), D(-2.0), D(naN), D(-1)}, alloc};
   V<Id> bTimesD{{D(1.0), D(-0.0), D(naN), D(0.0)}, alloc};
-  V<Id> bByD{{D(1.0), D(-0.0), D(naN), D(inf)}, alloc};
-  V<Id> dByB{{D(1.0), D(negInf), D(naN), D(0)}, alloc};
+  // Division by zero is `UNDEF`, to change this behavior a runtime parameter
+  // can be set. This is tested explicitly below.
+  V<Id> bByD{{D(1.0), D(-0.0), U, U}, alloc};
+  V<Id> dByB{{D(1.0), U, U, D(0)}, alloc};
 
   testPlus(bPlusD, b, d);
   testMinus(bMinusD, b, d);
@@ -443,6 +452,24 @@ TEST(SparqlExpression, arithmeticOperators) {
   testDivide(by2, mixed, D(2));
   testMultiply(by2, mixed, D(0.5));
   testDivide(times13, mixed, D(1.0 / 1.3));
+
+  // Division by zero is either `UNDEF` or `NaN/infinity`, depending on a
+  // runtime parameter.
+  V<Id> undef{{U, U, U, U}, alloc};
+  V<Id> nanAndInf{{D(naN), D(naN), D(inf), D(negInf)}, alloc};
+  V<Id> divByZeroInputsDouble{{D(-0.0), D(0), D(1.3), D(-1.2)}, alloc};
+  V<Id> divByZeroInputsInt{{I(0), I(0), I(1), I(-1)}, alloc};
+
+  testDivide(undef, divByZeroInputsDouble, I(0));
+  testDivide(undef, divByZeroInputsInt, I(0));
+  testDivide(undef, divByZeroInputsDouble, D(0));
+  testDivide(undef, divByZeroInputsInt, D(0));
+
+  auto cleanup = setRuntimeParameterForTest<"division-by-zero-is-undef">(false);
+  testDivide(nanAndInf, divByZeroInputsDouble, I(0));
+  testDivide(nanAndInf, divByZeroInputsInt, I(0));
+  testDivide(nanAndInf, divByZeroInputsDouble, D(0));
+  testDivide(nanAndInf, divByZeroInputsInt, D(0));
 }
 
 // Test that the unary expression that is specified by the `makeFunction` yields
@@ -610,8 +637,10 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("1"), lit("2"), lit("3")});
   checkStr(Ids{D(-1.0), D(1.0), D(2.34)},
            IdOrLiteralOrIriVec{lit("-1"), lit("1"), lit("2.34")});
-  checkStr(Ids{B(true), B(false), B(true)},
-           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
+  checkStr(Ids{B(true), B(false), Id::makeBoolFromZeroOrOne(true),
+               Id::makeBoolFromZeroOrOne(false)},
+           IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true"),
+                               lit("false")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
   checkStr(IdOrLiteralOrIriVec{iriref("<http://example.org/str>"),
@@ -766,16 +795,18 @@ TEST(SparqlExpression, binaryStringOperations) {
   checkStrAfter(
       IdOrLiteralOrIriVec{lit("bc"), lit("abc"), lit("c", "@en"), lit(""),
                           lit("abc", "@en"), lit("abc", "@en"), lit(""),
-                          lit("abc", "@en")},
+                          lit("abc", "@en"), U, U},
       IdOrLiteralOrIriVec{
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
           lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+          lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"), lit("abc"),
+          lit("abc", "@en")},
       IdOrLiteralOrIriVec{
           lit("a"), lit(""), lit("ab"), lit("z"), lit(""), lit("", "@en"),
           lit("z", "@en"),
-          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+          lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+          lit("a", "@en"), lit("a", "@de")});
 
   checkStrBefore(
       S({U, U, "", "", "", "", "Hä", "", "", "Hä"}),
@@ -783,16 +814,18 @@ TEST(SparqlExpression, binaryStringOperations) {
       S({"", U, "", "x", "", "ullo", "ll", "Hällo", "Hällox", "l"}));
   checkStrBefore(IdOrLiteralOrIriVec{lit("a"), lit(""), lit("a", "@en"),
                                      lit(""), lit("", "@en"), lit("", "@en"),
-                                     lit(""), lit("", "@en")},
+                                     lit(""), lit("", "@en"), U, U},
                  IdOrLiteralOrIriVec{
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "^^<http://www.w3.org/2001/XMLSchema#string>"),
                      lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
-                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en")},
+                     lit("abc", "@en"), lit("abc", "@en"), lit("abc", "@en"),
+                     lit("abc"), lit("abc", "@en")},
                  IdOrLiteralOrIriVec{
                      lit("bc"), lit(""), lit("bc"), lit("z"), lit(""),
                      lit("", "@en"), lit("z", "@en"),
-                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>")});
+                     lit("", "^^<http://www.w3.org/2001/XMLSchema#string>"),
+                     lit("bc", "@en"), lit("bc", "@de")});
 }
 
 // ______________________________________________________________________________
@@ -1018,25 +1051,27 @@ TEST(SparqlExpression, customNumericFunctions) {
 TEST(SparqlExpression, isSomethingFunctions) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
+  Id geo = Id::makeFromGeoPoint(GeoPoint{0, 0});
+  Id date = Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-06-13"));
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
   Id blank2 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12));
   Id localLiteral = testContext().notInVocabA;
 
-  IdOrLiteralOrIriVec testIdOrStrings =
-      IdOrLiteralOrIriVec{iriref("<i>"), lit("\"l\""), blank2, iri,  literal,
-                          blank,         localLiteral, I(42),  D(1), U};
-  testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
-                                           Ids{T, F, F, T, F, F, F, F, F, F});
-  testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
-                                             Ids{F, F, T, F, F, T, F, F, F, F});
+  IdOrLiteralOrIriVec testIdOrStrings = IdOrLiteralOrIriVec{
+      iriref("<i>"), lit("\"l\""), blank2, iri, literal, blank, localLiteral,
+      I(42),         D(1),         F,      geo, date,    U};
+  testUnaryExpression<makeIsIriExpression>(
+      testIdOrStrings, Ids{T, F, F, T, F, F, F, F, F, F, F, F, F});
+  testUnaryExpression<makeIsBlankExpression>(
+      testIdOrStrings, Ids{F, F, T, F, F, T, F, F, F, F, F, F, F});
   testUnaryExpression<makeIsLiteralExpression>(
-      testIdOrStrings, Ids{F, T, F, F, T, F, T, F, F, F});
+      testIdOrStrings, Ids{F, T, F, F, T, F, T, T, T, T, T, T, F});
   testUnaryExpression<makeIsNumericExpression>(
-      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
-  testUnaryExpression<makeBoundExpression>(testIdOrStrings,
-                                           Ids{T, T, T, T, T, T, T, T, T, F});
+      testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F, F, F, F});
+  testUnaryExpression<makeBoundExpression>(
+      testIdOrStrings, Ids{T, T, T, T, T, T, T, T, T, T, T, T, F});
 }
 
 // ____________________________________________________________________________
@@ -1301,7 +1336,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
+  auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
+  auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1320,15 +1357,29 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
+  checkCentroid(v, v);
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkCentroid(IdOrLiteralOrIri{lit("NotAPoint")}, U);
   checkDist(U, v, IdOrLiteralOrIri{I(12)});
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
   checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
+
+  auto polygonCentroid = ValueId::makeFromGeoPoint(GeoPoint(3, 3));
+  checkCentroid(IdOrLiteralOrIri{lit(
+                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                polygonCentroid);
+
+  checkEnvelope(
+      IdOrLiteralOrIriVec{U, D(1.0), ValueId::makeFromGeoPoint({4, 2}),
+                          geoLit("LINESTRING(2 4, 8 8)")},
+      IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
+                          geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
 }
 
 // ________________________________________________________________________________________
@@ -1339,8 +1390,8 @@ TEST(SparqlExpression, ifAndCoalesce) {
   const auto T = Id::makeFromBool(true);
   const auto F = Id::makeFromBool(false);
 
-  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), "vier", "fünf"}),
-          // UNDEF and the empty string are considered to be `false`.
+  checkIf(idOrLitOrStringVec({I(0), "eins", I(2), I(3), U, "fünf"}),
+          // The empty string is considered to be `false`.
           std::tuple{idOrLitOrStringVec({T, F, T, "true", U, ""}),
                      Ids{I(0), I(1), I(2), I(3), I(4), I(5)},
                      idOrLitOrStringVec(

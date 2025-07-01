@@ -466,7 +466,7 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
       {1, 11, 102, 1000, 10001, 100001},
   });
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 6);
+  auto materializedResult = aggregateTables(result.idTables(), 6);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -514,7 +514,7 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   fillWithVocabValue(2, 12);
   reference.insertAtEnd(bigTable);
 
-  auto materializedResult = aggregateTables(std::move(result.idTables()), 4);
+  auto materializedResult = aggregateTables(result.idTables(), 4);
   EXPECT_EQ(
       materializedResult.first,
       trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
@@ -591,7 +591,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 
@@ -614,7 +614,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
 
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
-  auto& generator = result.idTables();
+  auto generator = result.idTables();
   ASSERT_EQ(generator.begin(), generator.end());
 }
 
@@ -686,5 +686,60 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
     }
     EXPECT_THAT(actualSizeEstimates,
                 ::testing::ElementsAre(0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = getQec();
+  // Without supported limit it should always work
+  {
+    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{3, 4}}),
+        Vars{Variable{"?x"}, std::nullopt}));
+
+    CartesianProductJoin join{qec, std::move(subtrees)};
+
+    // Should work with and without limit
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    join.applyLimitOffset({1});
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+  }
+  // With supported limit it should stop working the second time
+  {
+    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{3, 4}}),
+        Vars{Variable{"?x"}, std::nullopt}, true));
+
+    CartesianProductJoin join{qec, std::move(subtrees)};
+
+    // Should work without limit
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    // Should not work with limit
+    join.applyLimitOffset({1});
+
+    EXPECT_NO_THROW(join.clone());
+    EXPECT_NO_THROW(join.computeResultOnlyForTesting());
+
+    EXPECT_THROW(join.clone(), ad_utility::Exception);
+    EXPECT_THROW(join.computeResultOnlyForTesting(), ad_utility::Exception);
   }
 }

@@ -4,6 +4,8 @@
 
 #include "engine/Describe.h"
 
+#include <absl/strings/str_join.h>
+
 #include "../../test/engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -50,7 +52,7 @@ string Describe::getCacheKeyImpl() const {
   // `subtree_`. However, the named graphs only determine the result for
   // `subtree_` (the resources to be described), whereas the default graphs
   // also determine which triples for these resources become part of the result.
-  const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
+  const auto& defaultGraphs = describe_.datasetClauses_.activeDefaultGraphs();
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
@@ -162,7 +164,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), Permutation::SPO, triple,
-      describe_.datasetClauses_.defaultGraphs_);
+      describe_.datasetClauses_.activeDefaultGraphs());
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
   auto join = ad_utility::makeExecutionTree<Join>(
