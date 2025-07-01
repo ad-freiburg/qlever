@@ -5,6 +5,7 @@
 #include "parser/data/Variable.h"
 
 #include <ctre-unicode.hpp>
+#include <unicode/uchar.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
@@ -110,11 +111,32 @@ bool Variable::isValidVariableName(std::string_view var) {
 // _____________________________________________________________________________
 void Variable::appendEscapedWord(std::string_view word,
                                  std::string& target) const {
-  for (char c : word) {
-    if (isalpha(static_cast<unsigned char>(c))) {
-      target += c;
+  const char* ptr = word.data();
+  const char* end = word.data() + word.size();
+  
+  while (ptr < end) {
+    // For ASCII characters, use fast path
+    if (static_cast<unsigned char>(*ptr) < 128) {
+      if (isalpha(static_cast<unsigned char>(*ptr))) {
+        target += *ptr;
+      } else {
+        absl::StrAppend(&target, "_", std::to_string(*ptr), "_");
+      }
+      ptr++;
     } else {
-      absl::StrAppend(&target, "_", std::to_string(c), "_");
+      // For non-ASCII characters, use ICU to properly handle Unicode
+      UChar32 codePoint;
+      int32_t i = 0;
+      U8_NEXT_UNSAFE(reinterpret_cast<const uint8_t*>(ptr), i, codePoint);
+      
+      if (u_isalpha(codePoint)) {
+        // Keep Unicode letters as-is
+        target.append(ptr, i);
+      } else {
+        // Convert non-letters to numeric representation
+        absl::StrAppend(&target, "_", static_cast<int32_t>(codePoint), "_");
+      }
+      ptr += i;
     }
   }
 }

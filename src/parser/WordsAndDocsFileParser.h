@@ -8,6 +8,7 @@
 
 #include <absl/strings/str_split.h>
 #include <unicode/locid.h>
+#include <unicode/uchar.h>
 
 #include <fstream>
 #include <string>
@@ -99,12 +100,58 @@ struct DocsFileLine {
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
 // The `Find` function returns the next delimiter in `text` after the given
 // `pos` or an empty substring if there is no next delimiter.
+// This version properly handles Unicode characters using ICU.
 struct LiteralsTokenizationDelimiter {
   absl::string_view Find(absl::string_view text, size_t pos) const {
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
-    auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
-    if (found == text.end()) return text.substr(text.size());
-    return {found, found + 1};
+    auto isWordChar = [](const char* ptr, const char* end) -> bool {
+      if (ptr >= end) return false;
+      
+      // For ASCII characters, use fast path
+      if (static_cast<unsigned char>(*ptr) < 128) {
+        return std::isalnum(*ptr);
+      }
+      
+      // For non-ASCII characters, use ICU to properly handle Unicode
+      UChar32 codePoint;
+      int32_t i = 0;
+      U8_NEXT_UNSAFE(reinterpret_cast<const uint8_t*>(ptr), i, codePoint);
+      
+      // Check if we have enough bytes for this character
+      if (ptr + i > end) return false;
+      
+      return u_isalnum(codePoint);
+    };
+    
+    const char* current = text.data() + pos;
+    const char* textEnd = text.data() + text.size();
+    
+    // Find the first non-word character
+    while (current < textEnd && isWordChar(current, textEnd)) {
+      // Skip to next character (UTF-8 aware)
+      if (static_cast<unsigned char>(*current) < 128) {
+        current++;
+      } else {
+        int32_t i = 0;
+        U8_FWD_1_UNSAFE(reinterpret_cast<const uint8_t*>(current), i);
+        current += i;
+      }
+    }
+    
+    if (current >= textEnd) {
+      return text.substr(text.size());
+    }
+    
+    // Return one character (which might be multi-byte for Unicode)
+    const char* delimiterStart = current;
+    if (static_cast<unsigned char>(*current) < 128) {
+      current++;
+    } else {
+      int32_t i = 0;
+      U8_FWD_1_UNSAFE(reinterpret_cast<const uint8_t*>(current), i);
+      current += i;
+    }
+    
+    return absl::string_view(delimiterStart, current - delimiterStart);
   }
 };
 
