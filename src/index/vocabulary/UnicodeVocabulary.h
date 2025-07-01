@@ -5,24 +5,8 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
-#include <type_traits>
-
-#include "concepts/concepts.hpp"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
-
-// Only the `SplitVocabulary` currently needs a special handling for
-// `getPositionOfWord` (this includes the `PolymorphicVocabulary` which may
-// dynamically hold a `SplitVocabulary`)
-template <typename T>
-CPP_concept HasSpecialGetPositionOfWord =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary>;
-
-// As a safeguard for the future: Concept that a vocabulary does NOT have a
-// special handling for `getPositionOfWord`.
-template <typename T>
-CPP_concept DefaultGetPositionOfWord = std::is_same_v<T, VocabularyInMemory>;
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -81,18 +65,19 @@ class UnicodeVocabulary {
   // word, not a prefix. Special handling therefore should be applied in the
   // presence of a `SplitVocabulary`.
   template <typename T>
-  std::pair<uint64_t, uint64_t> getPositionOfWord(const T& word) const {
+  std::optional<std::pair<uint64_t, uint64_t>> getPositionOfWord(
+      const T& word) const {
     auto actualComparator = [this](const auto& a, const auto& b) {
       return _comparator(a, b, SortLevel::TOTAL);
     };
     if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
       return _underlyingVocabulary.getPositionOfWord(word, actualComparator);
     } else {
-      // TODO<ullingerc>
-      static_assert(DefaultGetPositionOfWord<UnderlyingVocabulary>);
+      // If this assertion fails, see `PolymorphicVocabulary.getPositionOfWord`
+      // for details.
+      static_assert(HasDefaultGetPositionOfWord<UnderlyingVocabulary>);
       return _underlyingVocabulary.lower_bound(word, actualComparator)
-          .positionOfWord(word)
-          .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
+          .positionOfWord(word);
     }
   }
 
