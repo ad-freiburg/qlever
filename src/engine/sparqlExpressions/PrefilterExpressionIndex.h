@@ -130,13 +130,8 @@ class PrefilterExpression {
   // potentially incomplete first/last `CompressedBlockMetadata` values in input
   // are handled automatically. They are stripped at the beginning and added
   // again when the evaluation procedure was successfully performed.
-  //
-  // TODO: `evaluate` should also return `BlockMetadataRanges` to avoid deep
-  // copies. This requires additional changes in `IndexScan` and
-  // `CompressedRelation`.
-  std::vector<CompressedBlockMetadata> evaluate(const Vocab& vocab,
-                                                BlockMetadataSpan blockRange,
-                                                size_t evaluationColumn) const;
+  BlockMetadataRanges evaluate(const Vocab& vocab, BlockMetadataSpan blockRange,
+                               size_t evaluationColumn) const;
 
   // `evaluateImpl` is internally used for the actual pre-filter procedure.
   // `ValueIdSubrange idRange` enables indirect access to all `ValueId`s at
@@ -386,15 +381,14 @@ using OrExpression = prefilterExpressions::LogicalExpression<
 namespace detail {
 //______________________________________________________________________________
 namespace logicalOps {
-// `This internal helper function is only exposed for unit tests!`
-// (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
-// (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
-// (2) `mergeRelevantBlockItRanges<false>` returns the `intersection`
-// (`logical-and &&)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges
-// r2`.
-template <bool GetUnion>
-BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
-                                               const BlockMetadataRanges& r2);
+
+// Performs a `logical-And` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getIntersectionOfBlockRanges(const BlockMetadataRanges& r1,
+                                                 const BlockMetadataRanges& r2);
+// Performs a `logical-Or` on across two given `BlockMetadataRanges`.
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2);
+
 }  // namespace logicalOps
 
 //______________________________________________________________________________
