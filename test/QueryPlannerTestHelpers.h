@@ -517,8 +517,9 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 
         // Construct index scan
         SparqlTripleSimple triple{{*vars[0]}, {equalTo}, {*vars[1]}};
-        SubtreePlan plan{_qec, std::make_shared<::IndexScan>(
-                                   _qec, Permutation::Enum::PSO, triple)};
+        SubtreePlan plan{getQec(),
+                         std::make_shared<::IndexScan>(
+                             getQec(), Permutation::Enum::PSO, triple)};
 
         // Set marker for included filter
         plan._idsOfIncludedFilters |= 1ull << i;
