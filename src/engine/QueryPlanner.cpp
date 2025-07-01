@@ -39,6 +39,7 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -2661,14 +2662,16 @@ void QueryPlanner::QueryGraph::setupGraph(
               AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
             }
           }
-          AD_CORRECTNESS_CHECK(substituteVariables.size() ==
-                               varsToBeConnected.size());
 
           if (varsToBeConnected.size() < 2) {
             // There is no variables to connect, because this filter has one or
             // zero variables.
             continue;
           }
+
+          AD_CORRECTNESS_CHECK(substituteVariables.size() ==
+                               varsToBeConnected.size());
+
           auto first = varsToBeConnected[0];
           for (size_t i = 1; i < varsToBeConnected.size(); i++) {
             auto second = varsToBeConnected[i];
