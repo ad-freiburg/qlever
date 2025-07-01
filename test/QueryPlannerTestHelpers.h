@@ -40,8 +40,11 @@
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
+#include "parser/Iri.h"
 #include "parser/SparqlParser.h"
+#include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -496,13 +499,32 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
       const std::vector<SparqlFilter>& filters) const override {
     FiltersAndOptionalSubstitutes plans;
     plans.reserve(filters.size());
-    for (const auto& filterExpression : filters) {
-      const auto& expr = *filterExpression.expression_.getPimpl();
+
+    const auto equalTo =
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            "equal-to");
+
+    for (const auto& [i, filterExpression] :
+         ::ranges::views::enumerate(filters)) {
       using namespace sparqlExpression;
-      if (dynamic_cast<const StringLiteralExpression*>(&expr) != nullptr) {
-        plans.emplace_back(
-            filterExpression,
-            SubtreePlan{_qec, std::make_shared<NeutralElementOperation>(_qec)});
+      auto eqExpr = dynamic_cast<const EqualExpression*>(
+          filterExpression.expression_.getPimpl());
+
+      // Substitute `?a = ?b` with `?a <equal-to> ?b`
+      if (eqExpr != nullptr) {
+        auto vars = eqExpr->containedVariables();
+        AD_CORRECTNESS_CHECK(vars.size() == 2);
+
+        // Construct index scan
+        SparqlTripleSimple triple{{*vars[0]}, {equalTo}, {*vars[1]}};
+        SubtreePlan plan{_qec, std::make_shared<::IndexScan>(
+                                   _qec, Permutation::Enum::PSO, triple)};
+
+        // Set marker for included filter
+        plan._idsOfIncludedFilters |= 1ull << i;
+        plan._containsFilterSubstitute = true;
+
+        plans.emplace_back(filterExpression, plan);
       } else {
         plans.emplace_back(filterExpression, std::nullopt);
       }

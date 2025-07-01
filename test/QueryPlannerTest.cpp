@@ -4479,7 +4479,13 @@ TEST(QueryPlanner, filtersWithUnboundVariables) {
 // _____________________________________________________________________________
 TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
   // Test the query planner's ability to substitute filters with alternative
-  // subtree plans using the `QueryPlannerWithMockFilterSubstitute` class.
-  /* h::expect<h::QueryPlannerWithMockFilterSubstitute>(
-      "SELECT * { FILTER(\"Test\") }", h::NeutralElement()); */
+  // subtree plans using the `QueryPlannerWithMockFilterSubstitute` class. It
+  // replaces filters of the form `FILTER(?a = ?b)` with `?a <equal-to> ?b` to
+  // connect otherwise unconnected components.
+  auto scan = h::IndexScanFromStrings;
+  h::expect<h::QueryPlannerWithMockFilterSubstitute>(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::Join(scan("?a", "<b>", "?c"),
+              h::Sort(h::Join(scan("?b", "<c>", "?d"),
+                              h::Sort(scan("?a", "<equal-to>", "?b"))))));
 }
