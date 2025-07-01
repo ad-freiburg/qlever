@@ -4504,11 +4504,6 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
 
   h::expect<h::QueryPlannerWithMockFilterSubstitute>(
       "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
-      ::testing::AnyOf(
-          h::Join(scan("?a", "<b>", "?c"),
-                  h::Sort(h::Join(scan("?b", "<c>", "?d"),
-                                  h::Sort(scan("?a", "<equal-to>", "?b"))))),
-          h::Join(scan("?b", "<c>", "?d"),
-                  h::Sort(h::Join(scan("?a", "<b>", "?c"),
-                                  scan("?a", "<equal-to>", "?b"))))));
+      h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
+                        scan("?a", "<equal-to>", "?b")));
 }
