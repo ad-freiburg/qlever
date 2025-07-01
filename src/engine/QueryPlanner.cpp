@@ -1294,7 +1294,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
   }
 
   // If a substitute is contained, do not use the triple graph. This is because
-  // a substitute connects triples that are otherwise unconnected but the
+  // a substitute might connect triples that are otherwise unconnected but the
   // connection is not part of the triple graph.
   if (!tg || a.containsFilterSubstitute_ || b.containsFilterSubstitute_) {
     return getJoinColumns(a, b);
@@ -2633,7 +2633,7 @@ void QueryPlanner::QueryGraph::setupGraph(
           }
           absl::InlinedVector<const Variable*, 4> varsToBeConnected;
 
-          auto substituteVariables =
+          const auto& substituteVariables =
               substitute.value()
                   ._qet->getRootOperation()
                   ->getExternallyVisibleVariableColumns();
@@ -2805,8 +2805,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       // been applied
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan.containsFilterSubstitute_ =
-            a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
+        plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
