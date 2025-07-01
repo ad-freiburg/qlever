@@ -141,8 +141,8 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
-  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
-  // GeoVocabulary.
+  // Retrieve `GeometryInfo` from an underlying vocabulary, if it is a
+  // `GeoVocabulary`.
   std::optional<ad_utility::GeometryInfo> getGeoInfo(uint64_t index) const {
     return std::visit(
         [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
