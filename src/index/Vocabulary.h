@@ -224,7 +224,8 @@ class Vocabulary {
   // The position where a word is stored or would be stored if it does not
   // exist. Unlike `lower_bound` and `upper_bound`, this function works with
   // full words, not prefixes. Currently used for `LocalVocabEntry`.
-  std::pair<IndexType, IndexType> getBoundsForWord(std::string_view word) const;
+  std::pair<IndexType, IndexType> getPositionOfWord(
+      std::string_view word) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
