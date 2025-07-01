@@ -14,13 +14,14 @@
 #include "util/File.h"
 #include "util/GeometryInfo.h"
 
-using GeometryInfo = ad_utility::GeometryInfo;
+using ad_utility::GeometryInfo;
 
-// A GeoVocabulary holds Well-Known Text literals. In contrast to the regular
-// vocabulary classes it does not only store the strings. Instead it stores both
-// preprocessed and original forms of its input words. Preprocessing includes
-// for example the computation of bounding boxes for accelerated spatial
-// queries.
+// A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
+// regular vocabulary classes it does not only store the strings. Instead it
+// stores both preprocessed and original forms of its input words. Preprocessing
+// includes for example the computation of bounding boxes for accelerated
+// spatial queries. Note: A `GeoVocabulary` may only store WKT literals,
+// therefore it should be used as part of a `SplitVocabulary`.
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
@@ -79,13 +80,13 @@ class GeoVocabulary {
 
   class WordWriter : public WordWriterBase {
    private:
-    using UV = UnderlyingVocabulary;
-    using WW = std::unique_ptr<typename UnderlyingVocabulary::WordWriter>;
-    WW underlyingWordWriter_;
+    std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
+        underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
 
    public:
-    WordWriter(const UV& vocabulary, const std::string& filename);
+    WordWriter(const UnderlyingVocabulary& vocabulary,
+               const std::string& filename);
 
     // Add the next literal to the vocabulary, precompute additional information
     // and return the literal's new index.
