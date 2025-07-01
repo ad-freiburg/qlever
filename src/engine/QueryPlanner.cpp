@@ -2632,11 +2632,21 @@ void QueryPlanner::QueryGraph::setupGraph(
             continue;
           }
           absl::InlinedVector<const Variable*, 4> varsToBeConnected;
+
+          auto substituteVariables =
+              substitute.value()
+                  ._qet->getRootOperation()
+                  ->getExternallyVisibleVariableColumns();
+
           for (auto var : filter.expression_.containedVariables()) {
             if (varToNode.contains(*var)) {
               varsToBeConnected.push_back(var);
+              AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
             }
           }
+          AD_CORRECTNESS_CHECK(substituteVariables.size() ==
+                               varsToBeConnected.size());
+
           if (varsToBeConnected.size() < 2) {
             // There is no variables to connect, because this filter has one or
             // zero variables.
