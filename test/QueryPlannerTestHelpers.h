@@ -522,7 +522,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
 
         // Set marker for included filter
         plan._idsOfIncludedFilters |= 1ull << i;
-        plan._containsFilterSubstitute = true;
+        plan.containsFilterSubstitute_ = true;
 
         plans.emplace_back(filterExpression, plan);
       } else {

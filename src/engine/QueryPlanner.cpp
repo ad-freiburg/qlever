@@ -92,8 +92,8 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
-  target._containsFilterSubstitute =
-      a._containsFilterSubstitute || b._containsFilterSubstitute;
+  target.containsFilterSubstitute_ =
+      a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
 }
 
 // Helper function that assigns the node, filter and text limit ids from
@@ -103,7 +103,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedNodes = source._idsOfIncludedNodes;
   target._idsOfIncludedFilters = source._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
-  target._containsFilterSubstitute = source._containsFilterSubstitute;
+  target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
 }
 }  // namespace
 
@@ -1296,7 +1296,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
   // If a substitute is contained, do not use the triple graph. This is because
   // a substitute connects triples that are otherwise unconnected but the
   // connection is not part of the triple graph.
-  if (!tg || a._containsFilterSubstitute || b._containsFilterSubstitute) {
+  if (!tg || a.containsFilterSubstitute_ || b.containsFilterSubstitute_) {
     return getJoinColumns(a, b);
   }
 
@@ -1349,7 +1349,7 @@ string QueryPlanner::getPruningKey(
   os << " t: ";
   os << ' ' << plan.idsOfIncludedTextLimits_;
   os << " s: ";
-  os << ' ' << plan._containsFilterSubstitute;
+  os << ' ' << plan.containsFilterSubstitute_;
 
   return std::move(os).str();
 }
@@ -1405,7 +1405,7 @@ void QueryPlanner::applyFiltersIfPossible(
         for (auto& newPlan : substPlans) {
           mergeSubtreePlanIds(newPlan, newPlan, plan);
           newPlan.type = plan.type;
-          newPlan._containsFilterSubstitute = true;
+          newPlan.containsFilterSubstitute_ = true;
           addedPlans.push_back(newPlan);
         }
         continue;
@@ -1483,7 +1483,7 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
       newPlan.idsOfIncludedTextLimits_ = plan.idsOfIncludedTextLimits_;
       newPlan.idsOfIncludedTextLimits_ |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
-      newPlan._containsFilterSubstitute = plan._containsFilterSubstitute;
+      newPlan.containsFilterSubstitute_ = plan.containsFilterSubstitute_;
       newPlan.type = plan.type;
       i++;
       if (replace) {
@@ -1790,7 +1790,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
         nodes |= plan._idsOfIncludedNodes;
         filterIds |= plan._idsOfIncludedFilters;
         textLimitIds |= plan.idsOfIncludedTextLimits_;
-        containsFilterSubstitute |= plan._containsFilterSubstitute;
+        containsFilterSubstitute |= plan.containsFilterSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
   result.at(0).push_back(
@@ -1799,7 +1799,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
-  plan._containsFilterSubstitute = containsFilterSubstitute;
+  plan.containsFilterSubstitute_ = containsFilterSubstitute;
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
@@ -2805,8 +2805,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       // been applied
       for (auto& plan : vec) {
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._containsFilterSubstitute =
-            a._containsFilterSubstitute || b._containsFilterSubstitute;
+        plan.containsFilterSubstitute_ =
+            a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
       }
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
@@ -2964,7 +2964,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
-    plan._containsFilterSubstitute = a._containsFilterSubstitute;
+    plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
     candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case where the BIND clause is the first clause (which is
