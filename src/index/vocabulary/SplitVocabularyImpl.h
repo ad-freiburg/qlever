@@ -113,8 +113,8 @@ template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
 std::optional<ad_utility::GeometryInfo>
 SplitVocabulary<SF, SFN, S...>::getGeoInfo(uint64_t indexWithMarker) const {
-  // Visit the underlying vocabulary and retrieve the requested GeometryInfo if
-  // it is a GeoVocabulary.
+  // Visit the underlying vocabulary and retrieve the requested `GeometryInfo`
+  // if it is a `GeoVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
   return std::visit(
       [&](const auto& v) -> std::optional<ad_utility::GeometryInfo> {
