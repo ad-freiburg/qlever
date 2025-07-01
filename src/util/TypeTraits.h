@@ -70,10 +70,6 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
   using type = std::variant<Ts...>;
 };
 
-// Test if type T is contained in variadic type List
-template <typename T, typename... List>
-struct TypeContainedImpl : std::disjunction<std::is_same<T, List>...> {};
-
 // Implementation for Last
 template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};
