@@ -46,9 +46,6 @@ double kilometerToUnit(double kilometers,
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
 
-const auto wktLiteralIri =
-    triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
-
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
@@ -118,8 +115,11 @@ class WktEnvelope {
       return ValueId::makeUndefined();
     }
     using namespace triple_component;
+    static const auto wktLiteralIri =
+        Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
+
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
-    lit.addDatatype(detail::wktLiteralIri);
+    lit.addDatatype(wktLiteralIri);
     return {LiteralOrIri{lit}};
   }
 };
