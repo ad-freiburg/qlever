@@ -51,8 +51,8 @@ class WordAndIndex {
   // `InternalExternalVocabulary`.
   std::optional<uint64_t>& previousIndex() { return previousIndex_; }
 
-  // Assuming this
-  // TODO<ullingerc> explanation
+  // Assuming this object holds a `lower_bound` result, check whether the word
+  // is stored at this position and return an upper bound accordingly.
   template <typename T>
   std::optional<std::pair<uint64_t, uint64_t>> positionOfWord(
       const T& wordToCheck) {
