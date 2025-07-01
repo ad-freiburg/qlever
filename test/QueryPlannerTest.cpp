@@ -4502,6 +4502,10 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
   //                    |
   //         SCAN ?a <equal-to> ?b      <-- Substituted FILTER to PSO scan
 
+  h::expect(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::Filter("?a = ?b", h::CartesianProductJoin(scan("?a", "<b>", "?c"),
+                                                   scan("?b", "<c>", "?d"))));
   h::expect<h::QueryPlannerWithMockFilterSubstitute>(
       "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
       h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
