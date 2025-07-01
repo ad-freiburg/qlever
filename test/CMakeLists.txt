@@ -256,6 +256,8 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
+addLinkAndDiscoverTest(SplitVocabularyTest index)
+
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
@@ -463,3 +465,5 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
+
+addLinkAndDiscoverTest(GeometryInfoTest util)

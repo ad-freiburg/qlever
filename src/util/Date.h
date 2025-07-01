@@ -323,6 +323,10 @@ class Date {
   // `xsd:dateTime` pointing to the January 1st, 00:00 hours. (This is the
   // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
+
+  // Acquire the year, but padded up to 4 digits with a leading `-` if negative.
+  // For example: 100 -> "0100" and -100 -> "-0100".
+  std::string getFormattedYear() const;
 };
 
 #endif  // QLEVER_DATE_H
