@@ -12,6 +12,7 @@
 #include <optional>
 #include <thread>
 
+#include "jthread.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
@@ -19,6 +20,40 @@
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 
+namespace {
+using ad_utility::data_structures::ThreadSafeQueue;
+
+template <typename Range>
+struct AsyncStreamGeneratorCore {
+  using value_type = typename Range::value_type;
+  AsyncStreamGeneratorCore(Range range, const size_t bufferLimit)
+      : queue{bufferLimit},
+        exception{nullptr},
+        thread{&AsyncStreamGeneratorCore::thread_function, std::move(range),
+               std::ref(queue), std::ref(exception)} {}
+
+  std::optional<value_type> get() { return queue.pop(); }
+
+  static void thread_function(Range range, ThreadSafeQueue<value_type>& queue,
+                              std::exception_ptr& exception_ptr) {
+    try {
+      for (auto& value : range) {
+        if (!queue.push(std::move(value))) {
+          return;
+        }
+      }
+    } catch (...) {
+      exception_ptr = std::current_exception();
+    }
+    queue.finish();
+  }
+
+  ThreadSafeQueue<value_type> queue;
+  std::exception_ptr exception;
+  ad_utility::JThread thread;
+};
+
+}  // namespace
 namespace ad_utility::streams {
 
 using ad_utility::data_structures::ThreadSafeQueue;
@@ -94,38 +129,12 @@ ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsyncV2(
 
   struct Generator : public ad_utility::InputRangeFromGet<value_type> {
     Generator(Range range, const size_t bufferLimit)
-        : queue{std::make_shared<ThreadSafeQueue<value_type>>(bufferLimit)},
-          exception{std::make_shared<std::exception_ptr>(nullptr)},
-          thread{std::shared_ptr<std::thread>(
-              new std::thread(&Generator::thread_function, std::move(range),
-                              queue, exception),
-              &Generator::threadCleanup)} {}
+        : core{std::make_unique<AsyncStreamGeneratorCore<Range>>(
+              std::move(range), bufferLimit)} {}
 
-    std::optional<value_type> get() override { return queue->pop(); }
+    std::optional<value_type> get() override { return core->get(); }
 
-    static void thread_function(
-        Range range, std::shared_ptr<ThreadSafeQueue<value_type>> queue,
-        std::shared_ptr<std::exception_ptr> exception) {
-      try {
-        for (auto& value : range) {
-          if (!queue->push(std::move(value))) {
-            return;
-          }
-        }
-      } catch (...) {
-        *exception = std::current_exception();
-      }
-      queue->finish();
-    }
-
-    static void threadCleanup(std::thread* thread) {
-      thread->join();
-      delete thread;
-    }
-
-    std::shared_ptr<ThreadSafeQueue<value_type>> queue;
-    std::shared_ptr<std::exception_ptr> exception;
-    std::shared_ptr<std::thread> thread;
+    std::unique_ptr<AsyncStreamGeneratorCore<Range>> core;
   };
 
   return ad_utility::InputRangeTypeErased<value_type>{
