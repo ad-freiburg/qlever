@@ -4,8 +4,10 @@
 
 #include "libqlever/Qlever.h"
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "parser/SparqlParser.h"
 
 namespace qlever {
 
@@ -68,6 +70,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
     index.setKeepTempFiles(config.keepTemporaryFiles);
     index.setSettingsFile(config.settingsFile);
     index.loadAllPermutations() = !config.onlyPsoAndPos;
+    index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType);
 
     if (!config.onlyAddTextIndex) {
       AD_CONTRACT_CHECK(!config.inputFiles.empty());
@@ -102,6 +105,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
       textIndexBuilder.buildDocsDB(docsfile);
     }
   } catch (std::exception& e) {
+    // TODO<joka921> To make this visible, we have to reset the global logging
+    // stream.
     LOG(ERROR) << "Creating the index for QLever failed with the following "
                   "exception: "
                << e.what() << std::endl;
@@ -111,21 +116,19 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
 // ___________________________________________________________________________
 std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
-  QueryExecutionContext qec{index_, &cache_, allocator_,
-                            sortPerformanceEstimator_};
-  auto parsedQuery = SparqlParser::parseQuery(query);
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{&qec, handle};
-  qp.setEnablePatternTrick(enablePatternTrick_);
-  auto qet = qp.createExecutionTree(parsedQuery);
-  qet.isRoot() = true;
+  return this->query(parseAndPlanQuery(std::move(query)), mediaType);
+}
 
+// ___________________________________________________________________________
+std::string Qlever::query(const qlever::Qlever::QueryPlan& queryPlan,
+                          ad_utility::MediaType mediaType) {
+  const auto& [qet, qec, parsedQuery] = queryPlan;
+  ad_utility::Timer timer{ad_utility::Timer::Started};
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
-
-  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, qet, mediaType, timer, std::move(handle));
+      parsedQuery, *qet, mediaType, timer, std::move(handle));
   std::string result;
   for (const auto& batch : responseGenerator) {
     result += batch;
@@ -145,11 +148,10 @@ Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
   qet.isRoot() = true;
 
   auto qetPtr = std::make_shared<QueryExecutionTree>(std::move(qet));
-  // TODO<joka921> For cancellation we have to call
-  // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
   return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
 }
 
+// ___________________________________________________________________________
 void IndexBuilderConfig::validate() {
   if (kScoringParam < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");

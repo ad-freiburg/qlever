@@ -12,18 +12,18 @@
 #include <utility>
 #include <vector>
 
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
-#include "parser/SparqlParser.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/http/MediaTypes.h"
 
 namespace qlever {
 
+// The common configuration shared by the index building and query execution.
 struct CommonConfig {
   // A basename for all files that QLever will write as part of the index
   // building.
@@ -47,7 +47,7 @@ struct CommonConfig {
   bool onlyPsoAndPos = false;
 };
 
-// A configuration for a QLever instance.
+// The configuration required for building an index.
 struct IndexBuilderConfig : CommonConfig {
   // The specification of the input files (Turtle/NT or NQuad) from which the
   // index will be built.
@@ -59,6 +59,9 @@ struct IndexBuilderConfig : CommonConfig {
   // TODO<joka921> Make these settings part of this struct directly
   // TODO<joka921> Document these additional settings.
   std::string settingsFile;
+
+  ad_utility::VocabularyType vocabType{
+      ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
   // The following members are only required if QLever's full-text search
   // extension is to be used, see `IndexBuilderMain.cpp` for additional details.
@@ -77,11 +80,13 @@ struct IndexBuilderConfig : CommonConfig {
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
 
+  // Assert that the given configuration is valid.
   void validate();
 };
 
+// The configuration required for executing queries on a previously built index.
 struct EngineConfig : CommonConfig {
-  EngineConfig(const IndexBuilderConfig& c)
+  explicit EngineConfig(const IndexBuilderConfig& c)
       : CommonConfig{static_cast<const CommonConfig&>(c)} {}
   EngineConfig() = default;
   bool text = false;
@@ -106,19 +111,24 @@ class Qlever {
   // Load the qlever index from file.
   explicit Qlever(const EngineConfig& config);
 
-  // Run the given query on the index. Currently only SELECT and ASK queries are
-  // supported, and the result will always be in sparql-results+json format.
-  // TODO<joka921> Support other formats + CONSTRUCT queries, support
-  // cancellation, time limits, and observable queries.
-  std::string query(std::string query, ad_utility::MediaType mediaType =
-                                           ad_utility::MediaType::sparqlJson);
-
   using QueryPlan =
       std::tuple<std::shared_ptr<QueryExecutionTree>,
                  std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
-  using QueryOrPlan = std::variant<std::string, QueryPlan>;
 
+  // Parse the given query plan and run the query planner for it.
   QueryPlan parseAndPlanQuery(std::string query);
+
+  // Run the given query on the index. Currently only queries, but no updates
+  // are supported.
+  // TODO<joka921> Support UPDATE, support
+  // cancellation, time limits, and observable queries via runtime information.
+  std::string query(std::string query, ad_utility::MediaType mediaType =
+                                           ad_utility::MediaType::sparqlJson);
+
+  // Same as `query` above, but takes a previously preconstructed `QueryPlan`
+  std::string query(
+      const QueryPlan& queryPlan,
+      ad_utility::MediaType mediaType = ad_utility::MediaType::sparqlJson);
 };
 }  // namespace qlever
 
