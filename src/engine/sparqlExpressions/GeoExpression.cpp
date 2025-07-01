@@ -100,6 +100,133 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
   return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
                                                            std::move(child2));
 }
+
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
+  auto geoRelExpr = dynamic_cast<const GeoRelationExpression<Relation>*>(&expr);
+  if (geoRelExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+}
+
+std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
+    const SparqlExpression& expr) {
+  // Check against all possible geo relation types
+  std::optional<GeoFunctionCall> res;
+  using enum SpatialJoinType;
+
+  if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<COVERS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CROSSES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<TOUCHES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
+    return res;
+  }
+  return std::nullopt;
+}
+
+std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
+    const SparqlExpression& expr) {
+  using namespace ad_utility::use_type_identity;
+  using DistArgs = std::tuple<Variable, Variable, UnitOfMeasurement>;
+
+  // Helper lambda to extract a unit of measurement from a SparqlExpression (IRI
+  // or literal with xsd:anyURI datatype)
+  auto extractUnit =
+      [&](const SparqlExpression* ptr) -> std::optional<UnitOfMeasurement> {
+    // Unit given as IRI
+    auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
+    if (unitExpr != nullptr) {
+      return ad_utility::detail::iriToUnitOfMeasurement(
+          asStringViewUnsafe(unitExpr->value().getContent()));
+    }
+
+    // Unit given as literal expression
+    auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
+    if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
+        asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
+            XSD_ANYURI_TYPE) {
+      return ad_utility::detail::iriToUnitOfMeasurement(
+          asStringViewUnsafe(unitExpr2->value().getContent()));
+    }
+
+    return std::nullopt;
+  };
+
+  // Helper lambda to extract the variables and the distance unit from a
+  // distance function call
+  auto extractArguments = [&](auto ti) -> std::optional<DistArgs> {
+    // Check if the argument is a distance function expression
+    using T = typename decltype(ti)::type;
+    auto distExpr = dynamic_cast<const T*>(&expr);
+    if (distExpr == nullptr) {
+      return std::nullopt;
+    }
+
+    // Extract variables
+    auto p1 = distExpr->children()[0]->getVariableOrNullopt();
+    if (!p1.has_value()) {
+      return std::nullopt;
+    }
+    auto p2 = distExpr->children()[1]->getVariableOrNullopt();
+    if (!p2.has_value()) {
+      return std::nullopt;
+    }
+
+    // Extract unit
+    auto unit = UnitOfMeasurement::KILOMETERS;
+    if constexpr (std::is_same_v<T, MetricDistExpression>) {
+      unit = UnitOfMeasurement::METERS;
+    } else if constexpr (std::is_same_v<T, DistWithUnitExpression>) {
+      // If the unit is not fixed, derive it from the user-specified IRI
+      auto unitOrNullopt = extractUnit(distExpr->children()[2].get());
+      if (!unitOrNullopt.has_value()) {
+        return std::nullopt;
+      }
+      unit = unitOrNullopt.value();
+    }
+
+    return DistArgs{p1.value(), p2.value(), unit};
+  };
+
+  // Try all possible distance expression types
+  auto distVars = extractArguments(ti<DistExpression>);
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<MetricDistExpression>);
+  }
+  if (!distVars.has_value()) {
+    distVars = extractArguments(ti<DistWithUnitExpression>);
+  }
+  if (!distVars.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto& [v1, v2, unit] = distVars.value();
+  return GeoDistanceCall{{SpatialJoinType::WITHIN_DIST, v1, v2}, unit};
+}
+
 }  // namespace sparqlExpression
 
 // Explicit instantiations for the different geometric relations to avoid linker
