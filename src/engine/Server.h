@@ -29,6 +29,7 @@
 #include "util/json.h"
 
 using nlohmann::json;
+using nlohmann::ordered_json;
 using std::string;
 using std::vector;
 
@@ -168,12 +169,11 @@ class Server {
           TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
-  static json createResponseMetadataForUpdate(
-      const ad_utility::Timer& requestTimer, const Index& index,
-      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+  static ordered_json createResponseMetadataForUpdate(
+      const Index& index, SharedLocatedTriplesSnapshot deltaTriples,
+      const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
       const UpdateMetadata& updateMetadata,
-      const DeltaTriplesCount& countAfter);
+      const ad_utility::timer::TimeTracer& tracer);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   CPP_template(typename RequestT, typename ResponseT)(
@@ -223,10 +223,10 @@ class Server {
           const RequestT& request, std::string_view operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  json processUpdateImpl(
+  UpdateMetadata processUpdateImpl(
       const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples);
+      DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
