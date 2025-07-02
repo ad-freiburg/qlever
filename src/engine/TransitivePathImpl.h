@@ -319,24 +319,39 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
-  static cppcoro::generator<TableColumnWithVocab> setupNodes(
+  static ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
-      // Bound -> var|id
-      ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
-          startSide.treeAndCol_.value().second);
-      co_yield TableColumnWithVocab{&startSideResult->idTable(), startNodes,
-                                    startSideResult->getCopyOfLocalVocab()};
-    } else {
-      for (auto& [idTable, localVocab] : startSideResult->idTables()) {
+      auto getter = [&startSide, startSideResult]() {
         // Bound -> var|id
-        ql::span<const Id> startNodes =
-            idTable.getColumn(startSide.treeAndCol_.value().second);
-        co_yield TableColumnWithVocab{&idTable, startNodes,
-                                      std::move(localVocab)};
-      }
+        ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
+            startSide.treeAndCol_.value().second);
+        return ad_utility::LoopControl<TableColumnWithVocab>::breakWithValue(
+            TableColumnWithVocab{&startSideResult->idTable(), startNodes,
+                                 startSideResult->getCopyOfLocalVocab()});
+      };
+
+      return ad_utility::InputRangeTypeErased<TableColumnWithVocab>{
+          ad_utility::InputRangeFromLoopControlGet(std::move(getter))};
     }
+
+    auto r = ad_utility::CachingTransformInputRange(
+        startSideResult->idTables(),
+        // the lamba uses a buffer to ensure the lifetime of the pointer to the
+        // idTable, but releases ownership of the localVocab
+        [&startSide, buf = std::optional<Result::IdTableVocabPair>{
+                         std::nullopt}](auto& idTableAndVocab) mutable {
+          buf = std::move(idTableAndVocab);
+          auto& [idTable, localVocab] = buf.value();
+          // Bound -> var|id
+          ql::span startNodes =
+              idTable.getColumn(startSide.treeAndCol_.value().second);
+          return TableColumnWithVocab{&idTable, startNodes,
+                                      std::move(localVocab)};
+        });
+
+    return ad_utility::InputRangeTypeErased{std::move(r)};
   }
 
   virtual T setupEdgesMap(const IdTable& dynSub,
