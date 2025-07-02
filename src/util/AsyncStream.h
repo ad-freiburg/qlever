@@ -12,6 +12,7 @@
 #include <optional>
 #include <thread>
 
+#include "Iterators.h"
 #include "jthread.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
@@ -24,15 +25,15 @@ namespace {
 using ad_utility::data_structures::ThreadSafeQueue;
 
 template <typename Range>
-struct AsyncStreamGeneratorCore {
+struct AsyncStreamGenerator : public ad_utility::InputRangeFromGet<typename Range::value_type>{
   using value_type = typename Range::value_type;
-  AsyncStreamGeneratorCore(Range range, const size_t bufferLimit)
+  AsyncStreamGenerator(Range range, const size_t bufferLimit)
       : queue{bufferLimit},
         exception{nullptr},
-        thread{&AsyncStreamGeneratorCore::thread_function, std::move(range),
+        thread{&AsyncStreamGenerator::thread_function, std::move(range),
                std::ref(queue), std::ref(exception)} {}
 
-  std::optional<value_type> get() { return queue.pop(); }
+  std::optional<value_type> get() override { return queue.pop(); }
 
   static void thread_function(Range range, ThreadSafeQueue<value_type>& queue,
                               std::exception_ptr& exception_ptr) {
@@ -127,18 +128,8 @@ ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsyncV2(
     Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
 
-  struct Generator : public ad_utility::InputRangeFromGet<value_type> {
-    Generator(Range range, const size_t bufferLimit)
-        : core{std::make_unique<AsyncStreamGeneratorCore<Range>>(
-              std::move(range), bufferLimit)} {}
-
-    std::optional<value_type> get() override { return core->get(); }
-
-    std::unique_ptr<AsyncStreamGeneratorCore<Range>> core;
-  };
-
-  return ad_utility::InputRangeTypeErased<value_type>{
-      Generator{std::move(range), bufferLimit}};
+  auto generator{std::make_unique<AsyncStreamGenerator<Range>>(std::move(range), bufferLimit)};
+  return ad_utility::InputRangeTypeErased<value_type>{std::move(generator)};
 }
 
 }  // namespace ad_utility::streams
