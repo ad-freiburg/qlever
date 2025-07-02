@@ -27,7 +27,7 @@ constexpr std::string_view lit3 =
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {0}};
+  GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {900}};
   ASSERT_EQ(g.getWktType().type_, 5);
   ASSERT_NEAR(g.getCentroid().centroid_.getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid_.getLng(), 1.5, 0.0001);
@@ -36,6 +36,7 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
   ASSERT_NEAR(upperRight.getLat(), 2, 0.0001);
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
+  ASSERT_NEAR(g.getMetricLength().length_, 900, 0.0001);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -46,6 +47,11 @@ TEST(GeometryInfoTest, BasicTests) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
+
+  // Negative length
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {-900}),
+      ::testing::HasSubstr("Metric length must be positive"));
 }
 
 // ____________________________________________________________________________
@@ -55,7 +61,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(lit2);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {0}};  // TODO expect
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {314635}};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(lit3);
@@ -100,6 +106,11 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, MetricLength) {
+  //
 }
 
 }  // namespace

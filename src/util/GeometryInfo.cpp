@@ -161,12 +161,12 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 GeometryType::GeometryType(uint8_t type) : type_{type} {
-  AD_CORRECTNESS_CHECK(type_ <= 7);
+  AD_CORRECTNESS_CHECK(type_ <= 7, "WKT Type out of range");
 };
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(float length) : length_{length} {
-  AD_CORRECTNESS_CHECK(length_ >= 0);
+  AD_CORRECTNESS_CHECK(length_ >= 0, "Metric length must be positive");
 };
 
 // ____________________________________________________________________________
