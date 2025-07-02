@@ -614,7 +614,6 @@ class IndexImpl {
   // the input).
   NumNormalAndInternal numTriples() const;
 
-  // using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
   using BlocksOfTriples = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
   // Functions to create the pairs of permutations during the index build. Each
