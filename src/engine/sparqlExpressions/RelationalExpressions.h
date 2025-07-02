@@ -112,8 +112,7 @@ using GreaterEqualExpression =
 using InExpression = relational::InExpression;
 
 // This function is a helper for the query planner. It allows unpacking a FILTER
-// of geof:distance and a constant. This needs to be declared in this module,
-// because the definitions of the relational expressions are hidden in its .cpp.
+// of geof:distance and a constant.
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 

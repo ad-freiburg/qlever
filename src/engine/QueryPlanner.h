@@ -261,7 +261,6 @@ class QueryPlanner {
  private:
   QueryExecutionContext* _qec;
 
- private:
   // Used to count the number of unique variables created using
   // generateUniqueVarName
   size_t _internalVarCount = 0;
