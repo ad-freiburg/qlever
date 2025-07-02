@@ -1730,9 +1730,9 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
       seedWithScansAndText(tg, children, textLimits);
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
 
-  // If we have FILTER statements that can also be answered by a SpatialJoin,
-  // add the respective spatial join query plans.
-  const auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
+  // If we have FILTER statements that can also be answered by a special join,
+  // add the respective query plans as filter substitutes.
+  auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
