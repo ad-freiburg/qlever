@@ -184,8 +184,6 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeLatitudeExpression);
     } else if (functionName == "centroid") {
       return createUnary(&makeCentroidExpression);
-    } else if (functionName == "envelope") {
-      return createUnary(&makeEnvelopeExpression);
     }
   }
 

@@ -12,12 +12,8 @@
 #include <optional>
 #include <string_view>
 
-#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
-#include "index/LocalVocabEntry.h"
 #include "parser/GeoPoint.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/GeometryInfo.h"
 
@@ -103,24 +99,6 @@ class WktCentroid {
       return ValueId::makeUndefined();
     }
     return ValueId::makeFromGeoPoint(geom.value().centroid_);
-  }
-};
-
-// Get the bounding box of a geometry.
-class WktEnvelope {
- public:
-  sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<BoundingBox>& boundingBox) const {
-    if (!boundingBox.has_value()) {
-      return ValueId::makeUndefined();
-    }
-    using namespace triple_component;
-    static const auto wktLiteralIri =
-        Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
-
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
-    lit.addDatatype(wktLiteralIri);
-    return {LiteralOrIri{lit}};
   }
 };
 
