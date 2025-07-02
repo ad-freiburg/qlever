@@ -1339,6 +1339,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
@@ -1380,6 +1381,17 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           geoLit("LINESTRING(2 4, 8 8)")},
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+
+  auto sfGeoType = [](std::string_view type) {
+    return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
+               "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
+  checkGeometryType(
+      IdOrLiteralOrIriVec{U, D(0.0), v, geoLit("LINESTRING(2 2, 4 4)"),
+                          geoLit("POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                          geoLit("BLABLIBLU(1 1, 2 2)")},
+      IdOrLiteralOrIriVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
+                          sfGeoType("Polygon"), U});
 }
 
 // ________________________________________________________________________________________

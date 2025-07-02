@@ -39,6 +39,10 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<ad_utility::WktGeometryType,
+                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
+
 }  // namespace detail
 
 using namespace detail;
@@ -76,6 +80,10 @@ SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
 
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryTypeExpression>(std::move(child));
 }
 
 }  // namespace sparqlExpression

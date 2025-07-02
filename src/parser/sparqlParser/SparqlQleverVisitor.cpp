@@ -186,6 +186,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(&makeCentroidExpression);
     } else if (functionName == "envelope") {
       return createUnary(&makeEnvelopeExpression);
+    } else if (functionName == "geometryType") {
+      return createUnary(&makeGeometryTypeExpression);
     }
   }
 

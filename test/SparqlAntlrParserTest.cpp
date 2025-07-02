@@ -1875,6 +1875,8 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeIsGeoPointExpression));
   expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
                      matchUnary(&makeEnvelopeExpression));
+  expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
+                     matchUnary(&makeGeometryTypeExpression));
 
   // The different distance functions:
   expectFunctionCall(
@@ -1968,6 +1970,9 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
   expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
   expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "geometryType>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b)"));
+  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b, ?c)"));
 
   // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));

@@ -101,4 +101,23 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
 }
 
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryTypeAsIri) {
+  ASSERT_EQ(GeometryType{1}.asIri().value(),
+            "http://www.opengis.net/ont/sf#Point");
+  ASSERT_EQ(GeometryType{2}.asIri().value(),
+            "http://www.opengis.net/ont/sf#LineString");
+  ASSERT_EQ(GeometryType{3}.asIri().value(),
+            "http://www.opengis.net/ont/sf#Polygon");
+  ASSERT_EQ(GeometryType{4}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiPoint");
+  ASSERT_EQ(GeometryType{5}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiLineString");
+  ASSERT_EQ(GeometryType{6}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiPolygon");
+  ASSERT_EQ(GeometryType{7}.asIri().value(),
+            "http://www.opengis.net/ont/sf#GeometryCollection");
+  ASSERT_FALSE(GeometryType{8}.asIri().has_value());
+}
+
 }  // namespace
