@@ -102,7 +102,6 @@ class Qlever {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   bool enablePatternTrick_;
-  static inline std::ostringstream ignoreLogStream;
 
  public:
   // Build a persistent on disk index using the `config`.

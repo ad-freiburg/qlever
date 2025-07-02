@@ -17,7 +17,6 @@ Qlever::Qlever(const EngineConfig& config)
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(
               config.memoryLimit.value())}},
       index_{allocator_} {
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
@@ -46,7 +45,6 @@ Qlever::Qlever(const EngineConfig& config)
 
 // _____________________________________________________________________________
 void Qlever::buildIndex(IndexBuilderConfig config) {
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   if (config.memoryLimit.has_value()) {
