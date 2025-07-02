@@ -4766,23 +4766,25 @@ TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
   // connect otherwise unconnected components.
   auto scan = h::IndexScanFromStrings;
 
-  //        FILTER (?a = ?b)
-  //                |
-  //      CARTESIAN PRODUCT JOIN
-  //          /           \
-  //   SCAN ?a <b> ?c    SCAN ?b <c> ?d
-  //
-  // becomes (for example):
-  //
-  //              JOIN ?a
-  //              /     \
-  //           SORT    SCAN ?a <b> ?c
-  //             |
-  //          JOIN ?b
-  //       /          \
-  // SCAN ?b <c> ?d   SORT
-  //                    |
-  //         SCAN ?a <equal-to> ?b      <-- Substituted FILTER to PSO scan
+  /*
+   *        FILTER (?a = ?b)
+   *                |
+   *      CARTESIAN PRODUCT JOIN
+   *          /           \
+   *   SCAN ?a <b> ?c    SCAN ?b <c> ?d
+   *
+   * becomes (for example):
+   *
+   *              JOIN ?a
+   *              /     \
+   *           SORT    SCAN ?a <b> ?c
+   *             |
+   *          JOIN ?b
+   *       /          \
+   * SCAN ?b <c> ?d   SORT
+   *                    |
+   *         SCAN ?a <equal-to> ?b      <-- Substituted FILTER to PSO scan
+   */
 
   h::expect(
       "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",

@@ -39,6 +39,8 @@ class QueryPlanner {
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
 
+  virtual ~QueryPlanner() = default;
+
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
   QueryExecutionTree createExecutionTree(ParsedQuery& pq,
@@ -254,6 +256,9 @@ class QueryPlanner {
                                                 bool isSubquery = false);
 
  protected:
+  QueryExecutionContext* getQec() const { return _qec; }
+
+ private:
   QueryExecutionContext* _qec;
 
  private:
