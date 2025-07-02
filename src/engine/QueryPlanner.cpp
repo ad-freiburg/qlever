@@ -3093,16 +3093,79 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
-  // TODO<joka921> here we could keep all the candidates, and create a
-  // "sorted union" by merging as additional candidates if the inputs
-  // are presorted.
-  SubtreePlan left = optimizeSingle(&arg._child1);
-  SubtreePlan right = optimizeSingle(&arg._child2);
+  // In case one of the children is not commutative, defensively optimize in any
+  // case.
+  optimizeCommutatively();
+  AD_CORRECTNESS_CHECK(candidateTriples_._triples.empty());
+  AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
 
-  // create a new subtree plan
-  SubtreePlan candidate =
-      makeSubtreePlan<Union>(planner_._qec, left._qet, right._qet);
-  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
+  auto originalPlans = candidatePlans_;
+  auto originalVariables = boundVariables_;
+
+  auto handleChild = [this](auto& pattern) {
+    // TODO<RobinTF> This is basically planner._optimize(), but without a new
+    // instance of GraphPatternPlanner
+    for (auto& child : pattern._graphPatterns) {
+      child.visit([this](auto& arg) {
+        return this->graphPatternOperationVisitor(arg);
+      });
+      planner_.checkCancellation();
+    }
+    // Make sure we only have a single vector of subtree plans to deal with.
+    optimizeCommutatively();
+    AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+    planner_.applyFiltersIfPossible<
+        FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(candidatePlans_.at(0),
+                                                         pattern._filters);
+    planner_.applyTextLimitsIfPossible(
+        candidatePlans_.at(0),
+        TextLimitVec{pattern.textLimits_.begin(), pattern.textLimits_.end()},
+        true);
+    planner_.checkCancellation();
+
+    AD_CONTRACT_CHECK(candidatePlans_.size() == 1);
+    if (candidatePlans_.at(0).empty()) {
+      // This happens if either graph pattern is an empty group,
+      // or it only consists of a MINUS clause (which then has no effect).
+      candidatePlans_.at(0).push_back(
+          makeSubtreePlan<NeutralElementOperation>(planner_._qec));
+      // Neutral element can potentially still get filtered out
+      planner_.applyFiltersIfPossible<
+          FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+          candidatePlans_.at(0), pattern._filters);
+    }
+  };
+
+  // Replace with cloned plan to avoid clashes.
+  for (SubtreePlan& plan : candidatePlans_.at(0)) {
+    plan = cloneWithNewTree(plan, plan._qet->clone());
+  }
+
+  handleChild(arg._child1);
+  auto leftPlans = std::exchange(candidatePlans_, std::move(originalPlans));
+  auto allVariables = std::exchange(boundVariables_, originalVariables);
+
+  handleChild(arg._child2);
+  auto& rightPlans = candidatePlans_;
+  // Merge variables
+  allVariables.insert(boundVariables_.begin(), boundVariables_.end());
+  // Set back to original to prevent conflicts with `visitGroupOptionalOrMinus`.
+  boundVariables_ = std::move(originalVariables);
+
+  std::vector<SubtreePlan> newCandidates;
+
+  for (const auto& left : leftPlans.at(0)) {
+    for (const auto& right : rightPlans.at(0)) {
+      newCandidates.push_back(
+          makeSubtreePlan<Union>(planner_._qec, left._qet, right._qet));
+    }
+  }
+
+  candidatePlans_.clear();
+
+  visitGroupOptionalOrMinus(std::move(newCandidates));
+
+  boundVariables_ = std::move(allVariables);
 }
 
 // _______________________________________________________________
