@@ -48,6 +48,7 @@ UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
 
 const auto wktLiteralIri =
     triple_component::Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
@@ -105,6 +106,21 @@ class WktCentroid {
       return ValueId::makeUndefined();
     }
     return ValueId::makeFromGeoPoint(geom.value().centroid_);
+  }
+};
+
+// Get the bounding box of a geometry.
+class WktEnvelope {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{lit}};
   }
 };
 
