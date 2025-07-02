@@ -70,6 +70,12 @@ struct EncodedValues {
 
     if (encoderIdx == 0) {
       return toLiteralOrIriSingle<0>(idx);
+    } else if (encoderIdx == 1) {
+      return toLiteralOrIriSingle<1>(idx);
+    } else if (encoderIdx == 2) {
+      return toLiteralOrIriSingle<2>(idx);
+    } else if (encoderIdx == 3) {
+      return toLiteralOrIriSingle<3>(idx);
     }
     AD_FAIL();
   }
