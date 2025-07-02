@@ -1714,7 +1714,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
       auto plan = makeSubtreePlan<SpatialJoin>(
           _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
       // Mark that this subtree plan handles (that is, substitutes) the filter
-      plan._idsOfIncludedFilters |= 1ull << i;
+      plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
       plans.emplace_back(filterExpression, std::move(plan));
     }

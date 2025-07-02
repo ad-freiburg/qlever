@@ -19,6 +19,7 @@
 
 namespace sparqlExpression {
 namespace detail {
+
 NARY_EXPRESSION(
     LongitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
@@ -49,25 +50,30 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
 
 using namespace detail;
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LatitudeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LongitudeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2) {
   return std::make_unique<MetricDistExpression>(std::move(child1),
                                                 std::move(child2));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3) {
@@ -81,20 +87,24 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
   return std::make_unique<CentroidExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression&) {
   // TODO<ullingerc> handle geo relation functions in subsequent PR
   return std::nullopt;
 }
 
+// _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;

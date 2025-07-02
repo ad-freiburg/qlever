@@ -39,11 +39,13 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
-// Convert kilometers to other supported units.
+// Convert kilometers to other supported units. If `unit` is `std::nullopt` is
+// is treated as kilometers.
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit);
 
-// Convert value from any supported unit to kilometers.
+// Convert value from any supported unit to kilometers. If `unit` is
+// `std::nullopt` is is treated as kilometers.
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit);
 
