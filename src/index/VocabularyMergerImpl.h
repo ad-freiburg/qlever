@@ -95,8 +95,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // Open and prepare all infiles and mmap output vectors.
   generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
-    generators.push_back(ad_utility::InputRangeTypeErased<QueueWord>{
-        QueueWordGenerator{i, basename}});
+    generators.emplace_back(QueueWordGenerator{i, basename});
     idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
