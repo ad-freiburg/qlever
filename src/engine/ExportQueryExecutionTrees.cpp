@@ -348,6 +348,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
+      // TODO<joka921> This is only to make the strange `toRdfLiteral` function
+      // work in the triple component class...
+    case EncodedVal:
+      return std::pair{
+          EncodedValues::toLiteralOrIri(id).toStringRepresentation(), nullptr};
     default:
       AD_FAIL();
   }
