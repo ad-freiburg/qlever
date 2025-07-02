@@ -57,6 +57,8 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkCentroid(a.getCentroid(), b.getCentroid());
 
   checkBoundingBox(a.getBoundingBox(), b.getBoundingBox());
+
+  // TODO check length
 }
 
 inline void checkRequestedInfoForInstance(GeometryInfo gi,

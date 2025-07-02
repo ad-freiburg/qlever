@@ -178,6 +178,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinaryOrTernary(&makeDistWithUnitExpression);
     } else if (functionName == "metricDistance") {
       return createBinary(&makeMetricDistExpression);
+    } else if (functionName == "length") {
+      return createBinary(&makeLengthExpression);
+    } else if (functionName == "metricLength") {
+      return createUnary(&makeMetricLengthExpression);
     } else if (functionName == "longitude") {
       return createUnary(&makeLongitudeExpression);
     } else if (functionName == "latitude") {
