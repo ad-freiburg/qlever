@@ -199,6 +199,10 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // The vocabulary type that is used (only relevant during index building).
+  ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
+      ad_utility::VocabularyType::Enum::OnDiskCompressed};
+
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
@@ -275,6 +279,13 @@ class IndexImpl {
   DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
   const DeltaTriplesManager& deltaTriplesManager() const {
     return deltaTriples_.value();
+  }
+
+  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
+  // details.
+  void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
+    vocabularyTypeForIndexBuilding_ = type;
+    configurationJson_["vocabulary-type"] = type;
   }
 
   // --------------------------------------------------------------------------

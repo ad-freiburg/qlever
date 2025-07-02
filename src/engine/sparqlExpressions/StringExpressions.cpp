@@ -314,35 +314,43 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::optional<ad_utility::triple_component::Literal> literal,
+    [](std::optional<ad_utility::triple_component::Literal> optLiteral,
        std::optional<ad_utility::triple_component::Literal> optPattern)
     -> IdOrLiteralOrIri {
-  if (!optPattern.has_value() || !literal.has_value()) {
+  if (!optPattern.has_value() || !optLiteral.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto& literal = optLiteral.value();
+  const auto& patternLit = optPattern.value();
+  // Check if arguments are compatible with their language tags.
+  if (patternLit.hasLanguageTag() &&
+      (!literal.hasLanguageTag() ||
+       literal.getLanguageTag() != patternLit.getLanguageTag())) {
     return Id::makeUndefined();
   }
   const auto& pattern = asStringViewUnsafe(optPattern.value().getContent());
   //  Required by the SPARQL standard.
   if (pattern.empty()) {
     if (isStrAfter) {
-      return LiteralOrIri(std::move(literal.value()));
+      return LiteralOrIri(std::move(literal));
     } else {
-      literal.value().setSubstr(0, 0);
-      return LiteralOrIri(std::move(literal.value()));
+      literal.setSubstr(0, 0);
+      return LiteralOrIri(std::move(literal));
     }
   }
-  auto literalContent = literal.value().getContent();
+  auto literalContent = literal.getContent();
   auto pos = asStringViewUnsafe(literalContent).find(pattern);
   if (pos >= literalContent.size()) {
     return toLiteral("");
   }
   if constexpr (isStrAfter) {
-    literal.value().setSubstr(pos + pattern.size(),
-                              literalContent.size() - pos - pattern.size());
+    literal.setSubstr(pos + pattern.size(),
+                      literalContent.size() - pos - pattern.size());
   } else {
     // STRBEFORE
-    literal.value().setSubstr(0, pos);
+    literal.setSubstr(0, pos);
   }
-  return LiteralOrIri(std::move(literal.value()));
+  return LiteralOrIri(std::move(literal));
 };
 
 auto strAfter = strAfterOrBeforeImpl<true>;
