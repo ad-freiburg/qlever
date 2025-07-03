@@ -476,7 +476,7 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
 
   // Prefix for which no function is known.
-  std::string prefixNexistepas = "<http://nexiste.pas/>";
+  std::string prefixNexistepas = "<http://nexiste.pas/";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 
   // Check that arbitrary nonexisting functions with a single argument silently
