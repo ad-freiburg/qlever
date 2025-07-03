@@ -337,7 +337,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                  startSideResult->getCopyOfLocalVocab()});
       };
 
-      return InputRangeTypeErased<TableColumnWithVocab>{
+      return InputRangeTypeErased{
           InputRangeFromLoopControlGet(std::move(getter))};
     }
 
