@@ -128,11 +128,6 @@ class CompactVectorOfStrings {
     return {ptr, size};
   }
 
-  // Forward iterator for a `CompactVectorOfStrings` that reads directly from
-  // disk without buffering the whole `Vector`.
-  static ad_utility::InputRangeTypeErased<vector_type> diskIterator(
-      string filename);
-
   using Iterator = ad_utility::IteratorForAccessOperator<
       CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,
       ad_utility::IsConst::True>;
