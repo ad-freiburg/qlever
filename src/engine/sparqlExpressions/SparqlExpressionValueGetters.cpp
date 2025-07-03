@@ -200,8 +200,9 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
                               word.value().first.starts_with(prefix));
     }
     case Datatype::EncodedVal:
-      // TODO<joka921> Something to do here.
-      AD_FAIL();
+      // TODO<joka921> This is wrong, (as they are IRIs), but we use this for
+      // testing currently.
+      return Id::makeFromBool(false);
     case Datatype::Bool:
     case Datatype::Int:
     case Datatype::Double:

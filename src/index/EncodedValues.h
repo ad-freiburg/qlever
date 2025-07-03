@@ -16,6 +16,12 @@ struct EncodedValues {
       ctll::fixed_string{"<https://www.openstreetmap.org/way/"},
       ctll::fixed_string{"<https://www.openstreetmap.org/relation/"},
       ctll::fixed_string{"<https://www.openstreetmap.org/node/"},
+      ctll::fixed_string{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_node_"},
+      ctll::fixed_string{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_relarea_"},
+      ctll::fixed_string{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_wayarea_"},
   };
   // TODO<joka921> Make sure to keep those two in sync by automating this
   // process.
@@ -24,6 +30,12 @@ struct EncodedValues {
       std::string_view{"<https://www.openstreetmap.org/way/"},
       std::string_view{"<https://www.openstreetmap.org/relation/"},
       std::string_view{"<https://www.openstreetmap.org/node/"},
+      std::string_view{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_node_"},
+      std::string_view{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_relarea_"},
+      std::string_view{
+          "<https://osm2rdf.cs.uni-freiburg.de/rdf/geom#osm_wayarea_"},
   };
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -54,6 +66,15 @@ struct EncodedValues {
     if (!res.has_value()) {
       res = encodeSingle<3>(repr);
     }
+    if (!res.has_value()) {
+      res = encodeSingle<4>(repr);
+    }
+    if (!res.has_value()) {
+      res = encodeSingle<5>(repr);
+    }
+    if (!res.has_value()) {
+      res = encodeSingle<6>(repr);
+    }
     return res;
   }
   template <size_t I>
@@ -76,6 +97,12 @@ struct EncodedValues {
       return toLiteralOrIriSingle<2>(idx);
     } else if (encoderIdx == 3) {
       return toLiteralOrIriSingle<3>(idx);
+    } else if (encoderIdx == 4) {
+      return toLiteralOrIriSingle<4>(idx);
+    } else if (encoderIdx == 5) {
+      return toLiteralOrIriSingle<5>(idx);
+    } else if (encoderIdx == 6) {
+      return toLiteralOrIriSingle<6>(idx);
     }
     AD_FAIL();
   }

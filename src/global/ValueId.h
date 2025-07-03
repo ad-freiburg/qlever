@@ -29,7 +29,6 @@ enum struct Datatype {
   Bool,
   Int,
   Double,
-  EncodedVal,
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
@@ -37,7 +36,8 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  EncodedVal,
+  MaxValue = EncodedVal
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
