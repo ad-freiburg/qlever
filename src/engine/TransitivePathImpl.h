@@ -326,10 +326,11 @@ class TransitivePathImpl : public TransitivePathBase {
       auto getter = [&startSide,
                      startSideResult = std::move(startSideResult)]() {
         // Bound -> var|id
-        ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
-            startSide.treeAndCol_.value().second);
+        const IdTable& idTable = startSideResult->idTable();
+        ql::span<const Id> startNodes =
+            idTable.getColumn(startSide.treeAndCol_.value().second);
         return ad_utility::LoopControl<TableColumnWithVocab>::breakWithValue(
-            TableColumnWithVocab{&startSideResult->idTable(), startNodes,
+            TableColumnWithVocab{&idTable, startNodes,
                                  startSideResult->getCopyOfLocalVocab()});
       };
 
