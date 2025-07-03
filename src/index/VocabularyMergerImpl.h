@@ -84,10 +84,9 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(numFiles);
 
-  for (std::size_t fileIndex : ad_utility::integerRange(numFiles)) {
-    generators.push_back(makeWordRangeFromFile(fileIndex));
-    idVecs_.emplace_back(0,
-                         absl::StrCat(basename, PARTIAL_MMAP_IDS, fileIndex));
+  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+    generators.push_back(makeWordRangeFromFile(i));
+    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
