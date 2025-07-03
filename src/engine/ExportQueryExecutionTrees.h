@@ -11,6 +11,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
+#include "util/stream_generator.h"
 
 // Class for computing the result of an already parsed and planned query and
 // exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
