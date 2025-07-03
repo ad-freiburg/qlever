@@ -242,9 +242,9 @@ auto Vocabulary<S, C, I>::getPositionOfWord(std::string_view word) const
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  auto pos = vocabulary_.getPositionOfWord(word);
-  idx->get() = pos.first;
-  return pos.first != pos.second;
+  auto [lower, upper] = vocabulary_.getPositionOfWord(word);
+  idx->get() = lower;
+  return lower != upper;
 }
 
 // ___________________________________________________________________________
