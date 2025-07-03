@@ -2293,6 +2293,12 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
     if (spatialJoin->getSubstitutesFilterOp()) {
       return std::nullopt;
     }
+    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
+    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
+    // query): If multiple such spatial joins occur on the same pair of
+    // variables, all except for one should be rewritten to a FILTER if they
+    // request a maxium distance search (for nearest neighbor search this is not
+    // possible). This however requires changes to `geof:distance` first.
     AD_THROW(
         "Currently, if both sides of a SpatialJoin are variables, then the"
         "SpatialJoin must be the only connection between these variables");
