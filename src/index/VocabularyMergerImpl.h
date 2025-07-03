@@ -23,6 +23,8 @@
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
@@ -63,26 +65,28 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  std::vector<cppcoro::generator<QueueWord>> generators;
+  // Open and prepare all infiles and mmap output vectors.
+  std::vector<ad_utility::InputRangeTypeErased<QueueWord>> generators;
+  generators.reserve(numFiles);
 
-  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
+  for (std::size_t fileIndex{0}; fileIndex < numFiles; ++fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
-    TripleComponentWithIndex val;
-    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
-      infile >> val;
-      QueueWord word{std::move(val), fileIdx};
-      co_yield word;
-    }
-  };
 
-  // Open and prepare all infiles and mmap output vectors.
-  generators.reserve(numFiles);
-  for (size_t i = 0; i < numFiles; i++) {
-    generators.push_back(makeGenerator(i));
-    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
+    auto transformer{[fileIndex, infile{std::move(infile)}](
+                         [[maybe_unused]] const std::size_t i) mutable {
+      TripleComponentWithIndex val;
+      infile >> val;
+      return QueueWord{std::move(val), fileIndex};
+    }};
+
+    ad_utility::CachingTransformInputRange generator{
+        ad_utility::integerRange(numWords), std::move(transformer)};
+
+    generators.emplace_back(std::move(generator));
+    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, fileIndex));
   }
 
   std::vector<QueueWord> sortedBuffer;
