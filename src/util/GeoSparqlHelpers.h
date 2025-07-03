@@ -12,12 +12,15 @@
 #include <optional>
 #include <string_view>
 
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
+#include "global/ValueId.h"
 #include "index/LocalVocabEntry.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
 #include "parser/Literal.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
 #include "util/GeometryInfo.h"
 
@@ -121,6 +124,24 @@ class WktEnvelope {
     auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{lit}};
+  }
+};
+
+// A generic operation for all geometric relation functions, like
+// geof:sfIntersects.
+template <SpatialJoinType Relation>
+class WktGeometricRelation {
+ public:
+  ValueId operator()(
+      // TODO<ullingerc> For implementation, use a new appropriate value getter
+      // for geometry literals and points.
+      [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
+      [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
+    AD_THROW(
+        "Geometric relations via the `geof:sf...` functions are not yet "
+        "implemented in QLever. Please refer to the custom `SERVICE qlss:` "
+        "with algorithm `qlss:libspatialjoin` for now. More details can be "
+        "found on the QLever Wiki.");
   }
 };
 
