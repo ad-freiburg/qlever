@@ -210,30 +210,30 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
   ASSERT_EQ(sv.numberOfVocabs, 3);
   ASSERT_EQ(sv.markerBitMaskSize, 2);
-  ASSERT_EQ(sv.markerBitMask, 3ull << 58);
+  ASSERT_EQ(sv.markerBitMask, 3ULL << 58);
   ASSERT_EQ(sv.markerShift, 58);
   ASSERT_EQ(sv.vocabIndexBitMask, (1ULL << 58) - 1);
 
   ASSERT_EQ(sv.addMarker(42, 0), 42);
   ASSERT_EQ(sv.addMarker(42, 1), (1ULL << 58) | 42);
-  ASSERT_EQ(sv.addMarker(42, 2), (2ull << 58) | 42);
+  ASSERT_EQ(sv.addMarker(42, 2), (2ULL << 58) | 42);
   ASSERT_ANY_THROW(sv.addMarker(1ULL << 60, 1));
   ASSERT_ANY_THROW(sv.addMarker(5, 3));
 
   ASSERT_EQ(sv.getMarker((1ULL << 58) | 42), 1);
-  ASSERT_EQ(sv.getMarker((2ull << 58) | 42), 2);
+  ASSERT_EQ(sv.getMarker((2ULL << 58) | 42), 2);
   ASSERT_EQ(sv.getMarker(42), 0);
 
   ASSERT_EQ(sv.getVocabIndex((1ULL << 58) | 42), 42);
-  ASSERT_EQ(sv.getVocabIndex((2ull << 58) | 42), 42);
+  ASSERT_EQ(sv.getVocabIndex((2ULL << 58) | 42), 42);
   ASSERT_EQ(sv.getVocabIndex(1ULL << 58), 0);
-  ASSERT_EQ(sv.getVocabIndex(2ull << 58), 0);
+  ASSERT_EQ(sv.getVocabIndex(2ULL << 58), 0);
   ASSERT_EQ(sv.getVocabIndex(0), 0);
   ASSERT_EQ(sv.getVocabIndex((1ULL << 58) - 1), (1ULL << 58) - 1);
   ASSERT_EQ(sv.getVocabIndex(42), 42);
 
   ASSERT_TRUE(sv.isSpecialVocabIndex((1ULL << 58) | 42));
-  ASSERT_TRUE(sv.isSpecialVocabIndex((2ull << 58) | 42));
+  ASSERT_TRUE(sv.isSpecialVocabIndex((2ULL << 58) | 42));
   ASSERT_TRUE(sv.isSpecialVocabIndex(1ULL << 58));
   ASSERT_FALSE(sv.isSpecialVocabIndex(42));
   ASSERT_FALSE(sv.isSpecialVocabIndex(0));
@@ -256,8 +256,8 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
   sv.readFromFile("threeSplitVocab.dat");
   ASSERT_EQ(sv.size(), 6);
   ASSERT_EQ(sv[2], "\"axyz\"");
-  ASSERT_EQ(sv[2ull << 58], "\"xyz\"^^<blabliblu>");
-  ASSERT_EQ(sv[(2ull << 58) | 1], "\"zzz\"^^<blabliblu>");
+  ASSERT_EQ(sv[2ULL << 58], "\"xyz\"^^<blabliblu>");
+  ASSERT_EQ(sv[(2ULL << 58) | 1], "\"zzz\"^^<blabliblu>");
   ASSERT_EQ(sv[1ULL << 58], "\"xyz\"^^<http://example.com>");
 }
 
