@@ -10,30 +10,3 @@ cppcoro::generator<ValueType> fromInputRange(
     co_yield value;
   }
 }
-
-template <typename ValueType>
-ad_utility::InputRangeTypeErased<ValueType> fromGenerator(
-    cppcoro::generator<ValueType> generator) {
-  struct Generator : ad_utility::InputRangeFromGet<ValueType> {
-    Generator(cppcoro::generator<ValueType> generator)
-        : generator{std::move(generator)},
-          iterator{this->generator.begin()},
-          end{this->generator.end()} {}
-
-    std::optional<ValueType> get() override {
-      if (iterator != end) {
-        auto value{std::move(*iterator)};
-        iterator++;
-        return value;
-      }
-
-      return std::nullopt;
-    };
-
-    cppcoro::generator<ValueType> generator;
-    decltype(generator.begin()) iterator;
-    decltype(generator.end()) end;
-  };
-
-  return ad_utility::InputRangeTypeErased<ValueType>{std::move(generator)};
-}

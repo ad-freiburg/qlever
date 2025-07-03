@@ -368,16 +368,15 @@ void IndexImpl::createFromFiles(
   };
 
   // For the first permutation, perform a unique.
-  auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
-  auto firstSorterWithUniqueIR{fromGenerator(std::move(firstSorterWithUnique))};
+  auto firstSorterWithUnique{ad_utility::InputRangeTypeErased{
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput())}};
 
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUniqueIR));
+                               std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -385,19 +384,17 @@ void IndexImpl::createFromFiles(
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUniqueIR),
+                               std::move(firstSorterWithUnique),
                                secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    auto secondSorterBlocksG{secondSorter.getSortedBlocks<0>()};
-    auto secondSorterBlocks{fromGenerator(std::move(secondSorterBlocksG))};
+    auto secondSorterBlocks{ad_utility::InputRangeTypeErased{secondSorter.getSortedBlocks<0>()}};
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 std::move(secondSorterBlocks), thirdSorter);
     secondSorter.clear();
 
-    auto thirdSorterBlocksG{thirdSorter.getSortedBlocks<0>()};
-    auto thirdSorterBlocks{fromGenerator(std::move(thirdSorterBlocksG))};
+    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{thirdSorter.getSortedBlocks<0>()}};
     createThirdPermutationPair(NumColumnsIndexBuilding,
                                std::move(thirdSorterBlocks));
     configurationJson_["has-all-permutations"] = true;
@@ -406,15 +403,14 @@ void IndexImpl::createFromFiles(
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
     auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding, std::move(firstSorterWithUniqueIR));
+        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
 
-    auto thirdSorterBlocksG{thirdSorterPtr->template getSortedBlocks<0>()};
-    auto thirdSorterBlocks{fromGenerator(std::move(thirdSorterBlocksG))};
+    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{thirdSorterPtr->template getSortedBlocks<0>()}};
 
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
                                std::move(thirdSorterBlocks));

@@ -266,23 +266,3 @@ cppcoro::generator<int> simpleGenerator(const int max) {
     co_yield i;
   }
 }
-
-TEST(Iterator, fromGenerator) {
-  const int max{10};
-
-  auto generator{simpleGenerator(max)};
-
-  ad_utility::InputRangeTypeErased<int> range{
-      fromGenerator(std::move(generator))};
-  auto iterator{range.begin()};
-
-  for (int i{0}; i < 10; ++i) {
-    auto value{*iterator};
-
-    EXPECT_EQ(i, value);
-
-    iterator++;
-  }
-
-  EXPECT_EQ(iterator, range.end());
-}
