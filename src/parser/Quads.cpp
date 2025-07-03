@@ -6,13 +6,27 @@
 
 // ____________________________________________________________________________________
 // Transform the triples and sets the graph on all triples.
-vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
+static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
-    const SparqlTripleSimpleWithGraph::Graph& graph) {
-  auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
+    const SparqlTripleSimpleWithGraph::Graph& graph,
+    Quads::BlankNodeAdder& blankNodeAdder) {
+  auto toTc = [&blankNodeAdder](const GraphTerm& t) -> TripleComponent {
+    if (auto blank = std::get_if<BlankNode>(&t)) {
+      auto [it, wasInserted] = blankNodeAdder.map_.try_emplace(
+          blank->toSparql(), Id::makeUndefined());
+      if (wasInserted) {
+        it->second = Id::makeFromBlankNodeIndex(
+            blankNodeAdder.localVocab_.getBlankNodeIndex(
+                blankNodeAdder.bnodeManager_));
+      }
+      return it->second;
+    } else {
+      return t.toTripleComponent();
+    }
+  };
+  auto convertTriple = [&graph, &toTc](const std::array<GraphTerm, 3>& triple)
       -> SparqlTripleSimpleWithGraph {
-    return {triple[0].toTripleComponent(), triple[1].toTripleComponent(),
-            triple[2].toTripleComponent(), graph};
+    return {toTc(triple[0]), toTc(triple[1]), toTc(triple[2]), graph};
   };
 
   return ad_utility::transform(triples, convertTriple);
@@ -26,7 +40,8 @@ static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
 
 // ____________________________________________________________________________________
 std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
-    const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const {
+    const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
+    BlankNodeAdder& blankNodeAdder) const {
   std::vector<SparqlTripleSimpleWithGraph> quads;
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
@@ -35,12 +50,14 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
-      quads, transformTriplesTemplate(freeTriples_, defaultGraph));
+      quads,
+      transformTriplesTemplate(freeTriples_, defaultGraph, blankNodeAdder));
   for (const auto& [graph, triples] : graphTriples_) {
     ad_utility::appendVector(
         quads,
         transformTriplesTemplate(
-            triples, expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph)));
+            triples, expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph),
+            blankNodeAdder));
   }
   return quads;
 }
@@ -50,8 +67,8 @@ std::vector<parsedQuery::GraphPatternOperation>
 Quads::toGraphPatternOperations() const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
     return SparqlTriple::fromSimple(SparqlTripleSimple(
-        triple[0].toTripleComponent(), triple[1].toTripleComponent(),
-        triple[2].toTripleComponent()));
+        triple[0].toTripleComponent(true), triple[1].toTripleComponent(true),
+        triple[2].toTripleComponent(true)));
   };
 
   using namespace parsedQuery;
