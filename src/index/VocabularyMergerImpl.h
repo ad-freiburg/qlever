@@ -86,7 +86,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
         ad_utility::integerRange(numWords), std::move(transformer)};
 
     generators.emplace_back(std::move(generator));
-    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, fileIndex));
+    idVecs_.emplace_back(0,
+                         absl::StrCat(basename, PARTIAL_MMAP_IDS, fileIndex));
   }
 
   std::vector<QueueWord> sortedBuffer;

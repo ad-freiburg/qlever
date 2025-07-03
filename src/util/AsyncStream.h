@@ -25,7 +25,8 @@ namespace {
 using ad_utility::data_structures::ThreadSafeQueue;
 
 template <typename Range>
-struct AsyncStreamGenerator : public ad_utility::InputRangeFromGet<typename Range::value_type>{
+struct AsyncStreamGenerator
+    : public ad_utility::InputRangeFromGet<typename Range::value_type> {
   using value_type = typename Range::value_type;
   AsyncStreamGenerator(Range range, const size_t bufferLimit)
       : queue{bufferLimit},
@@ -128,7 +129,8 @@ ad_utility::InputRangeTypeErased<typename Range::value_type> runStreamAsyncV2(
     Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
 
-  auto generator{std::make_unique<AsyncStreamGenerator<Range>>(std::move(range), bufferLimit)};
+  auto generator{std::make_unique<AsyncStreamGenerator<Range>>(std::move(range),
+                                                               bufferLimit)};
   return ad_utility::InputRangeTypeErased<value_type>{std::move(generator)};
 }
 

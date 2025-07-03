@@ -384,17 +384,18 @@ void IndexImpl::createFromFiles(
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique),
-                               secondSorter);
+                               std::move(firstSorterWithUnique), secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    auto secondSorterBlocks{ad_utility::InputRangeTypeErased{secondSorter.getSortedBlocks<0>()}};
+    auto secondSorterBlocks{
+        ad_utility::InputRangeTypeErased{secondSorter.getSortedBlocks<0>()}};
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 std::move(secondSorterBlocks), thirdSorter);
     secondSorter.clear();
 
-    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{thirdSorter.getSortedBlocks<0>()}};
+    auto thirdSorterBlocks{
+        ad_utility::InputRangeTypeErased{thirdSorter.getSortedBlocks<0>()}};
     createThirdPermutationPair(NumColumnsIndexBuilding,
                                std::move(thirdSorterBlocks));
     configurationJson_["has-all-permutations"] = true;
@@ -410,7 +411,8 @@ void IndexImpl::createFromFiles(
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
 
-    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{thirdSorterPtr->template getSortedBlocks<0>()}};
+    auto thirdSorterBlocks{ad_utility::InputRangeTypeErased{
+        thirdSorterPtr->template getSortedBlocks<0>()}};
 
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
                                std::move(thirdSorterBlocks));
@@ -1296,8 +1298,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
