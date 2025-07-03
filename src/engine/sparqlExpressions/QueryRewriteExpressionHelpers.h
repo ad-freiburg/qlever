@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
 #include "parser/data/Variable.h"

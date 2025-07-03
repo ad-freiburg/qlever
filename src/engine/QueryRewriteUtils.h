@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
 #define QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/data/SparqlFilter.h"
 
 // This module contains utilities for query rewriting, e.g. optimizing cartesian
