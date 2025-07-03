@@ -366,34 +366,46 @@ TEST(Vocabulary, SplitVocabularyWordWriterAndGetPosition) {
   ASSERT_ANY_THROW(vocabulary[VocabIndex::make(42)]);
 
   // Check that `getPositionOfWord` returns correct boundaries:
-  //  - Non-existing normal word
+  //  - Non-existing normal word, at the end
   auto [l1, u1] = vocabulary.getPositionOfWord("\"xyz\"");
   ASSERT_EQ(l1, VocabIndex::make(4));
   ASSERT_EQ(u1, VocabIndex::make(4));
 
-  //  - Existing normal word
-  auto [l2, u2] = vocabulary.getPositionOfWord("\"car\"@en");
-  ASSERT_EQ(l2, VocabIndex::make(3));
-  ASSERT_EQ(u2, VocabIndex::make(4));
+  //  - Non-existing normal word, not at the end
+  auto [l2, u2] = vocabulary.getPositionOfWord("\"0\"");
+  ASSERT_EQ(l2, VocabIndex::make(0));
+  ASSERT_EQ(u2, VocabIndex::make(0));
 
-  //  - Non-existing split word
-  auto [l3, u3] = vocabulary.getPositionOfWord(
+  //  - Existing normal word
+  auto [l3, u3] = vocabulary.getPositionOfWord("\"car\"@en");
+  ASSERT_EQ(l3, VocabIndex::make(3));
+  ASSERT_EQ(u3, VocabIndex::make(4));
+
+  //  - Non-existing split word, not at the end
+  auto [l4, u4] = vocabulary.getPositionOfWord(
       "\"POLYGON((0 0, 3 4))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(l3, VocabIndex::make((1ULL << 59) | 1));
-  ASSERT_EQ(u3, VocabIndex::make((1ULL << 59) | 1));
+  ASSERT_EQ(l4, VocabIndex::make((1ULL << 59) | 1));
+  ASSERT_EQ(u4, VocabIndex::make((1ULL << 59) | 1));
+
+  //  - Non-existing split word, at the end
+  auto [l5, u5] = vocabulary.getPositionOfWord(
+      "\"POLYGON((9 9, 9 9))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  ASSERT_EQ(l5, VocabIndex::make((1ULL << 59) | 2));
+  ASSERT_EQ(u5, VocabIndex::make((1ULL << 59) | 2));
 
   //  - Existing split word
-  auto [l4, u4] = vocabulary.getPositionOfWord(
+  auto [l6, u6] = vocabulary.getPositionOfWord(
       "\"POLYGON((1 2, 3 4))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(l4, VocabIndex::make((1ULL << 59) | 1));
-  ASSERT_EQ(u4, VocabIndex::make((1ULL << 59) | 2));
+  ASSERT_EQ(l6, VocabIndex::make((1ULL << 59) | 1));
+  ASSERT_EQ(u6, VocabIndex::make((1ULL << 59) | 2));
 
   //  - Non-existing prefix of an existing split word
-  auto [l5, u5] = vocabulary.getPositionOfWord("\"POLYGON((1 2, 3 4))");
-  ASSERT_EQ(l5, VocabIndex::make(4));
-  ASSERT_EQ(u5, VocabIndex::make(4));
+  auto [l7, u7] = vocabulary.getPositionOfWord("\"POLYGON((1 2, 3 4))");
+  ASSERT_EQ(l7, VocabIndex::make(4));
+  ASSERT_EQ(u7, VocabIndex::make(4));
 }
 
 }  // namespace
