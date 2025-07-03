@@ -322,15 +322,16 @@ class TransitivePathImpl : public TransitivePathBase {
   static ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
+    auto getStartNodes = [&startSide](const IdTable& idTable) {
+      return idTable.getColumn(startSide.treeAndCol_.value().second);
+    };
+
     if (startSideResult->isFullyMaterialized()) {
-      auto getter = [&startSide,
+      auto getter = [&getStartNodes, &startSide,
                      startSideResult = std::move(startSideResult)]() {
-        // Bound -> var|id
         const IdTable& idTable = startSideResult->idTable();
-        ql::span<const Id> startNodes =
-            idTable.getColumn(startSide.treeAndCol_.value().second);
         return ad_utility::LoopControl<TableColumnWithVocab>::breakWithValue(
-            TableColumnWithVocab{&idTable, startNodes,
+            TableColumnWithVocab{&idTable, getStartNodes(idTable),
                                  startSideResult->getCopyOfLocalVocab()});
       };
 
@@ -342,14 +343,12 @@ class TransitivePathImpl : public TransitivePathBase {
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
-        [&startSide, buf = std::optional<Result::IdTableVocabPair>{
-                         std::nullopt}](auto& idTableAndVocab) mutable {
+        [&getStartNodes, &startSide,
+         buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
+            auto& idTableAndVocab) mutable {
           buf = std::move(idTableAndVocab);
           auto& [idTable, localVocab] = buf.value();
-          // Bound -> var|id
-          ql::span startNodes =
-              idTable.getColumn(startSide.treeAndCol_.value().second);
-          return TableColumnWithVocab{&idTable, startNodes,
+          return TableColumnWithVocab{&idTable, getStartNodes(idTable),
                                       std::move(localVocab)};
         });
 
