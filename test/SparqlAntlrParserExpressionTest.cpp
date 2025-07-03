@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace {
@@ -317,8 +318,12 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeLatitudeExpression));
   expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
                      matchUnary(&makeLongitudeExpression));
+  expectFunctionCall(absl::StrCat(geof, "centroid>(?x)"),
+                     matchUnary(&makeCentroidExpression));
   expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
                      matchUnary(&makeIsGeoPointExpression));
+  expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
+                     matchUnary(&makeEnvelopeExpression));
 
   // The different distance functions:
   expectFunctionCall(
@@ -430,6 +435,12 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b)"));
+  expectFunctionCallFails(absl::StrCat(geof, "centroid>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
+  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
 
   expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>()"));
@@ -465,8 +476,16 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
 
   // Prefix for which no function is known.
-  std::string prefixNexistepas = "<http://nexiste.pas/>";
+  std::string prefixNexistepas = "<http://nexiste.pas/";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
+
+  // Check that arbitrary nonexisting functions with a single argument silently
+  // return an `IdExpression(UNDEF)` in the syntax test mode.
+  auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+  expectFunctionCall(
+      absl::StrCat(prefixNexistepas, "nada>(?x)"),
+      matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,
+                                         ::testing::Eq(Id::makeUndefined()))));
 }
 
 // ______________________________________________________________________________
