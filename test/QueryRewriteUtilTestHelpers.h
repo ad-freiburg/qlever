@@ -100,10 +100,9 @@ inline DistancePtrAndExpected makeUnrelated() {
 //______________________________________________________________________________
 inline std::shared_ptr<SparqlExpression> makeLessEqualSharedPtr(
     VariantArgs child0, VariantArgs child1) {
-  return std::make_shared<sparqlExpression::LessEqualExpression>(
-      std::array<SparqlExpression::Ptr, 2>{
-          std::visit(getExpr, std::move(child0)),
-          std::visit(getExpr, std::move(child1))});
+  return std::make_shared<LessEqualExpression>(
+      std::array<Ptr, 2>{std::visit(getExpr, std::move(child0)),
+                         std::visit(getExpr, std::move(child1))});
 };
 
 }  // namespace queryRewriteUtilTestHelpers
