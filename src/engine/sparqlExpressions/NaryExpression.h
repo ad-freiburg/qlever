@@ -14,7 +14,6 @@
 
 #include "backports/concepts.h"
 #include "engine/SpatialJoinConfig.h"
-#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
 #include "parser/data/Variable.h"

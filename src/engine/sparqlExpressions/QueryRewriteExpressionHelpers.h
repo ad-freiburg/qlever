@@ -11,7 +11,12 @@
 #include "parser/data/Variable.h"
 
 // This header declares utilities required during query planning for rewriting
-// parts of queries.
+// parts of queries. The implementation of the
+// `getGeoFunctionExpressionParameters` and `getGeoDistanceExpressionParameters`
+// functions can be found in `GeoExpression.cpp`. Additionally note the
+// `getGeoDistanceFilter` function from `RelationalExpressions.cpp` for
+// extracting information from expressions of the form `geof:distance(?a, ?b) <=
+// constant`.
 
 namespace sparqlExpression {
 
@@ -26,9 +31,9 @@ struct GeoFunctionCall {
 // call. Returns `std::nullopt` if the given `SparqlExpression` is not a
 // supported geo function or `geof:distance`/`geof:metricDistance` which is
 // handled by the `getGeoDistanceExpressionParameters` function below.
-// Note: this function must be declared here, because the definitions of the
-// different geo expressions are hidden in the cpp file and are therefore
-// invisible elsewhere.
+// Note: this function must be implemented in in `GeoExpression.cpp`, because
+// the definitions of the different geo expressions are hidden in that cpp file
+// and are therefore invisible elsewhere.
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr);
 
@@ -38,7 +43,8 @@ struct GeoDistanceCall : public GeoFunctionCall {
 };
 
 // Same as `getGeoFunctionExpressionParameters`, but with special handling for
-// the unit of measurement associated with a distance.
+// the unit of measurement associated with a distance. Also implemented in in
+// `GeoExpression.cpp`.
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr);
 

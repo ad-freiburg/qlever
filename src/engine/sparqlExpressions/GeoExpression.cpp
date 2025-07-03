@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
@@ -202,7 +203,9 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 // problems
 using Ptr = sparqlExpression::SparqlExpression::Ptr;
 
-#undef QL_INSTANTIATE_GEO_RELATION_EXPR
+#ifdef QL_INSTANTIATE_GEO_RELATION_EXPR
+#error "Macro QL_INSTANTIATE_GEO_RELATION_EXPR already defined"
+#endif
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
   template Ptr                                                                \
       sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \

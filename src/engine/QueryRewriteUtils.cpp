@@ -5,6 +5,7 @@
 #include "engine/QueryRewriteUtils.h"
 
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
 // _____________________________________________________________________________
