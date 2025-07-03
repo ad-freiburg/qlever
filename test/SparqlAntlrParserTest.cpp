@@ -18,17 +18,10 @@
 #include "QueryPlannerTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
-#include "engine/sparqlExpressions/CountStarExpression.h"
-#include "engine/sparqlExpressions/ExistsExpression.h"
-#include "engine/sparqlExpressions/GroupConcatExpression.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
-#include "engine/sparqlExpressions/SampleExpression.h"
-#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
@@ -39,145 +32,12 @@
 #include "util/SourceLocation.h"
 
 namespace {
-using namespace sparqlParserHelpers;
-namespace m = matchers;
-using Parser = SparqlAutomaticParser;
-using namespace std::literals;
-using Var = Variable;
+using namespace sparqlParserTestHelpers;
+
 auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
-    {std::string{QLEVER_INTERNAL_PREFIX_NAME},
-     std::string{QLEVER_INTERNAL_PREFIX_IRI}}};
-
-template <auto F, bool testInsideConstructTemplate = false>
-auto parse =
-    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
-       std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
-       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
-                         disableSomeChecks};
-      if (testInsideConstructTemplate) {
-        p.visitor_.setParseModeToInsideConstructTemplateForTesting();
-      }
-      return p.parseTypesafe(F);
-    };
-
-auto parseBlankNode = parse<&Parser::blankNode>;
-auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
-auto parseCollection = parse<&Parser::collection>;
-auto parseCollectionConstruct = parse<&Parser::collection, true>;
-auto parseConstructTriples = parse<&Parser::constructTriples>;
-auto parseGraphNode = parse<&Parser::graphNode>;
-auto parseGraphNodeConstruct = parse<&Parser::graphNode, true>;
-auto parseObjectList = parse<&Parser::objectList>;
-auto parsePropertyList = parse<&Parser::propertyList>;
-auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
-auto parseSelectClause = parse<&Parser::selectClause>;
-auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
-auto parseTriplesSameSubjectConstruct =
-    parse<&Parser::triplesSameSubject, true>;
-auto parseVariable = parse<&Parser::var>;
-auto parseVarOrTerm = parse<&Parser::varOrTerm>;
-auto parseVerb = parse<&Parser::verb>;
-
-template <auto Clause, bool parseInsideConstructTemplate = false,
-          typename Value = decltype(parse<Clause>("").resultOfParse_)>
-struct ExpectCompleteParse {
-  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
-  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
-
-  auto operator()(const string& input, const Value& value,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
-    return operator()(input, value, prefixMap_, l);
-  };
-
-  auto operator()(const string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
-    return operator()(input, matcher, prefixMap_, l);
-  };
-
-  auto operator()(const string& input, const Value& value,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
-    return operator()(input, testing::Eq(value), std::move(prefixMap), l);
-  };
-
-  auto operator()(const string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  SparqlQleverVisitor::PrefixMap prefixMap,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
-    auto tr = generateLocationTrace(l, "successful parsing was expected here");
-    EXPECT_NO_THROW({
-      return expectCompleteParse(
-          parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), std::nullopt, disableSomeChecks),
-          matcher, l);
-    });
-  };
-
-  auto operator()(const string& input,
-                  const testing::Matcher<const Value&>& matcher,
-                  ParsedQuery::DatasetClauses activeDatasetClauses,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) const {
-    auto tr = generateLocationTrace(l, "successful parsing was expected here");
-    EXPECT_NO_THROW({
-      return expectCompleteParse(
-          parse<Clause, parseInsideConstructTemplate>(
-              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
-          matcher, l);
-    });
-  };
-};
-
-template <auto Clause>
-struct ExpectParseFails {
-  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
-  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
-
-  auto operator()(
-      const string& input,
-      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
-    return operator()(input, prefixMap_, messageMatcher, l);
-  }
-
-  auto operator()(
-      const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
-      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
-      ad_utility::source_location l = ad_utility::source_location::current()) {
-    auto trace = generateLocationTrace(l);
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),
-        messageMatcher);
-  }
-};
-
-// TODO: make function that creates both the complete and fails parser. and use
-// them with structured binding.
-
-auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
-auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
-auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
-auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-
-using ::testing::ElementsAre;
-using ::testing::Eq;
-using ::testing::IsEmpty;
-using ::testing::Pair;
-using ::testing::SizeIs;
-using ::testing::StrEq;
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -2109,134 +1969,6 @@ TEST(SparqlParser, Exists) {
   expectGroupGraphPattern(
       "{ { FILTER NOT EXISTS {?a <bar> ?foo} . ?d ?e ?f  } ?a ?b ?c }",
       doesNotBindExists());
-}
-
-namespace aggregateTestHelpers {
-using namespace sparqlExpression;
-
-// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
-// points to an `AggregateExpr`, that the distinctness and the child variable of
-// the aggregate expression match, and that the `AggregateExpr`(via dynamic
-// cast) matches all the `additionalMatchers`.
-template <typename AggregateExpr>
-::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
-    bool distinct, const Variable& child, const auto&... additionalMatchers) {
-  using namespace ::testing;
-  using namespace m::builtInCall;
-  using Exp = SparqlExpression;
-
-  auto innerMatcher = [&]() -> Matcher<const AggregateExpr&> {
-    if constexpr (sizeof...(additionalMatchers) > 0) {
-      return AllOf(additionalMatchers...);
-    } else {
-      return ::testing::_;
-    }
-  }();
-  using enum SparqlExpression::AggregateStatus;
-  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
-  return Pointee(AllOf(
-      AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
-      AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
-      WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
-}
-
-// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
-// points to an `AggregateExpr` and that the distinctness of the aggregate
-// expression matches. It does not check the child. This is required to test
-// aggregates that implicitly replace their child, like `StdevExpression`.
-template <typename AggregateExpr>
-::testing::Matcher<const SparqlExpression::Ptr&> matchAggregateWithoutChild(
-    bool distinct) {
-  using namespace ::testing;
-  using namespace m::builtInCall;
-  using Exp = SparqlExpression;
-
-  using enum SparqlExpression::AggregateStatus;
-  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
-  return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
-                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
-}
-}  // namespace aggregateTestHelpers
-
-// ___________________________________________________________
-TEST(SparqlParser, aggregateExpressions) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  using namespace aggregateTestHelpers;
-  using V = Variable;
-  auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
-  auto expectAggregateFails = ExpectParseFails<&Parser::aggregate>{};
-
-  // For the `COUNT *` expression we have completely hidden the type. So we need
-  // to match it via RTTI.
-  auto typeIdLambda = [](const auto& ptr) {
-    return std::type_index{typeid(ptr)};
-  };
-  auto typeIdxCountStar = typeIdLambda(*makeCountStarExpression(true));
-
-  // A matcher that matches a `COUNT *` expression with the given distinctness.
-  auto matchCountStar =
-      [&typeIdLambda, typeIdxCountStar](
-          bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
-    using namespace ::testing;
-    using enum SparqlExpression::AggregateStatus;
-    auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
-    return Pointee(
-        AllOf(AD_PROPERTY(SparqlExpression, isAggregate, Eq(aggregateStatus)),
-              ResultOf(typeIdLambda, Eq(typeIdxCountStar))));
-  };
-
-  expectAggregate("COUNT(*)", matchCountStar(false));
-  expectAggregate("COUNT(DISTINCT *)", matchCountStar(true));
-
-  expectAggregate("SAMPLE(?x)",
-                  matchAggregate<SampleExpression>(false, V{"?x"}));
-  expectAggregate("SAMPLE(DISTINCT ?x)",
-                  matchAggregate<SampleExpression>(false, V{"?x"}));
-
-  expectAggregate("Min(?x)", matchAggregate<MinExpression>(false, V{"?x"}));
-  expectAggregate("Min(DISTINCT ?x)",
-                  matchAggregate<MinExpression>(true, V{"?x"}));
-
-  expectAggregate("Max(?x)", matchAggregate<MaxExpression>(false, V{"?x"}));
-  expectAggregate("Max(DISTINCT ?x)",
-                  matchAggregate<MaxExpression>(true, V{"?x"}));
-
-  expectAggregate("Count(?x)", matchAggregate<CountExpression>(false, V{"?x"}));
-  expectAggregate("Count(DISTINCT ?x)",
-                  matchAggregate<CountExpression>(true, V{"?x"}));
-
-  expectAggregate("Avg(?x)", matchAggregate<AvgExpression>(false, V{"?x"}));
-  expectAggregate("Avg(DISTINCT ?x)",
-                  matchAggregate<AvgExpression>(true, V{"?x"}));
-
-  // A matcher for the separator of `GROUP_CONCAT`.
-  auto separator = [](const std::string& sep) {
-    return AD_PROPERTY(GroupConcatExpression, getSeparator, Eq(sep));
-  };
-  expectAggregate("GROUP_CONCAT(?x)", matchAggregate<GroupConcatExpression>(
-                                          false, V{"?x"}, separator(" ")));
-  expectAggregate(
-      "group_concat(DISTINCT ?x)",
-      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(" ")));
-
-  expectAggregate(
-      "GROUP_CONCAT(?x; SEPARATOR= \";\")",
-      matchAggregate<GroupConcatExpression>(false, V{"?x"}, separator(";")));
-  expectAggregate(
-      "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
-      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
-
-  // The STDEV expression
-  // Here we don't match the child, because StdevExpression replaces it with a
-  // DeviationExpression.
-  expectAggregate("STDEV(?x)",
-                  matchAggregateWithoutChild<StdevExpression>(false));
-  expectAggregate("stdev(?x)",
-                  matchAggregateWithoutChild<StdevExpression>(false));
-  // A distinct stdev is probably not very useful, but should be possible anyway
-  expectAggregate("STDEV(DISTINCT ?x)",
-                  matchAggregateWithoutChild<StdevExpression>(true));
 }
 
 TEST(SparqlParser, Quads) {
