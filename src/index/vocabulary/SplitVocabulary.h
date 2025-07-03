@@ -209,7 +209,7 @@ class SplitVocabulary {
       auto end = addMarker(
           std::visit([](auto& v) { return v.size(); }, underlying_[marker]),
           marker);
-      return std::pair<uint64_t, uint64_t>{end, end};
+      return {end, end};
     }
     return pos.value();
   }
