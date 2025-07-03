@@ -8,10 +8,12 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <memory>
 #include <optional>
+#include <range/v3/view/cartesian_product.hpp>
 #include <type_traits>
 #include <variant>
 
@@ -28,6 +30,7 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Load.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
@@ -46,13 +49,18 @@
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "global/ValueId.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/data/Variable.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
@@ -84,6 +92,8 @@ void mergeSubtreePlanIds(SubtreePlan& target, const SubtreePlan& a,
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
+  target.containsFilterSubstitute_ =
+      a.containsFilterSubstitute_ || b.containsFilterSubstitute_;
 }
 
 // Helper function that assigns the node, filter and text limit ids from
@@ -93,6 +103,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedNodes = source._idsOfIncludedNodes;
   target._idsOfIncludedFilters = source._idsOfIncludedFilters;
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
+  target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
 }
 }  // namespace
 
@@ -109,15 +120,11 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   // Store the dataset clause (FROM and FROM NAMED clauses), s.t. we have access
   // to them down the callstack. Subqueries can't have their own dataset clause,
   // but inherit it from the parent query.
-  auto datasetClauseIsEmpty = [](const auto& datasetClause) {
-    return !datasetClause.defaultGraphs_.has_value() &&
-           !datasetClause.namedGraphs_.has_value();
-  };
   if (!isSubquery) {
-    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(activeDatasetClauses_));
+    AD_CORRECTNESS_CHECK(activeDatasetClauses_.isUnconstrainedOrWithClause());
     activeDatasetClauses_ = pq.datasetClauses_;
   } else {
-    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(pq.datasetClauses_));
+    AD_CORRECTNESS_CHECK(pq.datasetClauses_.isUnconstrainedOrWithClause());
   }
 
   // Look for ql:has-predicate to determine if the pattern trick should be used.
@@ -203,8 +210,13 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->setLimit(pq._limitOffset);
+    // For subqueries the limit has already been applied, for the root query the
+    // exporter will apply LIMIT and OFFSET if `supportsLimit()` is not natively
+    // supported by the `Operation`. Check the documentation of
+    // `ExportQueryExecutionTrees::compensateForLimitOffsetClause to see `how
+    // this is comphandled in the exporter.
+    if (plan._qet->getRootOperation()->supportsLimitOffset() && !isSubquery) {
+      plan._qet->applyLimit(pq._limitOffset);
     }
   }
 
@@ -264,7 +276,8 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible<true>(candidatePlans[0], rootPattern->_filters);
+    applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+        candidatePlans[0], optimizer.filtersAndSubst_);
     applyTextLimitsIfPossible(candidatePlans[0],
                               TextLimitVec{rootPattern->textLimits_.begin(),
                                            rootPattern->textLimits_.end()},
@@ -283,7 +296,8 @@ std::vector<SubtreePlan> QueryPlanner::optimize(
       // or it only consists of a MINUS clause (which then has no effect).
       std::vector neutralPlans{makeSubtreePlan<NeutralElementOperation>(_qec)};
       // Neutral element can potentially still get filtered out
-      applyFiltersIfPossible<true>(neutralPlans, rootPattern->_filters);
+      applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+          neutralPlans, optimizer.filtersAndSubst_);
       return neutralPlans;
     }
     return candidatePlans[0];
@@ -507,7 +521,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
         std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t.s_.getVariable()].push_back(s);
         if (activeGraphVariable_.has_value() ||
-            activeDatasetClauses_.defaultGraphs_.has_value()) {
+            activeDatasetClauses_.activeDefaultGraphs().has_value()) {
           AD_THROW(
               "contains-word is not allowed inside GRAPH clauses or in queries "
               "with FROM/FROM NAMED clauses.");
@@ -761,8 +775,25 @@ auto QueryPlanner::seedWithScansAndText(
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-      newIdPlan._idsOfIncludedFilters = 0;
-      newIdPlan.idsOfIncludedTextLimits_ = 0;
+
+      // Helper to check if the query execution tree of the plan holds a given
+      // operation type as its root
+      auto is = [&](auto ti) {
+        using T = typename decltype(ti)::type;
+        return dynamic_cast<const T*>(
+                   newIdPlan._qet->getRootOperation().get()) != nullptr;
+      };
+
+      // Either the _idsOfIncludedFilters and idsOfIncludedTextLimits_ of the
+      // plan are all `0`, or the plan is either a MINUS, OPTIONAL, or BIND (for
+      // which we have special handling).
+      using namespace ad_utility::use_type_identity;
+      AD_CORRECTNESS_CHECK(
+          (newIdPlan._idsOfIncludedFilters == 0 &&
+           newIdPlan.idsOfIncludedTextLimits_ == 0) ||
+              is(ti<Bind>) || is(ti<OptionalJoin>) || is(ti<Minus>),
+          "Bit map _idsOfIncludedFilters or idsOfIncludedTextLimits_ illegal");
+
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
@@ -828,34 +859,56 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan =
-        [this, pushPlan, node,
-         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
-            Permutation::Enum permutation,
-            std::optional<SparqlTripleSimple> triple = std::nullopt) {
-          if (!triple.has_value()) {
-            triple = node.triple_.getSimple();
-          }
-
-          // We are inside a `GRAPH ?var {...}` clause, so all index scans have
-          // to add the graph variable as an additional column.
-          auto& additionalColumns = triple.value().additionalScanColumns_;
-          AD_CORRECTNESS_CHECK(!ad_utility::contains(
-              additionalColumns | ql::views::keys, ADDITIONAL_COLUMN_GRAPH_ID));
-          if (activeGraphVariable_.has_value()) {
-            additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                           activeGraphVariable_.value());
-          }
-
-          // TODO<joka921> Handle the case, that the Graph variable is also used
-          // inside the `GRAPH` clause, e.g. by being used inside a triple.
-
-          pushPlan(makeSubtreePlan<IndexScan>(
-              _qec, permutation, std::move(triple.value()), relevantGraphs));
-        };
-
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
+    };
+
+    auto addIndexScan = [this, pushPlan, node,
+                         &relevantGraphs =
+                             activeDatasetClauses_.activeDefaultGraphs(),
+                         &addFilter](
+                            Permutation::Enum permutation,
+                            std::optional<SparqlTripleSimple> optTriple =
+                                std::nullopt) {
+      if (!optTriple.has_value()) {
+        optTriple = node.triple_.getSimple();
+      }
+
+      // We are inside a `GRAPH ?var {...}` clause, so all index scans have
+      // to add the graph variable as an additional column.
+      auto& triple = optTriple.value();
+      auto& additionalColumns = triple.additionalScanColumns_;
+      AD_CORRECTNESS_CHECK(!ad_utility::contains(
+          additionalColumns | ql::views::keys, ADDITIONAL_COLUMN_GRAPH_ID));
+      if (activeGraphVariable_.has_value()) {
+        const auto& graphVariable = activeGraphVariable_.value();
+        bool tripleContainsGraphVariable = triple.s_ == graphVariable ||
+                                           triple.p_ == graphVariable ||
+                                           triple.o_ == graphVariable;
+        auto internalVariable = tripleContainsGraphVariable
+                                    ? generateUniqueVarName()
+                                    : graphVariable;
+        // If the pattern contains the graph variable, make sure to apply a
+        // proper filter.
+        if (tripleContainsGraphVariable) {
+          using namespace sparqlExpression;
+          auto makeVarExpr = [](Variable variable) {
+            return std::make_unique<VariableExpression>(std::move(variable));
+          };
+          addFilter(SparqlFilter{
+              SparqlExpressionPimpl{std::make_shared<EqualExpression>(
+                                        std::array<SparqlExpression::Ptr, 2>{
+                                            makeVarExpr(graphVariable),
+                                            makeVarExpr(internalVariable)}),
+                                    absl::StrCat(graphVariable.name(), " = ",
+                                                 internalVariable.name())}});
+        }
+        additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                       std::move(internalVariable));
+      }
+
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple),
+                                          relevantGraphs));
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
@@ -1231,32 +1284,40 @@ size_t SubtreePlan::getCostEstimate() const { return _qet->getCostEstimate(); }
 size_t SubtreePlan::getSizeEstimate() const { return _qet->getSizeEstimate(); }
 
 // _____________________________________________________________________________
-bool QueryPlanner::connected(const SubtreePlan& a, const SubtreePlan& b,
-                             const QueryPlanner::TripleGraph& tg) const {
+QueryPlanner::JoinColumns QueryPlanner::connected(
+    const SubtreePlan& a, const SubtreePlan& b,
+    boost::optional<const QueryPlanner::TripleGraph&> tg) const {
   // Check if there is overlap.
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) {
-    return false;
+    return {};
   }
 
-  if (a._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size()) ||
-      b._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size())) {
-    return getJoinColumns(a, b).size() > 0;
+  // If a substitute is contained, do not use the triple graph. This is because
+  // a substitute might connect triples that are otherwise unconnected but the
+  // connection is not part of the triple graph.
+  if (!tg || a.containsFilterSubstitute_ || b.containsFilterSubstitute_) {
+    return getJoinColumns(a, b);
   }
 
-  for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
+  auto scope = 1ULL << tg->_nodeMap.size();
+  if (a._idsOfIncludedNodes >= scope || b._idsOfIncludedNodes >= scope) {
+    return getJoinColumns(a, b);
+  }
+
+  for (size_t i = 0; i < tg->_nodeMap.size(); ++i) {
     if (((a._idsOfIncludedNodes >> i) & 1) == 0) {
       continue;
     }
-    auto& connectedNodes = tg._adjLists[i];
+    auto& connectedNodes = tg->_adjLists[i];
     for (auto targetNodeId : connectedNodes) {
       if ((((a._idsOfIncludedNodes >> targetNodeId) & 1) == 0) &&
           (((b._idsOfIncludedNodes >> targetNodeId) & 1) != 0)) {
-        return true;
+        return getJoinColumns(a, b);
       }
     }
   }
-  return false;
+  return {};
 }
 
 // _____________________________________________________________________________
@@ -1287,14 +1348,17 @@ string QueryPlanner::getPruningKey(
   os << ' ' << plan._idsOfIncludedFilters;
   os << " t: ";
   os << ' ' << plan.idsOfIncludedTextLimits_;
+  os << " s: ";
+  os << ' ' << plan.containsFilterSubstitute_;
 
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-template <bool replace>
+template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
-    vector<SubtreePlan>& row, const vector<SparqlFilter>& filters) const {
+    vector<SubtreePlan>& row,
+    const FiltersAndOptionalSubstitutes& filters) const {
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
@@ -1319,23 +1383,49 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    for (size_t i = 0; i < filters.size(); ++i) {
+    for (const auto& [i, filterAndSubst] :
+         ::ranges::views::enumerate(filters)) {
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
 
-      if (ql::ranges::all_of(filters[i].expression_.containedVariables(),
-                             [&plan](const auto& variable) {
-                               return plan._qet->isVariableCovered(*variable);
-                             })) {
-        // Apply this filter.
-        SubtreePlan newPlan =
-            makeSubtreePlan<Filter>(_qec, plan._qet, filters[i].expression_);
-        newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+      const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
+                                    mode == FilterMode::ReplaceUnfiltered;
+      if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
+          (filterAndSubst.filter_.expression_.containedVariables().empty() ||
+           ql::ranges::any_of(
+               filterAndSubst.filter_.expression_.containedVariables(),
+               [&plan](const auto& variable) {
+                 return plan._qet->isVariableCovered(*variable);
+               }))) {
+        // Apply filter substitution
+        auto jcs = getJoinColumns(filterAndSubst.substitute_.value(), plan);
+        auto substPlans =
+            createJoinCandidates(filterAndSubst.substitute_.value(), plan, jcs);
+        for (auto& newPlan : substPlans) {
+          mergeSubtreePlanIds(newPlan, newPlan, plan);
+          newPlan.type = plan.type;
+          newPlan.containsFilterSubstitute_ = true;
+          addedPlans.push_back(newPlan);
+        }
+        continue;
+      }
+
+      const bool applyAll =
+          mode == FilterMode::ApplyAllFiltersAndReplaceUnfiltered;
+      if (applyAll ||
+          ql::ranges::all_of(
+              filterAndSubst.filter_.expression_.containedVariables(),
+              [&plan](const auto& variable) {
+                return plan._qet->isVariableCovered(*variable);
+              })) {
+        // Apply this filter regularly.
+        SubtreePlan newPlan = makeSubtreePlan<Filter>(
+            _qec, plan._qet, filterAndSubst.filter_.expression_);
+        mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
-        newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
         newPlan.type = plan.type;
-        if constexpr (replace) {
+        if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
           addedPlans.push_back(std::move(newPlan));
@@ -1393,6 +1483,7 @@ void QueryPlanner::applyTextLimitsIfPossible(vector<SubtreePlan>& row,
       newPlan.idsOfIncludedTextLimits_ = plan.idsOfIncludedTextLimits_;
       newPlan.idsOfIncludedTextLimits_ |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+      newPlan.containsFilterSubstitute_ = plan.containsFilterSubstitute_;
       newPlan.type = plan.type;
       i++;
       if (replace) {
@@ -1423,34 +1514,33 @@ size_t QueryPlanner::findUniqueNodeIds(
 std::vector<SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-    const TripleGraph& tg) const {
+    const FiltersAndOptionalSubstitutes& filters,
+    const TextLimitVec& textLimits, const TripleGraph& tg) const {
   vector<vector<SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  applyFiltersIfPossible<false>(dpTab.back(), filters);
-  applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
   size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
+    applyFiltersIfPossible<FilterMode::KeepUnfiltered>(dpTab.back(), filters);
+    applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible<false>(dpTab.back(), filters);
-      applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   auto& result = dpTab.back();
-  applyFiltersIfPossible<true>(result, filters);
+  applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
+                                                                     filters);
   applyTextLimitsIfPossible(result, textLimits, true);
   return std::move(result);
 }
@@ -1530,9 +1620,10 @@ size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
-    const TripleGraph& tg) const {
-  applyFiltersIfPossible<true>(connectedComponent, filters);
+    const FiltersAndOptionalSubstitutes& filters,
+    const TextLimitVec& textLimits, const TripleGraph& tg) const {
+  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
+                                                        filters);
   applyTextLimitsIfPossible(connectedComponent, textLimits, true);
   const size_t numSeeds = findUniqueNodeIds(connectedComponent);
   if (numSeeds <= 1) {
@@ -1556,8 +1647,8 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // planning is performed, which also establishes the pre-/postconditions.
   auto greedyStep = [this, &tg, &filters, &textLimits,
                      currentPlans = std::move(connectedComponent),
-                     cache = Plans{}](Plans& nextBestPlan,
-                                      bool isFirstStep) mutable {
+                     cache = Plans{}](Plans& nextBestPlan, bool isFirstStep,
+                                      bool isLastStep) mutable {
     checkCancellation();
     // Normally, we already have all combinations of two nodes in `currentPlans`
     // in the cache, so we only have to add the combinations between
@@ -1565,7 +1656,13 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     // compute all possible combinations.
     auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
                                 : merge(currentPlans, nextBestPlan, tg);
-    applyFiltersIfPossible<true>(newPlans, filters);
+    // Do not apply filter substitutes in the last round
+    if (isLastStep) {
+      applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+          newPlans, filters);
+    } else {
+      applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
+    }
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
@@ -1591,15 +1688,27 @@ std::vector<SubtreePlan> QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::erase_if(cache, shouldBeErased);
   };
 
-  bool first = true;
   Plans result;
-  for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    greedyStep(result, first);
-    first = false;
+  for (size_t i : ad_utility::integerRange(numSeeds - 1)) {
+    greedyStep(result, i == 0, i == numSeeds - 2);
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
   return result;
 }
+
+// _____________________________________________________________________________
+QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
+    const std::vector<SparqlFilter>& filters) const {
+  FiltersAndOptionalSubstitutes plans;
+  plans.reserve(filters.size());
+
+  // Currently, no filter substitutes are implemented. This will follow in
+  // #1935 and #2140.
+  for (const auto& filterExpression : filters) {
+    plans.emplace_back(filterExpression, std::nullopt);
+  }
+  return plans;
+};
 
 // _____________________________________________________________________________
 vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
@@ -1608,10 +1717,18 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);
   ql::ranges::move(additionalFilters, std::back_inserter(filters));
+
+  // If we have FILTER statements that can also be answered by a special join,
+  // add the respective query plans as filter substitutes.
+  auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
+
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
-  auto componentIndices = QueryGraph::computeConnectedComponents(initialPlans);
+
+  auto componentIndices = QueryGraph::computeConnectedComponents(
+      initialPlans, filtersAndOptSubstitutes);
+
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
@@ -1633,8 +1750,9 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
-    lastDpRowFromComponents.push_back(std::invoke(
-        impl, this, std::move(component), filters, textLimitVec, tg));
+    lastDpRowFromComponents.push_back(
+        std::invoke(impl, this, std::move(component), filtersAndOptSubstitutes,
+                    textLimitVec, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -1646,7 +1764,8 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   }
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
-    applyFiltersIfPossible<true>(lastDpRowFromComponents.back(), filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+        lastDpRowFromComponents.back(), filtersAndOptSubstitutes);
     applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimitVec,
                               true);
     return lastDpRowFromComponents;
@@ -1661,6 +1780,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t nodes = 0;
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
+  bool containsFilterSubstitute = false;
   ql::ranges::for_each(
       lastDpRowFromComponents |
           ql::views::transform([this](auto& vec) -> decltype(auto) {
@@ -1670,6 +1790,7 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
         nodes |= plan._idsOfIncludedNodes;
         filterIds |= plan._idsOfIncludedFilters;
         textLimitIds |= plan.idsOfIncludedTextLimits_;
+        containsFilterSubstitute |= plan.containsFilterSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
   result.at(0).push_back(
@@ -1678,7 +1799,9 @@ vector<vector<SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
-  applyFiltersIfPossible<true>(result.at(0), filters);
+  plan.containsFilterSubstitute_ = containsFilterSubstitute;
+  applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
+      result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
 }
@@ -2003,21 +2126,7 @@ std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
   const auto& b = !swapForTesting ? bin : ain;
-  std::vector<SubtreePlan> candidates;
-
-  // TODO<joka921> find out, what is ACTUALLY the use case for the triple
-  // graph. Is it only meant for (questionable) performance reasons
-  // or does it change the meaning.
-  JoinColumns jcs;
-  if (tg) {
-    if (connected(a, b, *tg)) {
-      jcs = getJoinColumns(a, b);
-    }
-  } else {
-    jcs = getJoinColumns(a, b);
-  }
-
-  return createJoinCandidates(ain, bin, jcs);
+  return createJoinCandidates(ain, bin, connected(a, b, tg));
 }
 
 // _____________________________________________________________________________
@@ -2469,7 +2578,8 @@ auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
 
 // _____________________________________________________________________
 void QueryPlanner::QueryGraph::setupGraph(
-    const std::vector<SubtreePlan>& leafOperations) {
+    const std::vector<SubtreePlan>& leafOperations,
+    const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
   // Prepare the `nodes_` vector for the graph. We have one node for each leaf
   // of what later becomes the `QueryExecutionTree`.
   for (const auto& leafOperation : leafOperations) {
@@ -2481,7 +2591,8 @@ void QueryPlanner::QueryGraph::setupGraph(
     ad_utility::HashMap<Variable, std::vector<Node*>> result;
     for (const auto& node : nodes_) {
       const auto& variableColumns = node->plan_->_qet->getVariableColumns();
-      // Make sure plans with the same id without variables count as connected.
+      // Make sure plans with the same id without variables count as
+      // connected.
       if (variableColumns.empty()) {
         // Dummy variable that can not be created using the SPARQL grammar.
         result[Variable{absl::StrCat("??", node->plan_->_idsOfIncludedNodes),
@@ -2498,7 +2609,7 @@ void QueryPlanner::QueryGraph::setupGraph(
   // adjacent if they share a variable. The adjacentNodes_ are stored as hash
   // sets so we don't need to worry about duplicates.
   ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
-      [&varToNode]() {
+      [&varToNode, &filtersAndOptionalSubstitutes]() {
         ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
         for (auto& nodesThatContainSameVar : varToNode | ql::views::values) {
           // TODO<C++23> Use ql::views::cartesian_product
@@ -2509,6 +2620,54 @@ void QueryPlanner::QueryGraph::setupGraph(
                 result[n2].insert(n1);
               }
             }
+          }
+        }
+
+        // Add additional edges to the graph representing the connections
+        // between variables given by joins substituting cartesian product +
+        // filter.
+        for (auto& [filter, substitute] : filtersAndOptionalSubstitutes) {
+          if (!substitute.has_value()) {
+            // This filter cannot be substituted: add no edges.
+            continue;
+          }
+          absl::InlinedVector<const Variable*, 4> varsToBeConnected;
+
+          const auto& substituteVariables =
+              substitute.value()
+                  ._qet->getRootOperation()
+                  ->getExternallyVisibleVariableColumns();
+
+          for (auto var : filter.expression_.containedVariables()) {
+            if (varToNode.contains(*var)) {
+              varsToBeConnected.push_back(var);
+              AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
+            }
+          }
+
+          if (varsToBeConnected.size() < 2) {
+            // There is no variables to connect, because this filter has one or
+            // zero variables.
+            continue;
+          }
+
+          AD_CORRECTNESS_CHECK(substituteVariables.size() ==
+                               varsToBeConnected.size());
+
+          auto first = varsToBeConnected[0];
+          for (size_t i = 1; i < varsToBeConnected.size(); i++) {
+            auto second = varsToBeConnected[i];
+
+            for (auto [n1, n2] :
+                 ::ranges::views::cartesian_product(varToNode.at(*first),
+                                                    varToNode.at(*second)) |
+                     ::ranges::views::filter([](const auto& pair) {
+                       return std::get<0>(pair) != std::get<1>(pair);
+                     })) {
+              result[n1].insert(n2);
+              result[n2].insert(n1);
+            }
+            first = second;
           }
         }
         return result;
@@ -2618,6 +2777,14 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
+
+    // We have finished a nested GroupGraphPattern, reset the filter and text
+    // limit IDs, s.t. they don't leak into other groups
+    for (auto& plan : candidatePlans_.back()) {
+      plan._idsOfIncludedFilters = 0;
+      plan.idsOfIncludedTextLimits_ = 0;
+    }
+
     return;
   }
 
@@ -2630,9 +2797,18 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // For each candidate plan, and each plan from the OPTIONAL or MINUS, create
   // a new plan with an optional join. Note that `createJoinCandidates` will
   // whether `b` is from an OPTIONAL or MINUS.
-  for (const auto& a : candidatePlans_.at(0)) {
-    for (const auto& b : candidates) {
+  for (auto& a : candidatePlans_.at(0)) {
+    for (auto& b : candidates) {
+      a._idsOfIncludedNodes = 1;
+      b._idsOfIncludedNodes = 2;
       auto vec = planner_.createJoinCandidates(a, b, boost::none);
+      // This is not yet the end of a group (but just an optimization barrier
+      // within the group), so we have to remember which filters have already
+      // been applied
+      for (auto& plan : vec) {
+        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+        plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
+      }
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
                             std::make_move_iterator(vec.end()));
@@ -2646,7 +2822,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   AD_CORRECTNESS_CHECK(
       !nextCandidates.empty(),
       "Could not find a single candidate join for two optimized graph "
-      "patterns. Please report this to the developers");
+      "patterns");
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
   candidatePlans_.clear();
   candidatePlans_.push_back({std::move(nextCandidates[idx])});
@@ -2663,24 +2839,21 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
+    auto& activeDatasets = planner_.activeDatasetClauses_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (std::holds_alternative<TripleComponent::Iri>(arg.graphSpec_)) {
-        datasetBackup = planner_.activeDatasetClauses_;
-        planner_.activeDatasetClauses_.defaultGraphs_.emplace(
-            {std::get<TripleComponent::Iri>(arg.graphSpec_)});
-      } else if (std::holds_alternative<Variable>(arg.graphSpec_)) {
-        const auto& graphVar = std::get<Variable>(arg.graphSpec_);
-        if (checkUsePatternTrick::isVariableContainedInGraphPattern(
-                graphVar, arg._child, nullptr)) {
-          throw std::runtime_error(
-              "A variable that is used as the graph specifier of a `GRAPH ?var "
-              "{...}` clause may not appear in the body of that clause");
-        }
-        datasetBackup = planner_.activeDatasetClauses_;
-        planner_.activeDatasetClauses_.defaultGraphs_ =
-            planner_.activeDatasetClauses_.namedGraphs_;
+      if (const auto* graphIri =
+              std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
+        datasetBackup = std::exchange(
+            activeDatasets,
+            activeDatasets.getDatasetClauseForGraphClause(*graphIri));
+      } else if (const auto* graphVar =
+                     std::get_if<Variable>(&arg.graphSpec_)) {
+        datasetBackup = std::exchange(
+            activeDatasets,
+            activeDatasets.getDatasetClauseForVariableGraphClause());
+
         // We already have backed up the `activeGraphVariable_`.
-        planner_.activeGraphVariable_ = std::get<Variable>(arg.graphSpec_);
+        planner_.activeGraphVariable_ = *graphVar;
       } else {
         AD_CORRECTNESS_CHECK(
             std::holds_alternative<std::monostate>(arg.graphSpec_));
@@ -2710,6 +2883,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::Service>) {
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
+  } else if constexpr (std::is_same_v<T, p::Load>) {
+    SubtreePlan loadPlan = makeSubtreePlan<Load>(qec_, arg);
+    visitGroupOptionalOrMinus(std::vector{std::move(loadPlan)});
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
@@ -2789,6 +2965,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
+    plan.containsFilterSubstitute_ = a.containsFilterSubstitute_;
     candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case where the BIND clause is the first clause (which is
@@ -2823,7 +3000,7 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.defaultGraphs_);
+        planner_.activeDatasetClauses_.activeDefaultGraphs());
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
@@ -2931,7 +3108,20 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitSubquery(
     parsedQuery::Subquery& arg) {
+  absl::Cleanup resetActiveGraphs{
+      [this, originalVar = planner_.activeGraphVariable_]() mutable {
+        // Reset back to original
+        planner_.activeGraphVariable_ = std::move(originalVar);
+      }};
+
   ParsedQuery& subquery = arg.get();
+  const auto& select = subquery.selectClause();
+  // Disable for subqueries that do not select the graph variable
+  if (planner_.activeGraphVariable_.has_value() && !select.isAsterisk() &&
+      !ad_utility::contains(select.getSelectedVariables(),
+                            planner_.activeGraphVariable_.value())) {
+    planner_.activeGraphVariable_ = std::nullopt;
+  }
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
   // remove the ORDER BY clauses of a subquery if we can prove that
@@ -2940,26 +3130,16 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // For a subquery, make sure that one optimal result for each ordering
   // of the result (by a single column) is contained.
   auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
-  // Make sure that variables that are not selected by the subquery are
-  // not visible.
-  auto setSelectedVariables = [&](SubtreePlan& plan) {
-    auto selectedVariables = arg.get().selectClause().getSelectedVariables();
-    // TODO<C++23> Use `optional::transform`
-    if (planner_.activeGraphVariable_.has_value()) {
-      const auto& graphVar = planner_.activeGraphVariable_.value();
-      AD_CORRECTNESS_CHECK(
-          !ad_utility::contains(selectedVariables, graphVar),
-          "This case (variable of GRAPH ?var {...} appears also in the body) "
-          "should have thrown further up in the call stack");
-      selectedVariables.push_back(graphVar);
-    }
+  // Make sure that variables that are not selected by the subquery are not
+  // visible.
+  auto setSelectedVariables = [&select](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        selectedVariables);
+        select.getSelectedVariables());
   };
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->setLimit(arg.get()._limitOffset);
+    plan._qet->applyLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }

@@ -110,7 +110,7 @@ struct NumericIdWrapper {
 // floating point) and converts it to a function, that takes the same arguments
 // and returns the same result, but the arguments and the return type are the
 // `NumericValue` variant.
-template <typename Function>
+template <typename Function, bool NanOrInfToUndef = false>
 inline auto makeNumericExpression() {
   return [](const auto&... args) {
     CPP_assert(
@@ -120,7 +120,7 @@ inline auto makeNumericExpression() {
                      std::is_same_v<NotNumeric, std::decay_t<decltype(t)>>)) {
         return Id::makeUndefined();
       } else {
-        return makeNumericId(Function{}(t...));
+        return makeNumericId<NanOrInfToUndef>(Function{}(t...));
       }
     };
     return std::visit(visitor, args...);

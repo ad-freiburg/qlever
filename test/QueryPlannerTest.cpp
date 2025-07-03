@@ -1625,7 +1625,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       parsedQuery::PathSearchException);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -1849,8 +1849,24 @@ TEST(QueryPlanner, SpatialJoinService) {
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
                      std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+
+  // Floating point as maximum distance
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 0.5 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(0.5, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
+                     std::nullopt, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   // Test the <payload> option which allows selecting columns from the graph
   // pattern inside the service.
@@ -1967,6 +1983,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2052,6 +2069,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
           "SERVICE, but the <payload> parameter was set"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   // Test two spatial join SERVICEs that share a common ?left variable
 
@@ -2129,6 +2147,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
                          scan("?ab", "<p1>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMissingConfig) {
   // Tests with incomplete config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2194,6 +2213,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                                "`<maxDistance>` were provided"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
   // Test that unallowed operations inside the SERVICE statement throw
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2213,6 +2233,7 @@ TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
       ::testing::ContainsRegex("Unsupported element in spatialQuery"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
   // Test that the SERVICE statement may only contain at most one graph pattern
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2232,6 +2253,7 @@ TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
                                "than one nested group graph pattern"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
   // Tests with mistakes in the config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2423,6 +2445,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2580,6 +2603,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                 ::testing::_));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   // test if the SpatialJoin operation parses the maximum distance correctly
   auto testMaxDistance = [](std::string distanceIRI, long long distance,
@@ -2664,7 +2688,7 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
@@ -3438,13 +3462,16 @@ TEST(QueryPlanner, DatasetClause) {
   h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
-  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{}));
 
   auto g1 = Graphs{"<g1>"};
   auto g2 = Graphs{"<g2>"};
   h::expect(
-      "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
+      "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH "
+      "<g2> { <c> ?p <z> "
       "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
@@ -3452,6 +3479,7 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<e>", "?p", "<z3>", {}, g1)));
 
   auto g12 = Graphs{"<g1>", "<g2>"};
+  auto noGraphs = Graphs{};
   auto varG = std::vector{Variable{"?g"}};
   std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
   h::expect(
@@ -3460,41 +3488,95 @@ TEST(QueryPlanner, DatasetClause) {
       scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
 
   h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
-            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
+            scan("<a>", "<b>", "<c>", {}, noGraphs, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
-  // We use the `UnorderedJoins` matcher, because the index scan has to be
-  // resorted by the graph column.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                 h::UnorderedJoins(
-                     scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
+      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
 
   // A complex example with graph variables.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
       "{ <c> ?p <z> "
-      "{SELECT * {<d> ?p <z2>}}"
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "{SELECT * {<d> ?p <z2>}}"
       "} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
+          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
           scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                     h::UnorderedJoins(
-                         scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
           scan("<e>", "?p", "<z3>", {}, g1)));
-  // We currently don't support repeating the graph variable inside the
-  // graph clause
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT * { GRAPH ?x {?x <b> <c>}}", ::testing::_),
-      AllOf(HasSubstr("used as the graph specifier"),
-            HasSubstr("may not appear in the body")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, graphVariablesWithinPattern) {
+  auto scan = h::IndexScanFromStrings;
+  // Single variable
+  h::expect("SELECT * { GRAPH ?x { ?x <b> <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "<b>", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> ?x <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "?x", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> <b> ?x } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "<b>", "?x", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  // Two variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x <c> } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan(internalVar(0), "?x", "<c>", {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x <b> ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("?x", "<b>", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { <a> ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("<a>", "?x", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  // Three variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_2",
+                h::Filter("?_QLever_internal_variable_qp_1=?x",
+                          h::Filter("?_QLever_internal_variable_qp_0=?x",
+                                    scan(internalVar(1), "?x", internalVar(0),
+                                         {}, std::nullopt,
+                                         {Variable{internalVar(2)}}, {3})))));
+  // Three distinct variables
+  h::expect("SELECT * { GRAPH ?x { ?x ?y ?z } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "?y", "?z", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+
+  // Wrapped in subquery (one of the compliance tests)
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
+      scan("?x", "?p", "?g"));
 }
 
 // _____________________________________________________________________________
@@ -3918,6 +4000,42 @@ TEST(QueryPlanner, OptionalJoinWithEmptyPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, LimitIsProperlyAppliedForSubqueries) {
+  auto hasLimit = [](const LimitOffsetClause& limit) {
+    return queryPlannerTestHelpers::RootOperationBase(
+        AD_PROPERTY(Operation, getLimitOffset, ::testing::Eq(limit)));
+  };
+
+  h::expect("SELECT * { SELECT ?a { ?a ?b ?c } LIMIT 1 }",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  h::expect(
+      "SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } } LIMIT 1 }",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 1"),
+            hasLimit({1})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } OFFSET 2 } OFFSET 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"),
+                  hasLimit({std::nullopt, 3})));
+  // Last offset should only be applied by exporter since VALUES does not
+  // support OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} OFFSET 1 } OFFSET 2 } OFFSET 5",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } OFFSET 3"),
+            hasLimit({std::nullopt, 3})));
+
+  h::expect("SELECT * { SELECT * { ?a ?b ?c } LIMIT 2 } LIMIT 1",
+            AllOf(h::IndexScanFromStrings("?a", "?b", "?c"), hasLimit({1})));
+  // Last limit should only be applied by exporter since VALUES does not support
+  // OFFSET natively
+  h::expect(
+      "SELECT * { SELECT * { SELECT * { VALUES (?x) { (1) (2) (3) (4) (5) } "
+      "} LIMIT 3 } LIMIT 2 } LIMIT 1",
+      AllOf(h::ValuesClause("VALUES (?x) { (1) (2) (3) (4) (5) } LIMIT 2"),
+            hasLimit({2})));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   auto query = SparqlParser::parseQuery(
       "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
@@ -4198,4 +4316,200 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                               h::IndexScanFromStrings(
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, correctFiltersHandling) {
+  auto scan = h::IndexScanFromStrings;
+
+  // Filter is only applied once with OPTIONAL
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?x <c> ?d } }",
+            h::OptionalJoin(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                            scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . OPTIONAL {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::OptionalJoin(scan("?x", "<c>", "?d"),
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter is applied in the correct subtree with MINUS
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) MINUS { ?x <c> ?d } }",
+            h::Minus(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                     scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . MINUS {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::Minus(scan("?x", "<c>", "?d"),
+                     h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter inside and outside of a subquery
+  h::expect("SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c FILTER(?c < 5) } } }",
+            h::Join(scan("?x", "<c>", "?d"),
+                    h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+  h::expect(
+      "SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c } } FILTER(?c < 5) }",
+      ::testing::AnyOf(h::Join(scan("?x", "<c>", "?d"),
+                               h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<c>", "?d"),
+                                                   scan("?x", "<b>", "?c")))));
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) { SELECT * { ?x <c> ?d } } }",
+      ::testing::AnyOf(h::Join(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                               scan("?x", "<c>", "?d")),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<b>", "?c"),
+                                                   scan("?x", "<c>", "?d")))));
+
+  // Filter and bind
+  h::expect(
+      "SELECT * { ?x <b> ?c FILTER(?c < 5) BIND(42 AS ?unrelated) FILTER(?c >= "
+      "1) }",
+      h::AnyOf(
+          h::Filter("?c >= 1",
+                    h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")), "42",
+                            Variable{"?unrelated"})),
+          h::Filter("?c >= 1",
+                    h::Filter("?c < 5", h::Bind(scan("?x", "<b>", "?c"), "42",
+                                                Variable{"?unrelated"}))),
+          h::Bind(h::Filter("?c >= 1",
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                  "42", Variable{"?unrelated"})));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimization) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  TransitivePathSide left2{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?other"}, 1};
+  h::expect(
+      "SELECT * { ?var <a>* ?other . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { ?other <a>* ?var . ?var <a> <b> }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?var", "<a>", "<b>"),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  auto* qec = ad_utility::testing::getQec(
+      "<d> <c> <d> . <d1> <c> <d> . <d2> <c> <d> . <d> <a> <b> . <d2> <a> <b> "
+      ". <d3> <a> <b> . <d4> <a> <b> . <d5> <a> <b> . <d6> <a> <b>");
+
+  h::expect(
+      "SELECT * { ?var <a> <b> . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::IndexScanFromStrings("?var", "<a>", "<b>"),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+
+  h::expect(
+      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimizationAndUndefFilter) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { UNDEF } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::Filter("BOUND(?var)",
+                                h::ValuesClause("VALUES (?var) { (UNDEF) }")))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, filtersWithUnboundVariables) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect("SELECT * { ?a ?b ?c FILTER(?c = ?d) }",
+            h::Filter("?c = ?d", scan("?a", "?b", "?c")));
+  h::expect("SELECT * { FILTER(?c = 1) }",
+            h::Filter("?c = 1", h::NeutralElement()));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
+  // Test the query planner's ability to substitute filters with alternative
+  // subtree plans using the `QueryPlannerWithMockFilterSubstitute` class. It
+  // replaces filters of the form `FILTER(?a = ?b)` with `?a <equal-to> ?b` to
+  // connect otherwise unconnected components.
+  auto scan = h::IndexScanFromStrings;
+
+  /*
+   *        FILTER (?a = ?b)
+   *                |
+   *      CARTESIAN PRODUCT JOIN
+   *          /           \
+   *   SCAN ?a <b> ?c    SCAN ?b <c> ?d
+   *
+   * becomes (for example):
+   *
+   *              JOIN ?a
+   *              /     \
+   *           SORT    SCAN ?a <b> ?c
+   *             |
+   *          JOIN ?b
+   *       /          \
+   * SCAN ?b <c> ?d   SORT
+   *                    |
+   *         SCAN ?a <equal-to> ?b      <-- Substituted FILTER to PSO scan
+   */
+
+  h::expect(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::Filter("?a = ?b", h::CartesianProductJoin(scan("?a", "<b>", "?c"),
+                                                   scan("?b", "<c>", "?d"))));
+  h::expect<h::QueryPlannerWithMockFilterSubstitute>(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
+                        scan("?a", "<equal-to>", "?b")));
 }

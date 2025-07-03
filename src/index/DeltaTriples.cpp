@@ -1,8 +1,13 @@
-// Copyright 2023 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
-//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2025 The QLever Authors, in particular:
+//
+// 2023 - 2025 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2024 - 2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>, UFR
+// 2024 - 2025 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "index/DeltaTriples.h"
 
@@ -29,8 +34,8 @@ void DeltaTriples::clear() {
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
-                                  ql::span<const IdTriple<0>> idTriples,
-                                  bool shouldExist) {
+                                  ql::span<const IdTriple<0>> triples,
+                                  bool insertOrDelete) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -38,7 +43,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
         //  is done
-        idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
+        triples, perm.metaData().blockData(), perm.keyOrder(), insertOrDelete,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[static_cast<size_t>(permutation)] =
@@ -46,9 +51,9 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
-  std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
+  std::vector<DeltaTriples::LocatedTripleHandles> handles{triples.size()};
   for (auto permutation : Permutation::ALL) {
-    for (size_t i = 0; i < idTriples.size(); i++) {
+    for (size_t i = 0; i < triples.size(); i++) {
       handles[i].forPermutation(permutation) =
           intermediateHandles[static_cast<size_t>(permutation)][i];
     }
@@ -148,7 +153,7 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
 
 // ____________________________________________________________________________
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
-                                     Triples triples, bool shouldExist,
+                                     Triples triples, bool insertOrDelete,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
@@ -170,8 +175,8 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   ql::ranges::for_each(locatedTriples(),
                        &LocatedTriplesPerBlock::updateAugmentedMetadata);
 
-  std::vector<LocatedTripleHandles> handles =
-      locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
+  std::vector<LocatedTripleHandles> handles = locateAndAddTriples(
+      std::move(cancellationHandle), triples, insertOrDelete);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with ql::views::zip in C++23

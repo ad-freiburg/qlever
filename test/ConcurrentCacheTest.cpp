@@ -3,7 +3,6 @@
 // Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
 
 #include <gmock/gmock.h>
-#include <util/Parameters.h>
 
 #include <atomic>
 #include <chrono>
@@ -15,6 +14,7 @@
 #include "util/ConcurrentCache.h"
 #include "util/DefaultValueSizeGetter.h"
 #include "util/GTestHelpers.h"
+#include "util/Parameters.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 

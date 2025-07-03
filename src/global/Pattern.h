@@ -251,43 +251,6 @@ static_assert(
     std::is_nothrow_move_constructible_v<CompactStringVectorWriter<char>>);
 }  // namespace detail
 
-// Forward iterator for a `CompactVectorOfStrings` that reads directly from
-// disk without buffering the whole `Vector`.
-template <typename DataT>
-cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
-CompactVectorOfStrings<DataT>::diskIterator(string filename) {
-  ad_utility::File dataFile{filename, "r"};
-  ad_utility::File indexFile{filename, "r"};
-  AD_CORRECTNESS_CHECK(dataFile.isOpen());
-  AD_CORRECTNESS_CHECK(indexFile.isOpen());
-
-  const size_t dataSizeInBytes = [&]() {
-    size_t dataSize;
-    dataFile.read(&dataSize, sizeof(dataSize));
-    return dataSize * sizeof(DataT);
-  }();
-
-  indexFile.seek(sizeof(dataSizeInBytes) + dataSizeInBytes, SEEK_SET);
-  size_t size;
-  indexFile.read(&size, sizeof(size));
-
-  size--;  // There is one more offset than the number of elements.
-
-  size_t offset;
-  indexFile.read(&offset, sizeof(offset));
-
-  for (size_t i = 0; i < size; ++i) {
-    size_t nextOffset;
-    indexFile.read(&nextOffset, sizeof(nextOffset));
-    auto currentSize = nextOffset - offset;
-    vector_type result;
-    result.resize(currentSize);
-    dataFile.read(result.data(), currentSize * sizeof(DataT));
-    co_yield result;
-    offset = nextOffset;
-  }
-}
-
 // Hashing support for the `Pattern` class.
 template <>
 struct std::hash<Pattern> {

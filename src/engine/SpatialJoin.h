@@ -12,77 +12,9 @@
 #include <variant>
 
 #include "engine/Operation.h"
+#include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
-#include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
-
-// The supported spatial join types (geometry predicates).
-enum class SpatialJoinType {
-  INTERSECTS,
-  CONTAINS,
-  COVERS,
-  CROSSES,
-  TOUCHES,
-  EQUALS,
-  OVERLAPS,
-  WITHIN_DIST
-};
-
-// A nearest neighbor search with optionally a maximum distance.
-struct NearestNeighborsConfig {
-  size_t maxResults_;
-  std::optional<size_t> maxDist_ = std::nullopt;
-};
-
-// A spatial search limited only by a maximum distance.
-struct MaxDistanceConfig {
-  size_t maxDist_;
-};
-
-// Spatial join using one of the join types above. The maximal distance is
-// relevant only for the `WITHIN_DIST` join type.
-struct SpatialJoinConfig {
-  SpatialJoinType joinType_;
-  std::optional<size_t> maxDist_ = std::nullopt;
-};
-
-// Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask =
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig, SpatialJoinConfig>;
-
-// Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm {
-  BASELINE,
-  S2_GEOMETRY,
-  BOUNDING_BOX,
-  LIBSPATIALJOIN
-};
-const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
-    SpatialJoinAlgorithm::S2_GEOMETRY;
-
-// The configuration object that will be provided by the special SERVICE.
-struct SpatialJoinConfiguration {
-  // The task defines search parameters
-  SpatialJoinTask task_;
-
-  // The variables for the two tables to be joined
-  Variable left_;
-  Variable right_;
-
-  // If given, the distance will be added to the result and be bound to this
-  // variable.
-  std::optional<Variable> distanceVariable_ = std::nullopt;
-
-  // If given a vector of variables, the selected variables will be part of the
-  // result table - the join column will automatically be part of the result.
-  // You may use PayloadAllVariables to select all columns of the right table.
-  PayloadVariables payloadVariables_ = PayloadVariables::all();
-
-  // Choice of algorithm.
-  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
-
-  std::optional<SpatialJoinType> joinType_ = std::nullopt;
-};
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {
@@ -94,16 +26,10 @@ struct PreparedSpatialJoinParams {
   ColumnIndex rightJoinCol_;
   std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
-  std::optional<size_t> maxDist_;
+  std::optional<double> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<SpatialJoinType> joinType_;
 };
-
-// The spatial join operation without a limit on the maximum number of results
-// can, in the worst case have a square number of results, but usually this is
-// not the case. 1 divided by this constant is the damping factor for the
-// estimated number of results.
-static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
@@ -163,7 +89,7 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<size_t> getMaxDist() const;
+  std::optional<double> getMaxDist() const;
 
   // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
@@ -180,8 +106,8 @@ class SpatialJoin : public Operation {
   }
 
   // Helper functions for unit tests
-  std::pair<size_t, size_t> onlyForTestingGetTask() const {
-    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  std::pair<double, size_t> onlyForTestingGetTask() const {
+    return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
   }
 
   const SpatialJoinConfiguration& onlyForTestingGetConfig() const {

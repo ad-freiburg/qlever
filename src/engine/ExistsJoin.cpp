@@ -23,12 +23,25 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
   // Make sure that the left and right input are sorted on the join columns.
   std::tie(left_, right_) = QueryExecutionTree::createSortedTrees(
       std::move(left_), std::move(right_), joinColumns_);
+
+  if (joinColumns_.empty()) {
+    // For non-lazy results applying the limit introduces some overhead, but for
+    // lazy results it ensures that we don't have to compute the whole result,
+    // so we consider this a tradeoff worth to make.
+    right_->applyLimit({1});
+  }
 }
 
 // _____________________________________________________________________________
 string ExistsJoin::getCacheKeyImpl() const {
   return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
-                      " right: ", right_->getCacheKey());
+                      " right: ", right_->getCacheKey(), " join columns: [",
+                      absl::StrJoin(joinColumns_, " ",
+                                    [](std::string* out, const auto& array) {
+                                      absl::StrAppend(out, "(", array[0], ",",
+                                                      array[1], ")");
+                                    }),
+                      "]");
 }
 
 // _____________________________________________________________________________
@@ -85,12 +98,6 @@ size_t ExistsJoin::getCostEstimate() {
 Result ExistsJoin::computeResult(bool requestLaziness) {
   bool noJoinNecessary = joinColumns_.empty();
   auto leftRes = left_->getResult(noJoinNecessary && requestLaziness);
-  if (noJoinNecessary) {
-    // For non-lazy results applying the limit introduces some overhead, but for
-    // lazy results it ensures that we don't have to compute the whole result,
-    // so we consider this a tradeoff worth to make.
-    right_->setLimit({1});
-  }
   auto rightRes = right_->getResult();
   const auto& right = rightRes->idTable();
 
@@ -99,7 +106,7 @@ Result ExistsJoin::computeResult(bool requestLaziness) {
     // Forward lazy result, otherwise let the existing code handle the join with
     // no column.
     return {Result::LazyResult{
-                ad_utility::OwningView{std::move(leftRes->idTables())} |
+                ad_utility::OwningView{leftRes->idTables()} |
                 ql::views::transform([exists = !right.empty(),
                                       leftRes](Result::IdTableVocabPair& pair) {
                   // Make sure we keep this shared ptr alive until the result is
@@ -223,6 +230,13 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     auto pq = exists.argument();
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    // Hide non-visible variables in the subtree, so that they are not
+    // accidentally joined, ideally collisions wouldn't happen in the first
+    // place, but since we're creating our own instance of `QueryPlanner` we
+    // can't prevent them without refactoring the code. This workaround has the
+    // downside that it might look confusing
+    tree->getRootOperation()->setSelectedVariablesForSubquery(
+        pq.getVisibleVariables());
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
@@ -235,4 +249,17 @@ std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();
   return newJoin;
+}
+
+// _____________________________________________________________________________
+bool ExistsJoin::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable == existsVariable_) {
+    // NOTE: We could in theory check if the literals true and false are
+    // contained in the knowledge graph, but that would makes things more
+    // complicated for almost no benefit.
+    return false;
+  }
+  return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
 }

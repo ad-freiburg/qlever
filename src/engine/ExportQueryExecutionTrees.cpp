@@ -7,6 +7,7 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
 #include <ranges>
@@ -336,8 +337,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
-                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+      return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
@@ -1051,11 +1051,22 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   }(std::move(streamGenerator), std::move(it));
 }
 
+void ExportQueryExecutionTrees::compensateForLimitOffsetClause(
+    LimitOffsetClause& limitOffsetClause, const QueryExecutionTree& qet) {
+  // See the comment in `QueryPlanner::createExecutionTrees` on why this is safe
+  // to do
+  if (qet.supportsLimit()) {
+    limitOffsetClause._offset = 0;
+  }
+}
+
 // _____________________________________________________________________________
 cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
+  auto limit = parsedQuery._limitOffset;
+  compensateForLimitOffsetClause(limit, qet);
   auto compute = ad_utility::ApplyAsValueIdentity{[&](auto format) {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
@@ -1066,12 +1077,11 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
       }
       return parsedQuery.hasSelectClause()
                  ? selectQueryResultToStream<format>(
-                       qet, parsedQuery.selectClause(),
-                       parsedQuery._limitOffset, std::move(cancellationHandle))
+                       qet, parsedQuery.selectClause(), limit,
+                       std::move(cancellationHandle))
                  : constructQueryResultToStream<format>(
-                       qet, parsedQuery.constructClause().triples_,
-                       parsedQuery._limitOffset, qet.getResult(true),
-                       std::move(cancellationHandle));
+                       qet, parsedQuery.constructClause().triples_, limit,
+                       qet.getResult(true), std::move(cancellationHandle));
     }
   }};
 

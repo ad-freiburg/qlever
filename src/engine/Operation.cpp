@@ -5,6 +5,7 @@
 #include "engine/Operation.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/container/inlined_vector.h>
 
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
@@ -220,17 +221,18 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
   // that a lot of the time the limit is only artificially applied during
   // export, allowing the cache to reuse the same operation for different
   // limits and offsets.
-  if (!supportsLimit()) {
-    runtimeInfo().addLimitOffsetRow(_limit, true);
+  if (!supportsLimitOffset()) {
+    runtimeInfo().addLimitOffsetRow(limitOffset_, true);
     AD_CONTRACT_CHECK(!externalLimitApplied_);
-    externalLimitApplied_ = !_limit.isUnconstrained();
-    result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
-                                           const IdTable& idTable) {
-      updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
-                         limitTime);
-    });
+    externalLimitApplied_ = !limitOffset_.isUnconstrained();
+    result.applyLimitOffset(
+        limitOffset_,
+        [this](std::chrono::microseconds limitTime, const IdTable& idTable) {
+          updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                             limitTime);
+        });
   } else {
-    result.assertThatLimitWasRespected(_limit);
+    result.assertThatLimitWasRespected(limitOffset_);
   }
   return result;
 }
@@ -502,6 +504,14 @@ void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
 }
 
 // __________________________________________________________________
+void Operation::applyLimitOffset(const LimitOffsetClause& limitOffsetClause) {
+  limitOffset_.mergeLimitAndOffset(limitOffsetClause);
+  // We can safely ignore members that are not `_offset` and `_limit` since
+  // they are unused by subclasses of `Operation`.
+  onLimitOffsetChanged(limitOffsetClause);
+}
+
+// __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
   _rootRuntimeInfo = root;
@@ -520,7 +530,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
   // We are interested only in the first two elements of the limit tuple.
-  const auto& [limit, offset, _1, _2] = getLimit();
+  const auto& [limit, offset, _1, _2] = getLimitOffset();
   if (limit.has_value()) {
     _runtimeInfo->addDetail("limit", limit.value());
   }
@@ -629,19 +639,19 @@ void Operation::signalQueryUpdate() const {
 // _____________________________________________________________________________
 std::string Operation::getCacheKey() const {
   auto result = getCacheKeyImpl();
-  if (_limit._limit.has_value()) {
-    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  if (limitOffset_._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
   }
-  if (_limit._offset != 0) {
-    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  if (limitOffset_._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", limitOffset_._offset);
   }
   return result;
 }
 
 // _____________________________________________________________________________
 uint64_t Operation::getSizeEstimate() {
-  if (_limit._limit.has_value()) {
-    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  if (limitOffset_._limit.has_value()) {
+    return std::min(limitOffset_._limit.value(), getSizeEstimateBeforeLimit());
   } else {
     return getSizeEstimateBeforeLimit();
   }
@@ -658,6 +668,7 @@ std::unique_ptr<Operation> Operation::clone() const {
                      std::back_inserter(visibleVariables));
     result->setSelectedVariablesForSubquery(visibleVariables);
   }
+  result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
@@ -680,7 +691,10 @@ std::unique_ptr<Operation> Operation::clone() const {
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
   AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
-  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
+  // If the result can be cached, then the cache key must be the same for
+  // the cloned operation.
+  AD_EXPENSIVE_CHECK(!canResultBeCached() ||
+                     getCacheKey() == result->getCacheKey());
   return result;
 }
 
@@ -703,4 +717,22 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
     const vector<ColumnIndex>& sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool Operation::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  // Returning false does never lead to a wrong result, but it might be
+  // inefficient.
+  if (ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
+        return child->getVariableColumnOrNullopt(variable).has_value();
+      })) {
+    return false;
+  }
+  return ql::ranges::all_of(getChildren(), [&variable](const auto* child) {
+    return !child->getVariableColumnOrNullopt(variable).has_value() ||
+           child->getRootOperation()->columnOriginatesFromGraphOrUndef(
+               variable);
+  });
 }

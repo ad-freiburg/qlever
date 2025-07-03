@@ -8,12 +8,15 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/functional/function_ref.h>
 #include <absl/strings/str_split.h>
 #include <absl/time/time.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -25,6 +28,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/Constants.h"
@@ -172,62 +176,68 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   };
 
+  using Ptr = sparqlExpression::SparqlExpression::Ptr;
+  using UnaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr)>>;
+  using BinaryFuncTable =
+      std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
+
   // Geo functions.
+  static const UnaryFuncTable geoUnaryFuncs{
+      {"longitude", &makeLongitudeExpression},
+      {"latitude", &makeLatitudeExpression},
+      {"centroid", &makeCentroidExpression},
+      {"envelope", &makeEnvelopeExpression}};
+  using enum SpatialJoinType;
+  static const BinaryFuncTable geoBinaryFuncs{
+      {"metricDistance", &makeMetricDistExpression},
+      // Geometric relation functions
+      {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
+      {"sfContains", &makeGeoRelationExpression<CONTAINS>},
+      {"sfCovers", &makeGeoRelationExpression<COVERS>},
+      {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
+      {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
+      {"sfEquals", &makeGeoRelationExpression<EQUALS>},
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
-    } else if (functionName == "metricDistance") {
-      return createBinary(&makeMetricDistExpression);
-    } else if (functionName == "longitude") {
-      return createUnary(&makeLongitudeExpression);
-    } else if (functionName == "latitude") {
-      return createUnary(&makeLatitudeExpression);
+    } else if (geoUnaryFuncs.contains(functionName)) {
+      return createUnary(geoUnaryFuncs.at(functionName));
+    } else if (geoBinaryFuncs.contains(functionName)) {
+      return createBinary(geoBinaryFuncs.at(functionName));
     }
   }
 
   // Math functions.
+  static const UnaryFuncTable mathFuncs{
+      {"log", &makeLogExpression},   {"exp", &makeExpExpression},
+      {"sqrt", &makeSqrtExpression}, {"sin", &makeSinExpression},
+      {"cos", &makeCosExpression},   {"tan", &makeTanExpression},
+  };
   if (checkPrefix(MATH_PREFIX)) {
-    if (functionName == "log") {
-      return createUnary(&makeLogExpression);
-    } else if (functionName == "exp") {
-      return createUnary(&makeExpExpression);
-    } else if (functionName == "sqrt") {
-      return createUnary(&makeSqrtExpression);
-    } else if (functionName == "sin") {
-      return createUnary(&makeSinExpression);
-    } else if (functionName == "cos") {
-      return createUnary(&makeCosExpression);
-    } else if (functionName == "tan") {
-      return createUnary(&makeTanExpression);
+    if (mathFuncs.contains(functionName)) {
+      return createUnary(mathFuncs.at(functionName));
     } else if (functionName == "pow") {
       return createBinary(&makePowExpression);
     }
   }
 
   // XSD conversion functions.
-  if (checkPrefix(XSD_PREFIX)) {
-    if (functionName == "integer" || functionName == "int") {
-      return createUnary(&makeConvertToIntExpression);
-    }
-    if (functionName == "decimal") {
-      return createUnary(&makeConvertToDecimalExpression);
-    }
-    // We currently don't have a float type, so we just convert to double.
-    if (functionName == "double" || functionName == "float") {
-      return createUnary(&makeConvertToDoubleExpression);
-    }
-    if (functionName == "boolean") {
-      return createUnary(&makeConvertToBooleanExpression);
-    }
-    if (functionName == "string") {
-      return createUnary(&makeConvertToStringExpression);
-    }
-    if (functionName == "dateTime") {
-      return createUnary(&makeConvertToDateTimeExpression);
-    }
-    if (functionName == "date") {
-      return createUnary(&makeConvertToDateExpression);
-    }
+  static const UnaryFuncTable convertFuncs{
+      {"integer", &makeConvertToIntExpression},
+      {"int", &makeConvertToIntExpression},
+      {"decimal", &makeConvertToDecimalExpression},
+      {"double", &makeConvertToDoubleExpression},
+      // We currently don't have a float type, so we just convert to double.
+      {"float", &makeConvertToDoubleExpression},
+      {"boolean", &makeConvertToBooleanExpression},
+      {"string", &makeConvertToStringExpression},
+      {"dateTime", &makeConvertToDateTimeExpression},
+      {"date", &makeConvertToDateExpression},
+  };
+  if (checkPrefix(XSD_PREFIX) && convertFuncs.contains(functionName)) {
+    return createUnary(convertFuncs.at(functionName));
   }
 
   // QLever-internal functions.
@@ -239,9 +249,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
 
-  // If none of the above matched, report unknown function.
-  reportNotSupported(ctx,
-                     "Function \""s + iri.toStringRepresentation() + "\" is");
+  if (RuntimeParameters().get<"syntax-test-mode">()) {
+    // In the syntax test mode we silently create an expression that always
+    // returns `UNDEF`.
+    return std::make_unique<sparqlExpression::IdExpression>(
+        Id::makeUndefined());
+  } else {
+    // If none of the above matched, report unknown function.
+    reportNotSupported(ctx,
+                       "Function \""s + iri.toStringRepresentation() + "\" is");
+  }
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -580,16 +597,22 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
     // state of the visitor. The standard mentions that prefixes are shared
     // between consecutive updates.
     visit(ctx->prologue(i));
-    auto thisUpdate = visit(ctx->update1(i));
+    auto thisUpdates = visit(ctx->update1(i));
     // The string representation of the Update is from the beginning of that
     // updates prologue to the end of the update. The `;` between queries is
     // ignored in the string representation.
     const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
     const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
-    thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
+    auto updateStringRepr = std::string{ad_utility::getUTF8Substring(
         ctx->getStart()->getInputStream()->toString(), updateStartPos,
         updateEndPos - updateStartPos + 1)};
-    updates.push_back(std::move(thisUpdate));
+    // Many graph management operations are desugared into multiple updates. We
+    // set the string representation of the graph management operation for all
+    // the simple update operations.
+    ql::ranges::for_each(thisUpdates, [updateStringRepr](ParsedQuery& update) {
+      update._originalString = updateStringRepr;
+    });
+    ad_utility::appendVector(updates, thisUpdates);
     resetStateForMultipleUpdates();
   }
 
@@ -597,71 +620,233 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  if (ctx->deleteWhere() || ctx->modify()) {
-    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify());
-  } else {
-    parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-        ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
-        ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
+std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
+  if (ctx->deleteWhere() || ctx->modify() || ctx->clear() || ctx->drop() ||
+      ctx->create() || ctx->copy() || ctx->move() || ctx->add() ||
+      ctx->load()) {
+    return visitAlternative<std::vector<ParsedQuery>>(
+        ctx->deleteWhere(), ctx->modify(), ctx->clear(), ctx->drop(),
+        ctx->create(), ctx->copy(), ctx->move(), ctx->add(), ctx->load());
+  }
+  AD_CORRECTNESS_CHECK(ctx->insertData() || ctx->deleteData());
+  parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
+      ctx->insertData(), ctx->deleteData());
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  return {std::move(parsedQuery_)};
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
+  GraphPattern pattern;
+  auto iri = visit(ctx->iri());
+  // The `LOAD` Update operation is translated into something like
+  // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
+  // an internal operation that binds the result of parsing the given RDF
+  // document into the variables `?s`, `?p`, and `?o`.
+  pattern._graphPatterns.emplace_back(
+      parsedQuery::Load{iri, static_cast<bool>(ctx->SILENT())});
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  addVisibleVariable(Variable("?s"));
+  addVisibleVariable(Variable("?p"));
+  addVisibleVariable(Variable("?o"));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
+  using Quad = SparqlTripleSimpleWithGraph;
+  std::vector<Quad> toInsert{
+      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                           : Quad::Graph(std::monostate{})}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{toInsert, {}}};
+  return parsedQuery_;
+}
+
+// Helper functions for some inner parts of graph management operations.
+namespace {
+// ____________________________________________________________________________________
+// Transform a `GraphRefAll` or `GraphOrDefault` into a
+// `SparqlTripleSimpleWithGraph::Graph`/`parsedQuery::GroupGraphPattern::GraphSpec`
+// (which are the same type).
+SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphRefAll& graph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  // This case cannot be handled in this function and must be handled before.
+  AD_CORRECTNESS_CHECK(!std::holds_alternative<NAMED>(graph));
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const ad_utility::triple_component::Iri& iri) -> Graph {
+            return iri;
+          },
+          [](const ALL&) -> Graph { return Variable("?g"); },
+          [](const DEFAULT&) -> Graph {
+            return ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+          },
+          [](const NAMED&) -> Graph { AD_FAIL(); }},
+      graph);
+}
+
+// ____________________________________________________________________________________
+SparqlTripleSimpleWithGraph::Graph transformGraph(const GraphOrDefault& graph) {
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const ad_utility::triple_component::Iri& iri) -> Graph {
+            return iri;
+          },
+          [](const DEFAULT&) -> Graph {
+            return ad_utility::triple_component::Iri::fromIriref(
+                DEFAULT_GRAPH_IRI);
+          }},
+      graph);
+}
+
+// ____________________________________________________________________________________
+// Make a `GraphPatternOperation` that matches all triples in the given graph.
+GraphPatternOperation makeAllTripleGraphPattern(
+    parsedQuery::GroupGraphPattern::GraphSpec graph) {
+  GraphPattern inner;
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+  return {parsedQuery::GroupGraphPattern{std::move(inner), std::move(graph)}};
+}
+
+// ____________________________________________________________________________________
+// Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(
+    SparqlTripleSimpleWithGraph::Graph graph) {
+  return {
+      {Variable("?s")}, {Variable("?p")}, {Variable("?o")}, std::move(graph)};
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
+  return makeClear(visit(ctx->graphRefAll()));
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::makeClear(SparqlTripleSimpleWithGraph::Graph graph) {
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      makeAllTripleGraphPattern(graph));
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{}, {makeAllTripleTemplate(std::move(graph))}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  return parsedQuery_;
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
+  if (std::holds_alternative<NAMED>(graph)) {
+    // We first select all graphs and then filter out the default graph, to get
+    // only the named graphs. `Variable("?g")` selects all graphs.
+    parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+        makeAllTripleGraphPattern(Variable("?g")));
+    // TODO<joka921,qup> Extend the graph filtering s.t. we can exclude a single
+    //  graph more efficiently
+    auto e = SparqlExpressionPimpl{
+        createExpression<sparqlExpression::NotEqualExpression>(
+            std::make_unique<sparqlExpression::VariableExpression>(
+                Variable("?g")),
+            std::make_unique<sparqlExpression::IriExpression>(
+                TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))),
+        absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
+    parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
+    parsedQuery_._clause = parsedQuery::UpdateClause{
+        GraphUpdate{{}, {makeAllTripleTemplate(Variable("?g"))}}};
     parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+    return parsedQuery_;
   }
 
-  return std::move(parsedQuery_);
+  return makeClear(transformGraph(graph));
 }
 
 // ____________________________________________________________________________________
-Load Visitor::visit(Parser::LoadContext* ctx) {
-  return Load{
-      static_cast<bool>(ctx->SILENT()), visit(ctx->iri()),
-      ctx->graphRef() ? visit(ctx->graphRef()) : std::optional<GraphRef>{}};
+ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
+                             const GraphOrDefault& target) {
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      makeAllTripleGraphPattern(transformGraph(source)));
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{makeAllTripleTemplate(transformGraph(target))}, {}}};
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
-Clear Visitor::visit(Parser::ClearContext* ctx) {
-  return Clear{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRefAll())};
+ParsedQuery Visitor::visit(Parser::DropContext* ctx) {
+  return makeClear(visit(ctx->graphRefAll()));
 }
 
 // ____________________________________________________________________________________
-Drop Visitor::visit(Parser::DropContext* ctx) {
-  return Drop{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRefAll())};
+std::vector<ParsedQuery> Visitor::visit(const Parser::CreateContext*) {
+  // Create is a no-op because we don't explicitly record the existence of empty
+  // graphs.
+  return {};
 }
 
 // ____________________________________________________________________________________
-Create Visitor::visit(Parser::CreateContext* ctx) {
-  return Create{static_cast<bool>(ctx->SILENT()), visit(ctx->graphRef())};
-}
-
-// ____________________________________________________________________________________
-Add Visitor::visit(Parser::AddContext* ctx) {
+std::vector<ParsedQuery> Visitor::visit(Parser::AddContext* ctx) {
   AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
-  return Add{static_cast<bool>(ctx->SILENT()),
-             visit(ctx->graphOrDefault().at(0)),
-             visit(ctx->graphOrDefault().at(1))};
+  auto from = visit(ctx->graphOrDefault()[0]);
+  auto to = visit(ctx->graphOrDefault()[1]);
+
+  if (from == to) {
+    return {};
+  }
+
+  return {makeAdd(from, to)};
+}
+
+// _____________________________________________________________________________
+std::vector<ParsedQuery> Visitor::makeCopy(const GraphOrDefault& from,
+                                           const GraphOrDefault& to) {
+  std::vector<ParsedQuery> updates{makeClear(transformGraph(to))};
+  resetStateForMultipleUpdates();
+  updates.push_back(makeAdd(from, to));
+
+  return updates;
 }
 
 // ____________________________________________________________________________________
-Move Visitor::visit(Parser::MoveContext* ctx) {
-  AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
-  return Move{static_cast<bool>(ctx->SILENT()),
-              visit(ctx->graphOrDefault().at(0)),
-              visit(ctx->graphOrDefault().at(1))};
+std::pair<GraphOrDefault, GraphOrDefault> Visitor::visitFromTo(
+    std::vector<Parser::GraphOrDefaultContext*> ctxs) {
+  AD_CORRECTNESS_CHECK(ctxs.size() == 2);
+  return {visit(ctxs[0]), visit(ctxs[1])};
+};
+
+// ____________________________________________________________________________________
+std::vector<ParsedQuery> Visitor::visit(Parser::MoveContext* ctx) {
+  auto [from, to] = visitFromTo(ctx->graphOrDefault());
+
+  if (from == to) {
+    return {};
+  }
+
+  std::vector<ParsedQuery> updates = makeCopy(from, to);
+  resetStateForMultipleUpdates();
+  updates.push_back(makeClear(transformGraph(from)));
+
+  return updates;
 }
 
 // ____________________________________________________________________________________
-Copy Visitor::visit(Parser::CopyContext* ctx) {
-  return Copy{static_cast<bool>(ctx->SILENT()), visit(ctx->graphOrDefault()[0]),
-              visit(ctx->graphOrDefault()[1])};
+std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
+  auto [from, to] = visitFromTo(ctx->graphOrDefault());
+
+  if (from == to) {
+    return {};
+  }
+
+  return makeCopy(from, to);
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  return {visit(ctx->quadData()).toTriplesWithGraph(), {}};
+  return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  return {{}, visit(ctx->quadData()).toTriplesWithGraph()};
+  return {{}, visit(ctx->quadData()).toTriplesWithGraph(std::monostate{})};
 }
 
 // ____________________________________________________________________________________
@@ -677,9 +862,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, triples.toTriplesWithGraph()}};
-
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{})}};
   return parsedQuery_;
 }
 
@@ -691,25 +875,59 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
                                     " was not bound in the query body."));
     }
   };
-  auto visitTemplateClause = [&ensureVariableIsVisible, this](auto* ctx,
-                                                              auto* target) {
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](
+                                 auto* ctx, auto* target,
+                                 const auto& defaultGraph) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
-      *target = quads.toTriplesWithGraph();
+      *target = quads.toTriplesWithGraph(defaultGraph);
     }
   };
+
+  using Iri = TripleComponent::Iri;
+  // The graph specified in the `WITH` clause or `std::monostate{}` if there was
+  // no with clause.
+  auto withGraph = [&ctx, this]() -> SparqlTripleSimpleWithGraph::Graph {
+    std::optional<Iri> with;
+    if (ctx->iri() && datasetsAreFixed_) {
+      reportError(ctx->iri(),
+                  "`WITH` is disallowed in section 2.2.3 of the SPARQL "
+                  "1.1 protocol standard if the `using-graph-uri` or "
+                  "`using-named-graph-uri` http parameters are used");
+    }
+    visitIf(&with, ctx->iri());
+    if (with.has_value()) {
+      return std::move(with.value());
+    }
+    return std::monostate{};
+  }();
+
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->usingClause()));
+
+  // If there is no USING clause, but a WITH clause, then the graph specified in
+  // the WITH clause is used as the default graph in the WHERE clause of this
+  // update.
+  if (const auto* withGraphIri = std::get_if<Iri>(&withGraph);
+      parsedQuery_.datasetClauses_.isUnconstrainedOrWithClause() &&
+      withGraphIri != nullptr) {
+    parsedQuery_.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromWithClause(*withGraphIri);
+  }
+
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   auto op = GraphUpdate{};
-  visitTemplateClause(ctx->insertClause(), &op.toInsert_);
-  visitTemplateClause(ctx->deleteClause(), &op.toDelete_);
-  visitIf(&op.with_, ctx->iri());
+
+  // If there was a `WITH` clause, then the specified graph is used for all
+  // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH
+  // {}` clauses.
+  visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
+  visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
   return parsedQuery_;
@@ -1234,6 +1452,12 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 
 // ____________________________________________________________________________________
 DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
+  if (datasetsAreFixed_) {
+    reportError(ctx,
+                "`USING [NAMED]` is disallowed in section 2.2.3 of the SPARQL "
+                "1.1 protocol standard if the `using-graph-uri` or "
+                "`using-named-graph-uri` http parameters are used");
+  }
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {
