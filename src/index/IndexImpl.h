@@ -351,16 +351,24 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getSizeOfTextBlockForEntities(const string& words) const;
-
-  // Returns the size of the whole textblock. If the word is very long or not
-  // prefixed then only a small number of words actually match. So the final
-  // result is much smaller.
-  // Note that as a cost estimate the estimation is correct. Because we always
-  // have to read the complete block and then filter by the actually needed
-  // words.
-  // TODO: improve size estimate by adding a correction factor.
-  size_t getSizeOfTextBlockForWord(const string& words) const;
+  /**
+   *
+   * @param word: The word used to do the entity- or wordscan
+   * @param forWord: If true then the context lists are checked. If false the
+   *                 entity lists of the text blocks are checked.
+   * @return Sum of context list sizes or entity list sizes of all touched
+   *         blocks. If 'forWord' is true and the word is not a prefix only a
+   *         small number of words actually match. So the final result is much
+   *         smaller. If 'forWord' is false and the word is a prefix then the
+   *         final result can be a little smaller since duplicate entities are
+   *         filtered out. For details see documentation of
+   *         mergeTextBlockResults.
+   * @note As a cost estimate the estimation is correct. Because we always have
+   *       to read the complete blocks and then (if needed) filter by the
+   *       actual wordId range.
+   *       TODO: improve size estimate by adding a correction factor.
+   */
+  size_t getSizeOfTextBlocks(const string& word, bool forWord) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -399,8 +407,6 @@ class IndexImpl {
   void setKbName(const string& name);
 
   void setTextName(const string& name);
-
-  void setTextBlockSize(size_t blockSize);
 
   bool& usePatterns();
 
@@ -589,12 +595,35 @@ class IndexImpl {
   std::optional<std::vector<TextBlockMetadataAndWordInfo>>
   getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
 
-  // This method is used to combine the multiple blocks returned from a word or
-  // prefix scan into one IdTable. The parameter isEntitySearch is necessary
-  // to prevent filtering and remove duplicates.
+  static size_t getSizeOfTextBlocksSum(
+      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+      bool forWord);
+
+  /**
+   * @brief This method is used to combine the IdTables of multiple blocks
+   * returned from a word or entity scan into one IdTable.
+   * @param reader: The reader is the function used to read the blocks from disk
+   * @param tbmds: The tbmds are all TextBlockMetadataAndWordInfo returned by
+   *               the getTextBlockMetadaForWordOrPrefix function
+   * @param allocator: The allocator is used to create the result IdTable.
+   * @param isEntitySearch:
+   *        if false: The contextLists of the blocks are read and filtered
+   *              given the respective wordId range. The wordId range was
+   *              previously calculated and saved in the
+   *              TextBlockMetadataAndWordInfo.Those filtered IdTables are then
+   *              merged into one. Sorted by TextRecordIndex (contextId).
+   *         if true: The entityLists of the blocks are read and NOT filtered.
+   *              During the merging exact duplicate entries are removed.
+   *              Duplicates can occur since the same entity in the same text
+   *              record is saved to all words occurring in this text record.
+   *              It is checked that no duplicates occur in one block but when
+   *              combining multiple blocks they have to be accounted for.
+   *
+   */
   template <typename Reader>
   IdTable mergeTextBlockResults(
-      Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+      const Reader& reader,
+      const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       bool isEntitySearch) const;
 

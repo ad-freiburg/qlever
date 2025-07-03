@@ -19,6 +19,24 @@
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
+#include "util/TransparentFunctors.h"
+
+size_t IndexImpl::getSizeOfTextBlocksSum(
+    const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+    bool forWord) {
+  auto getSizeOfBlock =
+      [&forWord](const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
+        if (forWord) {
+          return tbmdAndWordInfo.tbmd_._cl._nofElements;
+        }
+        return tbmdAndWordInfo.tbmd_._entityCl._nofElements;
+      };
+  size_t sum = 0;
+  for (const auto& tbmdAndWordInfo : tbmds) {
+    sum += getSizeOfBlock(tbmdAndWordInfo);
+  }
+  return sum;
+};
 
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
@@ -110,7 +128,8 @@ IdTable IndexImpl::getEntityMentionsForWord(
 // _____________________________________________________________________________
 template <typename Reader>
 IdTable IndexImpl::mergeTextBlockResults(
-    Reader reader, const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+    const Reader& reader,
+    const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     bool isEntitySearch) const {
   // Collect all blocks as IdTables
@@ -133,23 +152,18 @@ IdTable IndexImpl::mergeTextBlockResults(
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
     const vector<string>& terms) const {
-  // Apart from that, entity lists are usually larger by a factor.
-  // Hence it makes sense to choose the smallest.
-
-  // Heuristic: Pick the one with the smallest EL block sum to be read. Can be
-  // faulty since duplicates are later filtered.
+  // Heuristic: Pick the term with the smallest number of entries to be read.
+  // Note that
+  // 1. The entries can be spread over multiple blocks and
+  // 2. The heuristic might be off since it doesn't account for duplicates which
+  // are later filtered out.
   std::vector<std::tuple<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
     auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
     if (!optTbmd.has_value()) {
       return i;
     }
-    size_t sumOfEntityLists = 0;
-    for (const auto& tbmdAndWordInfo : optTbmd.value()) {
-      const auto& tbmd = tbmdAndWordInfo.tbmd_;
-      sumOfEntityLists += tbmd._entityCl._nofElements;
-    }
-    toBeSorted.emplace_back(i, sumOfEntityLists);
+    toBeSorted.emplace_back(i, getSizeOfTextBlocksSum(optTbmd.value(), false));
   }
   ql::ranges::sort(toBeSorted, [](const std::tuple<size_t, size_t>& a,
                                   const std::tuple<size_t, size_t>& b) {
@@ -159,7 +173,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
+size_t IndexImpl::getSizeOfTextBlocks(const string& word, bool forWord) const {
   if (word.empty()) {
     return 0;
   }
@@ -167,27 +181,7 @@ size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
   if (!optTbmd.has_value()) {
     return 0;
   }
-  size_t sum = 0;
-  for (const auto& tbmdAndWordInfo : optTbmd.value()) {
-    sum += tbmdAndWordInfo.tbmd_._entityCl._nofElements;
-  }
-  return sum;
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
-  if (word.empty()) {
-    return 0;
-  }
-  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
-  if (!optTbmd.has_value()) {
-    return 0;
-  }
-  size_t sum = 0;
-  for (const auto& tbmdAndWordInfo : optTbmd.value()) {
-    sum += tbmdAndWordInfo.tbmd_._cl._nofElements;
-  }
-  return sum;
+  return getSizeOfTextBlocksSum(optTbmd.value(), forWord);
 }
 
 // _____________________________________________________________________________
@@ -204,6 +198,9 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     if (!optTbmd.has_value()) {
       return 0;
     }
+    if (optTbmd.value().size() == 0) {
+      return 0;
+    }
     return ql::ranges::min(
         optTbmd.value() | ql::views::transform([](const auto& tbmdAndWordInfo) {
           return 1 + tbmdAndWordInfo.tbmd_._entityCl._nofElements / 100;
@@ -214,11 +211,6 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
-
-// _____________________________________________________________________________
-void IndexImpl::setTextBlockSize(size_t blockSize) {
-  textBlockSize_ = blockSize;
-}
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
@@ -251,7 +243,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                         tbmd.get()._lastWordId == idRange.last().get());
     output.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
   }
-  return std::optional{output};
+  return std::optional{std::move(output)};
 }
 
 // _____________________________________________________________________________

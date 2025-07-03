@@ -32,6 +32,9 @@ class TextIndexBuilder : public IndexImpl {
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
 
+  // Sets the text block size (nof wordIds for one block)
+  void setTextBlockSize(size_t blockSize) { textBlockSize_ = blockSize; }
+
  private:
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
