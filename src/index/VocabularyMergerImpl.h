@@ -23,6 +23,8 @@
 #include "util/Conversions.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/InputRangeUtils.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
 #include "util/ProgressBar.h"
@@ -63,25 +65,27 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
     return lessThan(p1.entry_, p2.entry_);
   };
 
-  std::vector<cppcoro::generator<QueueWord>> generators;
-
-  auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
+  // Open and prepare all infiles and mmap output vectors.
+  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
-    TripleComponentWithIndex val;
-    for ([[maybe_unused]] auto idx : ad_utility::integerRange(numWords)) {
-      infile >> val;
-      QueueWord word{std::move(val), fileIdx};
-      co_yield word;
-    }
-  };
 
-  // Open and prepare all infiles and mmap output vectors.
+    return ad_utility::CachingTransformInputRange{
+        ad_utility::integerRange(numWords),
+        [fileIndex, infile{std::move(infile)}](
+            [[maybe_unused]] const std::size_t i) mutable {
+          TripleComponentWithIndex val;
+          infile >> val;
+          return QueueWord{std::move(val), fileIndex};
+        }};
+  };
+  std::vector<decltype(makeWordRangeFromFile(0))> generators;
   generators.reserve(numFiles);
-  for (size_t i = 0; i < numFiles; i++) {
-    generators.push_back(makeGenerator(i));
+
+  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+    generators.push_back(makeWordRangeFromFile(i));
     idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
