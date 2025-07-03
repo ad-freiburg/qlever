@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./QueryRewriteUtilTestHelpers.h"
+#include "engine/QueryRewriteUtils.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/SparqlFilter.h"
@@ -63,11 +64,37 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
+//______________________________________________________________________________
+
 // _____________________________________________________________________________
 TEST(QueryRewriteUtilTest, RewriteFilterToSpatialJoinConfig) {
-  // TODO
-  // rewriteFilterToSpatialJoinConfig(SparqlFilter{
-  // SparqlExpressionPimpl{shared_ptr<SparqlExpression>}})
+  auto D = &ValueId::makeFromDouble;
+
+  // Construct `FILTER(geof:metricDistance(?a, ?b) <= 10.0)`
+  auto [distExpr, distCall] = makeMetricDist();
+  auto exprSharedPtr = makeLessEqualSharedPtr(std::move(distExpr), D(10.0));
+  SparqlFilter filter{
+      SparqlExpressionPimpl{std::move(exprSharedPtr),
+                            "<http://www.opengis.net/def/function/geosparql/"
+                            "metricDistance>(?a, ?b) <= 10.0"}};
+
+  // Convert to `SpatialJoinConfiguration`
+  auto sjConf = rewriteFilterToSpatialJoinConfig(filter);
+  ASSERT_TRUE(sjConf.has_value());
+  ASSERT_EQ(sjConf.value().left_, V{"?a"});
+  ASSERT_EQ(sjConf.value().right_, V{"?b"});
+  ASSERT_EQ(sjConf.value().joinType_, WITHIN_DIST);
+  std::visit([](const auto& task) { ASSERT_EQ(task.maxDist_, 10.0); },
+             sjConf.value().task_);
+
+  // Unrelated `FILTER(math:pow(?a, ?b) <= 10.0)` results in `std::nullopt`
+  auto [unrelExpr, unrelCall] = makeUnrelated();
+  auto unrelExprSharedPtr =
+      makeLessEqualSharedPtr(std::move(unrelExpr), D(10.0));
+  SparqlFilter unrelFilter{SparqlExpressionPimpl{
+      std::move(unrelExprSharedPtr),
+      "<http://www.w3.org/2005/xpath-functions/math#pow>(?a, ?b) <= 10.0"}};
+  ASSERT_FALSE(rewriteFilterToSpatialJoinConfig(unrelFilter).has_value());
 }
 
 // TODO<ullingerc> #2140: Add tests for `getGeoFunctionExpressionParameters` +

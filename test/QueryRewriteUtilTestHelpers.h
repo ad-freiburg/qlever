@@ -25,6 +25,10 @@ using enum UnitOfMeasurement;
 using ad_utility::triple_component::Iri;
 using Ptr = SparqlExpression::Ptr;
 
+using GeoDistanceFilter =
+    std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>;
+using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
+
 // Test helper for `GeoFunctionCall`
 inline void checkGeoFunctionCall(const std::optional<GeoFunctionCall>& a,
                                  const std::optional<GeoFunctionCall>& b,
@@ -52,8 +56,6 @@ inline void checkGeoDistanceCall(const std::optional<GeoDistanceCall>& a,
 }
 
 // Test helper for `getGeoDistanceFilter`
-using GeoDistanceFilter =
-    std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>;
 inline void checkGeoDistanceFilter(
     const GeoDistanceFilter& result,
     const std::optional<GeoFunctionCall>& expected, double expectedMeters,
@@ -67,14 +69,14 @@ inline void checkGeoDistanceFilter(
   ASSERT_NEAR(result.value().second, expectedMeters, 0.01);
 }
 
-using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
-
+//______________________________________________________________________________
 inline DistancePtrAndExpected makeTwoArgumentDist() {
   GeoDistanceCall exp{{WITHIN_DIST, V{"?a"}, V{"?b"}}, KILOMETERS};
   auto ptr = makeDistExpression(getExpr(V{"?a"}), getExpr(V{"?b"}));
   return {std::move(ptr), exp};
 }
 
+//______________________________________________________________________________
 inline DistancePtrAndExpected makeThreeArgumentDist() {
   GeoDistanceCall exp{{WITHIN_DIST, V{"?a"}, V{"?b"}}, MILES};
   auto ptr = makeDistWithUnitExpression(
@@ -83,15 +85,26 @@ inline DistancePtrAndExpected makeThreeArgumentDist() {
   return {std::move(ptr), exp};
 }
 
+//______________________________________________________________________________
 inline DistancePtrAndExpected makeMetricDist() {
   GeoDistanceCall exp{{WITHIN_DIST, V{"?a"}, V{"?b"}}, METERS};
   auto ptr = makeMetricDistExpression(getExpr(V{"?a"}), getExpr(V{"?b"}));
   return {std::move(ptr), exp};
 }
 
+//______________________________________________________________________________
 inline DistancePtrAndExpected makeUnrelated() {
   return {makePowExpression(getExpr(V{"?a"}), getExpr(V{"?b"})), std::nullopt};
 }
+
+//______________________________________________________________________________
+inline std::shared_ptr<SparqlExpression> makeLessEqualSharedPtr(
+    VariantArgs child0, VariantArgs child1) {
+  return std::make_shared<sparqlExpression::LessEqualExpression>(
+      std::array<SparqlExpression::Ptr, 2>{
+          std::visit(getExpr, std::move(child0)),
+          std::visit(getExpr, std::move(child1))});
+};
 
 }  // namespace queryRewriteUtilTestHelpers
 
