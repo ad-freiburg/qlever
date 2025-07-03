@@ -339,7 +339,7 @@ class TransitivePathImpl : public TransitivePathBase {
 
     auto r = ad_utility::CachingTransformInputRange(
         startSideResult->idTables(),
-        // the lamba uses a buffer to ensure the lifetime of the pointer to the
+        // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
         [&startSide, buf = std::optional<Result::IdTableVocabPair>{
                          std::nullopt}](auto& idTableAndVocab) mutable {
