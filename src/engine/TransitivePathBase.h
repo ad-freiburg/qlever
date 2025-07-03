@@ -70,14 +70,14 @@ struct TransitivePathSide {
   }
 };
 
-// We deliberately use the `std::` variants of a hash set and hash map because
-// `absl`s types are not exception safe.
+// We deliberately use the `std::` variants of a hash set because `absl`s types
+// are not exception safe.
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-using Map = std::unordered_map<
-    Id, Set, absl::Hash<Id>, std::equal_to<Id>,
-    ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
-
+using SetWithGraph =
+    std::unordered_set<std::pair<Id, Id>, absl::Hash<std::pair<Id, Id>>,
+                       std::equal_to<std::pair<Id, Id>>,
+                       ad_utility::AllocatorWithLimit<std::pair<Id, Id>>>;
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
 // index of the node in the input table. The `IdTable` pointer might be null if
@@ -87,18 +87,21 @@ struct NodeWithTargets {
   Id node_;
   Set targets_;
   LocalVocab localVocab_;
-  const IdTable* idTable_;
+  std::optional<IdTableView<0>> idTable_;
   size_t row_;
+  // Graph id, undefined if no graph is set.
+  Id graph_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  const IdTable* idTable, size_t row)
+                  std::optional<IdTableView<0>> idTable, size_t row, Id graph)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
-        idTable_{idTable},
-        row_{row} {}
+        idTable_{std::move(idTable)},
+        row_{row},
+        graph_{graph} {}
 };
 
 using NodeGenerator = cppcoro::generator<NodeWithTargets>;
@@ -130,12 +133,14 @@ class TransitivePathBase : public Operation {
   // Store the active graphs for the transitive path operation. This is used to
   // correctly match against the proper graph when the minimum distance is 0.
   Graphs activeGraphs_;
+  std::optional<Variable> graphVariable_;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist, Graphs activeGraphs);
+                     size_t minDist, size_t maxDist, Graphs activeGraphs,
+                     const std::optional<Variable>& graphVariable);
 
   ~TransitivePathBase() override = 0;
 
@@ -190,7 +195,6 @@ class TransitivePathBase : public Operation {
   /**
    * @brief Fill the given table with the transitive hull and use the
    * startSideTable to fill in the rest of the columns.
-   * This function is called if the start side is bound and a variable.
    *
    * @param hull The transitive hull, represented by a generator that yields
    * sets of connected nodes with some metadata.
@@ -198,41 +202,19 @@ class TransitivePathBase : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param skipCol This column contains the Ids of the start side in the
-   * startSideTable and will be skipped.
    * @param yieldOnce If true, the generator will yield only a single time.
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, size_t skipCol,
-                                      bool yieldOnce, size_t inputWidth) const;
-
-  /**
-   * @brief Fill the given table with the transitive hull.
-   * This function is called if the sides are unbound or ids.
-   *
-   * @param hull The transitive hull.
-   * @param startSideCol The column of the result table for the startSide of the
-   * hull
-   * @param targetSideCol The column of the result table for the targetSide of
-   * the hull
-   * @param yieldOnce If true, the generator will yield only a single time.
-   */
-  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol,
-                                      bool yieldOnce) const;
+                                      size_t targetSideCol, bool yieldOnce,
+                                      size_t inputWidth) const;
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-  static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
-                          IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow, size_t skipCol);
-
-  // A small helper function: Insert the `value` to the set at `map[key]`.
-  // As the sets all have an allocator with memory limit, this construction is a
-  // little bit more involved, so this can be a separate helper function.
-  void insertIntoMap(Map& map, Id key, Id value) const;
+  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                   IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
+                   size_t outputRow) const;
 
  public:
   std::string getDescriptor() const override;
@@ -251,14 +233,15 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
-                                          size_t targetSideCol, bool yieldOnce,
-                                          size_t skipCol = 0) const;
+                                          size_t targetSideCol,
+                                          bool yieldOnce) const;
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // of the subjects or objects in the knowledge graph, so if the graph does not
   // contain this value it is filtered out.
   static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
 
   // Return an execution tree that represents one side of an empty path. This is
@@ -269,7 +252,14 @@ class TransitivePathBase : public Operation {
   // subsequent joins), by default it is `?internal_property_path_variable_x`.
   static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
       QueryExecutionContext* qec, Graphs activeGraphs,
+      const std::optional<Variable>& graphVariable,
       std::optional<Variable> variable = std::nullopt);
+
+  // Add a `Filter` operation to `leftOrRightOp` that removes any unbound
+  // values.
+  static std::shared_ptr<QueryExecutionTree> filterUndefVariable(
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp,
+      const Variable& dataVariable);
 
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
   // found in the knowledge graph. In many cases we can statically guarantee
@@ -299,11 +289,13 @@ class TransitivePathBase : public Operation {
    * TransitivePathBinSearch. Else it will be a TransitivePathFallback
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {});
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
@@ -320,11 +312,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
+   * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, Graphs activeGraphs = {});
+      size_t maxDist, Graphs activeGraphs = {},
+      const std::optional<Variable>& graphVariable = std::nullopt);
 
   vector<QueryExecutionTree*> getChildren() override;
 

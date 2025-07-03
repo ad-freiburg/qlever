@@ -224,28 +224,34 @@ TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce) {
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractTargetGraph) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
-  const auto extractTargetGraph = ParsedRequestBuilder::extractTargetGraph;
   // Equivalent to `/?default`
-  EXPECT_THAT(extractTargetGraph({{"default", {""}}}), DEFAULT{});
+  ParsedRequestBuilder builder1(makeGetRequest("/?default"));
+  EXPECT_THAT(builder1.extractTargetGraph({{"default", {""}}}), DEFAULT{});
   // Equivalent to `/?graph=foo`
-  EXPECT_THAT(extractTargetGraph({{"graph", {"foo"}}}), Iri("<foo>"));
+  ParsedRequestBuilder builder2(makeGetRequest("/?graph=foo"));
+  EXPECT_THAT(builder2.extractTargetGraph({{"graph", {"foo"}}}), Iri("<foo>"));
   // Equivalent to `/?graph=foo&graph=bar`
+  ParsedRequestBuilder builder3(makeGetRequest("/?graph=foo&graph=bar"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      extractTargetGraph({{"graph", {"foo", "bar"}}}),
+      builder3.extractTargetGraph({{"graph", {"foo", "bar"}}}),
       testing::HasSubstr(
           "Parameter \"graph\" must be given exactly once. Is: 2"));
   const std::string eitherDefaultOrGraphErrorMsg =
       R"(Exactly one of the query parameters "default" or "graph" must be set to identify the graph for the graph store protocol request.)";
   // Equivalent to `/` or `/?`
+  ParsedRequestBuilder builder4(makeGetRequest("/"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      extractTargetGraph({}), testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+      builder4.extractTargetGraph({}),
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?unrelated=a&unrelated=b`
+  ParsedRequestBuilder builder5(makeGetRequest("/?unrelated=a&unrelated=b"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      extractTargetGraph({{"unrelated", {"a", "b"}}}),
+      builder5.extractTargetGraph({{"unrelated", {"a", "b"}}}),
       testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?default&graph=foo`
+  ParsedRequestBuilder builder6(makeGetRequest("/?default&graph=foo"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      extractTargetGraph({{"default", {""}}, {"graph", {"foo"}}}),
+      builder6.extractTargetGraph({{"default", {""}}, {"graph", {"foo"}}}),
       testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
 }
 
