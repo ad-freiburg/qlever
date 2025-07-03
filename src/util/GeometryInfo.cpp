@@ -186,7 +186,7 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
   return detail::boundingBoxAsGeoPoints(parsed.value());
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
 }
