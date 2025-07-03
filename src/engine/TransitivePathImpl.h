@@ -322,6 +322,8 @@ class TransitivePathImpl : public TransitivePathBase {
   static ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
+    using namespace ad_utility;
+
     auto getStartNodes = [&startSide](const IdTable& idTable) {
       return idTable.getColumn(startSide.treeAndCol_.value().second);
     };
@@ -330,16 +332,16 @@ class TransitivePathImpl : public TransitivePathBase {
       auto getter = [&getStartNodes, &startSide,
                      startSideResult = std::move(startSideResult)]() {
         const IdTable& idTable = startSideResult->idTable();
-        return ad_utility::LoopControl<TableColumnWithVocab>::breakWithValue(
+        return LoopControl<TableColumnWithVocab>::breakWithValue(
             TableColumnWithVocab{&idTable, getStartNodes(idTable),
                                  startSideResult->getCopyOfLocalVocab()});
       };
 
-      return ad_utility::InputRangeTypeErased<TableColumnWithVocab>{
-          ad_utility::InputRangeFromLoopControlGet(std::move(getter))};
+      return InputRangeTypeErased<TableColumnWithVocab>{
+          InputRangeFromLoopControlGet(std::move(getter))};
     }
 
-    auto r = ad_utility::CachingTransformInputRange(
+    auto r = CachingTransformInputRange(
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
@@ -352,7 +354,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                       std::move(localVocab)};
         });
 
-    return ad_utility::InputRangeTypeErased{std::move(r)};
+    return InputRangeTypeErased{std::move(r)};
   }
 
   virtual T setupEdgesMap(const IdTable& dynSub,
