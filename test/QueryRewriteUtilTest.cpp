@@ -56,6 +56,11 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto [dExpr5, dExp5] = makeMetricDist();
   auto expr5 = ltSprql(std::move(dExpr5), D(10));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr5), std::nullopt, 10);
+
+  // Non-numeric comparison is unsupported
+  auto [dExpr6, dExp6] = makeMetricDist();
+  auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
 }
 
 // _____________________________________________________________________________
