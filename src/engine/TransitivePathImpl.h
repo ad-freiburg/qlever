@@ -323,7 +323,8 @@ class TransitivePathImpl : public TransitivePathBase {
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
-      auto getter = [&startSide, startSideResult]() {
+      auto getter = [&startSide,
+                     startSideResult = std::move(startSideResult)]() {
         // Bound -> var|id
         ql::span<const Id> startNodes = startSideResult->idTable().getColumn(
             startSide.treeAndCol_.value().second);
