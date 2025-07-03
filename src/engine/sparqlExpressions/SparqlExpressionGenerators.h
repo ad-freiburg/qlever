@@ -113,8 +113,13 @@ inline auto resultGenerator(S&& input, size_t targetSize,
 #ifdef QLEVER_OPTIMIZED_EXPRESSIONS
   return gen;
 #else
-  return ad_utility::InputRangeTypeErased<
-      ql::ranges::range_value_t<decltype(gen)>>(std::move(gen));
+  using Value = ql::ranges::range_value_t<decltype(gen)>;
+  static_assert(std::is_trivially_copyable_v<ValueId>);
+  if constexpr (std::is_trivially_copyable_v<Value>) {
+    return gen;
+  } else {
+    return ad_utility::InputRangeTypeErased<Value>(std::move(gen));
+  }
 #endif
 }
 
