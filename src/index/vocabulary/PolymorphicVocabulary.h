@@ -116,10 +116,10 @@ class PolymorphicVocabulary {
   // word, not a prefix, this function can respect the split of an underlying
   // `SplitVocabulary`.
   template <typename String, typename Comp>
-  std::optional<std::pair<uint64_t, uint64_t>> getPositionOfWord(
-      const String& word, Comp comp) const {
+  std::pair<uint64_t, uint64_t> getPositionOfWord(const String& word,
+                                                  Comp comp) const {
     return std::visit(
-        [&word, &comp](auto& vocab) {
+        [&word, &comp, this](auto& vocab) {
           using T = std::decay_t<decltype(vocab)>;
           if constexpr (HasSpecialGetPositionOfWord<T>) {
             return vocab.getPositionOfWord(word, std::move(comp));
@@ -130,7 +130,9 @@ class PolymorphicVocabulary {
             // correct semantics here by deciding between adding the class to
             // `HasSpecialGetPositionOfWord` or `HasDefaultGetPositionOfWord`.
             static_assert(HasDefaultGetPositionOfWord<T>);
-            return vocab.lower_bound(word, comp).positionOfWord(word);
+            return vocab.lower_bound(word, comp)
+                .positionOfWord(word)
+                .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
           }
         },
         vocab_);
