@@ -130,17 +130,15 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     // Unit given as IRI
     auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
     if (unitExpr != nullptr) {
-      return ad_utility::detail::iriToUnitOfMeasurement(
-          asStringViewUnsafe(unitExpr->value().getContent()));
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr->value()});
     }
 
     // Unit given as literal expression
     auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
-    if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
-        asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
-            XSD_ANYURI_TYPE) {
-      return ad_utility::detail::iriToUnitOfMeasurement(
-          asStringViewUnsafe(unitExpr2->value().getContent()));
+    if (unitExpr2 != nullptr) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr2->value()});
     }
 
     return std::nullopt;

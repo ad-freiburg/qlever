@@ -358,6 +358,10 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
                                const EvaluationContext*) const;
+
+  // The actual implementation for a given `LiteralOrIri` which is guaranteed
+  // not to use the `EvaluationContext`.
+  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
