@@ -1,4 +1,4 @@
-// Copyright 2021 - 2024
+// Copyright 2021 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
@@ -7,7 +7,7 @@
 
 #include <type_traits>
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
@@ -45,6 +45,11 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
+template <SpatialJoinType Relation>
+NARY_EXPRESSION(
+    GeoRelationExpression, 2,
+    FV<ad_utility::WktGeometricRelation<Relation>, GeoPointValueGetter>);
 
 }  // namespace detail
 
@@ -95,6 +100,14 @@ SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2) {
+  return std::make_unique<GeoRelationExpression<Relation>>(std::move(child1),
+                                                           std::move(child2));
 }
 
 // _____________________________________________________________________________
@@ -186,3 +199,21 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 }
 
 }  // namespace sparqlExpression
+
+// Explicit instantiations for the different geometric relations to avoid linker
+// problems
+using Ptr = sparqlExpression::SparqlExpression::Ptr;
+
+#undef QL_INSTANTIATE_GEO_RELATION_EXPR
+#define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
+  template Ptr                                                                \
+      sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
+          Ptr, Ptr);
+
+QL_INSTANTIATE_GEO_RELATION_EXPR(INTERSECTS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(CONTAINS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(COVERS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(CROSSES);
+QL_INSTANTIATE_GEO_RELATION_EXPR(TOUCHES);
+QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <string>
 
+#include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/Iri.h"
@@ -16,7 +17,9 @@
 
 namespace {
 
+using ad_utility::source_location;
 using ad_utility::WktDistGeoPoints;
+using ad_utility::WktGeometricRelation;
 using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
@@ -152,6 +155,30 @@ TEST(GeoSparqlHelpers, IriToUnit) {
   ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/M"), METERS);
   ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/KiloM"), KILOMETERS);
   ASSERT_EQ(iriToUnit("http://qudt.org/vocab/unit/MI"), MILES);
+}
+
+// _____________________________________________________________________________
+template <SpatialJoinType SJType>
+void checkGeoRelationDummyImpl(
+    source_location sourceLocation = source_location::current()) {
+  auto l = generateLocationTrace(sourceLocation);
+  const auto geoRelationFunction = WktGeometricRelation<SJType>();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
+      ::testing::HasSubstr("not yet implemented"));
+}
+
+// _____________________________________________________________________________
+TEST(GeoSparqlHelpers, WktGeometricRelation) {
+  // Currently the geometric relation functions are only a dummy implementation
+  using enum SpatialJoinType;
+  checkGeoRelationDummyImpl<INTERSECTS>();
+  checkGeoRelationDummyImpl<CONTAINS>();
+  checkGeoRelationDummyImpl<COVERS>();
+  checkGeoRelationDummyImpl<CROSSES>();
+  checkGeoRelationDummyImpl<TOUCHES>();
+  checkGeoRelationDummyImpl<EQUALS>();
+  checkGeoRelationDummyImpl<OVERLAPS>();
 }
 
 }  // namespace

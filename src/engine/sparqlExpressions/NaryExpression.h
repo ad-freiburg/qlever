@@ -14,7 +14,7 @@
 #include <optional>
 
 #include "backports/concepts.h"
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
@@ -61,6 +61,11 @@ SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
+
+template <SpatialJoinType Relation>
+SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2);
+
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
