@@ -20,10 +20,12 @@
 #include "util/jthread.h"
 
 namespace {
+
 template <typename Queue, typename Producer, typename MakeQueueTask>
-struct GeneratorCore {
-  GeneratorCore(const size_t queueSize, const size_t numThreads,
-                Producer producer, MakeQueueTask makeQueueTask)
+struct QueueGenerator
+    : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
+  QueueGenerator(const size_t queueSize, const size_t numThreads,
+                 Producer producer, MakeQueueTask makeQueueTask)
       : queue{queueSize},
         numUnfinishedThreads{static_cast<int64_t>(numThreads)} {
     std::cout << "GeneratorCore starting threads " << numThreads << "\n";
@@ -33,41 +35,16 @@ struct GeneratorCore {
     }
   }
 
-  ~GeneratorCore() {
-    std::cout << "GeneratorCore finish\n";
-    queue.finish();
-  }
+  ~QueueGenerator() { queue.finish(); }
 
-  std::optional<typename Queue::value_type> get() {
-    std::optional<typename Queue::value_type> value{queue.pop()};
-    static int a{0};
-    if (value.has_value()) {
-      std::cout << "GeneratorCore::get " << a++ << "\n";
-      return value;
-    }
-    std::cout << "GeneratorCore::get nullopt " << a++ << "\n";
-    return std::nullopt;
+  std::optional<typename Queue::value_type> get() override {
+    return queue.pop();
   }
 
   Queue queue;
   std::vector<ad_utility::JThread> threads;
   std::atomic<int64_t> numUnfinishedThreads;
   MakeQueueTask makeQueueTask;
-};
-
-template <typename Queue, typename Producer, typename MakeQueueTask>
-struct QueueGenerator
-    : public ad_utility::InputRangeFromGet<typename Queue::value_type> {
-  QueueGenerator(const size_t queueSize, const size_t numThreads,
-                 Producer producer, MakeQueueTask makeQueueTask)
-      : core{std::make_shared<GeneratorCore<Queue, Producer, MakeQueueTask>>(
-            queueSize, numThreads, producer, makeQueueTask)} {}
-
-  std::optional<typename Queue::value_type> get() override {
-    return core->get();
-  }
-
-  std::shared_ptr<GeneratorCore<Queue, Producer, MakeQueueTask>> core;
 };
 
 }  // namespace
@@ -326,15 +303,15 @@ CPP_template(typename Queue, typename Producer)(
 template <typename Queue, typename Producer>
 ad_utility::InputRangeTypeErased<typename Queue::value_type> queueManager(
     size_t queueSize, size_t numThreads, Producer producer) {
-  using value_type = Queue::value_type;
-
   AD_CONTRACT_CHECK(numThreads > 0u);
 
   auto makeQueueTask{detail::makeQueueTask<Queue, Producer>};
-  return ad_utility::InputRangeTypeErased<value_type>{
-      QueueGenerator<Queue, Producer, decltype(makeQueueTask)>{
-          queueSize, numThreads, std::move(producer),
-          std::move(makeQueueTask)}};
+  auto generator{std::make_unique<
+      QueueGenerator<Queue, Producer, decltype(makeQueueTask)>>(
+      queueSize, numThreads, std::move(producer), std::move(makeQueueTask))};
+
+  return ad_utility::InputRangeTypeErased<typename Queue::value_type>{
+      std::move(generator)};
 }
 
 }  // namespace ad_utility::data_structures
