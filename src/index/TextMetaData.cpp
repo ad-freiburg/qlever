@@ -18,7 +18,6 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
                              _blockUpperBoundWordIds.end(), lower);
-
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
     --it;
@@ -27,17 +26,27 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
-
-  // Use the info to retrieve an index.
-  vector<std::reference_wrapper<const TextBlockMetaData>> output;
-  size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
-  assert(lower >= _blocks[index]._firstWordId);
-  while (it <= upperIt && it != _blockUpperBoundWordIds.end()) {
-    index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
-    output.push_back(std::cref(_blocks[index]));
-    ++it;
+  // Same as for normal it
+  if (upperIt == _blockUpperBoundWordIds.end()) {
+    --upperIt;
   }
-  assert(lower <= _blocks[index]._lastWordId);
+
+  // Convert iterators to indices
+  size_t startIndex =
+      static_cast<size_t>(std::distance(_blockUpperBoundWordIds.begin(), it));
+  size_t endIndex = static_cast<size_t>(
+      std::distance(_blockUpperBoundWordIds.begin(), upperIt));
+
+  // Lambda to transform index to block
+  auto indexToBlock = [this](size_t index) {
+    return std::cref(_blocks[index]);
+  };
+
+  // Collect all blocks
+  vector<std::reference_wrapper<const TextBlockMetaData>> output;
+  ql::ranges::copy(ql::views::iota(startIndex, endIndex + 1) |
+                       ql::views::transform(indexToBlock),
+                   std::back_inserter(output));
   return output;
 }
 

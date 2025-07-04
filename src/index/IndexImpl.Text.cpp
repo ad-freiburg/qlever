@@ -157,7 +157,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
   // 1. The entries can be spread over multiple blocks and
   // 2. The heuristic might be off since it doesn't account for duplicates which
   // are later filtered out.
-  std::vector<std::tuple<size_t, size_t>> toBeSorted;
+  std::vector<std::pair<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
     auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
     if (!optTbmd.has_value()) {
@@ -165,10 +165,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
     }
     toBeSorted.emplace_back(i, getSizeOfTextBlocksSum(optTbmd.value(), false));
   }
-  ql::ranges::sort(toBeSorted, [](const std::tuple<size_t, size_t>& a,
-                                  const std::tuple<size_t, size_t>& b) {
-    return std::get<1>(a) < std::get<1>(b);
-  });
+  ql::ranges::sort(toBeSorted, std::less<>{}, ad_utility::second);
   return std::get<0>(toBeSorted[0]);
 }
 
