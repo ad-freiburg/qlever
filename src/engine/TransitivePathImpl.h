@@ -329,7 +329,7 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     if (startSideResult->isFullyMaterialized()) {
-      auto getter = [&getStartNodes, &startSide,
+      auto getter = [getStartNodes,
                      startSideResult = std::move(startSideResult)]() {
         const IdTable& idTable = startSideResult->idTable();
         return LoopControl<TableColumnWithVocab>::breakWithValue(
@@ -345,9 +345,8 @@ class TransitivePathImpl : public TransitivePathBase {
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
-        [&getStartNodes, &startSide,
-         buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
-            auto& idTableAndVocab) mutable {
+        [getStartNodes, buf = std::optional<Result::IdTableVocabPair>{
+                            std::nullopt}](auto& idTableAndVocab) mutable {
           buf = std::move(idTableAndVocab);
           auto& [idTable, localVocab] = buf.value();
           return TableColumnWithVocab{&idTable, getStartNodes(idTable),
