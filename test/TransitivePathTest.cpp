@@ -38,6 +38,8 @@ class TransitivePathTest
            std::optional<std::string> turtleInput = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
     auto qec = getQec(std::move(turtleInput));
+    // TODO<joka921> properly address this issue.
+    qec->clearCacheUnpinnedOnly();
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
     return {TransitivePathBase::makeTransitivePath(
@@ -97,9 +99,10 @@ class TransitivePathTest
   static bool requestLaziness() { return std::get<1>(GetParam()); }
 
   // ___________________________________________________________________________
-  void assertResultMatchesIdTable(const Result& result, const IdTable& expected,
-                                  ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
+  static void assertResultMatchesIdTable(
+      const Result& result, const IdTable& expected,
+      ad_utility::source_location loc =
+          ad_utility::source_location::current()) {
     auto t = generateLocationTrace(loc);
     using ::testing::UnorderedElementsAreArray;
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
@@ -889,6 +892,7 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   LocalVocab localVocab;
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry{Literal::literalWithoutQuotes(literal)}));
+  std::cerr << "id: " << id.getLocalVocabIndex() << std::endl;
   auto sub = makeIdTableFromVector({
       {id, id},
   });

@@ -48,5 +48,10 @@ runs:
         wget http://mirrors.kernel.org/ubuntu/pool/universe/g/gcc-8/g++-8_8.4.0-3ubuntu2_amd64.deb
         sudo apt install ./libstdc++-8-dev_8.4.0-3ubuntu2_amd64.deb ./g++-8_8.4.0-3ubuntu2_amd64.deb
       shell: bash
+    - name: Install mold linker
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt install -y mold
 
 # TODO<joka921> Add assertion for unsupported compilers and versions.
