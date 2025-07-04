@@ -10,10 +10,13 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <optional>
 
 #include "backports/concepts.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/Constants.h"
+#include "parser/data/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
