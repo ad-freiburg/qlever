@@ -8,8 +8,9 @@
 #include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________
-const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
-    const uint64_t lower, const uint64_t upper) const {
+vector<std::reference_wrapper<const TextBlockMetaData>>
+TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
+                                      const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() == _blockUpperBoundWordIds.size());
@@ -17,7 +18,6 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
                              _blockUpperBoundWordIds.end(), lower);
-
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
     --it;
@@ -26,20 +26,28 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
-
-  if (upper > *it) {
-    AD_THROW(
-        "No words found for the given prefix. This usually means that the "
-        "prefix is smaller than the configured minimum prefix size. This range "
-        "spans over " +
-        std::to_string(upperIt - it) + " blocks");
+  // Same as for normal it
+  if (upperIt == _blockUpperBoundWordIds.end()) {
+    --upperIt;
   }
 
-  // Use the info to retrieve an index.
-  size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
-  assert(lower <= _blocks[index]._lastWordId);
-  assert(lower >= _blocks[index]._firstWordId);
-  return _blocks[index];
+  // Convert iterators to indices
+  size_t startIndex =
+      static_cast<size_t>(std::distance(_blockUpperBoundWordIds.begin(), it));
+  size_t endIndex = static_cast<size_t>(
+      std::distance(_blockUpperBoundWordIds.begin(), upperIt));
+
+  // Lambda to transform index to block
+  auto indexToBlock = [this](size_t index) {
+    return std::cref(_blocks[index]);
+  };
+
+  // Collect all blocks
+  vector<std::reference_wrapper<const TextBlockMetaData>> output;
+  ql::ranges::copy(ql::views::iota(startIndex, endIndex + 1) |
+                       ql::views::transform(indexToBlock),
+                   std::back_inserter(output));
+  return output;
 }
 
 // _____________________________________________________________________________
