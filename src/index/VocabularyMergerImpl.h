@@ -66,28 +66,27 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   };
 
   // Open and prepare all infiles and mmap output vectors.
-  std::vector<ad_utility::InputRangeTypeErased<QueueWord>> generators;
-  generators.reserve(numFiles);
-
-  for (std::size_t fileIndex{0}; fileIndex < numFiles; ++fileIndex) {
+  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
     ad_utility::serialization::FileReadSerializer infile{
         absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIndex)};
     uint64_t numWords;
     infile >> numWords;
 
-    auto transformer{[fileIndex, infile{std::move(infile)}](
-                         [[maybe_unused]] const std::size_t i) mutable {
-      TripleComponentWithIndex val;
-      infile >> val;
-      return QueueWord{std::move(val), fileIndex};
-    }};
+    return ad_utility::CachingTransformInputRange{
+        ad_utility::integerRange(numWords),
+        [fileIndex, infile{std::move(infile)}](
+            [[maybe_unused]] const std::size_t i) mutable {
+          TripleComponentWithIndex val;
+          infile >> val;
+          return QueueWord{std::move(val), fileIndex};
+        }};
+  };
+  std::vector<decltype(makeWordRangeFromFile(0))> generators;
+  generators.reserve(numFiles);
 
-    ad_utility::CachingTransformInputRange generator{
-        ad_utility::integerRange(numWords), std::move(transformer)};
-
-    generators.emplace_back(std::move(generator));
-    idVecs_.emplace_back(0,
-                         absl::StrCat(basename, PARTIAL_MMAP_IDS, fileIndex));
+  for (std::size_t i : ad_utility::integerRange(numFiles)) {
+    generators.push_back(makeWordRangeFromFile(i));
+    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
