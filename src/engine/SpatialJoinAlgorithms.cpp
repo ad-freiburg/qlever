@@ -169,7 +169,7 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
   // use the already parsed geometries to calculate the distance
   if (useMidpointForAreas_ ||
       (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value())) {
-    return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
+    return Id::makeFromDouble(ad_utility::detail::wktDistS2Impl(
         convertPoint(geo1), convertPoint(geo2)));
   } else {
     // at least one area
