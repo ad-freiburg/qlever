@@ -35,9 +35,11 @@ enum class TurtleParserIntegerOverflowBehavior {
 };
 
 struct TurtleTriple {
-  // TODO<joka921> The subject can only be IRI or BlankNode.
+  // The subject can be IRI or BlankNode, but the IRI can also be directly
+  // folded into the ID.
   TripleComponent subject_;
-  TripleComponent::Iri predicate_;
+  // The predicate can an IRI which can also be directly folded into the ID.
+  TripleComponent predicate_;
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
