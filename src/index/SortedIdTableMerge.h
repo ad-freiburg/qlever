@@ -24,9 +24,7 @@ struct DefaultRowComparator {
                   const std::vector<ValueId>& b) const {
     return std::lexicographical_compare(
         a.begin(), a.end(), b.begin(), b.end(),
-        [](const ValueId& lhs, const ValueId& rhs) {
-          return lhs.getBits() < rhs.getBits();
-        });
+        [](const ValueId& lhs, const ValueId& rhs) { return lhs < rhs; });
   }
 };
 
