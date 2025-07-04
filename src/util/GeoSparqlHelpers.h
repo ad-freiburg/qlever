@@ -40,7 +40,7 @@ static constexpr double kilometerToMile = 0.62137119;
 std::pair<double, double> parseWktPoint(const std::string_view point);
 
 // Calculate geographic distance between points in kilometers using s2geometry.
-double wktDistImpl(GeoPoint point1, GeoPoint point2);
+double wktDistS2Impl(GeoPoint point1, GeoPoint point2);
 
 // Convert kilometers to other supported units.
 double kilometerToUnit(double kilometers,
@@ -88,7 +88,7 @@ class WktDistGeoPoints {
     }
 
     return detail::kilometerToUnit(
-        detail::wktDistImpl(point1.value(), point2.value()), unit);
+        detail::wktDistS2Impl(point1.value(), point2.value()), unit);
   }
 };
 
@@ -98,6 +98,31 @@ class WktMetricDistGeoPoints {
   double operator()(const std::optional<GeoPoint>& point1,
                     const std::optional<GeoPoint>& point2) const {
     return WktDistGeoPoints{}(point1, point2, UnitOfMeasurement::METERS);
+  }
+};
+
+// Compute the distance between two WKT points.
+class WktDist {
+ public:
+  double operator()(
+      const std::optional<GeoPointOrWkt>& geom1,
+      const std::optional<GeoPointOrWkt>& geom2,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!geom1.has_value() || !geom2.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    return detail::kilometerToUnit(
+        detail::wktDistLibSpatialJoinImpl(geom1.value(), geom2.value()), unit);
+  }
+};
+
+// Compute the distance between two WKT points in meters.
+class WktMetricDist {
+ public:
+  double operator()(const std::optional<GeoPointOrWkt>& geom1,
+                    const std::optional<GeoPointOrWkt>& geom2) const {
+    return WktDist{}(geom1, geom2, UnitOfMeasurement::METERS);
   }
 };
 

@@ -4,6 +4,7 @@
 
 #include "util/GeometryInfo.h"
 
+#include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 
 #include <cstdint>
@@ -14,6 +15,8 @@
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/GeoTmp.h"
+#include "util/TypeTraits.h"
 #include "util/geo/Point.h"
 
 namespace ad_utility {
@@ -32,7 +35,17 @@ using ParsedWkt =
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
 // ____________________________________________________________________________
-ParseResult parseWkt(const std::string_view& wkt) {
+Point<CoordType> webMercatorProjection(const Point<CoordType>& p) {
+  return latLngToWebMerc(p);
+}
+
+// ____________________________________________________________________________
+Point<CoordType> identity(const Point<CoordType>& p) { return p; }
+
+// ____________________________________________________________________________
+ParseResult parseWkt(const std::string_view& wkt,
+                     std::function<Point<CoordType>(const Point<CoordType>&)>
+                         projFunc = &identity) {
   // TODO<ullingerc> Remove unnecessary string copying
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
       std::string(wkt));
@@ -42,31 +55,31 @@ ParseResult parseWkt(const std::string_view& wkt) {
   auto type = getWKTType(wktLiteral);
   switch (type) {
     case WKTType::POINT: {
-      parsed = pointFromWKT<CoordType>(wktLiteral);
+      parsed = pointFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::LINESTRING: {
-      parsed = lineFromWKT<CoordType>(wktLiteral);
+      parsed = lineFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::POLYGON: {
-      parsed = polygonFromWKT<CoordType>(wktLiteral);
+      parsed = polygonFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::MULTIPOINT: {
-      parsed = multiPointFromWKT<CoordType>(wktLiteral);
+      parsed = multiPointFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::MULTILINESTRING: {
-      parsed = multiLineFromWKT<CoordType>(wktLiteral);
+      parsed = multiLineFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::MULTIPOLYGON: {
-      parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
+      parsed = multiPolygonFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::COLLECTION: {
-      parsed = collectionFromWKT<CoordType>(wktLiteral);
+      parsed = collectionFromWKT<CoordType>(wktLiteral.c_str(), 0, projFunc);
       break;
     }
     case WKTType::NONE:
@@ -106,6 +119,51 @@ std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
                                 geoPointToUtilPoint(upperRight)};
   return getWKT(box);
+}
+
+// ____________________________________________________________________________
+ParseResult geoPointOrWktToParsedInWebMercator(
+    const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(
+      [](auto& geom) -> ParseResult {
+        using T = std::decay_t<decltype(geom)>;
+        if constexpr (std::is_same_v<T, GeoPoint>) {
+          return {WKTType::POINT,
+                  webMercatorProjection(geoPointToUtilPoint(geom))};
+        } else {
+          return parseWkt(geom, &webMercatorProjection);
+        }
+      },
+      geoPointOrWkt);
+}
+
+// ____________________________________________________________________________
+double wktDistLibSpatialJoinImpl(GeoPointOrWkt geom1, GeoPointOrWkt geom2) {
+  auto [t1, p1] = detail::geoPointOrWktToParsedInWebMercator(geom1);
+  auto [t2, p2] = detail::geoPointOrWktToParsedInWebMercator(geom2);
+  if (!p1.has_value() || !p2.has_value()) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return std::visit(
+      [](const auto& a, const auto& b) {
+        using Ta = std::decay_t<decltype(a)>;
+        using Tb = std::decay_t<decltype(b)>;
+        if constexpr (!std::is_same_v<Ta, Collection<CoordType>> &&
+                      !std::is_same_v<Tb, Collection<CoordType>>) {
+          // if constexpr ((std::is_same_v<Ta, Polygon<CoordType>> ||
+          //                std::is_same_v<Ta, MultiPolygon<CoordType>>) &&
+          //               !(std::is_same_v<Tb, Polygon<CoordType>> ||
+          //                 std::is_same_v<Tb, MultiPolygon<CoordType>>)) {
+          //   return util::geo::webMercMeterDist<Tb, Ta>(b, a) / 1000;
+          // } else {
+          return util::geo::webMercMeterDist<Ta, Tb>(a, b) / 1000;
+          // }
+        } else {
+          return std::numeric_limits<double>::quiet_NaN();
+        }
+        // TODO Collection
+      },
+      p1.value(), p2.value());
 }
 
 }  // namespace detail

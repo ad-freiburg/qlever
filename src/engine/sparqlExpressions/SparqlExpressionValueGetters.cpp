@@ -445,6 +445,42 @@ sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case GeoPoint:
+      return id.getGeoPoint();
+    case VocabIndex:
+    case LocalVocabIndex: {
+      auto lit = ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+          context->_qec.getIndex(), id, context->_localVocab);
+      return GeoPointOrWktValueGetter{}(lit, context);
+    }
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+      return std::nullopt;
+  }
+  AD_FAIL();
+}
+
+//______________________________________________________________________________
+std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  if (litOrIri.isLiteral() && litOrIri.hasDatatype() &&
+      asStringViewUnsafe(litOrIri.getDatatype()) == GEO_WKT_LITERAL) {
+    return litOrIri.toStringRepresentation();
+  }
+  return std::nullopt;
+};
+
+//______________________________________________________________________________
 template <typename RequestedInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 std::optional<ad_utility::GeometryInfo>

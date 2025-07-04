@@ -12,6 +12,7 @@
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
 #include "parser/GeoPoint.h"
+#include "parser/Literal.h"
 #include "util/BitUtils.h"
 
 namespace ad_utility {
@@ -55,6 +56,9 @@ class GeometryInfo;
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
+
+// Where the actual geometries are required, this type can be used.
+using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
@@ -112,6 +116,14 @@ class GeometryInfo {
   requires RequestedInfoT<RequestedInfo>
   static RequestedInfo getRequestedInfo(const std::string_view& wkt);
 };
+
+namespace detail {
+
+// Use libspatialjoin to compute the distance in kilometers between two
+// `GeoPoint`s or WKT literals.
+double wktDistLibSpatialJoinImpl(GeoPointOrWkt geom1, GeoPointOrWkt geom2);
+
+}  // namespace detail
 
 }  // namespace ad_utility
 
