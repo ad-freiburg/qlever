@@ -62,7 +62,7 @@ constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
 
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
-// index-breaking change regarding the GeoVocabulary. Please update the
+// index-breaking change regarding the `GeoVocabulary`. Please update the
 // `GEOMETRY_INFO_VERSION` constant accordingly, which will invalidate all
 // indices using such a vocabulary.
 class GeometryInfo {
