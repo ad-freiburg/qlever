@@ -65,8 +65,7 @@ class UnicodeVocabulary {
   // word, not a prefix. Special handling therefore should be applied in the
   // presence of a `SplitVocabulary`.
   template <typename T>
-  std::optional<std::pair<uint64_t, uint64_t>> getPositionOfWord(
-      const T& word) const {
+  std::pair<uint64_t, uint64_t> getPositionOfWord(const T& word) const {
     auto actualComparator = [this](const auto& a, const auto& b) {
       return _comparator(a, b, SortLevel::TOTAL);
     };
@@ -77,7 +76,8 @@ class UnicodeVocabulary {
       // for details.
       static_assert(HasDefaultGetPositionOfWord<UnderlyingVocabulary>);
       return _underlyingVocabulary.lower_bound(word, actualComparator)
-          .positionOfWord(word);
+          .positionOfWord(word)
+          .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
     }
   }
 
