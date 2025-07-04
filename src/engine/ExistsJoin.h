@@ -85,6 +85,8 @@ class ExistsJoin : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

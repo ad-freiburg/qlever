@@ -26,38 +26,6 @@ template <typename R>
 CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 }  // namespace detail
 
-/// Takes a view and yields the elements of the same view, but skips over
-/// consecutive duplicates.
-template <typename SortedView,
-          typename ValueType = ql::ranges::range_value_t<SortedView>>
-cppcoro::generator<ValueType> uniqueView(SortedView view) {
-  size_t numInputs = 0;
-  size_t numUnique = 0;
-  auto it = view.begin();
-  if (it == view.end()) {
-    co_return;
-  }
-  ValueType previousValue = std::move(*it);
-  ValueType previousValueCopy = previousValue;
-  co_yield previousValueCopy;
-  numInputs = 1;
-  numUnique = 1;
-  ++it;
-
-  for (; it != view.end(); ++it) {
-    ++numInputs;
-    if (*it != previousValue) {
-      previousValue = std::move(*it);
-      previousValueCopy = previousValue;
-      ++numUnique;
-      co_yield previousValueCopy;
-    }
-  }
-  LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(DEBUG) << "Number of unique outputs of `uniqueView`: " << numUnique
-             << std::endl;
-}
-
 // Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
 template <typename SortedBlockView,

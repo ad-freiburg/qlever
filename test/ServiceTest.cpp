@@ -254,6 +254,11 @@ TEST_F(ServiceTest, computeResult) {
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
+
+          // In the syntax test mode, all services (so also the failing ones)
+          // return the neutral result.
+          auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
+          EXPECT_NO_THROW(runComputeResult(result, status, contentType, false));
         };
 
     // CHECK 1: An exception shall be thrown (and maybe silenced), when
