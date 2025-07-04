@@ -112,9 +112,50 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
 }
 
 // _____________________________________________________________________________
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
+  auto geoRelExpr = dynamic_cast<const GeoRelationExpression<Relation>*>(&expr);
+  if (geoRelExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+}
+
+// _____________________________________________________________________________
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
-    const SparqlExpression&) {
-  // TODO<ullingerc> handle geo relation functions in subsequent PR
+    const SparqlExpression& expr) {
+  // Check against all possible geo relation types
+  std::optional<GeoFunctionCall> res;
+  using enum SpatialJoinType;
+
+  if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<COVERS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CROSSES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<TOUCHES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
+    return res;
+  }
   return std::nullopt;
 }
 
