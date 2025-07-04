@@ -15,11 +15,12 @@
 
 namespace SpatialJoinTestHelpers {
 
-auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
+constexpr inline auto makePointLiteral = [](std::string_view c1,
+                                            std::string_view c2) {
   return absl::StrCat(" \"POINT(", c1, " ", c2, ")\"^^<", GEO_WKT_LITERAL, ">");
 };
 
-auto makeAreaLiteral = [](std::string_view coordinateList) {
+constexpr inline auto makeAreaLiteral = [](std::string_view coordinateList) {
   return absl::StrCat("\"POLYGON((", coordinateList, "))\"^^<", GEO_WKT_LITERAL,
                       ">");
 };
