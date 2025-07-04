@@ -435,7 +435,7 @@ add_subdirectory(src/global)
 add_subdirectory(benchmark)
 
 enable_testing()
-option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
+option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools and greatly reduces the total disk space required when building" OFF)
 add_subdirectory(test)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
