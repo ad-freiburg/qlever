@@ -195,39 +195,6 @@ SparqlExpression::Ptr makeConcatExpression(
 constexpr auto makeConcatExpressionVariadic =
     variadicExpressionFactory<&makeConcatExpression>;
 
-// Helper struct for `getGeoFunctionExpressionParameters`
-struct GeoFunctionCall {
-  SpatialJoinType function_;
-  Variable left_;
-  Variable right_;
-};
-
-// Helper to check if the given `SparqlExpression` holds a `geof:sf[Relation]`
-// function call. If yes, a `GeoFunctionCall` is returned.
-template <SpatialJoinType Relation>
-std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
-    const SparqlExpression& expr);
-
-// Helper to extract spatial join parameters from a parsed `geof:` function
-// call. Returns `std::nullopt` if the given `SparqlExpression` is not a
-// supported geo function or `geof:distance`/`geof:metricDistance` which is
-// handled by the `getGeoDistanceExpressionParameters` function below.
-// Note: this function must be declared here, because the definitions of the
-// different geo expressions are hidden in the cpp file and are therefore
-// invisible elsewhere.
-std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
-    const SparqlExpression& expr);
-
-// Helper struct for `getGeoDistanceExpressionParameters`
-struct GeoDistanceCall : public GeoFunctionCall {
-  UnitOfMeasurement unit_;
-};
-
-// Same as `getGeoFunctionExpressionParameters`, but with special handling for
-// the unit of measurement associated with a distance.
-std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
-    const SparqlExpression& expr);
-
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_NARYEXPRESSION_H
