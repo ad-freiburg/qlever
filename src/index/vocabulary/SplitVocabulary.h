@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
@@ -84,7 +85,7 @@ class SplitVocabulary {
 
  private:
   // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_;
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
@@ -198,6 +199,22 @@ class SplitVocabulary {
                                                            marker);
   }
 
+  template <typename InternalStringType, typename Comparator>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(
+      const InternalStringType& word, Comparator comparator) const {
+    auto marker = getMarkerForWord(word);
+    auto pos = boundImpl<InternalStringType, Comparator, false>(
+                   word, comparator, marker)
+                   .positionOfWord(word);
+    if (!pos.has_value()) {
+      auto end = addMarker(
+          std::visit([](auto& v) { return v.size(); }, underlying_[marker]),
+          marker);
+      return {end, end};
+    }
+    return pos.value();
+  }
+
   // Shortcut to retrieve the first underlying vocabulary
   AnyUnderlyingVocab& getUnderlyingMainVocabulary() { return underlying_[0]; }
   const AnyUnderlyingVocab& getUnderlyingMainVocabulary() const {
@@ -245,6 +262,11 @@ class SplitVocabulary {
       const std::string& filename) const {
     return std::make_unique<WordWriter>(underlying_, filename);
   }
+
+  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
+  // GeoVocabulary.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(
+      uint64_t indexWithMarker) const;
 };
 
 // Concrete implementations of split function and split filename function
@@ -275,6 +297,6 @@ template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
                     decltype(detail::splitVocabulary::geoFilenameFunc),
-                    UnderlyingVocabulary, UnderlyingVocabulary>;
+                    UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

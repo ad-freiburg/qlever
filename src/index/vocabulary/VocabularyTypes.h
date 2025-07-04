@@ -51,6 +51,19 @@ class WordAndIndex {
   // `InternalExternalVocabulary`.
   std::optional<uint64_t>& previousIndex() { return previousIndex_; }
 
+  // Assuming this object holds a `lower_bound` result, check whether the word
+  // is stored at this position and return an upper bound accordingly.
+  template <typename T>
+  std::optional<std::pair<uint64_t, uint64_t>> positionOfWord(
+      const T& wordToCheck) {
+    if (isEnd()) {
+      return std::nullopt;
+    }
+    auto lower = index();
+    auto upper = word() == wordToCheck ? lower + 1 : lower;
+    return std::pair<uint64_t, uint64_t>{lower, upper};
+  }
+
   // The default constructor creates a `WordAndIndex` with `isEnd() == true`.
   WordAndIndex() = default;
 

@@ -9,6 +9,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/Conversions.h"
@@ -449,18 +450,12 @@ template <typename RequestedInfo>
 requires ad_utility::RequestedInfoT<RequestedInfo>
 std::optional<ad_utility::GeometryInfo>
 GeometryInfoValueGetter<RequestedInfo>::getPrecomputedGeometryInfo(
-    ValueId id, const EvaluationContext*) {
+    ValueId id, const EvaluationContext* context) {
   auto datatype = id.getDatatype();
   if (datatype == Datatype::VocabIndex) {
-    // TODO<ullingerc> After merge of GeoVocabulary this can be activated
-    // TODO<ullingerc> Retrieve via getGeoInfo only if we have a GeoVocab as
-    // underlying vocabulary of the PolymorphicVocabulary, otherwise return
-    // nullopt
-
     // All geometry strings encountered during index build have a precomputed
     // geometry info object.
-    // return
-    // context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
+    return context->_qec.getIndex().getVocab().getGeoInfo(id.getVocabIndex());
   }
   return std::nullopt;
 }
