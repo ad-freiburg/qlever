@@ -56,10 +56,15 @@ template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
 
+// The version of the `GeometryInfo`: to ensure correctness when reading disk
+// serialized objects of this class.
+constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
+
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
-// index-breaking change regarding the GeoVocabulary. Please update the index
-// version accordingly.
+// index-breaking change regarding the GeoVocabulary. Please update the
+// `GEOMETRY_INFO_VERSION` constant accordingly, which will invalidate all
+// indices using such a vocabulary.
 class GeometryInfo {
  private:
   EncodedBoundingBox boundingBox_;

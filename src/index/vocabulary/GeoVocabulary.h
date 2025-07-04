@@ -39,6 +39,10 @@ class GeoVocabulary {
   // Offset per index inside the geometry information file
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
 
+  // Offset for the header of the geometry information file
+  static constexpr size_t geoInfoHeader =
+      sizeof(ad_utility::GEOMETRY_INFO_VERSION);
+
  public:
   // Constructor
   template <typename... Args>

@@ -4,10 +4,13 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <stdexcept>
+
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
+#include "util/GeometryInfo.h"
 
 // ____________________________________________________________________________
 template <typename V>
@@ -15,6 +18,19 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   literals_.open(filename);
 
   geoInfoFile_.open(getGeoInfoFilename(filename).c_str(), "r");
+
+  // Read header of `geoInfoFile_` to determine version
+  std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
+  geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
+
+  // Check version
+  if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
+    throw std::runtime_error(absl::StrCat(
+        "The geometry info version of ", getGeoInfoFilename(filename), " is ",
+        versionOfFile, ", which is incompatible with ",
+        ad_utility::GEOMETRY_INFO_VERSION,
+        " as required by this version of QLever."));
+  }
 };
 
 // ____________________________________________________________________________
@@ -29,7 +45,9 @@ template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
-      geoInfoFile_{filename + geoInfoSuffix, "w"} {};
+      geoInfoFile_{filename + geoInfoSuffix, "w"} {
+  geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
+};
 
 // ____________________________________________________________________________
 template <typename V>
@@ -64,7 +82,7 @@ GeometryInfo GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   uint8_t buffer[geoInfoOffset];
   void* ptr = &buffer;
   // Read into the buffer
-  geoInfoFile_.read(ptr, geoInfoOffset, index * geoInfoOffset);
+  geoInfoFile_.read(ptr, geoInfoOffset, geoInfoHeader + index * geoInfoOffset);
   // Interpret the buffer as a GeometryInfo object
   return *static_cast<GeometryInfo*>(ptr);
 }
