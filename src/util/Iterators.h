@@ -413,6 +413,13 @@ class InputRangeTypeErased {
           Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
+  // Constructor for ranges that are not moveable
+  CPP_template(typename Range)(
+      requires std::is_base_of_v<
+          InputRangeFromGet<ValueType>,
+          Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
+      : impl_{std::move(range)} {}
+
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
