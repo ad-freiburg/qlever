@@ -187,10 +187,12 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
       {"centroid", &makeCentroidExpression},
-      {"envelope", &makeEnvelopeExpression}};
+      {"envelope", &makeEnvelopeExpression},
+      {"metricLength", &makeMetricLengthExpression}};
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
+      {"length", &makeLengthExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},

@@ -524,4 +524,5 @@ template struct GeometryInfoValueGetter<ad_utility::GeometryInfo>;
 template struct GeometryInfoValueGetter<ad_utility::GeometryType>;
 template struct GeometryInfoValueGetter<ad_utility::Centroid>;
 template struct GeometryInfoValueGetter<ad_utility::BoundingBox>;
+template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 }  // namespace sparqlExpression::detail

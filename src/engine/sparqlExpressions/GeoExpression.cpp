@@ -40,6 +40,14 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(LengthExpression, 2,
+                FV<NumericIdWrapper<ad_utility::WktLength, true>,
+                   GeometryInfoValueGetter<ad_utility::MetricLength>,
+                   UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(MetricLengthExpression, 1,
+                FV<NumericIdWrapper<ad_utility::WktMetricLength, true>,
+                   GeometryInfoValueGetter<ad_utility::MetricLength>>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -87,6 +95,15 @@ SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
 
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
+                                           SparqlExpression::Ptr child2) {
+  return std::make_unique<LengthExpression>(std::move(child1),
+                                            std::move(child2));
+}
+SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
+  return std::make_unique<MetricLengthExpression>(std::move(child1));
 }
 
 template <SpatialJoinType Relation>

@@ -367,6 +367,13 @@ TEST(SparqlParser, FunctionCall) {
                          variableExpressionMatcher(Variable{"?b"}),
                          variableExpressionMatcher(Variable{"?unit"})));
 
+  // Length functions
+  expectFunctionCall(absl::StrCat(geof, "metricLength>(?x)"),
+                     matchUnary(&makeMetricLengthExpression));
+  expectFunctionCall(
+      absl::StrCat(geof, "length>(?a, ?b)"),
+      matchNary(&makeLengthExpression, Variable{"?a"}, Variable{"?b"}));
+
   // Geometric relation functions
   expectFunctionCall(
       absl::StrCat(geof, "sfIntersects>(?a, ?b)"),
@@ -441,6 +448,12 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
   expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
   expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(geof, "length>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "length>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "length>(?a, ?b, ?c, ?d)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricLength>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricLength>(?a, ?b)"));
+  expectFunctionCallFails(absl::StrCat(geof, "metricLength>(?a, ?b, ?c)"));
 
   expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>()"));
