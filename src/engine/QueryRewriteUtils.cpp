@@ -5,8 +5,10 @@
 #include "engine/QueryRewriteUtils.h"
 
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
+// _____________________________________________________________________________
 std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
     const SparqlFilter& filter) {
   const auto& filterBody = *filter.expression_.getPimpl();
@@ -31,8 +33,8 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
   // Construct spatial join
   auto [type, left, right] = geoFuncCall.value();
   return SpatialJoinConfiguration{SpatialJoinConfig{type, maxDist},
-                                  left,
-                                  right,
+                                  std::move(left),
+                                  std::move(right),
                                   std::nullopt,
                                   PayloadVariables::all(),
                                   SpatialJoinAlgorithm::LIBSPATIALJOIN,

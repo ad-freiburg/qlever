@@ -579,9 +579,11 @@ namespace sparqlExpression {
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
   // TODO<ullingerc> Add support for more optimizable filters:
-  // * geof:distance() < constant
-  // * constant > geof:distance()
-  // * constant >= geof:distance()
+  // * `geof:distance() < constant`
+  // * `constant > geof:distance()`
+  // * `constant >= geof:distance()`
+  // The supported patterns are documented in the header declaration of this
+  // function.
 
   // Supported comparison operator
   auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);

@@ -2463,9 +2463,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b) <= 0.5)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Metric distance function
   h::expect(
@@ -2475,9 +2475,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:metricDistance(?y, ?b) <= 500)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Distance function with unit
   h::expect(
@@ -2487,9 +2487,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M>) <= 500)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -2497,9 +2497,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>) <= 1)"
       " }",
-      h::spatialJoin(1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -2507,9 +2507,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/KiloM>) <= 0.5)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
@@ -2520,9 +2520,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>) <= 500)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -2532,9 +2532,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>) <= 1)"
       " }",
-      h::spatialJoin(1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -2544,9 +2544,9 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>) <= 0.5)"
       " }",
-      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), algo, type,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Two distance filters
   h::expect(
@@ -2559,19 +2559,21 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "FILTER(geof:distance(?y, ?n) <= 1)"
       " }",
       ::testing::AnyOf(
-          h::spatialJoin(
+          h::spatialJoinFilterSubstitute(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                             PayloadVariables::all(), algo, type,
-                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+              h::spatialJoinFilterSubstitute(
+                  500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
+                  scan("?a", "<p>", "?b")),
               scan("?m", "<p>", "?n")),
-          h::spatialJoin(
+          h::spatialJoinFilterSubstitute(
               500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                             PayloadVariables::all(), algo, type,
-                             scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+              h::spatialJoinFilterSubstitute(
+                  1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
+                  scan("?m", "<p>", "?n")),
               scan("?a", "<p>", "?b"))));
 
   // Regression test: two distance filters and unrelated bind operation
@@ -2586,40 +2588,40 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "FILTER(geof:distance(?y, ?n) <= 1)"
       " }",
       ::testing::AnyOf(
-          h::Bind(h::spatialJoin(
+          h::Bind(h::spatialJoinFilterSubstitute(
                       1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
                       PayloadVariables::all(), algo, type,
-                      h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                                     PayloadVariables::all(), algo, type,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?a", "<p>", "?b")),
+                      h::spatialJoinFilterSubstitute(
+                          500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
                   "1", Variable{"?unrelated"}),
-          h::spatialJoin(
+          h::spatialJoinFilterSubstitute(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
               algo, type,
-              h::Bind(h::spatialJoin(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                                     PayloadVariables::all(), algo, type,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?a", "<p>", "?b")),
+              h::Bind(h::spatialJoinFilterSubstitute(
+                          500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       "1", Variable{"?unrelated"}),
               scan("?m", "<p>", "?n")),
-          h::spatialJoin(
-              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-              algo, type,
-              h::Bind(h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                                     PayloadVariables::all(), algo, type,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?m", "<p>", "?n")),
+          h::spatialJoinFilterSubstitute(
+              500, -1, V{"?y"}, V{"?b"},
+              std::nullopt, PayloadVariables::all(), algo, type,
+              h::Bind(h::spatialJoinFilterSubstitute(
+                          1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       "1", Variable{"?unrelated"}),
               scan("?a", "<p>", "?b")),
-          h::Bind(h::spatialJoin(
-                      500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                      PayloadVariables::all(), algo, type,
-                      h::spatialJoin(1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                                     PayloadVariables::all(), algo, type,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?m", "<p>", "?n")),
+          h::Bind(h::spatialJoinFilterSubstitute(
+                      500, -1, V{"?y"}, V{"?b"},
+                      std::nullopt, PayloadVariables::all(), algo, type,
+                      h::spatialJoinFilterSubstitute(
+                          1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b")),
                   "1", Variable{"?unrelated"})));
 }

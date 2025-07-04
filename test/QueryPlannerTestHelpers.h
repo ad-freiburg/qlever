@@ -383,6 +383,7 @@ inline auto ValuesClause = [](string cacheKey) {
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
+template <bool Substitute = false>
 struct SpatialJoinMatcher {
   template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
@@ -391,21 +392,23 @@ struct SpatialJoinMatcher {
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::SpatialJoin>(
-        AllOf(children(childMatchers...),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
-                          Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
-                          Eq(std::pair(left, right))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
-                          Eq(distanceVariable)),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
-                          Eq(payloadVariables)),
-              AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
-              AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType))));
+    return RootOperation<::SpatialJoin>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
+                    Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables)),
+        AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
+        AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };
 constexpr inline SpatialJoinMatcher spatialJoin;
+constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =

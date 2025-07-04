@@ -6,6 +6,7 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
@@ -111,9 +112,12 @@ using GreaterEqualExpression =
 
 using InExpression = relational::InExpression;
 
-// This function is a helper for the query planner. It allows unpacking a FILTER
-// of geof:distance and a constant. This needs to be declared in this module,
-// because the definitions of the relational expressions are hidden in its .cpp.
+// This function is a helper for the query planner. It allows unpacking a
+// `SparqlExpression` of any of these forms
+// * `geof:distance(?variable1, ?variable2) <= constant`
+// * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
+// * `geof:metricDistance(?variable1, ?variable2) <= constant`
+// for rewriting filters to spatial joins.
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 

@@ -1,4 +1,4 @@
-// Copyright 2021 - 2024
+// Copyright 2021 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
@@ -19,6 +20,7 @@
 
 namespace sparqlExpression {
 namespace detail {
+
 NARY_EXPRESSION(
     LongitudeExpression, 1,
     FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
@@ -54,25 +56,30 @@ NARY_EXPRESSION(
 
 using namespace detail;
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LatitudeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<LongitudeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2) {
   return std::make_unique<DistExpression>(std::move(child1), std::move(child2));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricDistExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2) {
   return std::make_unique<MetricDistExpression>(std::move(child1),
                                                 std::move(child2));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3) {
@@ -86,14 +93,17 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
   }
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
   return std::make_unique<CentroidExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
 }
 
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
@@ -101,6 +111,7 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                            std::move(child2));
 }
 
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     const SparqlExpression& expr) {
@@ -123,6 +134,7 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
   return GeoFunctionCall{Relation, p1.value(), p2.value()};
 }
 
+// _____________________________________________________________________________
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
   // Check against all possible geo relation types
@@ -147,6 +159,7 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
   return std::nullopt;
 }
 
+// _____________________________________________________________________________
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     const SparqlExpression& expr) {
   using namespace ad_utility::use_type_identity;
@@ -159,17 +172,15 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     // Unit given as IRI
     auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
     if (unitExpr != nullptr) {
-      return ad_utility::detail::iriToUnitOfMeasurement(
-          asStringViewUnsafe(unitExpr->value().getContent()));
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr->value()});
     }
 
     // Unit given as literal expression
     auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
-    if (unitExpr2 != nullptr && unitExpr2->value().hasDatatype() &&
-        asStringViewUnsafe(unitExpr2->value().getDatatype()) ==
-            XSD_ANYURI_TYPE) {
-      return ad_utility::detail::iriToUnitOfMeasurement(
-          asStringViewUnsafe(unitExpr2->value().getContent()));
+    if (unitExpr2 != nullptr) {
+      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+          LiteralOrIri{unitExpr2->value()});
     }
 
     return std::nullopt;
@@ -233,7 +244,9 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
 // problems
 using Ptr = sparqlExpression::SparqlExpression::Ptr;
 
-#undef QL_INSTANTIATE_GEO_RELATION_EXPR
+#ifdef QL_INSTANTIATE_GEO_RELATION_EXPR
+#error "Macro QL_INSTANTIATE_GEO_RELATION_EXPR already defined"
+#endif
 #define QL_INSTANTIATE_GEO_RELATION_EXPR(joinType)                            \
   template Ptr                                                                \
       sparqlExpression::makeGeoRelationExpression<SpatialJoinType::joinType>( \
