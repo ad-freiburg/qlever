@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
   string kbIndexName;
   string settingsFile;
   string scoringMetric = "explicit";
+  string tripleInTextIndexRegex;
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -142,6 +143,8 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  bool addWordsFromAllLiterals = false;
+  bool tripleInTextIndexRegexIsWhitelist = true;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
   std::optional<ad_utility::MemorySize> indexMemoryLimit;
@@ -186,15 +189,25 @@ int main(int argc, char** argv) {
       "The full text of the text records from which to build the text index.");
   add("text-words-input-file,w", po::value(&wordsfile),
       "Words of the text records from which to build the text index.");
-  add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
+  add("text-words-from-literals,W", po::bool_switch(&addWordsFromAllLiterals),
       "Consider all literals from the internal vocabulary as text records. Can "
       "be combined with `text-docs-input-file` and `text-words-input-file`");
+  add("text-index-regex,r", po::value(&tripleInTextIndexRegex),
+      "Regex which is used to match predicates. If the predicate matches and"
+      "`text-index-regex-is-whitelist` is set to true (default), the object (if"
+      "it is a literal) is added to the text index.");
+  add("text-index-regex-is-whitelist,R",
+      po::bool_switch(&tripleInTextIndexRegexIsWhitelist),
+      "If set to true (default) the `text-index-regex` works as whitelist, if"
+      "false as blacklist.");
   add("text-index-name,T", po::value(&textIndexName),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
-      "the same `index-basename` already exists.");
+      "the same `index-basename` already exists. Also if Literals should be"
+      "added to the text index those have to be precomputed during the normal"
+      "index building.");
   add("bm25-b", po::value(&bScoringParam),
       "Sets the b param in the BM25 scoring metric for the fulltext index."
       " This has to be between (including) 0 and 1.");
@@ -249,6 +262,20 @@ int main(int argc, char** argv) {
           "The value of bm25-b must be between and "
           "including 0 and 1");
     }
+    if (addWordsFromAllLiterals && optionsMap.count("text-index-regex")) {
+      throw std::invalid_argument(
+          "The option to add all literals to text index"
+          "shouldn't be used with a filter for literals."
+          "Either choose to add all literals or choose"
+          "a regex that evaluates predicates of triples"
+          "with literals as object.");
+    }
+    if (optionsMap.count("text-index-regex") &&
+        optionsMap.count("add-text-index")) {
+      throw std::invalid_argument(
+          "The regex to filter literals with a regex on predicates only works"
+          "when building the normal index.");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
@@ -277,6 +304,11 @@ int main(int argc, char** argv) {
     kbIndexName = "no index name specified";
   }
 
+  // Add words from literals if either a regex filter for predicates with
+  // literals as objects is given or the option to add all literals is chosen
+  addWordsFromLiterals =
+      addWordsFromAllLiterals || optionsMap.count("text-index-regex");
+
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
             << qlever::version::GitShortHash << EMPH_OFF << std::endl;
@@ -294,6 +326,9 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
+    index.setTripleInTextIndexFilter(tripleInTextIndexRegex,
+                                     tripleInTextIndexRegexIsWhitelist);
+    index.setAddWordsFromAllLiterals(addWordsFromAllLiterals);
 
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.

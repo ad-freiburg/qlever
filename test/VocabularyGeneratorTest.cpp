@@ -79,14 +79,14 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},     {"\"bla\"", true, 2},
-        {"\"gorilla\"", false, 3}, {"\"monkey\"", false, 4},
-        {"_:blank", false, 0},     {"_:blunk", false, 1}};
+        {"\"ape\"", false, true, 0},     {"\"bla\"", true, true, 2},
+        {"\"gorilla\"", false, true, 3}, {"\"monkey\"", false, true, 4},
+        {"_:blank", false, false, 0},    {"_:blunk", false, false, 1}};
     std::vector<TripleComponentWithIndex> words1{
-        {"\"bear\"", false, 1},
-        {"\"monkey\"", true, 4},
-        {"\"zebra\"", false, 5},
-        {"_:blunk", false, 1},
+        {"\"bear\"", false, true, 1},
+        {"\"monkey\"", true, true, 4},
+        {"\"zebra\"", false, true, 5},
+        {"_:blunk", false, false, 1},
     };
 
     // Note that the word "monkey" appears in both vocabularies, buth with
@@ -157,8 +157,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   std::vector<std::pair<std::string, bool>> mergeResult;
   {
     auto internalVocabularyAction =
-        [&mergeResult](const auto& word,
-                       [[maybe_unused]] bool isExternal) -> uint64_t {
+        [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal,
+                       [[maybe_unused]] bool inTextIndexDummy) -> uint64_t {
       mergeResult.emplace_back(word, isExternal);
       return mergeResult.size() - 1;
     };

@@ -79,7 +79,6 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
 // ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
-                                  bool skipWordlistIfAllTheSame,
                                   off_t& currentOffset, bool scoreIsInt) {
   ContextListMetaData meta;
   meta._nofElements = postings.size();
@@ -104,9 +103,7 @@ ContextListMetaData writePostings(ad_utility::File& out,
   textRecordEncoder.writeToFile(out, currentOffset);
 
   meta._startWordlist = currentOffset;
-  if (!skipWordlistIfAllTheSame || wordIndexEncoder.getCodeBook().size() > 1) {
-    wordIndexEncoder.writeToFile(out, currentOffset);
-  }
+  wordIndexEncoder.writeToFile(out, currentOffset);
 
   meta._startScorelist = currentOffset;
   if (scoreIsInt) {
