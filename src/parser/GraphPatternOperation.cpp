@@ -12,7 +12,6 @@
 #include <string_view>
 #include <vector>
 
-#include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
