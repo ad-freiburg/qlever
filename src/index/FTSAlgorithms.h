@@ -16,8 +16,6 @@ class FTSAlgorithms {
   // idRange.
   static IdTable filterByRange(const IdRange<WordVocabIndex>& idRange,
                                const IdTable& idPreFilter);
-  // Filters duplicates a sorted IdTable
-  static IdTable filterDuplicates(const IdTable& idTablePreFilter);
 };
 
 #endif  // QLEVER_SRC_INDEX_FTSALGORITHMS_H

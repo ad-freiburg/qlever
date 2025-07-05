@@ -49,31 +49,3 @@ IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
              << idTableResult.numRows() << " elements.\n";
   return idTableResult;
 }
-
-// _____________________________________________________________________________
-IdTable FTSAlgorithms::filterDuplicates(const IdTable& idTablePreFilter) {
-  AD_CONTRACT_CHECK(idTablePreFilter.numColumns() == 3);
-  IdTable idTableResult{3, idTablePreFilter.getAllocator()};
-  size_t numDistinctRows = 1;
-  auto it = idTablePreFilter.begin();
-  if (it == idTablePreFilter.end()) {
-    return idTableResult;
-  }
-  idTableResult.resize(idTablePreFilter.getColumn(0).size());
-  const auto& firstRow = *it;
-  const auto* previousRow = &firstRow;
-  idTableResult.push_back(*it);
-  ++it;
-
-  for (; it != idTablePreFilter.end(); ++it) {
-    const auto& currentRow = *it;
-    if (currentRow != *previousRow) {
-      idTableResult.push_back(currentRow);
-      previousRow = &currentRow;
-    } else {
-      LOG(DEBUG) << "Skipping duplicate row.";
-    }
-  }
-  idTableResult.resize(numDistinctRows);
-  return idTableResult;
-}
