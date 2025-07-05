@@ -57,7 +57,7 @@ jobs:
       - name: Execute test suite
         run: |
           cd qlever-test-suite
-          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost sparql sparql
+          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost http-graph-store sparql
           python testsuite.py extract
           python testsuite.py ${{ github.sha }}
           cd ..

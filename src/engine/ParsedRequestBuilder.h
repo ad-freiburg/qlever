@@ -22,6 +22,12 @@ struct ParsedRequestBuilder {
 
   ad_utility::url_parser::ParsedRequest parsedRequest_;
 
+ private:
+  // Graph Store Protocol direct graph identification needs the host to be able
+  // to determine the graph IRI.
+  std::string host_;
+
+ public:
   // Initialize a `ParsedRequestBuilder`, parsing the request target into the
   // `ParsedRequest`.
   explicit ParsedRequestBuilder(const RequestType& request);
@@ -44,9 +50,11 @@ struct ParsedRequestBuilder {
 
   // Returns whether the request is a Graph Store operation.
   bool isGraphStoreOperation() const;
+  bool isGraphStoreOperationIndirect() const;
 
   // Set the operation to the parsed Graph Store operation.
   void extractGraphStoreOperation();
+  void extractGraphStoreOperationIndirect();
 
   // Returns whether the parameters contain a parameter with the given key.
   bool parametersContain(std::string_view param) const;
