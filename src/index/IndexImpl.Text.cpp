@@ -18,6 +18,24 @@
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
+#include "util/TransparentFunctors.h"
+
+size_t IndexImpl::getSizeOfTextBlocksSum(
+    const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+    bool forWord) {
+  auto getSizeOfBlock =
+      [&forWord](const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
+        if (forWord) {
+          return tbmdAndWordInfo.tbmd_._cl._nofElements;
+        }
+        return tbmdAndWordInfo.tbmd_._entityCl._nofElements;
+      };
+  size_t sum = 0;
+  for (const auto& tbmdAndWordInfo : tbmds) {
+    sum += getSizeOfBlock(tbmdAndWordInfo);
+  }
+  return sum;
+};
 
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
@@ -82,19 +100,16 @@ IdTable IndexImpl::getWordPostingsForTerm(
   IdTable idTable{allocator};
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
-    idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
+    idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
-  const auto& tbmd = optionalTbmd.value().tbmd_;
-  idTable = textIndexReadWrite::readWordCl(tbmd, allocator, textIndexFile_,
-                                           textScoringMetric_);
-  if (optionalTbmd.value().hasToBeFiltered_) {
-    idTable =
-        FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, idTable);
-  }
+
+  IdTable output = mergeTextBlockResults(
+      textIndexReadWrite::readWordCl, optionalTbmd.value(), allocator, false);
+
   LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << idTable.getColumn(0).size() << '\n';
-  return idTable;
+             << ": cids: " << output.getColumn(0).size() << '\n';
+  return output;
 }
 
 // _____________________________________________________________________________
@@ -105,48 +120,80 @@ IdTable IndexImpl::getEntityMentionsForWord(
   if (!optTbmd.has_value()) {
     return IdTable{allocator};
   }
-  const auto& tbmd = optTbmd.value().tbmd_;
-  return textIndexReadWrite::readWordEntityCl(tbmd, allocator, textIndexFile_,
-                                              textScoringMetric_);
+  return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl,
+                               optTbmd.value(), allocator, true);
+}
+
+// _____________________________________________________________________________
+template <typename Reader>
+IdTable IndexImpl::mergeTextBlockResults(
+    const Reader& reader,
+    const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    bool isEntitySearch) const {
+  if (tbmds.empty()) {
+    return IdTable{allocator};
+  }
+  // Collect all blocks as IdTables
+  vector<IdTable> partialResults;
+  for (const auto& tbmd : tbmds) {
+    IdTable partialResult{allocator};
+    partialResult =
+        reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
+    if (!isEntitySearch && tbmd.hasToBeFiltered_) {
+      partialResult =
+          FTSAlgorithms::filterByRange(tbmd.idRange_, partialResult);
+    }
+    partialResults.push_back(std::move(partialResult));
+  }
+  // If only one block was requested return the IdTable
+  if (partialResults.size() == 1) {
+    return std::move(partialResults[0]);
+  }
+  // Combine the partial results to one IdTable
+  IdTable result{3, allocator};
+  for (const auto& partialResult : partialResults) {
+    result.insertAtEnd(partialResult);
+  }
+  // Sort the result
+  ql::ranges::sort(result, [](const auto& a, const auto& b) {
+    return std::lexicographical_compare(
+        a.begin(), a.end(), b.begin(), b.end(), [](const Id& x, const Id& y) {
+          return x.compareWithoutLocalVocab(y) < 0;
+        });
+  });
+  // If not entitySearch don't filter duplicates
+  if (!isEntitySearch) {
+    return result;
+  }
+  // Filter duplicates
+  auto [newEnd, _] = std::ranges::unique(result);
+  result.erase(newEnd, result.end());
+  return result;
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
     const vector<string>& terms) const {
-  // It is beneficial to choose a term where no filtering by regular word id
-  // is needed. Then the entity lists can be read directly from disk.
-  // For others it is always necessary to reach wordlist and filter them
-  // if such an entity list is taken, another intersection is necessary.
-
-  // Apart from that, entity lists are usually larger by a factor.
-  // Hence it makes sense to choose the smallest.
-
-  // Heuristic: Always prefer no-filtering terms over others, then
-  // pick the one with the smallest EL block to be read.
-  std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
+  // Heuristic: Pick the term with the smallest number of entries to be read.
+  // Note that
+  // 1. The entries can be spread over multiple blocks and
+  // 2. The heuristic might be off since it doesn't account for duplicates which
+  // are later filtered out.
+  std::vector<std::pair<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
     auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
     if (!optTbmd.has_value()) {
       return i;
     }
-    const auto& tbmd = optTbmd.value().tbmd_;
-    toBeSorted.emplace_back(i, tbmd._firstWordId == tbmd._lastWordId,
-                            tbmd._entityCl._nofElements);
+    toBeSorted.emplace_back(i, getSizeOfTextBlocksSum(optTbmd.value(), false));
   }
-  std::sort(toBeSorted.begin(), toBeSorted.end(),
-            [](const std::tuple<size_t, bool, size_t>& a,
-               const std::tuple<size_t, bool, size_t>& b) {
-              if (std::get<1>(a) == std::get<1>(b)) {
-                return std::get<2>(a) < std::get<2>(b);
-              } else {
-                return std::get<1>(a);
-              }
-            });
+  ql::ranges::sort(toBeSorted, std::less<>{}, ad_utility::second);
   return std::get<0>(toBeSorted[0]);
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
+size_t IndexImpl::getSizeOfTextBlocks(const string& word, bool forWord) const {
   if (word.empty()) {
     return 0;
   }
@@ -154,19 +201,7 @@ size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
   if (!optTbmd.has_value()) {
     return 0;
   }
-  return optTbmd.value().tbmd_._entityCl._nofElements;
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
-  if (word.empty()) {
-    return 0;
-  }
-  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
-  if (!optTbmd.has_value()) {
-    return 0;
-  }
-  return optTbmd.value().tbmd_._cl._nofElements;
+  return getSizeOfTextBlocksSum(optTbmd.value(), forWord);
 }
 
 // _____________________________________________________________________________
@@ -183,7 +218,13 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     if (!optTbmd.has_value()) {
       return 0;
     }
-    return 1 + optTbmd.value().tbmd_._entityCl._nofElements / 100;
+    if (optTbmd.value().size() == 0) {
+      return 0;
+    }
+    return ql::ranges::min(
+        optTbmd.value() | ql::views::transform([](const auto& tbmdAndWordInfo) {
+          return 1 + tbmdAndWordInfo.tbmd_._entityCl._nofElements / 100;
+        }));
   };
   return ql::ranges::min(terms | ql::views::transform(termToEstimate));
 }
@@ -193,7 +234,7 @@ void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
-    const -> std::optional<TextBlockMetadataAndWordInfo> {
+    const -> std::optional<std::vector<TextBlockMetadataAndWordInfo>> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
   if (word.ends_with(PREFIX_CHAR)) {
@@ -211,12 +252,18 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
     }
     idRange = IdRange{idx, idx};
   }
-  const auto& tbmd = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
-                                                       idRange.last().get());
-  bool hasToBeFiltered = tbmd._cl.hasMultipleWords() &&
-                         !(tbmd._firstWordId == idRange.first().get() &&
-                           tbmd._lastWordId == idRange.last().get());
-  return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+  auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
+                                                      idRange.last().get());
+
+  bool hasToBeFiltered = false;
+  std::vector<TextBlockMetadataAndWordInfo> output;
+  for (auto tbmd : tbmdVector) {
+    hasToBeFiltered = tbmd.get()._cl.hasMultipleWords() &&
+                      !(tbmd.get()._firstWordId == idRange.first().get() &&
+                        tbmd.get()._lastWordId == idRange.last().get());
+    output.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
+  }
+  return std::optional{std::move(output)};
 }
 
 // _____________________________________________________________________________

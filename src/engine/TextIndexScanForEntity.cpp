@@ -97,11 +97,11 @@ size_t TextIndexScanForEntity::getCostEstimate() {
   if (hasFixedEntity()) {
     // We currently have to first materialize and then filter the complete list
     // for the fixed entity
-    return 2 * getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-                   config_.word_);
+    return 2 * getExecutionContext()->getIndex().getSizeOfTextBlocks(
+                   config_.word_, false);
   } else {
-    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        config_.word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlocks(config_.word_,
+                                                                 false);
   }
 }
 
@@ -111,15 +111,15 @@ uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
     return static_cast<uint64_t>(
         getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
-    return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        config_.word_);
+    return getExecutionContext()->getIndex().getSizeOfTextBlocks(config_.word_,
+                                                                 false);
   }
 }
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-             config_.word_) == 0;
+  return getExecutionContext()->getIndex().getSizeOfTextBlocks(config_.word_,
+                                                               false) == 0;
 }
 
 // _____________________________________________________________________________
