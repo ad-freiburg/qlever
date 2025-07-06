@@ -961,7 +961,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
   ad_utility::timer::TimeTracer tracerInner =
       ad_utility::timer::TimeTracer("update");
-  tracerInner.beginTrace("waitingForUpdateThread");
+  ad_utility::timer::TimeTracerOpt tracer(tracerInner);
+  tracer.beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
@@ -972,8 +973,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &cancellationHandle, &updates, &qec, &timeLimit,
-       &plannedUpdate, &tracerInner]() {
-        ad_utility::timer::TimeTracerOpt tracer{tracerInner};
+       &plannedUpdate, &tracer]() {
         tracer.endTrace("waitingForUpdateThread");
         std::vector<UpdateMetadata> results;
         std::vector<DeltaTriplesModifyTimings> timings;
@@ -993,10 +993,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           auto [updateMetadata, updateTiming] =
               index_.deltaTriplesManager().modify<UpdateMetadata>(
                   [this, &requestTimer, &cancellationHandle, &plannedUpdate,
-                   &tracerInner](auto& deltaTriples) {
+                   &tracer](auto& deltaTriples) {
                     // Use `this` explicitly to silence false-positive
                     // errors on captured `this` being unused.
-                    ad_utility::timer::TimeTracerOpt tracer{tracerInner};
                     tracer.beginTrace("processUpdateImpl");
                     auto res = this->processUpdateImpl(
                         plannedUpdate.value(), requestTimer, cancellationHandle,
@@ -1013,8 +1012,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       },
       cancellationHandle);
   auto [updateMetadata, timings] = co_await std::move(coroutine);
-  tracerInner.endTrace("update");
-  AD_LOG(INFO) << "TimeTracer output: " << tracerInner.getJSONShort().dump()
+  tracer.endTrace("update");
+  AD_LOG(INFO) << "TimeTracer output: " << tracer.get().getJSONShort().dump()
                << std::endl;
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
@@ -1022,7 +1021,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // TODO: display timings for all operations
   auto response = createResponseMetadataForUpdate(
       index_, index_.deltaTriplesManager().getCurrentSnapshot(), *plannedUpdate,
-      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracerInner);
+      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer.get());
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
