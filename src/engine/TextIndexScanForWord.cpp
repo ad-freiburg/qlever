@@ -114,6 +114,9 @@ string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "WORD INDEX SCAN: "
      << " with word: \"" << config_.word_ << "\"";
+  if (config_.scoreVar_.has_value()) {
+    os << " and scoreVar: \"" << config_.scoreVar_.value().name() << "\"";
+  }
   return std::move(os).str();
 }
 
