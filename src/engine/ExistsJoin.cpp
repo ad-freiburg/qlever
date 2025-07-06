@@ -35,7 +35,13 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string ExistsJoin::getCacheKeyImpl() const {
   return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
-                      " right: ", right_->getCacheKey());
+                      " right: ", right_->getCacheKey(), " join columns: [",
+                      absl::StrJoin(joinColumns_, " ",
+                                    [](std::string* out, const auto& array) {
+                                      absl::StrAppend(out, "(", array[0], ",",
+                                                      array[1], ")");
+                                    }),
+                      "]");
 }
 
 // _____________________________________________________________________________
@@ -224,6 +230,13 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     auto pq = exists.argument();
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    // Hide non-visible variables in the subtree, so that they are not
+    // accidentally joined, ideally collisions wouldn't happen in the first
+    // place, but since we're creating our own instance of `QueryPlanner` we
+    // can't prevent them without refactoring the code. This workaround has the
+    // downside that it might look confusing
+    tree->getRootOperation()->setSelectedVariablesForSubquery(
+        pq.getVisibleVariables());
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }

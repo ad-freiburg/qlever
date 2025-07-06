@@ -219,6 +219,8 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
 addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
 
+addLinkAndDiscoverTestSerial(SparqlAntlrParserExpressionTest parser sparqlExpressions engine)
+
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
 # for each test case.
@@ -465,3 +467,7 @@ addLinkAndDiscoverTest(LruCacheTest)
 addLinkAndDiscoverTestNoLibs(InputRangeUtilsTest)
 
 addLinkAndDiscoverTest(TripleSerializerTest)
+
+addLinkAndDiscoverTest(GeometryInfoTest util)
+
+addLinkAndDiscoverTestSerial(QueryRewriteUtilTest engine)

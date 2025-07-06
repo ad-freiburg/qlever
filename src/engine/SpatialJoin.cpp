@@ -36,8 +36,11 @@
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-    std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec), config_{std::move(config)} {
+    std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+    bool substitutesFilterOp)
+    : Operation(qec),
+      config_{std::move(config)},
+      substitutesFilterOp_{substitutesFilterOp} {
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }
@@ -53,10 +56,12 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
   std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
     sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       std::move(child), childRight_);
+                                       std::move(child), childRight_,
+                                       substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
     sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       childLeft_, std::move(child));
+                                       childLeft_, std::move(child),
+                                       substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
