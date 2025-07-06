@@ -169,16 +169,12 @@ class DeltaTriples {
   DeltaTriplesCount getCounts() const;
 
   // Insert triples.
-  void insertTriples(
-      CancellationHandle cancellationHandle, Triples triples,
-      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-          tracer = std::nullopt);
+  void insertTriples(CancellationHandle cancellationHandle, Triples triples,
+                     ad_utility::timer::TimeTracerOpt tracer = {});
 
   // Delete triples.
-  void deleteTriples(
-      CancellationHandle cancellationHandle, Triples triples,
-      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-          tracer = std::nullopt);
+  void deleteTriples(CancellationHandle cancellationHandle, Triples triples,
+                     ad_utility::timer::TimeTracerOpt tracer = {});
 
   // If the `filename` is set, then `writeToDisk()` will write these
   // `DeltaTriples` to `filename.value()`. If `filename` is `nullopt`, then
@@ -211,8 +207,7 @@ class DeltaTriples {
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       CancellationHandle cancellationHandle,
       ql::span<const IdTriple<0>> triples, bool insertOrDelete,
-      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-          tracer = std::nullopt);
+      ad_utility::timer::TimeTracerOpt tracer = {});
 
   // Common implementation for `insertTriples` and `deleteTriples`. When
   // `insertOrDelete` is `true`, the triples are inserted, `targetMap` contains
@@ -220,11 +215,10 @@ class DeltaTriples {
   // triples. When `insertOrDelete` is `false`, the triples are deleted, and it
   // is the other way around:. This is used to resolve insertions or deletions
   // that are idempotent or cancel each other out.
-  void modifyTriplesImpl(
-      CancellationHandle cancellationHandle, Triples triples, bool shouldExist,
-      TriplesToHandlesMap& targetMap, TriplesToHandlesMap& inverseMap,
-      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-          tracer = std::nullopt);
+  void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
+                         bool shouldExist, TriplesToHandlesMap& targetMap,
+                         TriplesToHandlesMap& inverseMap,
+                         ad_utility::timer::TimeTracerOpt tracer = {});
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
   // local blank nodes are managed by the `localVocab_` of this class.
@@ -279,8 +273,7 @@ class DeltaTriplesManager {
                      std::tuple<ReturnType, DeltaTriplesModifyTimings>>
   modify(const std::function<ReturnType(DeltaTriples&)>& function,
          bool writeToDiskAfterRequest = true,
-         std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-             tracer = std::nullopt);
+         ad_utility::timer::TimeTracerOpt tracer = {});
 
   void setFilenameForPersistentUpdatesAndReadFromDisk(std::string filename);
 

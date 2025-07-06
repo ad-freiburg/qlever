@@ -163,8 +163,7 @@ class LocatedTriplesPerBlock {
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
       ql::span<const LocatedTriple> locatedTriples,
-      std::optional<std::reference_wrapper<ad_utility::timer::TimeTracer>>
-          tracer = std::nullopt);
+      ad_utility::timer::TimeTracerOpt tracer = {});
 
   // Removes the given `LocatedTriple` from the `LocatedTriplesPerBlock`.
   //

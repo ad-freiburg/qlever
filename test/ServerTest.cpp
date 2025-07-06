@@ -221,11 +221,9 @@ TEST(ServerTest, createResponseMetadata) {
 
   // Execute the update
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  ad_utility::timer::TimeTracer tracer1(
-      "ServerTest::createResponseMetadata tracer1");
   UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
       index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
-      deltaTriples, handle, tracer1);
+      deltaTriples, handle);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
