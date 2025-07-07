@@ -138,6 +138,35 @@ TEST(OperationTest, getResultOnlyCached) {
 }
 
 // _____________________________________________________________________________
+TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  qec->_pinResult = true;
+  ValuesForTesting operation{qec, makeIdTableFromVector({{1}}), {std::nullopt}};
+
+  {
+    auto result = operation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
+
+  {
+    auto result =
+        operation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
+}
+
+// _____________________________________________________________________________
 
 /// Fixture to work with a generic operation
 class OperationTestFixture : public testing::Test {
