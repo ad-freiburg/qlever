@@ -145,9 +145,8 @@ class WktGeometricRelation {
       [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
     AD_THROW(
         "Geometric relations via the `geof:sfIntersects` ... functions are "
-        "currently only implemented for queries of the form "
-        "`FILTER(geof:sfIntersect(?a, ?b))`, ... More details on GeoSPARQL "
-        "support can be found on the QLever Wiki.");
+        "currently only implemented for a subset of all possible queries. More "
+        "details on GeoSPARQL support can be found on the QLever Wiki.");
   }
 };
 

@@ -111,7 +111,10 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                            std::move(child2));
 }
 
-// _____________________________________________________________________________
+namespace {
+
+// Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
+// function, given the templated `Relation`.
 template <SpatialJoinType Relation>
 std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
     const SparqlExpression& expr) {
@@ -134,6 +137,8 @@ std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
   return GeoFunctionCall{Relation, p1.value(), p2.value()};
 }
 
+}  // namespace
+
 // _____________________________________________________________________________
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr) {
@@ -141,6 +146,7 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
   std::optional<GeoFunctionCall> res;
   using enum SpatialJoinType;
 
+  // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
   if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
     return res;
   } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {

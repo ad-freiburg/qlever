@@ -18,6 +18,7 @@
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
 #include "range/v3/view/cartesian_product.hpp"
+#include "util/GTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -2729,6 +2730,26 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:distance(?y, ?b) <= \"abc\"",
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(?b, \"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) . }",
+      h::Filter("geof:sfContains(?b, \"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)",
+                scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(\"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)) . }",
+      h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
+                scan("?a", "<p>", "?b")));
 }
 
 // _____________________________________________________________________________
@@ -2843,6 +2864,15 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
                   1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
                   PayloadVariables::all(), algo, WITHIN_DIST,
                   scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")))));
+
+  // Geo relation filter with the same variable twice is not allowed
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "FILTER geof:sfContains(?b, ?b) . }",
+                ::testing::_),
+      ::testing::HasSubstr("Variable ?b on both sides"));
 }
 
 // _____________________________________________________________________________

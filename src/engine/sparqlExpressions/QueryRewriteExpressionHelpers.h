@@ -37,12 +37,6 @@ struct GeoFunctionCall {
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     const SparqlExpression& expr);
 
-// Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
-// function, given the templated `Relation`.
-template <SpatialJoinType Relation>
-std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
-    const SparqlExpression& expr);
-
 // Helper struct for `getGeoDistanceExpressionParameters`
 struct GeoDistanceCall : public GeoFunctionCall {
   UnitOfMeasurement unit_;
