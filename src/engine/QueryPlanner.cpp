@@ -39,6 +39,7 @@
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/QueryRewriteUtils.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -1702,10 +1703,21 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
   FiltersAndOptionalSubstitutes plans;
   plans.reserve(filters.size());
 
-  // Currently, no filter substitutes are implemented. This will follow in
-  // #1935 and #2140.
-  for (const auto& filterExpression : filters) {
-    plans.emplace_back(filterExpression, std::nullopt);
+  for (const auto& [i, filterExpression] :
+       ::ranges::views::enumerate(filters)) {
+    // Check if the filter expression is suitable for spatial join optimization
+    auto sjConfig = rewriteFilterToSpatialJoinConfig(filterExpression);
+    if (!sjConfig.has_value()) {
+      plans.emplace_back(filterExpression, std::nullopt);
+    } else {
+      // Construct spatial join
+      auto plan = makeSubtreePlan<SpatialJoin>(
+          _qec, sjConfig.value(), std::nullopt, std::nullopt, true);
+      // Mark that this subtree plan handles (that is, substitutes) the filter
+      plan._idsOfIncludedFilters |= 1ULL << i;
+      plan.containsFilterSubstitute_ = true;
+      plans.emplace_back(filterExpression, std::move(plan));
+    }
   }
   return plans;
 };
@@ -2275,6 +2287,18 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   }
 
   if (jcs.size() > 1) {
+    // If a spatial join operation substitutes a geometric relation filter,
+    // we might have multiple spatial joins for different pairs of variables
+    // that share some variable.
+    if (spatialJoin->getSubstitutesFilterOp()) {
+      return std::nullopt;
+    }
+    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
+    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
+    // query): If multiple such spatial joins occur on the same pair of
+    // variables, all except for one should be rewritten to a FILTER if they
+    // request a maximum distance search (for nearest neighbor search this is
+    // not possible). This however requires changes to `geof:distance` first.
     AD_THROW(
         "Currently, if both sides of a SpatialJoin are variables, then the"
         "SpatialJoin must be the only connection between these variables");

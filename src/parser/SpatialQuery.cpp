@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <variant>
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
