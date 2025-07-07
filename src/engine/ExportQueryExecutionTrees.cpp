@@ -7,6 +7,7 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_replace.h>
 
 #include <ranges>
@@ -336,8 +337,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
         return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
       }();
     case Bool:
-      return id.getBool() ? std::pair{"true", XSD_BOOLEAN_TYPE}
-                          : std::pair{"false", XSD_BOOLEAN_TYPE};
+      return std::pair{std::string{id.getBoolLiteral()}, XSD_BOOLEAN_TYPE};
     case Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:

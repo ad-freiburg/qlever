@@ -59,7 +59,7 @@ class Operation {
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimit()`
+  //    efficient calculation of the limit (see also the `supportsLimitOffset()`
   //    function).
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
@@ -291,7 +291,7 @@ class Operation {
   [[nodiscard]] virtual bool supportsLimitOffset() const { return false; }
 
  private:
-  // This function is called each time `applyLimit` is called. It can be
+  // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way
   virtual void onLimitOffsetChanged(const LimitOffsetClause&) const {
@@ -396,13 +396,6 @@ class Operation {
   virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
       const final;
 
-  // Helper function to allow dynamic modification of LIMIT/OFFSET from child
-  // operations. It returns an object that restores the original LIMIT + OFFSET
-  // the child operations haven when calling this function on destruction.
-  [[nodiscard]] virtual absl::Cleanup<absl::cleanup_internal::Tag,
-                                      std::function<void()>>
-  resetChildLimitsAndOffsetOnDestruction() final;
-
  private:
   //! Compute the result of the query-subtree rooted at this element..
   virtual Result computeResult(bool requestLaziness) = 0;
@@ -412,10 +405,10 @@ class Operation {
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   // `applyToLimit` indicates if the stats should be applied to the runtime
   // information of the limit, or the runtime information of the actual
-  // operation. If `supportsLimit() == true`, then the operation does already
-  // track the limit stats correctly and there's no need to keep track of both.
-  // Otherwise `externalLimitApplied_` decides how stat tracking should be
-  // handled.
+  // operation. If `supportsLimitOffset() == true`, then the operation does
+  // already track the limit stats correctly and there's no need to keep track
+  // of both. Otherwise `externalLimitApplied_` decides how stat tracking should
+  // be handled.
   void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
                           std::chrono::microseconds duration) const;
 
@@ -472,6 +465,30 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
+  // Return true if all values that the `variable` will be bound to by this
+  // expression are guaranteed to be contained in the underlying knowledge
+  // graph or undefined. This is e.g. true for results of `IndexScan`s, but not
+  // for `VALUES` clauses or expression results. This information is used to
+  // skip potentially expensive checks in the `TransitivePath` implementation.
+  // The default implementation is very conservative and assume all operations
+  // are just creating values from thin air, or intersect them from their
+  // children.
+  // So unless you implement an operation that consumes a column from its child
+  // and just adds arbitrary values to this column, this implementation is never
+  // wrong, just potentially inefficientand assumes that variables that are
+  // newly created always contain values that are not from the knowledge graph
+  // (e.g. `BIND` with an arbitrary function). Variables that are also contained
+  // in at least one of the children are assumed to originate from the knowledge
+  // graph if this is true for the same variable in all the children that define
+  // this variable).
+  // Therefore, this function has to be overridden by classes that modify
+  // variables of their children in an arbitrary way (currently we can think of
+  // no such operation) and should be overridden (for efficiency reasons) in
+  // operations, that only pass on variables from some of their children (e.g.
+  // the variables on the right hand side of a MINUS operation never become part
+  // of the result).
+  virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
@@ -502,7 +519,6 @@ class Operation {
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
-  FRIEND_TEST(OperationTest, resetChildLimitsAndOffsetOnDestruction);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPERATION_H

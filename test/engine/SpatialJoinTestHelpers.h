@@ -423,7 +423,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
   if (!qec) {
     qec = buildTestQEC();
   }
-  MaxDistanceConfig task{maxDist};
+  MaxDistanceConfig task{static_cast<double>(maxDist)};
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec.value(),

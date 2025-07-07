@@ -25,7 +25,8 @@ static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
 };
 
 // ____________________________________________________________________________________
-std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph() const {
+std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
+    const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const {
   std::vector<SparqlTripleSimpleWithGraph> quads;
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
@@ -34,7 +35,7 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph() const {
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
   ad_utility::appendVector(
-      quads, transformTriplesTemplate(freeTriples_, std::monostate{}));
+      quads, transformTriplesTemplate(freeTriples_, defaultGraph));
   for (const auto& [graph, triples] : graphTriples_) {
     ad_utility::appendVector(
         quads,

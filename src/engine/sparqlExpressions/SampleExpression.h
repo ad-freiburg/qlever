@@ -4,8 +4,9 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_SAMPLEEXPRESSION_H
 
-#include "./SparqlExpression.h"
-#include "absl/strings/str_cat.h"
+#include <absl/strings/str_cat.h>
+
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 /// The (SAMPLE(?x) as ?sample) expression
