@@ -2754,10 +2754,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
         "?x <p> ?y ."
         "FILTER(geof:",
         funcName, "(?y, ?b))  }");
-    h::expect(query,
-              h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                             PayloadVariables::all(), algo, sjType,
-                             scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+    h::expect(query, h::spatialJoinFilterSubstitute(
+                         -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                         PayloadVariables::all(), algo, sjType,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   }
 
   // Combination of two geo relation filters
@@ -2778,21 +2778,21 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
         funcName2, "(?y, ?n) .  }");
     h::expect(query,
               ::testing::AnyOf(
-                  h::spatialJoin(
+                  h::spatialJoinFilterSubstitute(
                       -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
                       PayloadVariables::all(), algo, sjType2,
-                      h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                                     PayloadVariables::all(), algo, sjType1,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?a", "<p>", "?b")),
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType1,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
-                  h::spatialJoin(
+                  h::spatialJoinFilterSubstitute(
                       -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
                       PayloadVariables::all(), algo, sjType1,
-                      h::spatialJoin(-1, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                                     PayloadVariables::all(), algo, sjType2,
-                                     scan("?x", "<p>", "?y"),
-                                     scan("?m", "<p>", "?n")),
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType2,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b"))));
   }
 
@@ -2807,16 +2807,16 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
       "FILTER geof:sfCovers(?n, ?b) ."
       "FILTER geof:sfContains(?n, ?b) .  }",
       ::testing::AnyOf(
-          h::Filter(
-              "geof:sfCovers(?n, ?b)",
-              h::spatialJoin(-1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                             PayloadVariables::all(), algo, CONTAINS,
-                             scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
+          h::Filter("geof:sfCovers(?n, ?b)",
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, CONTAINS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
           h::Filter("geof:sfContains(?n, ?b)",
-                    h::spatialJoin(-1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                                   PayloadVariables::all(), algo, COVERS,
-                                   scan("?m", "<p>", "?n"),
-                                   scan("?a", "<p>", "?b")))));
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, COVERS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")))));
 
   // Combination of geo relation filter and geo distance filter
   h::expect(
@@ -2828,20 +2828,21 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
       "FILTER(geof:metricDistance(?b, ?y) <= 1000) ."
       "FILTER geof:sfContains(?n, ?b) .  }",
       ::testing::AnyOf(
-          h::spatialJoin(
+          h::spatialJoinFilterSubstitute(
               1000, -1, V{"?b"}, V{"?y"}, std::nullopt, PayloadVariables::all(),
               algo, WITHIN_DIST,
-              h::spatialJoin(-1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                             PayloadVariables::all(), algo, CONTAINS,
-                             scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")),
+              h::spatialJoinFilterSubstitute(
+                  -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                  PayloadVariables::all(), algo, CONTAINS,
+                  scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")),
               scan("?x", "<p>", "?y")),
-          h::spatialJoin(
+          h::spatialJoinFilterSubstitute(
               -1, -1, V{"?n"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
               algo, CONTAINS, scan("?m", "<p>", "?n"),
-              h::spatialJoin(1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
-                             PayloadVariables::all(), algo, WITHIN_DIST,
-                             scan("?a", "<p>", "?b"),
-                             scan("?x", "<p>", "?y")))));
+              h::spatialJoinFilterSubstitute(
+                  1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
+                  PayloadVariables::all(), algo, WITHIN_DIST,
+                  scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")))));
 }
 
 // _____________________________________________________________________________
