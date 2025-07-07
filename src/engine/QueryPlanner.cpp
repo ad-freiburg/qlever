@@ -2448,11 +2448,11 @@ auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
   }
   const size_t otherCol = aTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aTransPath ? jcs[0][0] : jcs[0][1];
-  // Do not bind the side of a path twice
-  if (transPathOperation->isBoundOrId()) {
+  // Do not bind the side of a path twice and don't bind on graph variable
+  if (transPathOperation->isBoundOrId() || thisCol == 2) {
     return std::nullopt;
   }
-  // An unbound transitive path has at most two columns.
+  // An unbound transitive path has at most two columns we can bind to.
   AD_CONTRACT_CHECK(thisCol <= 1);
   // The left or right side is a TRANSITIVE_PATH and its join column
   // corresponds to the left side of its input.
@@ -3017,14 +3017,10 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     right.value_ = arg._right;
     size_t min = arg._min;
     size_t max = arg._max;
-    if (planner_.activeGraphVariable_.has_value()) {
-      throw std::runtime_error{
-          "Property paths inside a GRAPH clause with a graph variable are not "
-          "yet supported."};
-    }
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max,
-        planner_.activeDatasetClauses_.activeDefaultGraphs());
+        planner_.activeDatasetClauses_.activeDefaultGraphs(),
+        planner_.activeGraphVariable_);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }

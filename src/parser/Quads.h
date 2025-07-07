@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include "engine/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/data/Types.h"
@@ -34,12 +35,18 @@ struct Quads {
   // twice for the same variable.
   void forAllVariables(absl::FunctionRef<void(const Variable&)> f);
 
+  struct BlankNodeAdder {
+    LocalVocab localVocab_;
+    ad_utility::HashMap<std::string, Id> map_;
+    ad_utility::BlankNodeManager* bnodeManager_;
+  };
   // Return the quads in a format for use as an update template.
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set
   // when using a `WITH` clause. It can also be `std::monostate{}`, in which
   // case the global default graph will be used later on.
   std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
-      const SparqlTripleSimpleWithGraph::Graph& defaultGraph) const;
+      const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
+      BlankNodeAdder& blankNodeAddelocalVocabr) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;
