@@ -46,6 +46,7 @@ class GeoVocabulary {
  public:
   // Constructor
   template <typename... Args>
+  requires std::constructible_from<UnderlyingVocabulary, Args&&...>
   explicit GeoVocabulary(Args&&... args) : literals_{AD_FWD(args)...} {};
 
   // Retrieve the geometry info object stored for the literal with a given
