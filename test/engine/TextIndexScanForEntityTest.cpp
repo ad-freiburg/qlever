@@ -31,6 +31,22 @@ auto qecWithTextIndex = []() {
   return getQec(std::move(config));
 };
 
+TEST(TextIndexScanForEntity, ShortPrefixWord) {
+  auto qec = qecWithTextIndex();
+  TextIndexScanForEntity s1{qec, Variable{"?text"}, Variable{"?entityVar"},
+                            "t*"};
+  ASSERT_EQ(s1.getResultWidth(), 3);
+  auto result = s1.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 3);
+  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ("\"he failed the test\"",
+            h::getEntityFromResultTable(qec, result, 0));
+  ASSERT_EQ("\"testing can help\"",
+            h::getEntityFromResultTable(qec, result, 1));
+  ASSERT_EQ("\"the test on friday was really hard\"",
+            h::getEntityFromResultTable(qec, result, 2));
+}
+
 TEST(TextIndexScanForEntity, EntityScanBasic) {
   auto qec = qecWithTextIndex();
 

@@ -131,9 +131,7 @@ IdTable IndexImpl::mergeTextBlockResults(
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     bool isEntitySearch) const {
-  if (tbmds.empty()) {
-    return IdTable{allocator};
-  }
+  AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
   vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
@@ -157,8 +155,9 @@ IdTable IndexImpl::mergeTextBlockResults(
   }
   // Sort the result
   ql::ranges::sort(result, [](const auto& a, const auto& b) {
-    return std::lexicographical_compare(
-        a.begin(), a.end(), b.begin(), b.end(), [](const Id& x, const Id& y) {
+    return ql::ranges::lexicographical_compare(
+        std::begin(a), std::end(a), std::begin(b), std::end(b),
+        [](const Id& x, const Id& y) {
           return x.compareWithoutLocalVocab(y) < 0;
         });
   });
@@ -202,31 +201,6 @@ size_t IndexImpl::getSizeOfTextBlocks(const string& word, bool forWord) const {
     return 0;
   }
   return getSizeOfTextBlocksSum(optTbmd.value(), forWord);
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::getSizeEstimate(const string& words) const {
-  // TODO vector can be of type std::string_view if called functions
-  //  are updated to accept std::string_view instead of const std::string&
-  std::vector<std::string> terms = absl::StrSplit(words, ' ');
-  if (terms.empty()) {
-    return 0;
-  }
-  auto termToEstimate = [&](const std::string& term) -> size_t {
-    auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
-    // TODO<C++23> Use `std::optional::transform`.
-    if (!optTbmd.has_value()) {
-      return 0;
-    }
-    if (optTbmd.value().size() == 0) {
-      return 0;
-    }
-    return ql::ranges::min(
-        optTbmd.value() | ql::views::transform([](const auto& tbmdAndWordInfo) {
-          return 1 + tbmdAndWordInfo.tbmd_._entityCl._nofElements / 100;
-        }));
-  };
-  return ql::ranges::min(terms | ql::views::transform(termToEstimate));
 }
 
 // _____________________________________________________________________________

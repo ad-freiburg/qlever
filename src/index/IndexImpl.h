@@ -369,8 +369,6 @@ class IndexImpl {
    */
   size_t getSizeOfTextBlocks(const string& word, bool forWord) const;
 
-  size_t getSizeEstimate(const string& words) const;
-
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:

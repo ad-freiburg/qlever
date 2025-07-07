@@ -105,11 +105,6 @@ size_t Index::getSizeOfTextBlocks(const string& word, bool forWord) const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getSizeEstimate(const std::string& words) const {
-  return pimpl_->getSizeEstimate(words);
-}
-
-// ____________________________________________________________________________
 IdTable Index::getWordPostingsForTerm(
     const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {

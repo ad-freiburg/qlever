@@ -32,9 +32,9 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   }
 
   // Convert iterators to indices
-  size_t startIndex =
+  auto startIndex =
       static_cast<size_t>(std::distance(_blockUpperBoundWordIds.begin(), it));
-  size_t endIndex = static_cast<size_t>(
+  auto endIndex = static_cast<size_t>(
       std::distance(_blockUpperBoundWordIds.begin(), upperIt));
 
   // Lambda to transform index to block

@@ -159,8 +159,6 @@ class Index {
   [[nodiscard]] size_t getSizeOfTextBlocks(const string& word,
                                            bool forWord) const;
 
-  [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
-
   IdTable getWordPostingsForTerm(
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
