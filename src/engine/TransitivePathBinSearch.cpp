@@ -13,23 +13,37 @@
 TransitivePathBinSearch::TransitivePathBinSearch(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, Graphs activeGraphs)
+    size_t maxDist, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable)
     : TransitivePathImpl<BinSearchMap>(
           qec, std::move(child), std::move(leftSide), std::move(rightSide),
-          minDist, maxDist, std::move(activeGraphs)) {
+          minDist, maxDist, std::move(activeGraphs), graphVariable) {
   auto [startSide, targetSide] = decideDirection();
+  auto makeSortColumns = [this, &graphVariable](ColumnIndex first,
+                                                ColumnIndex second) {
+    std::vector<ColumnIndex> sortColumns;
+    if (graphVariable.has_value()) {
+      sortColumns.push_back(subtree_->getVariableColumn(graphVariable.value()));
+    }
+    sortColumns.push_back(first);
+    sortColumns.push_back(second);
+    return sortColumns;
+  };
   alternativelySortedSubtree_ = QueryExecutionTree::createSortedTree(
-      subtree_, {targetSide.subCol_, startSide.subCol_});
+      subtree_, makeSortColumns(targetSide.subCol_, startSide.subCol_));
   subtree_ = QueryExecutionTree::createSortedTree(
-      subtree_, {startSide.subCol_, targetSide.subCol_});
+      subtree_, makeSortColumns(startSide.subCol_, targetSide.subCol_));
 }
 
 // _____________________________________________________________________________
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return BinSearchMap{dynSub.getColumn(startSide.subCol_),
-                      dynSub.getColumn(targetSide.subCol_)};
+  return BinSearchMap{
+      dynSub.getColumn(startSide.subCol_), dynSub.getColumn(targetSide.subCol_),
+      graphVariable_.has_value() ? dynSub.getColumn(subtree_->getVariableColumn(
+                                       graphVariable_.value()))
+                                 : ql::span<const Id>{}};
 }
 
 // _____________________________________________________________________________
