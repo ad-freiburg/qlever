@@ -166,7 +166,7 @@ void checkGeoRelationDummyImpl(
   AD_EXPECT_THROW_WITH_MESSAGE(
       geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
       ::testing::HasSubstr(
-          "currently only implemented for queries of the form"));
+          "currently only implemented for a subset of all possible queries"));
 }
 
 // _____________________________________________________________________________
