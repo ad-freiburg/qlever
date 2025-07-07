@@ -18,6 +18,11 @@ class CartesianProductJoin : public Operation {
  private:
   Children children_;
   size_t chunkSize_;
+  // If `true` calls to `computeResult` and `cloneImpl` will result in an
+  // exception. This is because this flag indicates that a limit has been
+  // dynamically applied to the children of this operation and we currently have
+  // to mechanism to reverse this.
+  bool forbiddenToRecompute_ = false;
 
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class

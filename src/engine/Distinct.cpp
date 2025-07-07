@@ -80,9 +80,8 @@ Result Distinct::computeResult(bool requestLaziness) {
             subRes->getSharedLocalVocab()};
   }
 
-  auto generator =
-      CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
-                      std::move(subRes->idTables()), !requestLaziness);
+  auto generator = CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
+                                   subRes->idTables(), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
              : Result{cppcoro::getSingleElement(std::move(generator)),

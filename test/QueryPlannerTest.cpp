@@ -3,18 +3,22 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
+#include "range/v3/view/cartesian_product.hpp"
+#include "util/GTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -1625,7 +1629,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       parsedQuery::PathSearchException);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -1866,6 +1870,7 @@ TEST(QueryPlanner, SpatialJoinService) {
                      scan("?a", "<p>", "?b")));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   // Test the <payload> option which allows selecting columns from the graph
   // pattern inside the service.
@@ -1982,6 +1987,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2067,6 +2073,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
           "SERVICE, but the <payload> parameter was set"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   // Test two spatial join SERVICEs that share a common ?left variable
 
@@ -2144,6 +2151,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
                          scan("?ab", "<p1>", "?b"))));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinMissingConfig) {
   // Tests with incomplete config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2209,6 +2217,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                                "`<maxDistance>` were provided"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
   // Test that unallowed operations inside the SERVICE statement throw
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2228,6 +2237,7 @@ TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
       ::testing::ContainsRegex("Unsupported element in spatialQuery"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
   // Test that the SERVICE statement may only contain at most one graph pattern
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2247,6 +2257,7 @@ TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
                                "than one nested group graph pattern"));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
   // Tests with mistakes in the config
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2438,6 +2449,433 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
       ::testing::ContainsRegex("parameter `<joinType>` does not refer to"));
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  auto type = SpatialJoinType::WITHIN_DIST;
+
+  // Basic test with 2-argument geof:distance
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Metric distance function
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:metricDistance(?y, ?b) <= 500)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Distance function with unit
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M>) <= 500)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>) <= 1)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/KiloM>) <= 0.5)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 500)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 1)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b, "
+      "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>) <= 0.5)"
+      " }",
+      h::spatialJoinFilterSubstitute(
+          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Two distance filters
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::spatialJoinFilterSubstitute(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::spatialJoinFilterSubstitute(
+                  500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
+                  scan("?a", "<p>", "?b")),
+              scan("?m", "<p>", "?n")),
+          h::spatialJoinFilterSubstitute(
+              500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::spatialJoinFilterSubstitute(
+                  1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
+                  scan("?m", "<p>", "?n")),
+              scan("?a", "<p>", "?b"))));
+
+  // Regression test: two distance filters and unrelated bind operation
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "BIND(1 AS ?unrelated)"
+      "FILTER(geof:distance(?y, ?b) <= 0.5)"
+      "?m <p> ?n ."
+      "FILTER(geof:distance(?y, ?n) <= 1)"
+      " }",
+      ::testing::AnyOf(
+          h::Bind(h::spatialJoinFilterSubstitute(
+                      1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      PayloadVariables::all(), algo, type,
+                      h::spatialJoinFilterSubstitute(
+                          500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+                      scan("?m", "<p>", "?n")),
+                  "1", Variable{"?unrelated"}),
+          h::spatialJoinFilterSubstitute(
+              1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
+              algo, type,
+              h::Bind(h::spatialJoinFilterSubstitute(
+                          500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+                      "1", Variable{"?unrelated"}),
+              scan("?m", "<p>", "?n")),
+          h::spatialJoinFilterSubstitute(
+              500, -1, V{"?y"}, V{"?b"},
+              std::nullopt, PayloadVariables::all(), algo, type,
+              h::Bind(h::spatialJoinFilterSubstitute(
+                          1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+                      "1", Variable{"?unrelated"}),
+              scan("?a", "<p>", "?b")),
+          h::Bind(h::spatialJoinFilterSubstitute(
+                      500, -1, V{"?y"}, V{"?b"},
+                      std::nullopt, PayloadVariables::all(), algo, type,
+                      h::spatialJoinFilterSubstitute(
+                          1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, type,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+                      scan("?a", "<p>", "?b")),
+                  "1", Variable{"?unrelated"})));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterIsNotRewritten) {
+  auto scan = h::IndexScanFromStrings;
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) > 0.5)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) > 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(\"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter(
+              "geof:distance(\"POINT(50. "
+              "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+              "?b) <= 0.5",
+              h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                      scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(\"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
+                  "?b) <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, \"POINT(50. "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>) <= 0.5)"
+      " }",
+      ::testing::AnyOf(
+          h::Filter("geof:distance(?b, \"POINT(50. "
+                    "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                    ") <= 0.5",
+                    h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                            scan("?a", "<p>", "?b"))),
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter(
+                  "geof:distance(?b, \"POINT(50. "
+                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
+                  ") <= 0.5",
+                  scan("?a", "<p>", "?b")))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?b, ?y, ?a) <= 0.5)"
+      " }",
+      h::Filter("geof:distance(?b, ?y, ?a) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER((?b + ?y) <= 0.5)"
+      " }",
+      h::Filter("(?b + ?y) <= 0.5",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= ?a)"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= ?a",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) <= \"abc\")"
+      " }",
+      h::Filter("geof:distance(?y, ?b) <= \"abc\"",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(?b, \"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) . }",
+      h::Filter("geof:sfContains(?b, \"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)",
+                scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(\"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)) . }",
+      h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
+                scan("?a", "<p>", "?b")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType;
+
+  std::vector<std::pair<std::string, SpatialJoinType>>
+      geofFunctionNameAndSJType{
+          {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
+          {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
+          {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
+          {"sfOverlaps", OVERLAPS}};
+
+  // Run basic query planner test for each of the geo relation functions
+  for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER(geof:",
+        funcName, "(?y, ?b))  }");
+    h::expect(query, h::spatialJoinFilterSubstitute(
+                         -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                         PayloadVariables::all(), algo, sjType,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  }
+
+  // Combination of two geo relation filters
+  for (const auto& [a, b] : ::ranges::views::cartesian_product(
+           geofFunctionNameAndSJType, geofFunctionNameAndSJType)) {
+    const auto& [funcName1, sjType1] = a;
+    const auto& [funcName2, sjType2] = b;
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER geof:",
+        funcName1,
+        "(?y, ?b)  ."
+        "?m <p> ?n ."
+        "FILTER geof:",
+        funcName2, "(?y, ?n) .  }");
+    h::expect(query,
+              ::testing::AnyOf(
+                  h::spatialJoinFilterSubstitute(
+                      -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      PayloadVariables::all(), algo, sjType2,
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType1,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+                      scan("?m", "<p>", "?n")),
+                  h::spatialJoinFilterSubstitute(
+                      -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                      PayloadVariables::all(), algo, sjType1,
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType2,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+                      scan("?a", "<p>", "?b"))));
+  }
+
+  // Two geo relation filters on the same variables: The second one may not be
+  // substituted by a spatial join as this spatial join would be incomplete
+  // (that is: have only one child).
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?m <p> ?n ."
+      "FILTER geof:sfCovers(?n, ?b) ."
+      "FILTER geof:sfContains(?n, ?b) .  }",
+      ::testing::AnyOf(
+          h::Filter("geof:sfCovers(?n, ?b)",
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, CONTAINS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
+          h::Filter("geof:sfContains(?n, ?b)",
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, COVERS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")))));
+
+  // Combination of geo relation filter and geo distance filter
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "?m <p> ?n ."
+      "FILTER(geof:metricDistance(?b, ?y) <= 1000) ."
+      "FILTER geof:sfContains(?n, ?b) .  }",
+      ::testing::AnyOf(
+          h::spatialJoinFilterSubstitute(
+              1000, -1, V{"?b"}, V{"?y"}, std::nullopt, PayloadVariables::all(),
+              algo, WITHIN_DIST,
+              h::spatialJoinFilterSubstitute(
+                  -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                  PayloadVariables::all(), algo, CONTAINS,
+                  scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")),
+              scan("?x", "<p>", "?y")),
+          h::spatialJoinFilterSubstitute(
+              -1, -1, V{"?n"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, CONTAINS, scan("?m", "<p>", "?n"),
+              h::spatialJoinFilterSubstitute(
+                  1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
+                  PayloadVariables::all(), algo, WITHIN_DIST,
+                  scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")))));
+
+  // Geo relation filter with the same variable twice is not allowed
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "FILTER geof:sfContains(?b, ?b) . }",
+                ::testing::_),
+      ::testing::HasSubstr("Variable ?b on both sides"));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
@@ -2595,6 +3033,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                 ::testing::_));
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   // test if the SpatialJoin operation parses the maximum distance correctly
   auto testMaxDistance = [](std::string distanceIRI, long long distance,
@@ -2679,7 +3118,7 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
@@ -3453,13 +3892,16 @@ TEST(QueryPlanner, DatasetClause) {
   h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
-  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+  h::expect("SELECT * FROM <x> FROM NAMED <z> WHERE { GRAPH <z> {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{}));
 
   auto g1 = Graphs{"<g1>"};
   auto g2 = Graphs{"<g2>"};
   h::expect(
-      "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
+      "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH "
+      "<g2> { <c> ?p <z> "
       "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
@@ -3467,6 +3909,7 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<e>", "?p", "<z3>", {}, g1)));
 
   auto g12 = Graphs{"<g1>", "<g2>"};
+  auto noGraphs = Graphs{};
   auto varG = std::vector{Variable{"?g"}};
   std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
   h::expect(
@@ -3475,41 +3918,95 @@ TEST(QueryPlanner, DatasetClause) {
       scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
 
   h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
-            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
+            scan("<a>", "<b>", "<c>", {}, noGraphs, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
-  // We use the `UnorderedJoins` matcher, because the index scan has to be
-  // resorted by the graph column.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
       "} }",
-      h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                 h::UnorderedJoins(
-                     scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
+      h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)));
 
   // A complex example with graph variables.
   h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
       "{ <c> ?p <z> "
-      "{SELECT * {<d> ?p <z2>}}"
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "{SELECT * {<d> ?p <z2>}}"
       "} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
+          h::GroupBy({Variable{"?p"}}, {}, scan("<d>", "?p", "<z2>", {}, g2)),
           scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
-          h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
-                     h::UnorderedJoins(
-                         scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
           scan("<e>", "?p", "<z3>", {}, g1)));
-  // We currently don't support repeating the graph variable inside the
-  // graph clause
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT * { GRAPH ?x {?x <b> <c>}}", ::testing::_),
-      AllOf(HasSubstr("used as the graph specifier"),
-            HasSubstr("may not appear in the body")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, graphVariablesWithinPattern) {
+  auto scan = h::IndexScanFromStrings;
+  // Single variable
+  h::expect("SELECT * { GRAPH ?x { ?x <b> <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "<b>", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> ?x <c> } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "?x", "<c>", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  h::expect("SELECT * { GRAPH ?x { <a> <b> ?x } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("<a>", "<b>", "?x", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+  // Two variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x <c> } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan(internalVar(0), "?x", "<c>", {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x <b> ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("?x", "<b>", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  h::expect(
+      "SELECT * { GRAPH ?x { <a> ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_1",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          scan("<a>", "?x", internalVar(0), {}, std::nullopt,
+                               {Variable{internalVar(1)}}, {3}))));
+  // Three variables
+  h::expect(
+      "SELECT * { GRAPH ?x { ?x ?x ?x } }",
+      h::Filter("?x = ?_QLever_internal_variable_qp_2",
+                h::Filter("?_QLever_internal_variable_qp_1=?x",
+                          h::Filter("?_QLever_internal_variable_qp_0=?x",
+                                    scan(internalVar(1), "?x", internalVar(0),
+                                         {}, std::nullopt,
+                                         {Variable{internalVar(2)}}, {3})))));
+  // Three distinct variables
+  h::expect("SELECT * { GRAPH ?x { ?x ?y ?z } }",
+            h::Filter("?x = ?_QLever_internal_variable_qp_0",
+                      scan("?x", "?y", "?z", {}, std::nullopt,
+                           {Variable{internalVar(0)}}, {3})));
+
+  // Wrapped in subquery (one of the compliance tests)
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT * WHERE { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p ?g { ?x ?p ?g } } } }",
+      h::Filter("?g = ?_QLever_internal_variable_qp_0",
+                scan("?x", "?p", "?g", {}, std::nullopt,
+                     {Variable{internalVar(0)}}, {3})));
+  h::expect(
+      "SELECT ?x ?p WHERE { GRAPH ?g { { SELECT ?x ?p WHERE { ?x ?p ?g } } } }",
+      scan("?x", "?p", "?g"));
 }
 
 // _____________________________________________________________________________
@@ -4249,4 +4746,200 @@ TEST(QueryPlanner, propertyPathWithSameVariableTwiceBound) {
                               h::IndexScanFromStrings(
                                   "?_QLever_internal_variable_qp_0", "<a>",
                                   "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, correctFiltersHandling) {
+  auto scan = h::IndexScanFromStrings;
+
+  // Filter is only applied once with OPTIONAL
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) OPTIONAL { ?x <c> ?d } }",
+            h::OptionalJoin(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                            scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . OPTIONAL {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::OptionalJoin(scan("?x", "<c>", "?d"),
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter is applied in the correct subtree with MINUS
+  h::expect("SELECT * { ?x <b> ?c . FILTER(?c < 5) MINUS { ?x <c> ?d } }",
+            h::Minus(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                     scan("?x", "<c>", "?d")));
+  h::expect("SELECT * { ?x <c> ?d . MINUS {  ?x <b> ?c . FILTER(?c < 5) } }",
+            h::Minus(scan("?x", "<c>", "?d"),
+                     h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+
+  // Filter inside and outside of a subquery
+  h::expect("SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c FILTER(?c < 5) } } }",
+            h::Join(scan("?x", "<c>", "?d"),
+                    h::Filter("?c < 5", scan("?x", "<b>", "?c"))));
+  h::expect(
+      "SELECT * { ?x <c> ?d { SELECT * { ?x <b> ?c } } FILTER(?c < 5) }",
+      ::testing::AnyOf(h::Join(scan("?x", "<c>", "?d"),
+                               h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<c>", "?d"),
+                                                   scan("?x", "<b>", "?c")))));
+  h::expect(
+      "SELECT * { ?x <b> ?c . FILTER(?c < 5) { SELECT * { ?x <c> ?d } } }",
+      ::testing::AnyOf(h::Join(h::Filter("?c < 5", scan("?x", "<b>", "?c")),
+                               scan("?x", "<c>", "?d")),
+                       h::Filter("?c < 5", h::Join(scan("?x", "<b>", "?c"),
+                                                   scan("?x", "<c>", "?d")))));
+
+  // Filter and bind
+  h::expect(
+      "SELECT * { ?x <b> ?c FILTER(?c < 5) BIND(42 AS ?unrelated) FILTER(?c >= "
+      "1) }",
+      h::AnyOf(
+          h::Filter("?c >= 1",
+                    h::Bind(h::Filter("?c < 5", scan("?x", "<b>", "?c")), "42",
+                            Variable{"?unrelated"})),
+          h::Filter("?c >= 1",
+                    h::Filter("?c < 5", h::Bind(scan("?x", "<b>", "?c"), "42",
+                                                Variable{"?unrelated"}))),
+          h::Bind(h::Filter("?c >= 1",
+                            h::Filter("?c < 5", scan("?x", "<b>", "?c"))),
+                  "42", Variable{"?unrelated"})));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimization) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  TransitivePathSide left2{std::nullopt, 0, Variable{"?var"}, 0};
+  TransitivePathSide right2{std::nullopt, 1, Variable{"?other"}, 1};
+  h::expect(
+      "SELECT * { ?var <a>* ?other . VALUES ?var { 2 } }",
+      h::transitivePath(
+          left2, right2, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::ValuesClause("VALUES (?var) { (2) }"))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  h::expect(
+      "SELECT * { ?other <a>* ?var . ?var <a> <b> }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::IndexScanFromStrings("?var", "<a>", "<b>"),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+
+  auto* qec = ad_utility::testing::getQec(
+      "<d> <c> <d> . <d1> <c> <d> . <d2> <c> <d> . <d> <a> <b> . <d2> <a> <b> "
+      ". <d3> <a> <b> . <d4> <a> <b> . <d5> <a> <b> . <d6> <a> <b>");
+
+  h::expect(
+      "SELECT * { ?var <a> <b> . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::IndexScanFromStrings("?var", "<a>", "<b>"),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+
+  h::expect(
+      "SELECT * { VALUES ?var { 1 } . ?var <c> <d> . ?other <a>* ?var }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(h::Sort(h::ValuesClause("VALUES (?var) { (1) }")),
+                  h::IndexScanFromStrings("?var", "<c>", "<d>")),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")),
+      qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathWithJoinOptimizationAndUndefFilter) {
+  TransitivePathSide left{std::nullopt, 1, Variable{"?other"}, 0};
+  TransitivePathSide right{std::nullopt, 0, Variable{"?var"}, 1};
+  h::expect(
+      "SELECT * { ?other <a>* ?var . VALUES ?var { UNDEF } }",
+      h::transitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Join(
+              h::Distinct(
+                  {0},
+                  h::Union(h::IndexScanFromStrings(
+                               "?var", "?internal_property_path_variable_y",
+                               "?internal_property_path_variable_z"),
+                           h::IndexScanFromStrings(
+                               "?internal_property_path_variable_z",
+                               "?internal_property_path_variable_y", "?var"))),
+              h::Sort(h::Filter("BOUND(?var)",
+                                h::ValuesClause("VALUES (?var) { (UNDEF) }")))),
+          h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<a>",
+                                  "?_QLever_internal_variable_qp_1")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, filtersWithUnboundVariables) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect("SELECT * { ?a ?b ?c FILTER(?c = ?d) }",
+            h::Filter("?c = ?d", scan("?a", "?b", "?c")));
+  h::expect("SELECT * { FILTER(?c = 1) }",
+            h::Filter("?c = 1", h::NeutralElement()));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterSubstitutesMockQPTest) {
+  // Test the query planner's ability to substitute filters with alternative
+  // subtree plans using the `QueryPlannerWithMockFilterSubstitute` class. It
+  // replaces filters of the form `FILTER(?a = ?b)` with `?a <equal-to> ?b` to
+  // connect otherwise unconnected components.
+  auto scan = h::IndexScanFromStrings;
+
+  /*
+   *        FILTER (?a = ?b)
+   *                |
+   *      CARTESIAN PRODUCT JOIN
+   *          /           \
+   *   SCAN ?a <b> ?c    SCAN ?b <c> ?d
+   *
+   * becomes (for example):
+   *
+   *              JOIN ?a
+   *              /     \
+   *           SORT    SCAN ?a <b> ?c
+   *             |
+   *          JOIN ?b
+   *       /          \
+   * SCAN ?b <c> ?d   SORT
+   *                    |
+   *         SCAN ?a <equal-to> ?b      <-- Substituted FILTER to PSO scan
+   */
+
+  h::expect(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::Filter("?a = ?b", h::CartesianProductJoin(scan("?a", "<b>", "?c"),
+                                                   scan("?b", "<c>", "?d"))));
+  h::expect<h::QueryPlannerWithMockFilterSubstitute>(
+      "SELECT * { ?a <b> ?c . ?b <c> ?d . FILTER(?a = ?b) }",
+      h::UnorderedJoins(scan("?a", "<b>", "?c"), scan("?b", "<c>", "?d"),
+                        scan("?a", "<equal-to>", "?b")));
 }

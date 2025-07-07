@@ -5,6 +5,7 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_UNICODEVOCABULARY_H
 
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
@@ -58,6 +59,26 @@ class UnicodeVocabulary {
       return _comparator(a, b, level);
     };
     return _underlyingVocabulary.upper_bound(word, actualComparator);
+  }
+
+  // Same as lower_bound or upper_bound, except that word is known to be a full
+  // word, not a prefix. Special handling therefore should be applied in the
+  // presence of a `SplitVocabulary`.
+  template <typename T>
+  std::pair<uint64_t, uint64_t> getPositionOfWord(const T& word) const {
+    auto actualComparator = [this](const auto& a, const auto& b) {
+      return _comparator(a, b, SortLevel::TOTAL);
+    };
+    if constexpr (HasSpecialGetPositionOfWord<UnderlyingVocabulary>) {
+      return _underlyingVocabulary.getPositionOfWord(word, actualComparator);
+    } else {
+      // If this assertion fails, see `PolymorphicVocabulary.getPositionOfWord`
+      // for details.
+      static_assert(HasDefaultGetPositionOfWord<UnderlyingVocabulary>);
+      return _underlyingVocabulary.lower_bound(word, actualComparator)
+          .positionOfWord(word)
+          .value_or(std::pair<uint64_t, uint64_t>{size(), size()});
+    }
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the
