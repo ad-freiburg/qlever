@@ -29,7 +29,7 @@ class GeoVocabulary {
 
   // The file in which the additional information on the geometries (like
   // bounding box) is stored.
-  mutable ad_utility::File geoInfoFile_;
+  ad_utility::File geoInfoFile_;
 
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
@@ -50,8 +50,8 @@ class GeoVocabulary {
   explicit GeoVocabulary(Args&&... args) : literals_{AD_FWD(args)...} {};
 
   // Retrieve the geometry info object stored for the literal with a given
-  // index.
-  GeometryInfo getGeoInfo(uint64_t index) const;
+  // index. Return `std::nullopt` for invalid geometries.
+  std::optional<GeometryInfo> getGeoInfo(uint64_t index) const;
 
   std::string getGeoInfoFilename(const std::string& filename) {
     return filename + std::string(geoInfoSuffix);
@@ -88,6 +88,8 @@ class GeoVocabulary {
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
         underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
+
+    static constexpr uint8_t invalidGeoInfoBuffer[geoInfoOffset] = {};
 
    public:
     WordWriter(const UnderlyingVocabulary& vocabulary,

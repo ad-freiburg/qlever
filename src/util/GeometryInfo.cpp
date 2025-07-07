@@ -121,6 +121,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // index size.
   AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1,
                        "WKT Type out of range");
+  AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.centroid_.toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
@@ -135,13 +136,16 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 };
 
 // ____________________________________________________________________________
-GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
+std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(
+    const std::string_view& wkt) {
   // Parse WKT and compute info
   using namespace detail;
   auto [type, parsed] = parseWkt(wkt);
-  AD_CORRECTNESS_CHECK(parsed.has_value());
-  return {type, boundingBoxAsGeoPoints(parsed.value()),
-          centroidAsGeoPoint(parsed.value())};
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+  return GeometryInfo{type, boundingBoxAsGeoPoints(parsed.value()),
+                      centroidAsGeoPoint(parsed.value())};
 }
 
 // ____________________________________________________________________________
@@ -219,7 +223,9 @@ template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
 RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
-    return GeometryInfo::fromWktLiteral(wkt);
+    auto optionalGeoInfo = GeometryInfo::fromWktLiteral(wkt);
+    AD_CORRECTNESS_CHECK(optionalGeoInfo.has_value());
+    return optionalGeoInfo.value();
   } else if constexpr (std::is_same_v<RequestedInfo, Centroid>) {
     return GeometryInfo::getCentroid(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, BoundingBox>) {

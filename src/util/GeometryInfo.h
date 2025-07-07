@@ -63,10 +63,13 @@ constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
 // index-breaking change regarding the `GeoVocabulary`. Please update the
-// `GEOMETRY_INFO_VERSION` constant accordingly, which will invalidate all
+// `GEOMETRY_INFO_VERSION` constant above accordingly, which will invalidate all
 // indices using such a vocabulary.
 class GeometryInfo {
  private:
+  // `GeometryInfo` must ensure that its attributes' binary representation
+  // cannot be all-zero. This is currently used by the disk serialization of
+  // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
 
@@ -84,8 +87,12 @@ class GeometryInfo {
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid);
 
-  // Parse an arbitrary WKT literal and compute all attributes.
-  static GeometryInfo fromWktLiteral(const std::string_view& wkt);
+  GeometryInfo(const GeometryInfo& other) = default;
+
+  // Parse an arbitrary WKT literal and compute all attributes. Return
+  // `std:nullopt` if `wkt` cannot be parsed.
+  static std::optional<GeometryInfo> fromWktLiteral(
+      const std::string_view& wkt);
 
   // Create geometry info for a GeoPoint object.
   static GeometryInfo fromGeoPoint(const GeoPoint& point);

@@ -17,60 +17,66 @@ namespace {
 using namespace geoInfoTestHelpers;
 using namespace ad_utility;
 
-// A function to test that a GeoVocabulary can correctly insert and
-// lookup literals and precompute geometry information. This function is generic
-// because the GeoVocabulary should behave exactly the same no matter which
-// underlying vocabulary implementation is used: see the following uses of this
-// function in the TEST(...) blocks.
+// Define a typed test suite to test the `GeoVocabulary` on different types of
+// underlying vocabularies.
+using GeoVocabularyUnderlyingVocabTypes =
+    ::testing::Types<VocabularyInMemory,
+                     CompressedVocabulary<VocabularyInternalExternal>>;
 template <typename T>
-void testGeoVocabulary() {
-  using GV = GeoVocabulary<T>;
-  GV geoVocab;
-  const std::string fn = "geovocab-test1.dat";
-  auto ww = geoVocab.makeDiskWriterPtr(fn);
-  ww->readableName() = "test";
+class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
+ public:
+  // A function to test that a `GeoVocabulary` can correctly insert and
+  // lookup literals and precompute geometry information. This test is
+  // generic on the type of the underlying vocabulary, because the
+  // `GeoVocabulary` should behave exactly the same no matter which underlying
+  // vocabulary implementation is used.
+  void testGeoVocabulary() {
+    using GV = GeoVocabulary<T>;
+    GV geoVocab;
+    const std::string fn = "geovocab-test1.dat";
+    auto ww = geoVocab.makeDiskWriterPtr(fn);
+    ww->readableName() = "test";
 
-  std::vector<std::string> testLiterals{
-      "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
-      "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      "\"LINESTRING(1 1, 2 2, 3 "
-      "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
-      "\"POLYGON((1 1, 2 2, 3 "
-      "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+    std::vector<std::string> testLiterals{
+        "\"GEOMETRYCOLLECTION(LINESTRING(2 2, 4 4), POLYGON((2 4, 4 4, 4 2, 2 "
+        "2)))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"LINESTRING(1 1, 2 2, 3 "
+        "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+        "\"POLYGON((1 1, 2 2, 3 "
+        "3))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
 
-  for (size_t i = 0; i < testLiterals.size(); i++) {
-    auto lit = testLiterals[i];
-    auto idx = (*ww)(lit, true);
-    ASSERT_EQ(i, idx);
-  }
-
-  ww->finish();
-
-  geoVocab.open(fn);
-
-  auto checkGeoVocabContents = [&testLiterals](GV& geoVocab) {
-    ASSERT_EQ(geoVocab.size(), testLiterals.size());
     for (size_t i = 0; i < testLiterals.size(); i++) {
-      ASSERT_EQ(geoVocab[i], testLiterals[i]);
-      ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-      checkGeoInfo(geoVocab.getGeoInfo(i),
-                   GeometryInfo::fromWktLiteral(testLiterals[i]));
+      auto lit = testLiterals[i];
+      auto idx = (*ww)(lit, true);
+      ASSERT_EQ(i, idx);
     }
+
+    ww->finish();
+
+    geoVocab.open(fn);
+
+    auto checkGeoVocabContents = [&testLiterals](GV& geoVocab) {
+      ASSERT_EQ(geoVocab.size(), testLiterals.size());
+      for (size_t i = 0; i < testLiterals.size(); i++) {
+        ASSERT_EQ(geoVocab[i], testLiterals[i]);
+        ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
+        checkGeoInfo(geoVocab.getGeoInfo(i),
+                     GeometryInfo::fromWktLiteral(testLiterals[i]));
+      }
+    };
+
+    checkGeoVocabContents(geoVocab);
+
+    geoVocab.close();
   };
-
-  checkGeoVocabContents(geoVocab);
-
-  geoVocab.close();
 };
 
-// _____________________________________________________________________________
-TEST(GeoVocabularyTest, GeoVocabInMem) {
-  testGeoVocabulary<VocabularyInMemory>();
-}
+TYPED_TEST_SUITE(GeoVocabularyUnderlyingVocabTypedTest,
+                 GeoVocabularyUnderlyingVocabTypes);
 
 // _____________________________________________________________________________
-TEST(GeoVocabularyTest, GeoVocabInternalExternal) {
-  testGeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>();
+TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, TypedTest) {
+  this->testGeoVocabulary();
 }
 
 // _____________________________________________________________________________

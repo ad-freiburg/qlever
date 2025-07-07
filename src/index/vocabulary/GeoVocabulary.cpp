@@ -58,9 +58,15 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
   // Store the WKT literal
   index = (*underlyingWordWriter_)(word, isExternal);
 
-  // Precompute geometry info
+  // Precompute `GeometryInfo` and write the `GeometryInfo` to disk, or write a
+  // zero buffer of the same size (indicating an invalid geometry). This is
+  // required to ensure direct access by index is still possible on the file.
+  const void* ptr = &invalidGeoInfoBuffer;
   auto info = GeometryInfo::fromWktLiteral(word);
-  geoInfoFile_.write(&info, geoInfoOffset);
+  if (info.has_value()) {
+    ptr = &info.value();
+  }
+  geoInfoFile_.write(ptr, geoInfoOffset);
 
   return index;
 };
@@ -76,15 +82,21 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
 
 // ____________________________________________________________________________
 template <typename V>
-GeometryInfo GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
+std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   AD_CONTRACT_CHECK(index < size());
   // Allocate the required number of bytes
   uint8_t buffer[geoInfoOffset];
   void* ptr = &buffer;
   // Read into the buffer
   geoInfoFile_.read(ptr, geoInfoOffset, geoInfoHeader + index * geoInfoOffset);
+  // If all bytes are zero, this record on disk represents an invalid geometry.
+  if (std::all_of(static_cast<uint8_t*>(ptr),
+                  static_cast<uint8_t*>(ptr) + geoInfoOffset,
+                  [](uint8_t byte) { return byte == 0; })) {
+    return std::nullopt;
+  }
   // Interpret the buffer as a GeometryInfo object
-  return *static_cast<GeometryInfo*>(ptr);
+  return *absl::bit_cast<GeometryInfo*>(ptr);
 }
 
 // Avoid linker trouble.
