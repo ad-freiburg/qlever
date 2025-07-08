@@ -311,6 +311,11 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
+  // If pinned there's no point in computing the result lazily.
+  if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
+
   try {
     // In case of an exception, create the correct runtime info, no matter which
     // exception handler is called.
