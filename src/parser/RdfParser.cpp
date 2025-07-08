@@ -1160,19 +1160,27 @@ void RdfParallelParser<T>::initialize(const string& filename,
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_->open(filename);
-  if (auto batch = fileBuffer_->getNextBlock(); !batch) {
-    LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
-              << std::endl;
-  } else {
-    RdfStringParser<T> declarationParser{};
+  RdfStringParser<T> declarationParser{};
+  while (true) {
+    std::optional<ParallelBuffer::BufferType> batch =
+        fileBuffer_->getNextBlock();
+    if (!batch) {
+      AD_LOG_WARN
+          << "Empty input to the TURTLE parser, is this what you intended?"
+          << std::endl;
+      break;
+    }
     declarationParser.setInputStream(std::move(batch.value()));
     while (declarationParser.parseDirectiveManually()) {
     }
-    this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-    auto remainder = declarationParser.getUnparsedRemainder();
-    remainingBatchFromInitialization.reserve(remainder.size());
-    ql::ranges::copy(remainder,
-                     std::back_inserter(remainingBatchFromInitialization));
+    if (!declarationParser.getUnparsedRemainder().empty()) {
+      this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+      auto remainder = declarationParser.getUnparsedRemainder();
+      remainingBatchFromInitialization.reserve(remainder.size());
+      ql::ranges::copy(remainder,
+                       std::back_inserter(remainingBatchFromInitialization));
+      break;
+    }
   }
 
   auto feedBatches = [this, firstBatch = std::move(
@@ -1246,7 +1254,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
       [this] {
         parallelParser_.finish();
         tripleCollector_.finish();
-        parseFuture_.get();
+        parseFuture_.wait();
       },
       "During the destruction of a RdfParallelParser");
 }
