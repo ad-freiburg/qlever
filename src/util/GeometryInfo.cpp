@@ -4,111 +4,13 @@
 
 #include "util/GeometryInfo.h"
 
-#include <util/geo/Geo.h>
-
 #include <cstdint>
 
 #include "parser/GeoPoint.h"
-#include "parser/Literal.h"
-#include "parser/NormalizedString.h"
-#include "util/BitUtils.h"
 #include "util/Exception.h"
-#include "util/GeoSparqlHelpers.h"
-#include "util/geo/Point.h"
+#include "util/GeometryInfoHelpersImpl.h"
 
 namespace ad_utility {
-namespace detail {
-
-// The following functions are implemented using libspatialjoin. They are
-// declared in this cpp file only to avoid including the libspatialjoin code in
-// the headers.
-
-using namespace ::util::geo;
-using CoordType = double;
-using ParsedWkt =
-    std::variant<Point<CoordType>, Line<CoordType>, Polygon<CoordType>,
-                 MultiPoint<CoordType>, MultiLine<CoordType>,
-                 MultiPolygon<CoordType>, Collection<CoordType>>;
-using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
-
-// ____________________________________________________________________________
-ParseResult parseWkt(const std::string_view& wkt) {
-  // TODO<ullingerc> Remove unnecessary string copying
-  auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string(wkt));
-  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
-
-  std::optional<ParsedWkt> parsed = std::nullopt;
-  auto type = getWKTType(wktLiteral);
-  switch (type) {
-    case WKTType::POINT: {
-      parsed = pointFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::LINESTRING: {
-      parsed = lineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::POLYGON: {
-      parsed = polygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOINT: {
-      parsed = multiPointFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTILINESTRING: {
-      parsed = multiLineFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::MULTIPOLYGON: {
-      parsed = multiPolygonFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::COLLECTION: {
-      parsed = collectionFromWKT<CoordType>(wktLiteral);
-      break;
-    }
-    case WKTType::NONE:
-      break;
-  }
-
-  return {type, parsed};
-}
-
-// ____________________________________________________________________________
-GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
-  return GeoPoint(point.getY(), point.getX());
-}
-
-// ____________________________________________________________________________
-Centroid centroidAsGeoPoint(const ParsedWkt& geometry) {
-  auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
-  return utilPointToGeoPoint(uPoint);
-};
-
-// ____________________________________________________________________________
-BoundingBox boundingBoxAsGeoPoints(const ParsedWkt& geometry) {
-  auto bb = std::visit([](auto& val) { return getBoundingBox(val); }, geometry);
-  auto lowerLeft = utilPointToGeoPoint(bb.getLowerLeft());
-  auto upperRight = utilPointToGeoPoint(bb.getUpperRight());
-  return {lowerLeft, upperRight};
-}
-
-// ____________________________________________________________________________
-Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
-  return {point.getLng(), point.getLat()};
-}
-
-// ____________________________________________________________________________
-std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
-                             const GeoPoint& upperRight) {
-  util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
-                                geoPointToUtilPoint(upperRight)};
-  return getWKT(box);
-}
-
-}  // namespace detail
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
