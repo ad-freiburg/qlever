@@ -659,7 +659,8 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
       Quad{Variable("?s"), Variable("?p"), Variable("?o"),
            ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
                            : Quad::Graph(std::monostate{})}};
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{toInsert, {}}};
+  parsedQuery_._clause =
+      parsedQuery::UpdateClause{GraphUpdate{{toInsert, LocalVocab{}}, {}}};
   return parsedQuery_;
 }
 
@@ -730,8 +731,8 @@ ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
 ParsedQuery Visitor::makeClear(SparqlTripleSimpleWithGraph::Graph graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(graph));
-  parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, {makeAllTripleTemplate(std::move(graph))}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+      {}, {{makeAllTripleTemplate(std::move(graph))}, LocalVocab{}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -753,8 +754,8 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
                 TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI))),
         absl::StrCat("?g != ", DEFAULT_GRAPH_IRI)};
     parsedQuery_._rootGraphPattern._filters.emplace_back(std::move(e));
-    parsedQuery_._clause = parsedQuery::UpdateClause{
-        GraphUpdate{{}, {makeAllTripleTemplate(Variable("?g"))}}};
+    parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+        {}, {{makeAllTripleTemplate(Variable("?g"))}, LocalVocab{}}}};
     parsedQuery_.datasetClauses_ = activeDatasetClauses_;
     return parsedQuery_;
   }
@@ -767,8 +768,8 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
                              const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(transformGraph(source)));
-  parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{makeAllTripleTemplate(transformGraph(target))}, {}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+      {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }

@@ -39,7 +39,7 @@ static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
 };
 
 // ____________________________________________________________________________________
-std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
+updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
     const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
     BlankNodeAdder& blankNodeAdder) const {
   std::vector<SparqlTripleSimpleWithGraph> quads;
@@ -59,7 +59,7 @@ std::vector<SparqlTripleSimpleWithGraph> Quads::toTriplesWithGraph(
             triples, expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph),
             blankNodeAdder));
   }
-  return quads;
+  return {std::move(quads), blankNodeAdder.localVocab_.clone()};
 }
 
 // ____________________________________________________________________________________

@@ -11,6 +11,7 @@
 #include "engine/LocalVocab.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
+#include "parser/UpdateClause.h"
 #include "parser/data/Types.h"
 
 // A class for the intermediate parsing results of `quads`. Provides utilities
@@ -44,9 +45,9 @@ struct Quads {
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set
   // when using a `WITH` clause. It can also be `std::monostate{}`, in which
   // case the global default graph will be used later on.
-  std::vector<SparqlTripleSimpleWithGraph> toTriplesWithGraph(
+  updateClause::GraphUpdate::Triples toTriplesWithGraph(
       const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
-      BlankNodeAdder& blankNodeAddelocalVocabr) const;
+      BlankNodeAdder& blankNodeAdder) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;

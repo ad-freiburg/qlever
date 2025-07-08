@@ -25,7 +25,8 @@ TEST(QuadTest, getQuads) {
         ad_utility::BlankNodeManager manager;
         Quads::BlankNodeAdder bn{{}, {}, &manager};
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}, bn),
+        // TODO<joka921> Also check the local vocab wrt the blank nodes.
+        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}, bn).triples_,
                     testing::UnorderedElementsAreArray(expected));
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {

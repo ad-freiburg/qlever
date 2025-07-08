@@ -133,7 +133,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
-  auto updateClause = query.updateClause();
+  const auto& updateClause = query.updateClause();
   auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
@@ -142,7 +142,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   auto prepareTemplateAndResultContainer =
       [&vocab, &variableColumns,
-       &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
+       &result](std::vector<SparqlTripleSimpleWithGraph> tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(vocab, variableColumns,
                                      std::move(tripleTemplates));
@@ -158,9 +158,11 @@ ExecuteUpdate::computeGraphUpdateQuads(
       };
 
   auto [toInsertTemplates, toInsert, localVocabInsert] =
-      prepareTemplateAndResultContainer(std::move(graphUpdate.toInsert_));
+      prepareTemplateAndResultContainer(
+          std::move(graphUpdate.toInsert_.triples_));
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
-      prepareTemplateAndResultContainer(std::move(graphUpdate.toDelete_));
+      prepareTemplateAndResultContainer(
+          std::move(graphUpdate.toDelete_.triples_));
 
   uint64_t resultSize = 0;
   for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
