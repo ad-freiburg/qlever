@@ -20,6 +20,7 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
+#include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
@@ -118,27 +119,52 @@ int main(int argc, char** argv) {
   // For easier usage.
   namespace po = boost::program_options;
 
+  // sampling guard parameters
+  double samplePercent = RuntimeParameters().get<"group-by-sample-percent">();
+  size_t maxSampleRows = RuntimeParameters().get<"group-by-sample-max-rows">();
+  double sampleDistinctRatio = RuntimeParameters().get<"group-by-sample-distinct-ratio">();
+  size_t groupThreshold = RuntimeParameters().get<"group-by-sample-group-threshold">();
+  size_t hashMapGroupThreshold = RuntimeParameters().get<"group-by-hash-map-group-threshold">();
+
   // Declaring the supported options.
   po::options_description options("Options for the benchmark");
-  options.add_options()("help,h", "Print the help message.")(
-      "print,p", "Roughly prints all benchmarks.")(
-      "write,w", po::value<std::string>(&writeFileName),
+  options.add_options()
+      ("help,h", "Print the help message.")
+      ("print,p", "Roughly prints all benchmarks.")
+      ("write,w", po::value<std::string>(&writeFileName),
       "Writes the benchmarks as json to a json file, overriding the previous"
-      " content of the file.")(
-      "append,a",
+      " content of the file.")
+      ("append,a",
       "Causes the json option to append to the end of the json array in the "
       "json file, if there is one, instead of overriding the previous content "
       "of "
-      "the file.")(
-      "configuration-json,j",
+      "the file.")
+      ("configuration-json,j",
       po::value<std::string>(&jsonConfigurationFileName),
-      "Set the configuration of benchmarks as described in a json file.")(
-      "configuration-shorthand,s",
+      "Set the configuration of benchmarks as described in a json file.")
+      ("configuration-shorthand,s",
       po::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
-      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")(
-      "configuration-options,o",
-      "Prints all available benchmark configuration options.");
+      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")
+      ("configuration-options,o",
+      "Prints all available benchmark configuration options.")
+      // GROUP BY sampling options
+      ("group-by-sample-percent,e",
+      po::value<double>(&samplePercent)
+          ->default_value(RuntimeParameters().get<"group-by-sample-percent">()),
+      "Fraction of rows sampled for GROUP BY sampling guard.")
+      ("group-by-sample-max-rows,m",
+      po::value<size_t>(&maxSampleRows),
+      "Max sample rows for GROUP BY sampling guard.")
+      ("group-by-sample-distinct-ratio,r",
+      po::value<double>(&sampleDistinctRatio),
+      "Switch to sort if sampled distinct groups/sample size exceed this ratio.")
+      ("group-by-sample-group-threshold,t",
+      po::value<size_t>(&groupThreshold),
+      "Switch to sort if estimated number of distinct groups exceeds this number.")
+      ("group-by-hash-map-group-threshold,g",
+      po::value<size_t>(&hashMapGroupThreshold),
+      "Max number of groups for hash-map GROUP BY optimization.");
 
   // Prints how to use the file correctly and exits.
   auto printUsageAndExit = [&options]() {
@@ -157,6 +183,13 @@ int main(int argc, char** argv) {
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, options), vm);
   po::notify(vm);
+
+  // Apply GROUP BY sampling params to runtime parameters
+  RuntimeParameters().set<"group-by-sample-percent">(samplePercent);
+  RuntimeParameters().set<"group-by-sample-max-rows">(maxSampleRows);
+  RuntimeParameters().set<"group-by-sample-distinct-ratio">(sampleDistinctRatio);
+  RuntimeParameters().set<"group-by-sample-group-threshold">(groupThreshold);
+  RuntimeParameters().set<"group-by-hash-map-group-threshold">(hashMapGroupThreshold);
 
   // If write was chosen, then the given file must be a json file.
   if (vm.count("write") && !writeFileName.ends_with(".json")) {
