@@ -17,7 +17,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "range/v3/view/cartesian_product.hpp"
-#include "rdfTypes/Variable.h
+#include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
