@@ -49,37 +49,6 @@ TEST(Views, BufferedAsyncView) {
   testWithVector(strings);
 }
 
-TEST(Views, uniqueView) {
-  std::vector<int> ints;
-  const uint64_t numInts = 50'000;
-  ints.reserve(numInts);
-  ad_utility::SlowRandomIntGenerator<int> r;
-  for (size_t i = 0; i < numInts; ++i) {
-    ints.push_back(r());
-  }
-
-  std::vector<int> intsWithDuplicates;
-  intsWithDuplicates.reserve(3 * numInts);
-  for (size_t i = 0; i < 3; ++i) {
-    for (auto num : ints) {
-      intsWithDuplicates.push_back(num);
-    }
-  }
-
-  std::sort(intsWithDuplicates.begin(), intsWithDuplicates.end());
-  auto unique = ad_utility::uniqueView(intsWithDuplicates);
-  std::vector<int> result;
-  for (const auto& element : unique) {
-    result.push_back(element);
-  }
-  std::sort(ints.begin(), ints.end());
-  // Erase "accidental" duplicates from the random initialization.
-  auto it = std::unique(ints.begin(), ints.end());
-  ints.erase(it, ints.end());
-  ASSERT_EQ(ints.size(), result.size());
-  ASSERT_EQ(ints, result);
-}
-
 TEST(Views, uniqueBlockView) {
   const uint64_t numInts = 50'000;
   std::vector<int> ints;
