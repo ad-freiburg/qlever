@@ -12,6 +12,10 @@
 #include "util/Exception.h"
 #include "util/GeometryInfo.h"
 
+namespace {
+using ad_utility::GeometryInfo;
+}
+
 // ____________________________________________________________________________
 template <typename V>
 void GeoVocabulary<V>::open(const std::string& filename) {

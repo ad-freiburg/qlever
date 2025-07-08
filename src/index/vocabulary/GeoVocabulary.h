@@ -14,8 +14,6 @@
 #include "util/File.h"
 #include "util/GeometryInfo.h"
 
-using ad_utility::GeometryInfo;
-
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it
 // stores both preprocessed and original forms of its input words. Preprocessing
@@ -26,6 +24,8 @@ using ad_utility::GeometryInfo;
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
+  using GeometryInfo = ad_utility::GeometryInfo;
+
   UnderlyingVocabulary literals_;
 
   // The file in which the additional information on the geometries (like
