@@ -199,6 +199,13 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   const auto& svConstRef = sv;
   EXPECT_ANY_THROW(svConstRef.getUnderlyingVocabulary(2));
 
+  // There is not GeoInfo because none of the underlying vocabularies is a
+  // `GeoVocabulary`
+  ASSERT_EQ(sv.getGeoInfo(0), std::nullopt);
+  ASSERT_EQ(sv.getGeoInfo(1), std::nullopt);
+  ASSERT_EQ(sv.getGeoInfo(1ULL << 59), std::nullopt);
+  ASSERT_EQ(sv.getGeoInfo((1ULL << 59) | 1), std::nullopt);
+
   sv.close();
 }
 

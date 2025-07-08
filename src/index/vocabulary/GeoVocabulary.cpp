@@ -45,7 +45,7 @@ template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
-      geoInfoFile_{filename + geoInfoSuffix, "w"} {
+      geoInfoFile_{getGeoInfoFilename(filename), "w"} {
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 };
 

@@ -44,45 +44,58 @@ class GeoVocabulary {
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
 
  public:
-  // Constructor
-  template <typename... Args>
-  requires std::constructible_from<UnderlyingVocabulary, Args&&...>
-  explicit GeoVocabulary(Args&&... args) : literals_{AD_FWD(args)...} {};
+  CPP_variadic_template(typename... Args)(
+      requires std::constructible_from<
+          UnderlyingVocabulary,
+          Args&&...>) explicit GeoVocabulary(Args&&... args)
+      : literals_{AD_FWD(args)...} {};
 
   // Retrieve the geometry info object stored for the literal with a given
   // index. Return `std::nullopt` for invalid geometries.
   std::optional<GeometryInfo> getGeoInfo(uint64_t index) const;
 
-  std::string getGeoInfoFilename(const std::string& filename) {
-    return filename + std::string(geoInfoSuffix);
+  // Construct a filename for the geo info file by appending a suffix to the
+  // given filename.
+  static std::string getGeoInfoFilename(const std::string& filename) {
+    return absl::StrCat(filename, std::string(geoInfoSuffix));
   }
 
   // Forward all the standard operations to the underlying literal vocabulary.
+  // See there for more details.
 
+  // ___________________________________________________________________________
   decltype(auto) operator[](uint64_t id) const { return literals_[id]; }
 
+  // ___________________________________________________________________________
   [[nodiscard]] uint64_t size() const { return literals_.size(); }
 
+  // ___________________________________________________________________________
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
     return literals_.lower_bound(word, comparator);
   }
 
+  // ___________________________________________________________________________
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
     return literals_.upper_bound(word, comparator);
   }
 
+  // ___________________________________________________________________________
   UnderlyingVocabulary& getUnderlyingVocabulary() { return literals_; }
 
+  // ___________________________________________________________________________
   const UnderlyingVocabulary& getUnderlyingVocabulary() const {
     return literals_;
   }
 
+  // ___________________________________________________________________________
   void open(const std::string& filename);
 
+  // Custom word writer, which precomputes and writes geometry info along with
+  // the words.
   class WordWriter : public WordWriterBase {
    private:
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
@@ -104,11 +117,13 @@ class GeoVocabulary {
     void finishImpl() override;
   };
 
+  // ___________________________________________________________________________
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
     return std::make_unique<WordWriter>(literals_, filename);
   }
 
+  // ___________________________________________________________________________
   void close();
 };
 

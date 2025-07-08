@@ -9,7 +9,6 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "index/vocabulary/GeoVocabulary.h"
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
 #include "util/Conversions.h"

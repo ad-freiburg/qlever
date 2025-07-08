@@ -11,29 +11,17 @@
 #define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
-#include <fstream>
-#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "global/Constants.h"
-#include "global/Id.h"
-#include "global/Pattern.h"
 #include "index/StringSortComparator.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/GeoVocabulary.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
-#include "index/vocabulary/SplitVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Exception.h"
 #include "util/GeometryInfo.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/Log.h"
 
 using std::string;
 using std::vector;
