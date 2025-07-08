@@ -132,7 +132,7 @@ bool PropertyPath::isIri() const {
 
 // _____________________________________________________________________________
 std::optional<std::reference_wrapper<const PropertyPath>>
-PropertyPath::getInvertedChild() const {
+PropertyPath::getChildOfInvertedPath() const {
   if (std::holds_alternative<ModifiedPath>(path_)) {
     const auto& path = std::get<ModifiedPath>(path_);
     if (path.modifier_ == Modifier::INVERSE) {

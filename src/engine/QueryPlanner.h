@@ -324,6 +324,8 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters) const;
 
+  // TODO<RobinTF> Extract to dedicated module, this has little to do with
+  // actual query planning.
   // Turn a generic `PropertyPath` into a `GraphPattern` that can be used for
   // further planning.
   ParsedQuery::GraphPattern seedFromPropertyPath(const TripleComponent& left,

@@ -111,7 +111,9 @@ class PropertyPath {
   // Create an inverse property path with the given child.
   static PropertyPath makeInverse(PropertyPath child);
 
-  // Create a negated property path with the given children.
+  // Create a negated property path with the given children, for multiple
+  // children the semantics are equivalent to `!(<a> | <b>)`, applying the union
+  // before the negation.
   static PropertyPath makeNegated(std::vector<PropertyPath> children);
 
   bool operator==(const PropertyPath& other) const = default;
@@ -132,8 +134,8 @@ class PropertyPath {
 
   // If the path is a modified path with an inverse modifier, return the pointer
   // to its only child. Otherwise, return nullptr.
-  std::optional<std::reference_wrapper<const PropertyPath>> getInvertedChild()
-      const;
+  std::optional<std::reference_wrapper<const PropertyPath>>
+  getChildOfInvertedPath() const;
 
   // Process the path with the given functions. The functions are called
   // depending on which internal representation this instance has.

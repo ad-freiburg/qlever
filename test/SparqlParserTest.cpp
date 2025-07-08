@@ -66,9 +66,7 @@ TEST(ParserTest, testParse) {
               getIriString(triples[1].p_));
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
-    ASSERT_EQ("<nsx:rel2>", std::get<PropertyPath>(triples[2].p_)
-                                .getIri()
-                                .toStringRepresentation());
+    ASSERT_EQ("<nsx:rel2>", getIriString(triples[2].p_));
     ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);

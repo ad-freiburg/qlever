@@ -1031,7 +1031,7 @@ std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
   std::vector<string_view> forwardIris;
   std::vector<string_view> inverseIris;
   for (const auto& child : children) {
-    if (auto unwrapped = child.getInvertedChild()) {
+    if (auto unwrapped = child.getChildOfInvertedPath()) {
       const PropertyPath& path = unwrapped.value();
       AD_CORRECTNESS_CHECK(path.isIri());
       inverseIris.emplace_back(path.getIri().toStringRepresentation());
