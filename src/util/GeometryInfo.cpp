@@ -114,6 +114,9 @@ std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 }
 
 // ____________________________________________________________________________
+namespace {
+// Compile-time helpers to simplify `wktTypeToIri` below.
+
 template <detail::constexpr_str_cat_impl::ConstexprString suffix>
 constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();
@@ -128,6 +131,8 @@ constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
     addSfPrefix<"MultiLineString">(),
     addSfPrefix<"MultiPolygon">(),
     addSfPrefix<"GeometryCollection">()};
+
+}  // namespace
 
 // ____________________________________________________________________________
 std::optional<std::string_view> wktTypeToIri(uint8_t type) {
