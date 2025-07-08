@@ -3,18 +3,22 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
+#include "range/v3/view/cartesian_product.hpp"
+#include "util/GTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -2726,6 +2730,149 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:distance(?y, ?b) <= \"abc\"",
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(?b, \"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) . }",
+      h::Filter("geof:sfContains(?b, \"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)",
+                scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfContains(\"POINT(50.0 50.0)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)) . }",
+      h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
+                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
+                scan("?a", "<p>", "?b")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType;
+
+  std::vector<std::pair<std::string, SpatialJoinType>>
+      geofFunctionNameAndSJType{
+          {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
+          {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
+          {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
+          {"sfOverlaps", OVERLAPS}};
+
+  // Run basic query planner test for each of the geo relation functions
+  for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER(geof:",
+        funcName, "(?y, ?b))  }");
+    h::expect(query, h::spatialJoinFilterSubstitute(
+                         -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                         PayloadVariables::all(), algo, sjType,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  }
+
+  // Combination of two geo relation filters
+  for (const auto& [a, b] : ::ranges::views::cartesian_product(
+           geofFunctionNameAndSJType, geofFunctionNameAndSJType)) {
+    const auto& [funcName1, sjType1] = a;
+    const auto& [funcName2, sjType2] = b;
+    std::string query = absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE {"
+        "?a <p> ?b ."
+        "?x <p> ?y ."
+        "FILTER geof:",
+        funcName1,
+        "(?y, ?b)  ."
+        "?m <p> ?n ."
+        "FILTER geof:",
+        funcName2, "(?y, ?n) .  }");
+    h::expect(query,
+              ::testing::AnyOf(
+                  h::spatialJoinFilterSubstitute(
+                      -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                      PayloadVariables::all(), algo, sjType2,
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType1,
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+                      scan("?m", "<p>", "?n")),
+                  h::spatialJoinFilterSubstitute(
+                      -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                      PayloadVariables::all(), algo, sjType1,
+                      h::spatialJoinFilterSubstitute(
+                          -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
+                          PayloadVariables::all(), algo, sjType2,
+                          scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
+                      scan("?a", "<p>", "?b"))));
+  }
+
+  // Two geo relation filters on the same variables: The second one may not be
+  // substituted by a spatial join as this spatial join would be incomplete
+  // (that is: have only one child).
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?m <p> ?n ."
+      "FILTER geof:sfCovers(?n, ?b) ."
+      "FILTER geof:sfContains(?n, ?b) .  }",
+      ::testing::AnyOf(
+          h::Filter("geof:sfCovers(?n, ?b)",
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, CONTAINS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
+          h::Filter("geof:sfContains(?n, ?b)",
+                    h::spatialJoinFilterSubstitute(
+                        -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                        PayloadVariables::all(), algo, COVERS,
+                        scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")))));
+
+  // Combination of geo relation filter and geo distance filter
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "?m <p> ?n ."
+      "FILTER(geof:metricDistance(?b, ?y) <= 1000) ."
+      "FILTER geof:sfContains(?n, ?b) .  }",
+      ::testing::AnyOf(
+          h::spatialJoinFilterSubstitute(
+              1000, -1, V{"?b"}, V{"?y"}, std::nullopt, PayloadVariables::all(),
+              algo, WITHIN_DIST,
+              h::spatialJoinFilterSubstitute(
+                  -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
+                  PayloadVariables::all(), algo, CONTAINS,
+                  scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")),
+              scan("?x", "<p>", "?y")),
+          h::spatialJoinFilterSubstitute(
+              -1, -1, V{"?n"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              algo, CONTAINS, scan("?m", "<p>", "?n"),
+              h::spatialJoinFilterSubstitute(
+                  1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
+                  PayloadVariables::all(), algo, WITHIN_DIST,
+                  scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")))));
+
+  // Geo relation filter with the same variable twice is not allowed
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "FILTER geof:sfContains(?b, ?b) . }",
+                ::testing::_),
+      ::testing::HasSubstr("Variable ?b on both sides"));
 }
 
 // _____________________________________________________________________________
