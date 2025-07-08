@@ -151,8 +151,9 @@ class PolymorphicVocabulary {
           using T = std::decay_t<decltype(vocab)>;
           if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
             return vocab.getGeoInfo(index);
+          } else {
+            return std::nullopt;
           }
-          return std::nullopt;
         },
         vocab_);
   };
