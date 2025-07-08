@@ -6,12 +6,13 @@
 
 #include "global/Constants.h"
 #include "index/Index.h"
+#include "parser/SparqlParserHelpers.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
   if (checkName && ad_utility::areExpensiveChecksEnabled) {
-    AD_CONTRACT_CHECK(isValidVariableName()(_name), [this]() {
+    AD_CONTRACT_CHECK(isValidVariableName(_name), [this]() {
       return absl::StrCat("\"", _name, "\" is not a valid SPARQL variable");
     });
   }
@@ -65,28 +66,6 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
       absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
 }
 
-// The following three functions implement the indirection for the evaluation of
-// variables and for the checking of valid variable names (see the header for
-// details).
-
-// _____________________________________________________________________________
-auto Variable::isValidVariableName() -> ValidNameFuncPtr& {
-  static ValidNameFuncPtr ptr = &Variable::isValidVariableNameDummy;
-  return ptr;
-}
-
-// _____________________________________________________________________________
-[[nodiscard]] static std::optional<std::string> evaluateVariableDummy(
-    const Variable&, const ConstructQueryExportContext&, PositionInTriple) {
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-auto Variable::decoupledEvaluateFuncPtr() -> EvaluateFuncPtr& {
-  static EvaluateFuncPtr ptr = &evaluateVariableDummy;
-  return ptr;
-}
-
 // _____________________________________________________________________________
 void Variable::appendEscapedWord(std::string_view word,
                                  std::string& target) const {
@@ -96,5 +75,29 @@ void Variable::appendEscapedWord(std::string_view word,
     } else {
       absl::StrAppend(&target, "_", std::to_string(c), "_");
     }
+  }
+}
+
+namespace {
+struct IsVariableVisitor {
+  using VarContext = SparqlAutomaticParser::VarContext*;
+  bool visit(VarContext) { return true; }
+  CPP_template(typename T)(
+      requires(!ad_utility::SimilarTo<T, VarContext>)) bool visit(T) {
+    return false;
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+bool Variable::isValidVariableName(std::string_view var) {
+  sparqlParserHelpers::ParserAndVisitorBase<IsVariableVisitor> parserAndVisitor{
+      std::string{var}};
+  try {
+    auto [result, remaining] =
+        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
+    return result && remaining.empty();
+  } catch (...) {
+    return false;
   }
 }

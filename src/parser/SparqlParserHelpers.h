@@ -26,7 +26,8 @@ struct ResultOfParseAndRemainingText {
         remainingText_{std::move(remainingText)} {}
 };
 
-struct ParserAndVisitor {
+template <typename Visitor>
+struct ParserAndVisitorBase {
  private:
   string input_;
   antlr4::ANTLRInputStream stream_{input_};
@@ -35,23 +36,11 @@ struct ParserAndVisitor {
   ad_utility::antlr_utility::ThrowingErrorListener<InvalidSparqlQueryException>
       errorListener_{};
 
-  // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
-  // before beginning with actual parsing as the SPARQL standard mandates.
-  static std::string unescapeUnicodeSequences(std::string input);
-
  public:
   SparqlAutomaticParser parser_{&tokens_};
-  SparqlQleverVisitor visitor_;
-  explicit ParserAndVisitor(
-      string input,
-      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
-  ParserAndVisitor(
-      string input, SparqlQleverVisitor::PrefixMap prefixes,
-      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
-      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
+  Visitor visitor_;
+  explicit ParserAndVisitorBase(std::string input, Visitor visitor = {})
+      : input_{std::move(input)}, visitor_{std::move(visitor)} {}
 
   template <typename ContextType>
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
@@ -64,6 +53,34 @@ struct ParserAndVisitor {
     return ResultOfParseAndRemainingText{std::move(resultOfParse),
                                          std::string{remainingString}};
   }
+};
+
+struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
+ private:
+  string input_;
+  antlr4::ANTLRInputStream stream_{input_};
+  SparqlAutomaticLexer lexer_{&stream_};
+  antlr4::CommonTokenStream tokens_{&lexer_};
+  ad_utility::antlr_utility::ThrowingErrorListener<InvalidSparqlQueryException>
+      errorListener_{};
+
+  // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
+  // before beginning with actual parsing as the SPARQL standard mandates.
+  static std::string unescapeUnicodeSequences(std::string input);
+
+  using Base = ParserAndVisitorBase<SparqlQleverVisitor>;
+
+ public:
+  explicit ParserAndVisitor(
+      string input,
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
+  ParserAndVisitor(
+      string input, SparqlQleverVisitor::PrefixMap prefixes,
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 };
 
 // This function returns true iff the argument is a valid name for a SPARQL

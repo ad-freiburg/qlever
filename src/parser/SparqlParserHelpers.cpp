@@ -19,8 +19,9 @@ ParserAndVisitor::ParserAndVisitor(
     std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : input_{unescapeUnicodeSequences(std::move(input))},
-      visitor_{{}, std::move(datasetClauses), disableSomeChecks} {
+    : Base{unescapeUnicodeSequences(std::move(input)),
+           SparqlQleverVisitor{
+               {}, std::move(datasetClauses), disableSomeChecks}} {
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.

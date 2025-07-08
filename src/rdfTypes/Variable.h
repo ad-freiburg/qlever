@@ -96,14 +96,7 @@ class Variable {
     out->append(variable.name());
   }
 
-  // As the exact checking for a valid variable name requires access to a fully
-  // blown SPARQL parser, and is also only performed when expensive checks are
-  // enabled, we use the same technique as described above for swapping in the
-  // actual implementation at the time the binary is initialized.
-  // (In SparqlParserHelpers.cpp).
-  using ValidNameFuncPtr = bool (*)(std::string_view);
-  static ValidNameFuncPtr& isValidVariableName();
-  static bool isValidVariableNameDummy(std::string_view) { return true; }
+  static bool isValidVariableName(std::string_view var);
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
   // it at the end of target.
