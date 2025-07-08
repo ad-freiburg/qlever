@@ -5,7 +5,7 @@
 #include "rdfTypes/Variable.h"
 
 #include "global/Constants.h"
-#include "parser/SparqlParserHelpers.h"
+#include "parser/ParserAndVisitorBase.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // ___________________________________________________________________________

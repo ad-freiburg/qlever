@@ -5,7 +5,7 @@
 
 #include <gtest/gtest.h>
 
-#include "./util/GTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "rdfTypes/RdfEscaping.h"
 using namespace RdfEscaping;
 

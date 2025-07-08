@@ -4,7 +4,7 @@
 
 #include <gmock/gmock.h>
 
-#include "../../util/GTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "rdfTypes/Variable.h"
 
 // _____________________________________________________________________________
