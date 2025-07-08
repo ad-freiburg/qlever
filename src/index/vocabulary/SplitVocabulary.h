@@ -291,8 +291,6 @@ namespace detail::splitVocabulary {
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
 // vocabulary. This can be used for precomputations for spatial features.
-// TODO<ullingerc>: Switch 2nd Vocab to GeoVocabulary<UnderlyingVocabulary>
-// after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
