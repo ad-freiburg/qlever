@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -141,6 +142,7 @@ TEST(OperationTest, getResultOnlyCached) {
 TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();
+  absl::Cleanup restorePinResult{[qec]() { qec->_pinResult = false; }};
   qec->_pinResult = true;
   ValuesForTesting operation{qec, makeIdTableFromVector({{1}}), {std::nullopt}};
 
