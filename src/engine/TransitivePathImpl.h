@@ -25,10 +25,10 @@ struct TableColumnWithVocab {
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(std::optional<IdTableView<0>> table, ColumnType column,
-                       LocalVocab vocab)
-      : payload_{std::move(table)},
-        startNodes_{std::move(column)},
+  TableColumnWithVocab(std::optional<IdTableView<0>> payload,
+                       ColumnType startNodes, LocalVocab vocab)
+      : payload_{std::move(payload)},
+        startNodes_{std::move(startNodes)},
         vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
