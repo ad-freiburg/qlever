@@ -134,7 +134,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   (*ngWordCallback)("<http://example.com/abc>", true);
   ngWordCallback->finish();
   nonGeoVocab.readFromFile("nonGeoVocabTest.dat");
-  ASSERT_FALSE(vocabulary.getGeoInfo(VocabIndex::make(0)).has_value());
+  ASSERT_FALSE(nonGeoVocab.getGeoInfo(VocabIndex::make(0)).has_value());
 }
 
 // _____________________________________________________________________________
