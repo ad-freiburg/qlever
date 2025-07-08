@@ -117,6 +117,7 @@ SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
   return std::make_unique<LengthExpression>(std::move(child1),
                                             std::move(child2));
 }
+
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child1) {
   return std::make_unique<MetricLengthExpression>(std::move(child1));
