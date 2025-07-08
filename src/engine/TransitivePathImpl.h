@@ -306,30 +306,51 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
-  static cppcoro::generator<TableColumnWithVocab> setupNodes(
+  static ad_utility::InputRangeTypeErased<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
       std::shared_ptr<const Result> startSideResult) {
-    ColumnIndex joinColumn = startSide.treeAndCol_.value().second;
-    size_t cols = startSide.treeAndCol_.value().first->getResultWidth();
+    using namespace ad_utility;
+
+    const auto& [startOperation, joinColumn] = startSide.treeAndCol_.value();
     std::vector<ColumnIndex> columnsWithoutJoinColumn =
-        computeColumnsWithoutJoinColumn(joinColumn, cols);
+        computeColumnsWithoutJoinColumn(joinColumn,
+                                        startOperation->getResultWidth());
+
+    auto toView = [columnsWithoutJoinColumn = std::move(
+                       columnsWithoutJoinColumn)](const IdTable& idTable) {
+      return idTable.asColumnSubsetView(columnsWithoutJoinColumn);
+    };
+    auto getStartNodes = [joinColumn](const IdTable& idTable) {
+      return idTable.getColumn(joinColumn);
+    };
+
     if (startSideResult->isFullyMaterialized()) {
-      // Bound -> var|id
-      ql::span<const Id> startNodes =
-          startSideResult->idTable().getColumn(joinColumn);
-      co_yield TableColumnWithVocab{
-          startSideResult->idTable().asColumnSubsetView(
-              columnsWithoutJoinColumn),
-          startNodes, startSideResult->getCopyOfLocalVocab()};
-    } else {
-      for (auto& [idTable, localVocab] : startSideResult->idTables()) {
-        // Bound -> var|id
-        ql::span<const Id> startNodes = idTable.getColumn(joinColumn);
-        co_yield TableColumnWithVocab{
-            idTable.asColumnSubsetView(columnsWithoutJoinColumn), startNodes,
-            std::move(localVocab)};
-      }
+      auto getter = [toView = std::move(toView), getStartNodes,
+                     startSideResult = std::move(startSideResult)]() {
+        const IdTable& idTable = startSideResult->idTable();
+        return LoopControl<TableColumnWithVocab>::breakWithValue(
+            TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
+                                 startSideResult->getCopyOfLocalVocab()});
+      };
+
+      return InputRangeTypeErased{
+          InputRangeFromLoopControlGet(std::move(getter))};
     }
+
+    auto r = CachingTransformInputRange(
+        startSideResult->idTables(),
+        // the lambda uses a buffer to ensure the lifetime of the pointer to the
+        // idTable, but releases ownership of the localVocab
+        [toView = std::move(toView), getStartNodes,
+         buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
+            auto& idTableAndVocab) mutable {
+          buf = std::move(idTableAndVocab);
+          auto& [idTable, localVocab] = buf.value();
+          return TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
+                                      std::move(localVocab)};
+        });
+
+    return InputRangeTypeErased{std::move(r)};
   }
 
   virtual T setupEdgesMap(const IdTable& dynSub,
