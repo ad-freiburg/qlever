@@ -27,12 +27,15 @@ using ParsedWkt =
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
 // ____________________________________________________________________________
-inline ParseResult parseWkt(const std::string_view& wkt) {
-  // TODO<ullingerc> Remove unnecessary string copying
+inline std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string(wkt));
-  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
+      std::string{wkt});
+  return std::string{asStringViewUnsafe(lit.getContent())};
+}
 
+// ____________________________________________________________________________
+inline ParseResult parseWkt(const std::string_view& wkt) {
+  auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
   switch (type) {
@@ -98,8 +101,8 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point) {
 // ____________________________________________________________________________
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
                                     const GeoPoint& upperRight) {
-  util::geo::Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
-                                geoPointToUtilPoint(upperRight)};
+  Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
+                     geoPointToUtilPoint(upperRight)};
   return getWKT(box);
 }
 
