@@ -1,1 +1,2 @@
 addLinkAndDiscoverTestNoLibs(VariableTest rdfTypes)
+

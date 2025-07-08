@@ -1,6 +1,6 @@
-//
-// Created by johannes on 16.05.21.
-//
+//  Copyright 2022-2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "SparqlParserHelpers.h"
 
@@ -21,15 +21,7 @@ ParserAndVisitor::ParserAndVisitor(
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : Base{unescapeUnicodeSequences(std::move(input)),
            SparqlQleverVisitor{
-               {}, std::move(datasetClauses), disableSomeChecks}} {
-  // The default in ANTLR is to log all errors to the console and to continue
-  // the parsing. We need to turn parse errors into exceptions instead to
-  // propagate them to the user.
-  parser_.removeErrorListeners();
-  parser_.addErrorListener(&errorListener_);
-  lexer_.removeErrorListeners();
-  lexer_.addErrorListener(&errorListener_);
-}
+               {}, std::move(datasetClauses), disableSomeChecks}} {}
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
@@ -123,25 +115,4 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   output += view.substr(lastPos);
   return output;
 }
-
-// _____________________________________________________________________________
-bool isValidVariableName(std::string_view var) {
-  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
-  try {
-    auto [result, remaining] =
-        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
-    return remaining.empty();
-  } catch (...) {
-    return false;
-  }
-}
-
-// As soon as a program is linked against this file, the following
-// initialization has the effect that `Variable::isValidVariableName` performs
-// as expected (See `Variable.h` for details).
-[[maybe_unused]] const static int isValidVarSetterDummy = []() {
-  Variable::isValidVariableName() = &isValidVariableName;
-  return 42;
-}();
-
 }  // namespace sparqlParserHelpers

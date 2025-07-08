@@ -10,8 +10,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 
-using std::string;
-
 struct Alias {
   sparqlExpression::SparqlExpressionPimpl _expression;
   Variable _target;

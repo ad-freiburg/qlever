@@ -1,7 +1,7 @@
 include(GoogleTest)
 
 # Needed for creating the `testUil`-library.
-add_subdirectory(util)
+add_subdirectory(util EXCLUDE_FROM_ALL)
 
 # Link binary ${basename} against `gmock_main`, the threading library, the
 # general test utilities and all libraries that are specified as additional

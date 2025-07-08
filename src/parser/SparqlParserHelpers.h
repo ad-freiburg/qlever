@@ -1,6 +1,6 @@
-//
-// Created by johannes on 16.05.21.
-//
+//  Copyright 2022-2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLPARSERHELPERS_H
 #define QLEVER_SPARQLPARSERHELPERS_H
@@ -26,6 +26,11 @@ struct ResultOfParseAndRemainingText {
         remainingText_{std::move(remainingText)} {}
 };
 
+// A class that combines a SPARQL parser + visitor. It is templated on the
+// `Visitor`. The most common usage is the `ParserAndVisitor` class below, the
+// only other usage Currently is in `Variable.cpp` where a custom visitor is
+// used to check valid variable names without depending on the rather larger
+// `SparqlQleverVisitor`.
 template <typename Visitor>
 struct ParserAndVisitorBase {
  private:
@@ -40,7 +45,15 @@ struct ParserAndVisitorBase {
   SparqlAutomaticParser parser_{&tokens_};
   Visitor visitor_;
   explicit ParserAndVisitorBase(std::string input, Visitor visitor = {})
-      : input_{std::move(input)}, visitor_{std::move(visitor)} {}
+      : input_{std::move(input)}, visitor_{std::move(visitor)} {
+    // The default in ANTLR is to log all errors to the console and to continue
+    // the parsing. We need to turn parse errors into exceptions instead to
+    // propagate them to the user.
+    parser_.removeErrorListeners();
+    parser_.addErrorListener(&errorListener_);
+    lexer_.removeErrorListeners();
+    lexer_.addErrorListener(&errorListener_);
+  }
 
   template <typename ContextType>
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
@@ -55,15 +68,11 @@ struct ParserAndVisitorBase {
   }
 };
 
+// The actual `ParserAndVisitor` class that can be used to fully parse SPARQL
+// using the automatically generated parser + the manually written
+// `SparqlQLeverVisitor`.
 struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
  private:
-  string input_;
-  antlr4::ANTLRInputStream stream_{input_};
-  SparqlAutomaticLexer lexer_{&stream_};
-  antlr4::CommonTokenStream tokens_{&lexer_};
-  ad_utility::antlr_utility::ThrowingErrorListener<InvalidSparqlQueryException>
-      errorListener_{};
-
   // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
   // before beginning with actual parsing as the SPARQL standard mandates.
   static std::string unescapeUnicodeSequences(std::string input);
@@ -82,11 +91,6 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 };
-
-// This function returns true iff the argument is a valid name for a SPARQL
-// variable. It uses the SPARQL parser and is therefore relatively expensive.
-bool isValidVariableName(std::string_view var);
-
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

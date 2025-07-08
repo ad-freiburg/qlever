@@ -5,7 +5,6 @@
 #include "rdfTypes/Variable.h"
 
 #include "global/Constants.h"
-#include "index/Index.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
@@ -100,4 +99,17 @@ bool Variable::isValidVariableName(std::string_view var) {
   } catch (...) {
     return false;
   }
+}
+
+// Implement the indirection for the evaluation of variables (see the header for
+// details).
+Variable::EvaluateFuncPtr& Variable::decoupledEvaluateFuncPtr() {
+  static constexpr auto dummy =
+      [](const Variable&, const ConstructQueryExportContext&,
+         PositionInTriple) -> std::optional<std::string> {
+    throw std::runtime_error(
+        "Variable::decoupledEvaluateFuncPtr() not yet set");
+  };
+  static EvaluateFuncPtr ptr = dummy;
+  return ptr;
 }

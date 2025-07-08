@@ -1232,7 +1232,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 // above function, without `Variable` having to link against the (heavy) export
 // module. This is a bit of a hack and will be removed in the future when we
 // improve the CONSTRUCT module for better performance.
-[[maybe_unused]] static int initializeVariableEvaluationDummy = []() {
+[[maybe_unused]] static const int initializeVariableEvaluationDummy = []() {
   Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
   return 42;
 }();
