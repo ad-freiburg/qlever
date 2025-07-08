@@ -51,7 +51,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
       [this,
        previousRow = std::optional<typename IdTableStatic<WIDTH>::row_type>{
            std::nullopt}](IdTable&& idTable) mutable {
-        IdTable result = distinct<WIDTH>(idTable, previousRow);
+        IdTable result = distinct<WIDTH>(std::move(idTable), previousRow);
         if (!result.empty()) {
           previousRow.emplace(result.asStaticView<WIDTH>().back());
         }
