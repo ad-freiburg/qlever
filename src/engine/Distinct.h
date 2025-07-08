@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_DISTINCT_H
 #define QLEVER_SRC_ENGINE_DISTINCT_H
@@ -73,8 +75,8 @@ class Distinct : public Operation {
   // if every `IdTable` from `input` should yield it's own `IdTable` or if all
   // of them should get aggregated into a single big `IdTable`.
   template <size_t WIDTH>
-  Result::Generator lazyDistinct(Result::LazyResult input,
-                                 bool yieldOnce) const;
+  Result::LazyResult lazyDistinct(Result::LazyResult input,
+                                  bool yieldOnce) const;
 
   // Removes all duplicates from input with regards to the columns
   // in keepIndices. The input needs to be sorted on the keep indices,

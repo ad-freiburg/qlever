@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Distinct.h"
 
@@ -42,27 +44,52 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-Result::Generator Distinct::lazyDistinct(Result::LazyResult input,
-                                         bool yieldOnce) const {
-  IdTable aggregateTable{subtree_->getResultWidth(), allocator()};
-  LocalVocab aggregateVocab{};
-  std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow =
-      std::nullopt;
-  for (auto& [idTable, localVocab] : input) {
-    IdTable result = distinct<WIDTH>(std::move(idTable), previousRow);
-    if (!result.empty()) {
-      previousRow.emplace(result.asStaticView<WIDTH>().back());
-      if (yieldOnce) {
-        aggregateVocab.mergeWith(std::array{std::move(localVocab)});
-        aggregateTable.insertAtEnd(result);
-      } else {
-        co_yield {std::move(result), std::move(localVocab)};
-      }
-    }
-  }
+Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
+                                          bool yieldOnce) const {
+  using namespace ad_utility;
+  auto getDistinctResult =
+      [this,
+       previousRow = std::optional<typename IdTableStatic<WIDTH>::row_type>{
+           std::nullopt}](IdTable&& idTable) mutable {
+        IdTable result = distinct<WIDTH>(idTable, previousRow);
+        if (!result.empty()) {
+          previousRow.emplace(result.asStaticView<WIDTH>().back());
+        }
+        return result;
+      };
+
   if (yieldOnce) {
-    co_yield {std::move(aggregateTable), std::move(aggregateVocab)};
+    return Result::LazyResult{InputRangeFromLoopControlGet(
+        [getDistinctResult,
+         aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
+         aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
+          for (auto& [idTable, localVocab] : input) {
+            IdTable result = getDistinctResult(std::move(idTable));
+            if (result.empty()) {
+              continue;
+            }
+            aggregateVocab.mergeWith(std::array{std::move(localVocab)});
+            aggregateTable.insertAtEnd(result);
+          }
+          return Result::IdTableLoopControl::breakWithValue(
+              Result::IdTableVocabPair{std::move(aggregateTable),
+                                       std::move(aggregateVocab)});
+        })};
   }
+
+  auto range = CachingContinuableTransformInputRange(
+      std::move(input),
+      [this, getDistinctResult](auto& idTableAndVocab) mutable {
+        IdTable result = getDistinctResult(std::move(idTableAndVocab.idTable_));
+        return result.empty()
+                   ? Result::IdTableLoopControl::makeContinue()
+                   : Result::IdTableLoopControl::yieldValue(
+                         Result::IdTableVocabPair{
+                             std::move(result),
+                             std::move(idTableAndVocab.localVocab_)});
+      });
+
+  return Result::LazyResult{std::move(range)};
 }
 
 // _____________________________________________________________________________
@@ -84,8 +111,7 @@ Result Distinct::computeResult(bool requestLaziness) {
                                    subRes->idTables(), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
-             : Result{cppcoro::getSingleElement(std::move(generator)),
-                      resultSortedOn()};
+             : Result{std::move(*generator.begin()), resultSortedOn()};
 }
 
 // _____________________________________________________________________________
