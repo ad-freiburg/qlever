@@ -828,9 +828,8 @@ auto QueryPlanner::seedWithScansAndText(
     const auto& input = std::visit(
         ad_utility::OverloadCallOperator{
             [](const PropertyPath& propertyPath) -> const std::string& {
-              AD_CORRECTNESS_CHECK(propertyPath.operation_ ==
-                                   PropertyPath::Operation::IRI);
-              return propertyPath.iri_;
+              AD_CORRECTNESS_CHECK(propertyPath.isIri());
+              return propertyPath.getIri().toStringRepresentation();
             },
             [](const Variable& var) -> const std::string& {
               return var.name();
@@ -933,44 +932,46 @@ auto QueryPlanner::seedWithScansAndText(
 ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  switch (path.operation_) {
-    case PropertyPath::Operation::ALTERNATIVE:
-      return seedFromAlternative(left, path, right);
-    case PropertyPath::Operation::INVERSE:
-      return seedFromInverse(left, path, right);
-    case PropertyPath::Operation::NEGATED:
-      return seedFromNegated(left, path, right);
-    case PropertyPath::Operation::IRI:
-      return seedFromVarOrIri(
-          left, ad_utility::triple_component::Iri::fromIriref(path.iri_),
-          right);
-    case PropertyPath::Operation::SEQUENCE:
-      return seedFromSequence(left, path, right);
-    case PropertyPath::Operation::ZERO_OR_MORE:
-      return seedFromTransitive(left, path, right, 0,
-                                std::numeric_limits<size_t>::max());
-    case PropertyPath::Operation::ONE_OR_MORE:
-      return seedFromTransitive(left, path, right, 1,
-                                std::numeric_limits<size_t>::max());
-    case PropertyPath::Operation::ZERO_OR_ONE:
-      return seedFromTransitive(left, path, right, 0, 1);
-  }
-  AD_FAIL();
+  return path.handlePath<ParsedQuery::GraphPattern>(
+      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+        return seedFromVarOrIri(left, iri, right);
+      },
+      [this, &left, &right](const std::vector<PropertyPath>& children,
+                            PropertyPath::Modifier modifier) {
+        using enum PropertyPath::Modifier;
+        switch (modifier) {
+          case ALTERNATIVE:
+            return seedFromAlternative(left, children, right);
+          case INVERSE:
+            AD_CORRECTNESS_CHECK(children.size() == 1);
+            return seedFromPropertyPath(right, children.at(0), left);
+          case NEGATED:
+            return seedFromNegated(left, children, right);
+          case SEQUENCE:
+            return seedFromSequence(left, children, right);
+          default:
+            AD_FAIL();
+        }
+      },
+      [this, &left, &right](const PropertyPath& basePath, size_t min,
+                            size_t max) {
+        return seedFromTransitive(left, basePath, right, min, max);
+      });
 }
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  AD_CORRECTNESS_CHECK(path.children_.size() > 1);
+  AD_CORRECTNESS_CHECK(paths.size() > 1);
 
   ParsedQuery::GraphPattern joinPattern{};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
-  for (size_t i = 0; i < path.children_.size(); i++) {
-    auto child = path.children_[i];
+  for (size_t i = 0; i < paths.size(); i++) {
+    const auto& child = paths[i];
 
-    if (i == path.children_.size() - 1) {
+    if (i == paths.size() - 1) {
       innerRight = right;
     }
 
@@ -987,22 +988,15 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  if (path.children_.empty()) {
-    AD_THROW(
-        "Tried processing an alternative property path node without any "
-        "children.");
-  } else if (path.children_.size() == 1) {
-    LOG(WARN)
-        << "Processing an alternative property path that has only one child."
-        << std::endl;
-    return seedFromPropertyPath(left, path, right);
-  }
+  AD_CONTRACT_CHECK(paths.size() > 1,
+                    "Tried processing an alternative property path node with 0 "
+                    "or 1 children.");
 
   std::vector<ParsedQuery::GraphPattern> childPlans;
-  childPlans.reserve(path.children_.size());
-  for (const auto& child : path.children_) {
+  childPlans.reserve(paths.size());
+  for (const auto& child : paths) {
     childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
   return uniteGraphPatterns(std::move(childPlans));
@@ -1015,7 +1009,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   Variable innerLeft = generateUniqueVarName();
   Variable innerRight = generateUniqueVarName();
   ParsedQuery::GraphPattern childPlan =
-      seedFromPropertyPath(innerLeft, path.children_[0], innerRight);
+      seedFromPropertyPath(innerLeft, path, innerRight);
   ParsedQuery::GraphPattern p{};
   p::TransPath transPath;
   transPath._left = left;
@@ -1029,29 +1023,21 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   return p;
 }
 
-// _____________________________________________________________________________
-ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
-    const TripleComponent& left, const PropertyPath& path,
-    const TripleComponent& right) {
-  return seedFromPropertyPath(right, path.children_[0], left);
-}
-
 namespace {
 using std::string_view;
 // Split the children of a property path into forward and inverse children.
 std::pair<std::vector<string_view>, std::vector<string_view>> splitChildren(
     const std::vector<PropertyPath>& children) {
-  using Operation = PropertyPath::Operation;
   std::vector<string_view> forwardIris;
   std::vector<string_view> inverseIris;
   for (const auto& child : children) {
-    if (child.operation_ == Operation::INVERSE) {
-      const auto& unwrapped = child.children_.at(0);
-      AD_CORRECTNESS_CHECK(unwrapped.operation_ == Operation::IRI);
-      inverseIris.emplace_back(unwrapped.iri_);
+    if (auto unwrapped = child.getChildOfInvertedPath()) {
+      const PropertyPath& path = unwrapped.value();
+      AD_CORRECTNESS_CHECK(path.isIri());
+      inverseIris.emplace_back(path.getIri().toStringRepresentation());
     } else {
-      AD_CORRECTNESS_CHECK(child.operation_ == Operation::IRI);
-      forwardIris.emplace_back(child.iri_);
+      AD_CORRECTNESS_CHECK(child.isIri());
+      forwardIris.emplace_back(child.getIri().toStringRepresentation());
     }
   }
   return {std::move(forwardIris), std::move(inverseIris)};
@@ -1076,10 +1062,10 @@ void appendNotEqualString(std::ostream& os, std::string_view iri,
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern QueryPlanner::seedFromNegated(
-    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& left, const std::vector<PropertyPath>& paths,
     const TripleComponent& right) {
-  AD_CORRECTNESS_CHECK(!path.children_.empty());
-  const auto& [forwardIris, inverseIris] = splitChildren(path.children_);
+  AD_CORRECTNESS_CHECK(!paths.empty());
+  const auto& [forwardIris, inverseIris] = splitChildren(paths);
   auto makeFilterPattern = [this](const TripleComponent& left,
                                   const TripleComponent& right,
                                   const std::vector<string_view>& iris) {
@@ -1127,7 +1113,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
                   -> ad_utility::sparql_types::VarOrPath { return variable; },
               [](const ad_utility::triple_component::Iri& iri)
                   -> ad_utility::sparql_types::VarOrPath {
-                return PropertyPath::fromIri(iri.toStringRepresentation());
+                return PropertyPath::fromIri(iri);
               }},
           varOrIri),
       right);
