@@ -417,11 +417,9 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
     visitWhereClause(ctx->whereClause(), query);
   } else {
     // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
-    // syntactically the same, so we set the flag to true to keep the blank
-    // nodes, and convert them into variables during `toGraphPattern`.
-
-    auto cleanup =
-        setBlankNodeTreatmentForScope(TreatBlankNodesAs::InternalVariables);
+    // syntactically the same, so we keep the blank nodes, and convert them into
+    // variables during `toGraphPattern`.
+    auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
     query._rootGraphPattern._graphPatterns.emplace_back(
