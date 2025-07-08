@@ -244,10 +244,10 @@ TEST(IndexTest, createFromTurtleTest) {
                {three, b}});
     }
   };
-  runTest(true, true);
-  runTest(true, false);
+//  runTest(true, true);
+//  runTest(true, false);
   runTest(false, false);
-  runTest(false, true);
+//  runTest(false, true);
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {

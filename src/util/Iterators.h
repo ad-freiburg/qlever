@@ -7,8 +7,10 @@
 
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <type_traits>
 
+#include "Generator.h"
 #include "backports/algorithm.h"
 #include "util/Enums.h"
 #include "util/LambdaHelpers.h"
@@ -259,6 +261,10 @@ class InputRangeMixin {
   Sentinel end() const { return {}; }
 };
 
+// No details empty struct, the default for no details, taken from cppcoro to
+// facilitate the conversion
+using NoDetails = cppcoro::NoDetails;
+
 // A similar mixin to the above, with slightly different characteristics:
 // 1. It only requires a single function `std::optional<ValueType> get()
 // override`
@@ -268,7 +274,7 @@ class InputRangeMixin {
 // little bit more complex, as the mixin has to store the value. This might be
 // less efficient for very simple generators, because the compiler might be able
 // to optimize this mixin as well as the one above.
-template <typename ValueType>
+template <typename ValueType, typename Details = NoDetails>
 class InputRangeFromGet {
  public:
   using Storage = std::optional<ValueType>;
@@ -279,14 +285,32 @@ class InputRangeFromGet {
   virtual Storage get() = 0;
 
   virtual ~InputRangeFromGet() = default;
-  InputRangeFromGet() = default;
   InputRangeFromGet(InputRangeFromGet&&) = default;
   InputRangeFromGet& operator=(InputRangeFromGet&&) = default;
   InputRangeFromGet(const InputRangeFromGet&) = default;
   InputRangeFromGet& operator=(const InputRangeFromGet&) = default;
 
+  InputRangeFromGet() {}
+
   // Get the next value and store it.
   void getNextAndStore() { storage_ = get(); }
+
+  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  Details& details() requires hasDetails {
+    return std::holds_alternative<Details>(m_details)
+               ? std::get<Details>(m_details)
+               : *std::get<Details*>(m_details);
+  }
+
+  void setDetailsPointer(Details* pointer) requires hasDetails {
+    AD_CONTRACT_CHECK(pointer != nullptr);
+    m_details = pointer;
+  }
+
+  using DetailStorage =
+      std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
+  // If the `Details` type is empty, we don't need it to occupy any space.
+  [[no_unique_address]] DetailStorage m_details{};
 
   struct Sentinel {};
   class Iterator {
@@ -294,7 +318,7 @@ class InputRangeFromGet {
     using iterator_category = std::input_iterator_tag;
     using difference_type = std::int64_t;
     using value_type = typename InputRangeFromGet::Storage::value_type;
-    using pointer = value_type*;
+    using pointer = value_type;
     using reference = std::add_lvalue_reference_t<value_type>;
     using const_reference = std::add_const_t<reference>;
     InputRangeFromGet* mixin_ = nullptr;
@@ -399,24 +423,24 @@ class RangeToInputRangeFromGet
 // A simple type-erased input range (that is, one class for *any* input range
 // with the given `ValueType`). It internally uses the `InputRangeOptionalMixin`
 // from above as an implementation detail.
-template <typename ValueType>
+template <typename ValueType, typename Details = NoDetails>
 class InputRangeTypeErased {
   // Unique (and therefore owning) pointer to the virtual base class.
-  std::unique_ptr<InputRangeFromGet<ValueType>> impl_;
+  std::unique_ptr<InputRangeFromGet<ValueType, Details>> impl_;
 
  public:
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   CPP_template(typename Range)(
       requires std::is_base_of_v<
-          InputRangeFromGet<ValueType>,
+          InputRangeFromGet<ValueType, Details>,
           Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for ranges that are not moveable
   CPP_template(typename Range)(
       requires std::is_base_of_v<
-          InputRangeFromGet<ValueType>,
+          InputRangeFromGet<ValueType, Details>,
           Range>) explicit InputRangeTypeErased(std::unique_ptr<Range> range)
       : impl_{std::move(range)} {}
 
@@ -424,7 +448,8 @@ class InputRangeTypeErased {
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
   CPP_template(typename Range)(
-      requires CPP_NOT(std::is_base_of_v<InputRangeFromGet<ValueType>, Range>)
+      requires CPP_NOT(
+          std::is_base_of_v<InputRangeFromGet<ValueType, Details>, Range>)
           CPP_and ql::ranges::range<Range>
               CPP_and std::same_as<
                   ql::ranges::range_value_t<Range>,
@@ -432,10 +457,27 @@ class InputRangeTypeErased {
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 
+  InputRangeTypeErased() {
+    struct Empty : public InputRangeFromGet<ValueType, Details> {
+      std::optional<ValueType> get() override { return std::nullopt; }
+    };
+
+    impl_ = std::make_unique<Empty>();
+  }
+
   decltype(auto) begin() { return impl_->begin(); }
   decltype(auto) end() { return impl_->end(); }
   decltype(auto) get() { return impl_->get(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
+
+  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+
+  void setDetailsPointer(Details* pointer) requires hasDetails {
+    AD_CONTRACT_CHECK(pointer != nullptr);
+    impl_->setDetailsPointer(pointer);
+  }
+
+  Details& details() { return impl_->details(); }
 };
 
 template <typename Range>

@@ -584,7 +584,7 @@ class CompressedRelationReader {
     void aggregate(const LazyScanMetadata& newValue);
   };
 
-  using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+  using IdTableGenerator = ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>;
 
  private:
   // The allocator used to allocate intermediate buffers.

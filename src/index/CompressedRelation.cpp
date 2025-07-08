@@ -6,7 +6,13 @@
 
 #include "CompressedRelation.h"
 
+#include <elf.h>
+
+#include <functional>
+#include <mutex>
+#include <optional>
 #include <ranges>
+#include <utility>
 
 #include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -16,6 +22,8 @@
 #include "index/LocatedTriples.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Generator.h"
+#include "util/GeneratorConverters.h"
+#include "util/Iterators.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
 #include "util/ProgressBar.h"
@@ -127,7 +135,6 @@ static void pruneBlock(T& block, LimitOffsetClause& limitOffset) {
   }
 }
 
-// ____________________________________________________________________________
 template <typename T>
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
@@ -136,95 +143,139 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     LimitOffsetClause& limitOffset) const {
   // Empty range.
   if (beginBlock == endBlock) {
-    co_return;
+    return IdTableGenerator{};
   }
 
-  // Preparation.
-  const auto& columnIndices = scanConfig.scanColumns_;
-  const auto& blockGraphFilter = scanConfig.graphFilter_;
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
-  const size_t queueSize =
-      RuntimeParameters().get<"lazy-index-scan-queue-size">();
-  auto blockMetadataIterator = beginBlock;
-  std::mutex blockIteratorMutex;
+  using ReadCompressedBlockFromFileFunc = std::function<CompressedBlock(
+      CompressedBlockMetadata&, ColumnIndicesRef)>;
 
-  // Helper lambda that reads and decompessed the next block and returns it
-  // together with its index relative to `beginBlock`. Return `std::nullopt`
-  // when `endBlock` is reached. Returns `std::nullopt` for the block if it
-  // is skipped due to the graph filter.
-  auto readAndDecompressBlock = [&]()
-      -> std::optional<
-          std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>> {
-    cancellationHandle->throwIfCancelled();
-    std::unique_lock lock{blockIteratorMutex};
-    if (blockMetadataIterator == endBlock) {
+  using DecompressAndPostprocessBlockFunc =
+      std::function<DecompressedBlockAndMetadata(
+          const CompressedBlock&, size_t,
+          const CompressedRelationReader::ScanImplConfig&,
+          const CompressedBlockMetadata&)>;
+
+  struct Generator
+      : public ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    T beginBlock;
+    T endBlock;
+    const ScanImplConfig& scanConfig;
+    CancellationHandle cancellationHandle;
+    LimitOffsetClause& limitOffset;
+    ad_utility::Timer popTimer{
+        ad_utility::timer::Timer::InitialStatus::Started};
+    std::mutex blockIteratorMutex;
+    T blockMetadataIterator;
+    ReadCompressedBlockFromFileFunc readCompressedBlockFromFile;
+    DecompressAndPostprocessBlockFunc decompressAndPostprocessBlock;
+    ad_utility::InputRangeTypeErased<
+        std::optional<DecompressedBlockAndMetadata>>
+        queue;
+
+    Generator(T beginBlock, T endBlock, const ScanImplConfig& scanConfig,
+              CancellationHandle cancellationHandlex,
+              LimitOffsetClause& limitOffset,
+              ReadCompressedBlockFromFileFunc readCompressedBlockFromFile,
+              DecompressAndPostprocessBlockFunc decompressAndPostprocessBlock)
+        : beginBlock{beginBlock},
+          endBlock{endBlock},
+          scanConfig{scanConfig},
+          cancellationHandle{cancellationHandlex},
+          limitOffset{limitOffset},
+          readCompressedBlockFromFile{readCompressedBlockFromFile},
+          decompressAndPostprocessBlock{decompressAndPostprocessBlock} {
+      blockMetadataIterator = beginBlock;
+
+      auto numThreads{RuntimeParameters().get<"lazy-index-scan-num-threads">()};
+      auto queueSize{RuntimeParameters().get<"lazy-index-scan-queue-size">()};
+      auto producer{std::bind(&Generator::readAndDecompressBlock, this)};
+
+      queue = ad_utility::data_structures::queueManager<
+          ad_utility::data_structures::OrderedThreadSafeQueue<
+              std::optional<DecompressedBlockAndMetadata>>>(
+          queueSize, numThreads, producer);
+    }
+
+    std::optional<
+        std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>>
+    readAndDecompressBlock() {
+      cancellationHandle->throwIfCancelled();
+      std::unique_lock lock{blockIteratorMutex};
+      if (blockMetadataIterator == endBlock) {
+        return std::nullopt;
+      }
+      // Note: taking a copy here is probably not necessary (the lifetime of
+      // all the blocks is long enough, so a `const&` would suffice), but the
+      // copy is cheap and makes the code more robust.
+      auto blockMetadata = *blockMetadataIterator;
+      // Note: The order of the following two lines is important: The index
+      // of the current blockMetadata depends on the current value of
+      // `blockMetadataIterator`, so we have to compute it before incrementing
+      // the iterator.
+      auto myIndex = static_cast<size_t>(blockMetadataIterator - beginBlock);
+      ++blockMetadataIterator;
+      if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetadata)) {
+        return std::pair{myIndex, std::nullopt};
+      }
+      // Note: the reading of the blockMetadata could also happen without
+      // holding the lock. We still perform it inside the lock to avoid
+      // contention of the file. On a fast SSD we could possibly change this,
+      // but this has to be investigated.
+      CompressedBlock compressedBlock =
+          readCompressedBlockFromFile(blockMetadata, scanConfig.scanColumns_);
+      lock.unlock();
+      auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
+          compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
+      return std::pair{myIndex,
+                       std::optional{std::move(decompressedBlockAndMetadata)}};
+    };
+
+    std::optional<IdTable> get() override {
+      std::optional<std::optional<DecompressedBlockAndMetadata>> item{
+          std::nullopt};
+
+      while ((item = queue.get()) != std::nullopt) {
+        auto& optBlock{item.value()};
+
+        popTimer.stop();
+        cancellationHandle->throwIfCancelled();
+        details().update(optBlock);
+        if (optBlock.has_value()) {
+          auto& block = optBlock.value().block_;
+          pruneBlock(block, limitOffset);
+          details().numElementsYielded_ += block.numRows();
+          if (!block.empty()) {
+            popTimer.cont();
+            return block;
+          }
+          if (limitOffset._limit.value_or(1) == 0) {
+            popTimer.cont();
+            return std::nullopt;
+          }
+        }
+      }
+
       return std::nullopt;
     }
-    // Note: taking a copy here is probably not necessary (the lifetime of
-    // all the blocks is long enough, so a `const&` would suffice), but the
-    // copy is cheap and makes the code more robust.
-    auto blockMetadata = *blockMetadataIterator;
-    // Note: The order of the following two lines is important: The index
-    // of the current blockMetadata depends on the current value of
-    // `blockMetadataIterator`, so we have to compute it before incrementing the
-    // iterator.
-    auto myIndex = static_cast<size_t>(blockMetadataIterator - beginBlock);
-    ++blockMetadataIterator;
-    if (blockGraphFilter.canBlockBeSkipped(blockMetadata)) {
-      return std::pair{myIndex, std::nullopt};
-    }
-    // Note: the reading of the blockMetadata could also happen without holding
-    // the lock. We still perform it inside the lock to avoid contention of the
-    // file. On a fast SSD we could possibly change this, but this has to be
-    // investigated.
-    CompressedBlock compressedBlock =
-        readCompressedBlockFromFile(blockMetadata, columnIndices);
-    lock.unlock();
-    auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
-        compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
-    return std::pair{myIndex,
-                     std::optional{std::move(decompressedBlockAndMetadata)}};
   };
 
-  // Prepare queue for reading and decompressing blocks concurrently using
-  // `numThreads` threads.
-  const size_t numThreads =
-      RuntimeParameters().get<"lazy-index-scan-num-threads">();
-  ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
-  // In case the coroutine is destroyed early we still want to have this
-  // information.
-  auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [&details, &popTimer]() { details.blockingTime_ = popTimer.msecs(); });
-  auto queue = ad_utility::data_structures::queueManager<
-      ad_utility::data_structures::OrderedThreadSafeQueue<
-          std::optional<DecompressedBlockAndMetadata>>>(queueSize, numThreads,
-                                                        readAndDecompressBlock);
+  auto readCompressedBlockFromFileF{
+      std::bind(&CompressedRelationReader::readCompressedBlockFromFile, this,
+                std::placeholders::_1, std::placeholders::_2)};
 
-  // Yield the blocks (in the right order) as soon as they become available.
-  // Stop when all the blocks have been yielded or the LIMIT of the query is
-  // reached. Keep track of various statistics.
-  for (std::optional<DecompressedBlockAndMetadata>& optBlock : queue) {
-    popTimer.stop();
-    cancellationHandle->throwIfCancelled();
-    details.update(optBlock);
-    if (optBlock.has_value()) {
-      auto& block = optBlock.value().block_;
-      pruneBlock(block, limitOffset);
-      details.numElementsYielded_ += block.numRows();
-      if (!block.empty()) {
-        co_yield block;
-      }
-      if (limitOffset._limit.value_or(1) == 0) {
-        co_return;
-      }
-    }
-    popTimer.cont();
-  }
-  // The `OnDestruction...` above might be called too late, so we manually stop
-  // the timer here in case it wasn't already.
-  popTimer.stop();
+  auto decompressAndPostprocessBlockF{
+      std::bind(&CompressedRelationReader::decompressAndPostprocessBlock, this,
+                std::placeholders::_1, std::placeholders::_2,
+                std::placeholders::_3, std::placeholders::_4)};
+
+  auto generator{std::make_unique<Generator>(
+      beginBlock, endBlock, scanConfig, cancellationHandle, limitOffset,
+      std::move(readCompressedBlockFromFileF),
+      std::move(decompressAndPostprocessBlockF))};
+
+  return ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>{
+      std::move(generator)};
 }
-
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
@@ -311,6 +362,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
       });
 }
 
+int x{0};
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
@@ -320,72 +372,134 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     LimitOffsetClause limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
-  // We will modify `limitOffset` as we go. We make a copy of the original
-  // value for some sanity checks at the end of the function.
-  const auto originalLimit = limitOffset;
-
   if (relevantBlockMetadata.empty()) {
-    co_return;
+    return IdTableGenerator{};
   }
 
-  // Some preparation.
-  auto [beginBlockMetadata, endBlockMetadata] =
-      getBeginAndEnd(relevantBlockMetadata);
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
-  size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
+  struct Generator : ad_utility::InputRangeFromGet<IdTable, LazyScanMetadata> {
+    ScanSpecification scanSpec;
+    std::vector<CompressedBlockMetadata> relevantBlockMetadata;
+    ColumnIndices additionalColumns;
+    CancellationHandle cancellationHandle;
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock;
+    LimitOffsetClause limitOffset;
+    ad_utility::InputRangeTypeErased<IdTable, LazyScanMetadata>
+        blockGenerator{};
+    bool firstBlockYielded{false};
+    bool middleBlocksYielded{false};
+    bool lastBlockYielded{false};
+    bool generatorCreated{false};
+    std::vector<CompressedBlockMetadata>::iterator beginBlockMetadata;
+    std::vector<CompressedBlockMetadata>::iterator endBlockMetadata;
+    const CompressedRelationReader* reader;
+    ScanImplConfig config;
+    IdTableGenerator middleBlocksGenerator{};
+    // We will modify `limitOffset` as we go. We make a copy of the original
+    // value for some sanity checks at the end of the function.
+    const LimitOffsetClause originalLimit{limitOffset};
+    std::size_t numBlocksTotal;
+
+    Generator(ScanSpecification scanSpec_,
+              std::vector<CompressedBlockMetadata> relevantBlockMetadata_,
+              ColumnIndices additionalColumns_,
+              CancellationHandle cancellationHandle_,
+              const LocatedTriplesPerBlock& locatedTriplesPerBlock_,
+              LimitOffsetClause limitOffset_,
+              const CompressedRelationReader* reader_, ScanImplConfig config_)
+        : scanSpec{scanSpec_},
+          relevantBlockMetadata{std::move(relevantBlockMetadata_)},
+          additionalColumns{std::move(additionalColumns_)},
+          cancellationHandle{cancellationHandle_},
+          locatedTriplesPerBlock{locatedTriplesPerBlock_},
+          limitOffset{limitOffset_},
+          reader{reader_},
+          config{config_} {
+      beginBlockMetadata = ql::ranges::begin(relevantBlockMetadata);
+      endBlockMetadata = ql::ranges::end(relevantBlockMetadata);
+
+      numBlocksTotal = endBlockMetadata - beginBlockMetadata;
+    }
+
+    auto getIncompleteBlock(std::vector<CompressedBlockMetadata>::iterator it) {
+      auto result = reader->readPossiblyIncompleteBlock(
+          scanSpec, config, *it, std::ref(details()), locatedTriplesPerBlock);
+      cancellationHandle->throwIfCancelled();
+      return result;
+    };
+
+    std::optional<IdTable> get() override {
+      if (!firstBlockYielded) {
+        firstBlockYielded = true;
+        // Get and yield the first block.
+        if (beginBlockMetadata < endBlockMetadata) {
+          auto block = getIncompleteBlock(beginBlockMetadata);
+          pruneBlock(block, limitOffset);
+          details().numElementsYielded_ += block.numRows();
+          if (!block.empty()) {
+            return block;
+          }
+        }
+      }
+
+      if (beginBlockMetadata + 1 < endBlockMetadata) {
+        if (!middleBlocksYielded) {
+          // Get and yield the remaining blocks.
+          if (!generatorCreated) {
+            generatorCreated = true;
+            middleBlocksGenerator = reader->asyncParallelBlockGenerator(
+                beginBlockMetadata + 1, endBlockMetadata - 1, config,
+                cancellationHandle, limitOffset);
+            middleBlocksGenerator.setDetailsPointer(&details());
+          }
+
+          auto block{middleBlocksGenerator.get()};
+          if (block.has_value()) {
+            if (!block.has_value()) {
+              middleBlocksYielded = true;
+            }
+
+            return block.value();
+          }
+        }
+
+        if (!lastBlockYielded) {
+          lastBlockYielded = true;
+          auto block = getIncompleteBlock(endBlockMetadata - 1);
+          pruneBlock(block, limitOffset);
+          if (!block.empty()) {
+            details().numElementsYielded_ += block.numRows();
+            return block;
+          }
+        }
+      }
+
+      // Some sanity checks.
+      // TODO @ccoecontrol sanity checks disabled until inputrange can share
+      // details
+      const auto& limit = originalLimit._limit;
+
+      LazyScanMetadata& d{details()};
+      AD_CORRECTNESS_CHECK(!limit.has_value() ||
+                           d.numElementsYielded_ <= limit.value());
+      AD_CORRECTNESS_CHECK(
+          numBlocksTotal ==
+                  (d.numBlocksRead_ + d.numBlocksSkippedBecauseOfGraph_) ||
+              !limitOffset.isUnconstrained(),
+          [&]() {
+            return absl::StrCat(numBlocksTotal, " ", d.numBlocksRead_, " ",
+                                d.numBlocksSkippedBecauseOfGraph_);
+          });
+
+      return std::nullopt;
+    }
+  };
+
   auto config =
       getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock);
 
-  // Helper lambda for reading the first and last block, of which only a part
-  // is needed.
-  auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(
-        scanSpec, config, *it, std::ref(details), locatedTriplesPerBlock);
-    cancellationHandle->throwIfCancelled();
-    return result;
-  };
-
-  // Get and yield the first block.
-  if (beginBlockMetadata < endBlockMetadata) {
-    auto block = getIncompleteBlock(beginBlockMetadata);
-    pruneBlock(block, limitOffset);
-    details.numElementsYielded_ += block.numRows();
-    if (!block.empty()) {
-      co_yield block;
-    }
-  }
-
-  // Get and yield the remaining blocks.
-  if (beginBlockMetadata + 1 < endBlockMetadata) {
-    // We copy the cancellationHandle because it is still captured by
-    // reference inside the `getIncompleteBlock` lambda.
-    auto blockGenerator = asyncParallelBlockGenerator(
-        beginBlockMetadata + 1, endBlockMetadata - 1, config,
-        cancellationHandle, limitOffset);
-    blockGenerator.setDetailsPointer(&details);
-    for (auto& block : blockGenerator) {
-      co_yield block;
-    }
-    auto lastBlock = getIncompleteBlock(endBlockMetadata - 1);
-    pruneBlock(lastBlock, limitOffset);
-    if (!lastBlock.empty()) {
-      details.numElementsYielded_ += lastBlock.numRows();
-      co_yield lastBlock;
-    }
-  }
-
-  // Some sanity checks.
-  const auto& limit = originalLimit._limit;
-  AD_CORRECTNESS_CHECK(!limit.has_value() ||
-                       details.numElementsYielded_ <= limit.value());
-  AD_CORRECTNESS_CHECK(
-      numBlocksTotal == (details.numBlocksRead_ +
-                         details.numBlocksSkippedBecauseOfGraph_) ||
-          !limitOffset.isUnconstrained(),
-      [&]() {
-        return absl::StrCat(numBlocksTotal, " ", details.numBlocksRead_, " ",
-                            details.numBlocksSkippedBecauseOfGraph_);
-      });
+  return IdTableGenerator{Generator{
+      scanSpec, std::move(relevantBlockMetadata), additionalColumns,
+      cancellationHandle, locatedTriplesPerBlock, limitOffset, this, config}};
 }
 
 // Helper function that enables a comparison of a triple with an `Id` in
@@ -395,9 +509,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 // `col1Id` is returned.
 // respective other `Id` of the triple is returned.
 //
-// If the given triple matches neither, a sentinel value is returned (`Id::min`
-// if the triple is lower than all triples matching the `ScanSpecification`, or
-// `Id::max` if it is higher).
+// If the given triple matches neither, a sentinel value is returned
+// (`Id::min` if the triple is lower than all triples matching the
+// `ScanSpecification`, or `Id::max` if it is higher).
 namespace {
 auto getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
@@ -412,9 +526,10 @@ auto getRelevantIdFromTriple(
     return triple.col0Id_;
   }
 
-  // Compute the following range: If the `scanSpec` specifies both `col0Id` and
-  // `col1Id`, the first and last `col2Id` of the blocks. If the `scanSpec`
-  // specifies only `col0Id`, the first and last `col1Id` of the blocks.
+  // Compute the following range: If the `scanSpec` specifies both `col0Id`
+  // and `col1Id`, the first and last `col2Id` of the blocks. If the
+  // `scanSpec` specifies only `col0Id`, the first and last `col1Id` of the
+  // blocks.
   auto [minId, maxId] = [&]() {
     const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
@@ -452,8 +567,8 @@ auto getRelevantIdFromTriple(
   }
 
   // If the `col1Id` of the triple matches that of the `scanSpec`, return the
-  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or `maxId`
-  // (if it is larger).
+  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or
+  // `maxId` (if it is larger).
   return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(), minId,
                                maxId)
       .value_or(triple.col2Id_);
@@ -719,8 +834,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
                                       locatedTriplesPerBlock)
               .numRows();
     } else {
-      // If the first and last triple of the block match, then we know that the
-      // whole block belongs to the result.
+      // If the first and last triple of the block match, then we know that
+      // the whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
@@ -1131,9 +1246,9 @@ BlockMetadataRanges CompressedRelationReader::getRelevantBlocks(
   };
 
   // TODO:
-  // Optionally implement a free function like `equal_range(YourRangeType, key,
-  // comp)` that implements the equal range correctly.
-  // (1) Perform binary search on the inner blocks with respect to the first and
+  // Optionally implement a free function like `equal_range(YourRangeType,
+  // key, comp)` that implements the equal range correctly. (1) Perform binary
+  // search on the inner blocks with respect to the first and
   //     last triple.
   // (2) Perform binary search regarding the outer blocks.
   BlockMetadataRanges resultBlocks;
