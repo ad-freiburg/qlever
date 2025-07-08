@@ -19,16 +19,16 @@ namespace detail {
 // the correct lifetime).
 template <typename ColumnType>
 struct TableColumnWithVocab {
-  std::optional<IdTableView<0>> table_;
-  ColumnType column_;
+  PayloadTable payload_;
+  ColumnType startNodes_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(std::optional<IdTableView<0>> table, ColumnType column,
                        LocalVocab vocab)
-      : table_{std::move(table)},
-        column_{std::move(column)},
+      : payload_{std::move(table)},
+        startNodes_{std::move(column)},
         vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
@@ -239,7 +239,7 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
-      for (Id startNode : tableColumn.column_) {
+      for (Id startNode : tableColumn.startNodes_) {
         if (sameVariableOnBothSides) {
           targetId = startNode;
         }
@@ -248,7 +248,7 @@ class TransitivePathImpl : public TransitivePathBase {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           timer.stop();
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
-                                   mergedVocab.clone(), tableColumn.table_,
+                                   mergedVocab.clone(), tableColumn.payload_,
                                    currentRow};
           timer.cont();
           // Reset vocab to prevent merging the same vocab over and over again.
@@ -365,12 +365,11 @@ class TransitivePathImpl : public TransitivePathBase {
     std::vector<ColumnIndex> columnsWithoutJoinColumn;
     AD_CORRECTNESS_CHECK(totalColumns > 0);
     columnsWithoutJoinColumn.reserve(totalColumns - 1);
-    for (ColumnIndex i = 0; i < totalColumns; ++i) {
-      if (i == joinColumn) {
-        continue;
-      }
-      columnsWithoutJoinColumn.push_back(i);
-    }
+    ql::ranges::copy(ql::views::iota(static_cast<size_t>(0), totalColumns) |
+                         ql::views::filter([joinColumn](size_t i) {
+                           return i != joinColumn;
+                         }),
+                     std::back_inserter(columnsWithoutJoinColumn));
     return columnsWithoutJoinColumn;
   }
 };
