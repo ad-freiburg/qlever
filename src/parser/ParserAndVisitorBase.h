@@ -24,10 +24,10 @@ struct ResultOfParseAndRemainingText {
 };
 
 // A class that combines a SPARQL parser + visitor. It is templated on the
-// `Visitor`. The most common usage is the `ParserAndVisitor` class below, the
-// only other usage Currently is in `Variable.cpp` where a custom visitor is
-// used to check valid variable names without depending on the rather larger
-// `SparqlQleverVisitor`.
+// `Visitor`. The most common usage is the `ParserAndVisitor` class in
+// `SparqlParserHelpers.h`, the only other usage currently is in `Variable.cpp`
+// where a custom visitor is used to check valid variable names without
+// depending on the rather larger `SparqlQleverVisitor`.
 template <typename Visitor>
 struct ParserAndVisitorBase {
  private:
