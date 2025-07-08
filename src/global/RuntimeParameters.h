@@ -13,6 +13,7 @@ inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::DurationParameter;
   using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
+  using ad_utility::detail::parameterShortNames::Int;
   // NOTE: It is important that the value of the static variable is created by
   // an immediately invoked lambda, otherwise we get really strange segfaults on
   // Clang 16 and 17.
@@ -52,8 +53,9 @@ inline auto& RuntimeParameters() {
         // Sampling-based hybrid GROUP BY thresholds
         Double<"group-by-sample-percent">{0.01},      // percent of rows to sample (1%)
         SizeT<"group-by-sample-max-rows">{50000},     // cap on sample size
-        SizeT<"group-by-sample-group-threshold">{1000000},    // switch to sort if estimated groups exceed this
-        SizeT<"group-by-hash-map-group-threshold">{1000000}, // max groups for hash-map optimization
+        Double<"group-by-sample-distinct-ratio">{0.95},    // LAZY CASE: switch to sort if the fraction (sampled distinct groups / sample size) exceeds this ratio
+        SizeT<"group-by-sample-group-threshold">{1'000'000},    // MATERIALIZED CASE: switch to sort if the estimated number of distinct groups exceeds this number
+        SizeT<"group-by-hash-map-group-threshold">{1'000'000}, // max groups for hash-map optimization
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
         Bool<"throw-on-unbound-variables">{false},

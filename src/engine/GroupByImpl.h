@@ -612,6 +612,8 @@ class GroupByImpl : public Operation {
 
   // Check via sampling if the hash-map path should be skipped due to too many groups
   bool shouldSkipHashMapGrouping(const IdTable& table) const;
+  bool shouldSkipHashMapGroupingLazy(
+      const std::shared_ptr<const Result>& subresult) const;
 
   // Check if the table is sorted on the given columns (non-decreasing order)
   bool isSortedOn(const IdTable& table, const std::vector<ColumnIndex>& cols) const {

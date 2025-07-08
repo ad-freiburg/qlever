@@ -170,6 +170,12 @@ struct szt {
     return std::stoull(s);
   }
 };
+struct sztnu {
+  template <typename T>
+  int operator()(const T& s) const {
+    return std::stoi(s);
+  }
+};
 struct bl {
   template <typename T>
   bool operator()(const T& s) const {
@@ -232,6 +238,9 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 
 template <ParameterName Name>
 using Bool = Parameter<bool, bl, boolToString, Name>;
+
+template <ParameterName Name>
+using Int = Parameter<int, sztnu, toString, Name>;
 
 template <ParameterName Name>
 using MemorySizeParameter =

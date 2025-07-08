@@ -139,36 +139,36 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     for (auto multiplicity : multiplicities) {
       for (auto valueIdType : numericValueIdTypes) {
         //-----------------------------------------------------------------------------------------------------
-        runTests<AvgExpression>(results, multiplicity, valueIdType, false,
-                                false);
+        // runTests<AvgExpression>(results, multiplicity, valueIdType, false,
+        //                         false);
 
         runTests<AvgExpression>(results, multiplicity, valueIdType, true,
                                 false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<SumExpression>(results, multiplicity, valueIdType, false,
-                                false);
+        // runTests<SumExpression>(results, multiplicity, valueIdType, false,
+        //                         false);
 
         runTests<SumExpression>(results, multiplicity, valueIdType, true,
                                 false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<CountExpression>(results, multiplicity, valueIdType, false,
-                                  false);
+        // runTests<CountExpression>(results, multiplicity, valueIdType, false,
+        //                           false);
 
         runTests<CountExpression>(results, multiplicity, valueIdType, true,
                                   false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<MinExpression>(results, multiplicity, valueIdType, false,
-                                false);
+        // runTests<MinExpression>(results, multiplicity, valueIdType, false,
+        //                         false);
 
         runTests<MinExpression>(results, multiplicity, valueIdType, true,
                                 false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<MaxExpression>(results, multiplicity, valueIdType, false,
-                                false);
+        // runTests<MaxExpression>(results, multiplicity, valueIdType, false,
+        //                         false);
 
         runTests<MaxExpression>(results, multiplicity, valueIdType, true,
                                 false);
@@ -180,29 +180,29 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     for (auto multiplicity : multiplicities) {
       for (auto valueIdType : numericValueIdTypes) {
         //-----------------------------------------------------------------------------------------------------
-        runTests<AvgExpression, SumExpression>(results, multiplicity,
-                                               valueIdType, false, false);
+        // runTests<AvgExpression, SumExpression>(results, multiplicity,
+        //                                        valueIdType, false, false);
 
         runTests<AvgExpression, SumExpression>(results, multiplicity,
                                                valueIdType, true, false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<AvgExpression, MaxExpression>(results, multiplicity,
-                                               valueIdType, false, false);
+        // runTests<AvgExpression, MaxExpression>(results, multiplicity,
+        //                                        valueIdType, false, false);
 
         runTests<AvgExpression, MaxExpression>(results, multiplicity,
                                                valueIdType, true, false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<AvgExpression, MinExpression>(results, multiplicity,
-                                               valueIdType, false, false);
+        // runTests<AvgExpression, MinExpression>(results, multiplicity,
+        //                                        valueIdType, false, false);
 
         runTests<AvgExpression, MinExpression>(results, multiplicity,
                                                valueIdType, true, false);
 
         //-----------------------------------------------------------------------------------------------------
-        runTests<AvgExpression, CountExpression>(results, multiplicity,
-                                                 valueIdType, false, false);
+        // runTests<AvgExpression, CountExpression>(results, multiplicity,
+        //                                          valueIdType, false, false);
 
         runTests<AvgExpression, CountExpression>(results, multiplicity,
                                                  valueIdType, true, false);
@@ -212,8 +212,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
   void runStringBenchmarks(BenchmarkResults& results) {
     for (auto multiplicity : multiplicities) {
-      runTests<GroupConcatExpression>(results, multiplicity,
-                                      ValueIdType::Strings, false, false);
+      // runTests<GroupConcatExpression>(results, multiplicity,
+      //                                 ValueIdType::Strings, false, false);
       runTests<GroupConcatExpression>(results, multiplicity,
                                       ValueIdType::Strings, true, false);
     }
