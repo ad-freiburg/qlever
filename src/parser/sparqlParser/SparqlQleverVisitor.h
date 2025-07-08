@@ -99,10 +99,18 @@ class SparqlQleverVisitor {
   // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
-  // This is set to true if and only if we are only inside the template of a
-  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
-  // meaning of blank and anonymous nodes is different.
-  bool isInsideConstructTriples_ = false;
+  // In most contexts, blank node labels in a SPARQL query are actually
+  // variables. But sometimes they are in fact blank node labels (e.g. in
+  // CONSTRUCT templates) and sometimes they are simply forbidden by the
+  // standard. The following enum keeps track of which of these modes is
+  // currently active.
+  enum struct TreatBlankNodesAs { InternalVariables, BlankNodes, Illegal };
+  TreatBlankNodesAs treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
+
+  [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
+    auto previous = std::exchange(treatBlankNodesAs_, newValue);
+    return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
+  }
 
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
@@ -139,7 +147,7 @@ class SparqlQleverVisitor {
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
   void setParseModeToInsideConstructTemplateForTesting() {
-    isInsideConstructTriples_ = true;
+    treatBlankNodesAs_ = TreatBlankNodesAs::BlankNodes;
   }
 
   // ___________________________________________________________________________
