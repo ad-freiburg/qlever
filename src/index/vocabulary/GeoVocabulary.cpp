@@ -23,7 +23,7 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   std::decay_t<decltype(ad_utility::GEOMETRY_INFO_VERSION)> versionOfFile = 0;
   geoInfoFile_.read(&versionOfFile, geoInfoHeader, 0);
 
-  // Check version
+  // Check version of geo info file
   if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
     throw std::runtime_error(absl::StrCat(
         "The geometry info version of ", getGeoInfoFilename(filename), " is ",
@@ -46,6 +46,7 @@ GeoVocabulary<V>::WordWriter::WordWriter(const V& vocabulary,
                                          const std::string& filename)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"} {
+  // Initialize geo info file with header
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader);
 };
 
@@ -55,7 +56,7 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
                                                   bool isExternal) {
   uint64_t index;
 
-  // Store the WKT literal
+  // Store the WKT literal as a string in the underlying vocabulary
   index = (*underlyingWordWriter_)(word, isExternal);
 
   // Precompute `GeometryInfo` and write the `GeometryInfo` to disk, or write a
@@ -74,8 +75,8 @@ uint64_t GeoVocabulary<V>::WordWriter::operator()(std::string_view word,
 // ____________________________________________________________________________
 template <typename V>
 void GeoVocabulary<V>::WordWriter::finishImpl() {
-  // WordWriterBase ensures that this is not called twice and we thus don't try
-  // to close the file handle twice
+  // `WordWriterBase` ensures that this is not called twice and we thus do not
+  // try to close the file handle twice
   underlyingWordWriter_->finish();
   geoInfoFile_.close();
 }
@@ -87,18 +88,23 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   // Allocate the required number of bytes
   uint8_t buffer[geoInfoOffset];
   void* ptr = &buffer;
+
   // Read into the buffer
   geoInfoFile_.read(ptr, geoInfoOffset, geoInfoHeader + index * geoInfoOffset);
+
   // If all bytes are zero, this record on disk represents an invalid geometry.
+  // The `GeometryInfo` class makes the guarantee that it can not have an
+  // all-zero binary representation.
   if (std::all_of(static_cast<uint8_t*>(ptr),
                   static_cast<uint8_t*>(ptr) + geoInfoOffset,
                   [](uint8_t byte) { return byte == 0; })) {
     return std::nullopt;
   }
-  // Interpret the buffer as a GeometryInfo object
+
+  // Interpret the buffer as a `GeometryInfo` object
   return *absl::bit_cast<GeometryInfo*>(ptr);
 }
 
-// Avoid linker trouble.
+// Explicit template instantiations
 template class GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>;
 template class GeoVocabulary<VocabularyInMemory>;

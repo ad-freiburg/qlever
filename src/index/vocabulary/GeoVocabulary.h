@@ -20,8 +20,9 @@ using ad_utility::GeometryInfo;
 // regular vocabulary classes it does not only store the strings. Instead it
 // stores both preprocessed and original forms of its input words. Preprocessing
 // includes for example the computation of bounding boxes for accelerated
-// spatial queries. Note: A `GeoVocabulary` may only store WKT literals,
-// therefore it should be used as part of a `SplitVocabulary`.
+// spatial queries. See the `GeometryInfo` class for details. Note: A
+// `GeoVocabulary` is only suitable for WKT literals, therefore it should be
+// used as part of a `SplitVocabulary`.
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
@@ -50,8 +51,8 @@ class GeoVocabulary {
           Args&&...>) explicit GeoVocabulary(Args&&... args)
       : literals_{AD_FWD(args)...} {};
 
-  // Retrieve the geometry info object stored for the literal with a given
-  // index. Return `std::nullopt` for invalid geometries.
+  // Load the precomputed `GeometryInfo` object for the literal with
+  // the given index from disk. Return `std::nullopt` for invalid geometries.
   std::optional<GeometryInfo> getGeoInfo(uint64_t index) const;
 
   // Construct a filename for the geo info file by appending a suffix to the
@@ -105,15 +106,17 @@ class GeoVocabulary {
     static constexpr uint8_t invalidGeoInfoBuffer[geoInfoOffset] = {};
 
    public:
+    // Initialize the `geoInfoFile_` by writing its header and open a word
+    // writer on the underlying vocabulary.
     WordWriter(const UnderlyingVocabulary& vocabulary,
                const std::string& filename);
 
     // Add the next literal to the vocabulary, precompute additional information
-    // and return the literal's new index.
+    // using `GeometryInfo` and return the literal's new index.
     uint64_t operator()(std::string_view word, bool isExternal) override;
 
-    // Finish the writing on the underlying writers. After this no more
-    // calls to `operator()` are allowed.
+    // Finish the writing on the underlying writer and close the `geoInfoFile_`
+    // file handle. After this no more calls to `operator()` are allowed.
     void finishImpl() override;
   };
 
