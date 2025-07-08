@@ -123,6 +123,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   return output;
 }
 
+// _____________________________________________________________________________
 bool isValidVariableName(std::string_view var) {
   sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
   try {
@@ -134,7 +135,10 @@ bool isValidVariableName(std::string_view var) {
   }
 }
 
-const static int isValidVarSetterDummy = []() {
+// As soon as a program is linked against this file, the following
+// initialization has the effect that `Variable::isValidVariableName` performs
+// as expected (See `Variable.h` for details).
+[[maybe_unused]] const static int isValidVarSetterDummy = []() {
   Variable::isValidVariableName() = &isValidVariableName;
   return 42;
 }();

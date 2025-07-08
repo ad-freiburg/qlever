@@ -9,8 +9,8 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {

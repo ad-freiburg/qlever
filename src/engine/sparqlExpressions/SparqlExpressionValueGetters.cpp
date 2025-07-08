@@ -10,10 +10,10 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 using namespace sparqlExpression::detail;
 

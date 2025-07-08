@@ -15,8 +15,8 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
-#include "util/GeometryInfo.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
 

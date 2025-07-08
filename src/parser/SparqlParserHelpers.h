@@ -66,7 +66,8 @@ struct ParserAndVisitor {
   }
 };
 
-// TODO<joka921> Comment this trick.
+// This function returns true iff the argument is a valid name for a SPARQL
+// variable. It uses the SPARQL parser and is therefore relatively expensive.
 bool isValidVariableName(std::string_view var);
 
 }  // namespace sparqlParserHelpers

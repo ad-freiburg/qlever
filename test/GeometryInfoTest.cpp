@@ -6,8 +6,8 @@
 
 #include "GeometryInfoTestHelpers.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GTestHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace {
 

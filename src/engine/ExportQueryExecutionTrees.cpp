@@ -1197,8 +1197,9 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   co_yield absl::StrCat("],", jsonSuffix.dump().substr(1));
 }
 
-// ___________________________________________________________________________
-[[nodiscard]] std::optional<std::string> evaluateVariableForConstruct(
+// This function evaluates a `Variable` in the context of the `CONSTRUCT`
+// export.
+[[nodiscard]] static std::optional<std::string> evaluateVariableForConstruct(
     const Variable& var, const ConstructQueryExportContext& context,
     [[maybe_unused]] PositionInTriple positionInTriple) {
   size_t row = context._row;
@@ -1227,6 +1228,10 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   return std::nullopt;
 }
 
+// The following trick has the effect that `Variable::evaluate()` calls the
+// above function, without `Variable` having to link against the (heavy) export
+// module. This is a bit of a hack and will be removed in the future when we
+// improve the CONSTRUCT module for better performance.
 [[maybe_unused]] static int initializeVariableEvaluationDummy = []() {
   Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
   return 42;

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "util/GeometryInfo.h"
+#include "rdfTypes/GeometryInfo.h"
 
 #include <util/geo/Geo.h>
 

@@ -19,9 +19,9 @@
 #include "index/LocalVocabEntry.h"
 #include "parser/NormalizedString.h"
 #include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
-#include "util/GeometryInfo.h"
 
 namespace ad_utility {
 
