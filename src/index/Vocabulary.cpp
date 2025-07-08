@@ -10,21 +10,13 @@
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
-#include "index/vocabulary/UnicodeVocabulary.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyTypes.h"
-#include "parser/RdfEscaping.h"
-#include "parser/Tokenizer.h"
 #include "util/Exception.h"
-#include "util/Forward.h"
 #include "util/GeometryInfo.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"
-#include "util/json.h"
 
 using std::string;
 
