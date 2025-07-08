@@ -65,6 +65,10 @@ struct ParserAndVisitor {
                                          std::string{remainingString}};
   }
 };
+
+// TODO<joka921> Comment this trick.
+bool isValidVariableName(std::string_view var);
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

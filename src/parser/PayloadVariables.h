@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace detail {
 // Represents the selection of all variables as payload

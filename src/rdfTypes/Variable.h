@@ -29,10 +29,26 @@ class Variable {
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
+
+  // The `evaluate` method, which is required for the export of CONSTRUCT query
+  // results depends on a lot of other code (in particular the complete
+  // `Index`). For the time being, To not be forced to link this class against
+  // all these types, we use the following approach: The `evaluate` method
+  // refers to a static function pointer, which is initially set to a dummy
+  // function. The Export module (in `ExportQueryExecutionTree.cpp`) sets this
+  // pointer to the actual implementation as part of the static initialization.
+  // In the future, the evaluation should be completely done outside the
+  // `Variable` class.
   // ___________________________________________________________________________
+  using EvaluateFuncPtr = std::optional<std::string> (*)(
+      const Variable&, const ConstructQueryExportContext& context,
+      [[maybe_unused]] PositionInTriple positionInTriple);
+
   [[nodiscard]] std::optional<std::string> evaluate(
       const ConstructQueryExportContext& context,
       [[maybe_unused]] PositionInTriple positionInTriple) const;
+
+  static EvaluateFuncPtr& decoupledEvaluateFuncPtr();
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _name; }
@@ -80,10 +96,17 @@ class Variable {
     out->append(variable.name());
   }
 
-  static bool isValidVariableName(std::string_view var);
+  // As the exact checking for a valid variable name requires access to a fully
+  // blown SPARQL parser, and is also only performed when expensive checks are
+  // enabled, we use the same technique as described above for swapping in the
+  // actual implementation at the time the binary is initialized.
+  // (In SparqlParserHelpers.cpp).
+  using ValidNameFuncPtr = bool (*)(std::string_view);
+  static ValidNameFuncPtr& isValidVariableName();
+  static bool isValidVariableNameDummy(std::string_view) { return true; }
 
   // The method escapes all special chars in word to "_ASCIICODE_" and appends
-  // it at the end of target
+  // it at the end of target.
   void appendEscapedWord(std::string_view word, std::string& target) const;
 };
 

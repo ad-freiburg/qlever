@@ -11,7 +11,7 @@
 #include "backports/span.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace sparqlExpression {
 

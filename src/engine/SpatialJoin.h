@@ -14,7 +14,7 @@
 #include "engine/Operation.h"
 #include "engine/SpatialJoinConfig.h"
 #include "global/Id.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // helper struct to improve readability in prepareJoin()
 struct PreparedSpatialJoinParams {

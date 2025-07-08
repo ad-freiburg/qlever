@@ -25,7 +25,7 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/TripleComponentTestHelpers.h"

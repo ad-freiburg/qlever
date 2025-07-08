@@ -2,20 +2,16 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
-#include <ctre-unicode.hpp>
-
-#include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "index/Index.h"
-#include "parser/SparqlParserHelpers.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
   if (checkName && ad_utility::areExpensiveChecksEnabled) {
-    AD_CONTRACT_CHECK(isValidVariableName(_name), [this]() {
+    AD_CONTRACT_CHECK(isValidVariableName()(_name), [this]() {
       return absl::StrCat("\"", _name, "\" is not a valid SPARQL variable");
     });
   }
@@ -27,33 +23,7 @@ Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
 [[nodiscard]] std::optional<std::string> Variable::evaluate(
     const ConstructQueryExportContext& context,
     [[maybe_unused]] PositionInTriple positionInTriple) const {
-  // TODO<joka921> This whole function should be much further up in the
-  // Call stack. Most notably the check which columns belongs to this variable
-  // should be much further up in the call stack.
-  size_t row = context._row;
-  const auto& variableColumns = context._variableColumns;
-  const Index& qecIndex = context._qecIndex;
-  const auto& idTable = context.idTable_;
-  if (variableColumns.contains(*this)) {
-    size_t index = variableColumns.at(*this).columnIndex_;
-    auto id = idTable(row, index);
-    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, context.localVocab_);
-    if (!optionalStringAndType.has_value()) {
-      return std::nullopt;
-    }
-    auto& [literal, type] = optionalStringAndType.value();
-    const char* i = XSD_INT_TYPE;
-    const char* d = XSD_DECIMAL_TYPE;
-    const char* b = XSD_BOOLEAN_TYPE;
-    if (type == nullptr || type == i || type == d ||
-        (type == b && literal.length() > 1)) {
-      return std::move(literal);
-    } else {
-      return absl::StrCat("\"", literal, "\"^^<", type, ">");
-    }
-  }
-  return std::nullopt;
+  return decoupledEvaluateFuncPtr()(*this, context, positionInTriple);
 }
 
 // _____________________________________________________________________________
@@ -95,16 +65,26 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
       absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
 }
 
+// The following three functions implement the indirection for the evaluation of
+// variables and for the checking of valid variable names (see the header for
+// details).
+
 // _____________________________________________________________________________
-bool Variable::isValidVariableName(std::string_view var) {
-  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
-  try {
-    auto [result, remaining] =
-        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
-    return remaining.empty();
-  } catch (...) {
-    return false;
-  }
+auto Variable::isValidVariableName() -> ValidNameFuncPtr& {
+  static ValidNameFuncPtr ptr = &Variable::isValidVariableNameDummy;
+  return ptr;
+}
+
+// _____________________________________________________________________________
+[[nodiscard]] static std::optional<std::string> evaluateVariableDummy(
+    const Variable&, const ConstructQueryExportContext&, PositionInTriple) {
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+auto Variable::decoupledEvaluateFuncPtr() -> EvaluateFuncPtr& {
+  static EvaluateFuncPtr ptr = &evaluateVariableDummy;
+  return ptr;
 }
 
 // _____________________________________________________________________________

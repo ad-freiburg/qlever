@@ -17,11 +17,10 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/LocalVocabEntry.h"
-#include "parser/GeoPoint.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 #include "util/GeometryInfo.h"
 
 namespace ad_utility {

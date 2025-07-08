@@ -12,7 +12,7 @@
 
 #include <ranges>
 
-#include "parser/RdfEscaping.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/ValueIdentity.h"
 #include "util/http/MediaTypes.h"
@@ -1196,3 +1196,38 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   co_yield absl::StrCat("],", jsonSuffix.dump().substr(1));
 }
+
+// ___________________________________________________________________________
+[[nodiscard]] std::optional<std::string> evaluateVariableForConstruct(
+    const Variable& var, const ConstructQueryExportContext& context,
+    [[maybe_unused]] PositionInTriple positionInTriple) {
+  size_t row = context._row;
+  const auto& variableColumns = context._variableColumns;
+  const Index& qecIndex = context._qecIndex;
+  const auto& idTable = context.idTable_;
+  if (variableColumns.contains(var)) {
+    size_t index = variableColumns.at(var).columnIndex_;
+    auto id = idTable(row, index);
+    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
+        qecIndex, id, context.localVocab_);
+    if (!optionalStringAndType.has_value()) {
+      return std::nullopt;
+    }
+    auto& [literal, type] = optionalStringAndType.value();
+    const char* i = XSD_INT_TYPE;
+    const char* d = XSD_DECIMAL_TYPE;
+    const char* b = XSD_BOOLEAN_TYPE;
+    if (type == nullptr || type == i || type == d ||
+        (type == b && literal.length() > 1)) {
+      return std::move(literal);
+    } else {
+      return absl::StrCat("\"", literal, "\"^^<", type, ">");
+    }
+  }
+  return std::nullopt;
+}
+
+[[maybe_unused]] static int initializeVariableEvaluationDummy = []() {
+  Variable::decoupledEvaluateFuncPtr() = &evaluateVariableForConstruct;
+  return 42;
+}();

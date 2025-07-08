@@ -8,9 +8,9 @@
 
 #include <cstdint>
 
-#include "parser/GeoPoint.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"

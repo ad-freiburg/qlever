@@ -122,4 +122,21 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   output += view.substr(lastPos);
   return output;
 }
+
+bool isValidVariableName(std::string_view var) {
+  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
+  try {
+    auto [result, remaining] =
+        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
+    return remaining.empty();
+  } catch (...) {
+    return false;
+  }
+}
+
+const static int isValidVarSetterDummy = []() {
+  Variable::isValidVariableName() = &isValidVariableName;
+  return 42;
+}();
+
 }  // namespace sparqlParserHelpers

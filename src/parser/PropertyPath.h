@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 class PropertyPath {
  public:

@@ -11,7 +11,7 @@
 
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
 namespace ad_utility {

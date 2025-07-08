@@ -6,8 +6,8 @@
 
 #include <fstream>
 
-#include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
+#include "../rdfTypes/RdfEscaping.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
 #include "../util/Log.h"

@@ -17,8 +17,8 @@
 #include "global/Constants.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
+#include "rdfTypes/Literal.h"
 #include "util/GeometryInfo.h"
 
 namespace valueGetterTestHelpers {

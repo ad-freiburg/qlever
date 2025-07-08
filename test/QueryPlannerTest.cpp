@@ -14,7 +14,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;

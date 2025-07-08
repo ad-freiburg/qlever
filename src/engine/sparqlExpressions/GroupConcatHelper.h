@@ -8,8 +8,8 @@
 #include <optional>
 #include <string>
 
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Literal.h"
 #include "util/Exception.h"
 
 namespace sparqlExpression::detail {

@@ -8,7 +8,7 @@
 #include <string>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 using std::string;
 

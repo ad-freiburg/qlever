@@ -10,7 +10,7 @@
 #include <variant>
 
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // This header contains enums and configuration structs for the spatial join
 // operation. It allows including these types without also including the whole

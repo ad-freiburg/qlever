@@ -7,9 +7,9 @@
 #include <iostream>
 #include <string>
 
-#include "../src/parser/RdfEscaping.h"
 #include "../src/parser/Tokenizer.h"
 #include "../src/parser/TokenizerCtre.h"
+#include "../src/rdfTypes/RdfEscaping.h"
 #include "./TokenTestCtreHelper.h"
 
 using std::string;
