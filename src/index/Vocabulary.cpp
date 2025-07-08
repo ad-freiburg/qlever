@@ -233,14 +233,18 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
+auto Vocabulary<S, C, I>::getPositionOfWord(std::string_view word) const
+    -> std::pair<IndexType, IndexType> {
+  auto [lower, upper] = vocabulary_.getPositionOfWord(word);
+  return {IndexType::make(lower), IndexType::make(upper)};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  // need the TOTAL level because we want the unique word.
-  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
-  if (wordAndIndex.isEnd()) {
-    return false;
-  }
-  idx->get() = wordAndIndex.index();
-  return wordAndIndex.word() == word;
+  auto [lower, upper] = vocabulary_.getPositionOfWord(word);
+  idx->get() = lower;
+  return lower != upper;
 }
 
 // ___________________________________________________________________________

@@ -36,15 +36,16 @@ struct PreparedSpatialJoinParams {
 // search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
-  // creates a SpatialJoin operation. The triple is needed, to get the
-  // variable names. Those are the names of the children, which get added
-  // later. In addition to that, the SpatialJoin operation needs a maximum
-  // distance, which two objects can be apart, which will still be accepted
-  // as a match and therefore be part of the result table. The distance is
-  // parsed from the triple.
+  // creates a SpatialJoin operation: the required configuration object
+  // can for example be obtained from the SpatialQuery class. Children are
+  // optional, because they may be added later using the addChild method.
+  // The substitutesFilterOp parameter indicates whether the spatial join
+  // was explicitly requested by the user (false) or has been created to
+  // implicitly rewrite a cartesian product with a geo filter (true).
   SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
-              std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
+              std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
+              std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+              bool substitutesFilterOp = false);
 
   std::vector<QueryExecutionTree*> getChildren() override;
   string getCacheKeyImpl() const override;
@@ -105,6 +106,15 @@ class SpatialJoin : public Operation {
     return config_.joinType_;
   }
 
+  // retrieve the variables the spatial join is joining on
+  std::pair<Variable, Variable> getSpatialJoinVariables() const {
+    return {config_.left_, config_.right_};
+  }
+
+  // get the boolean flag if this spatial join operation is used to substitute a
+  // GeoSPARQL filter operation
+  bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
+
   // Helper functions for unit tests
   std::pair<double, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};
@@ -157,6 +167,8 @@ class SpatialJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
   SpatialJoinConfiguration config_;
+
+  bool substitutesFilterOp_ = false;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H

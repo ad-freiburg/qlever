@@ -358,8 +358,13 @@ UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
 
 // _____________________________________________________________________________
 UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s,
-    [[maybe_unused]] const EvaluationContext* context) const {
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return litOrIriToUnit(s);
+}
+
+// _____________________________________________________________________________
+UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
+    const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
   // of measurement. Because this is a rather obscure requirement, we support
   // IRIs also.

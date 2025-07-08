@@ -16,7 +16,9 @@
 // operation. It allows including these types without also including the whole
 // class declaration of the spatial join operation.
 
-// The supported spatial join types (geometry predicates).
+// The supported spatial join types (geometry predicates). When updating this
+// enum, also add a case in `getGeoFunctionExpressionParameters` in
+// `GeoExpression.cpp`.
 enum class SpatialJoinType {
   INTERSECTS,
   CONTAINS,

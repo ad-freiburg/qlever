@@ -41,9 +41,15 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
-// Convert kilometers to other supported units.
+// Convert kilometers to other supported units. If `unit` is `std::nullopt` it
+// is treated as kilometers.
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit);
+
+// Convert value from any supported unit to kilometers. If `unit` is
+// `std::nullopt` it is treated as kilometers.
+double valueInUnitToKilometer(double valueInUnit,
+                              std::optional<UnitOfMeasurement> unit);
 
 // Convert a unit IRI string (without quotes or brackets) to unit.
 UnitOfMeasurement iriToUnitOfMeasurement(const std::string_view& uri);
@@ -127,7 +133,7 @@ class WktEnvelope {
 };
 
 // A generic operation for all geometric relation functions, like
-// geof:sfIntersects.
+// `geof:sfIntersects`.
 template <SpatialJoinType Relation>
 class WktGeometricRelation {
  public:
@@ -137,10 +143,9 @@ class WktGeometricRelation {
       [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
       [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
     AD_THROW(
-        "Geometric relations via the `geof:sf...` functions are not yet "
-        "implemented in QLever. Please refer to the custom `SERVICE qlss:` "
-        "with algorithm `qlss:libspatialjoin` for now. More details can be "
-        "found on the QLever Wiki.");
+        "Geometric relations via the `geof:sfIntersects` ... functions are "
+        "currently only implemented for a subset of all possible queries. More "
+        "details on GeoSPARQL support can be found on the QLever Wiki.");
   }
 };
 
