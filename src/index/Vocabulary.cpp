@@ -233,8 +233,9 @@ std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
   if constexpr (std::is_same_v<S, PolymorphicVocabulary> ||
                 ad_utility::isInstantiation<S, SplitVocabulary>) {
     return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
+  } else {
+    return std::nullopt;
   }
-  return std::nullopt;
 };
 
 // _____________________________________________________________________________

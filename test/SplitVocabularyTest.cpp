@@ -201,10 +201,10 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
 
   // There is not GeoInfo because none of the underlying vocabularies is a
   // `GeoVocabulary`
-  ASSERT_EQ(sv.getGeoInfo(0), std::nullopt);
-  ASSERT_EQ(sv.getGeoInfo(1), std::nullopt);
-  ASSERT_EQ(sv.getGeoInfo(1ULL << 59), std::nullopt);
-  ASSERT_EQ(sv.getGeoInfo((1ULL << 59) | 1), std::nullopt);
+  ASSERT_FALSE(sv.getGeoInfo(0).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1ULL << 59).has_value());
+  ASSERT_FALSE(sv.getGeoInfo((1ULL << 59) | 1).has_value());
 
   sv.close();
 }
