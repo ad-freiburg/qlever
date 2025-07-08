@@ -27,9 +27,9 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   if (versionOfFile != ad_utility::GEOMETRY_INFO_VERSION) {
     throw std::runtime_error(absl::StrCat(
         "The geometry info version of ", getGeoInfoFilename(filename), " is ",
-        versionOfFile, ", which is incompatible with ",
+        versionOfFile, ", which is incompatible with version ",
         ad_utility::GEOMETRY_INFO_VERSION,
-        " as required by this version of QLever."));
+        " as required by this version of QLever. Please rebuild your index."));
   }
 };
 
