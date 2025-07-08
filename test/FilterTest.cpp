@@ -49,7 +49,7 @@ void checkSetPrefilterExpressionVariablePair(
     std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
     ColumnIndex columnIdx, bool prefilterIsApplicable,
     bool enablePrefilterForFilter = true) {
-  RuntimeParameters().set<"disable-prefilter-for-filter-clauses">(
+  RuntimeParameters().set<"enable-prefilter-on-index-scans">(
       enablePrefilterForFilter);
   Filter filter{
       qec,
@@ -59,7 +59,7 @@ void checkSetPrefilterExpressionVariablePair(
   os << "Added PrefiterExpression: \n";
   os << *prefilterExpr;
   os << "\nApplied on column: " << columnIdx << ".";
-  if (prefilterIsApplicable && !enablePrefilterForFilter) {
+  if (prefilterIsApplicable && enablePrefilterForFilter) {
     EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(os.str()));
   } else {
     EXPECT_THAT(filter.getCacheKey(),
