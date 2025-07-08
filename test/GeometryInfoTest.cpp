@@ -8,6 +8,7 @@
 #include "parser/GeoPoint.h"
 #include "util/GTestHelpers.h"
 #include "util/GeometryInfo.h"
+#include "util/GeometryInfoHelpersImpl.h"
 
 namespace {
 
@@ -15,7 +16,7 @@ using namespace ad_utility;
 using namespace geoInfoTestHelpers;
 
 // Example WKT literals for the tests below
-constexpr std::string_view lit =
+constexpr std::string_view lit1 =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view lit2 =
     "\"LINESTRING(2 2, 4 "
@@ -49,7 +50,7 @@ TEST(GeometryInfoTest, BasicTests) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
-  auto g = GeometryInfo::fromWktLiteral(lit);
+  auto g = GeometryInfo::fromWktLiteral(lit1);
   GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
   checkGeoInfo(g, exp);
 
@@ -77,14 +78,14 @@ TEST(GeometryInfoTest, FromGeoPoint) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, RequestedInfoInstance) {
-  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit1));
   checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit2));
   checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit3));
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, RequestedInfoLiteral) {
-  checkRequestedInfoForWktLiteral(lit);
+  checkRequestedInfoForWktLiteral(lit1);
   checkRequestedInfoForWktLiteral(lit2);
   checkRequestedInfoForWktLiteral(lit3);
 }
@@ -99,6 +100,34 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryInfoHelpers) {
+  using namespace ad_utility::detail;
+  Point<double> p{50, 60};
+  auto g = utilPointToGeoPoint(p);
+  ASSERT_NEAR(g.getLng(), p.getX(), 0.0001);
+  ASSERT_NEAR(g.getLat(), p.getY(), 0.0001);
+
+  auto p2 = geoPointToUtilPoint(g);
+  ASSERT_NEAR(g.getLng(), p2.getX(), 0.0001);
+  ASSERT_NEAR(g.getLat(), p2.getY(), 0.0001);
+
+  ASSERT_EQ(removeDatatype(lit1), "POINT(3 4)");
+
+  auto parseRes1 = parseWkt(lit1);
+  ASSERT_TRUE(parseRes1.second.has_value());
+  auto parsed1 = parseRes1.second.value();
+
+  auto centroid1 = centroidAsGeoPoint(parsed1);
+  checkCentroid(centroid1, {{4, 3}});
+
+  auto bb1 = boundingBoxAsGeoPoints(parsed1);
+  checkBoundingBox(bb1, {{4, 3}, {4, 3}});
+
+  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
+  ASSERT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 }
 
 }  // namespace
