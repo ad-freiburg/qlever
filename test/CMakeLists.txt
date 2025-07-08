@@ -41,9 +41,10 @@ if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
+    # unit tests as a single test case and will simply run the executable (using the main function from `gtest_main`.
+    # This decreases the runtime overhead per unit tests in particular for sanitizer builds.
     add_test(NAME QLeverAllUnitTests COMMAND $<TARGET_FILE:QLeverAllUnitTestsMain>)
-    #gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain DISCOVERY_TIMEOUT 600 PROPERTIES RUN_SERIAL
-    #        TRUE)
 else ()
     message(STATUS "The tests are split over multiple binaries")
 

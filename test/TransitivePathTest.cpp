@@ -38,7 +38,7 @@ class TransitivePathTest
            std::optional<std::string> turtleInput = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
     auto qec = getQec(std::move(turtleInput));
-    // TODO<joka921> properly address this issue.
+    // Clear the cache to avoid crosstalk between tests.
     qec->clearCacheUnpinnedOnly();
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
@@ -889,10 +889,14 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
 
   // Simulate entries in the delta triples by using entries that are not in the
   // index
+  // Note: the entries in this local vocab are destroyed when this test is done.
+  // It is therefore crucial that the `makePath...` functions clear the cache,
+  // s.t. subsequent tests do not read results with a dangling local vocab from
+  // the cache (Currently the indexes used for testing are `static` which should
+  // be changed in the future).
   LocalVocab localVocab;
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry{Literal::literalWithoutQuotes(literal)}));
-  std::cerr << "id: " << id.getLocalVocabIndex() << std::endl;
   auto sub = makeIdTableFromVector({
       {id, id},
   });
