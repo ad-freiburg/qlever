@@ -19,8 +19,8 @@
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/GeometryInfo.h"
 #include "util/HashSet.h"
 
 using std::string;

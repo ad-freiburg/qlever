@@ -9,8 +9,8 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/GeometryInfo.h"
 
 namespace {
 using ad_utility::GeometryInfo;
