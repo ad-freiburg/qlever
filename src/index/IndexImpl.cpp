@@ -783,8 +783,10 @@ auto IndexImpl::convertPartialToGlobalIds(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
            IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
-IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                                     const string& fileName2, T&& sortedTriples,
+IndexImpl::createPermutationPairImpl(size_t numColumns,
+                                     const std::string& fileName1,
+                                     const std::string& fileName2,
+                                     T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
                                      Callbacks&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
@@ -881,7 +883,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase,
+void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
                                       bool persistUpdatesOnDisk) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
@@ -1006,7 +1008,7 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setKbName(const string& name) {
+void IndexImpl::setKbName(const std::string& name) {
   pos_.setKbName(name);
   pso_.setKbName(name);
   sop_.setKbName(name);
@@ -1393,9 +1395,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
-  string partialFilename =
+  std::string partialFilename =
       absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  string partialCompressionFilename = absl::StrCat(
+  std::string partialCompressionFilename = absl::StrCat(
       onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
@@ -1638,7 +1640,7 @@ size_t IndexImpl::getResultSizeOfScan(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::deleteTemporaryFile(const string& path) {
+void IndexImpl::deleteTemporaryFile(const std::string& path) {
   if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }

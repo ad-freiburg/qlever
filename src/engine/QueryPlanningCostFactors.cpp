@@ -41,9 +41,9 @@ float toFloat(std::string_view view) {
 }
 
 // _____________________________________________________________________________
-void QueryPlanningCostFactors::readFromFile(const string& fileName) {
+void QueryPlanningCostFactors::readFromFile(const std::string& fileName) {
   std::ifstream in(fileName);
-  string line;
+  std::string line;
   while (std::getline(in, line)) {
     std::vector<std::string_view> v = absl::StrSplit(line, '\t');
     AD_CONTRACT_CHECK(v.size() == 2);
@@ -55,6 +55,6 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-double QueryPlanningCostFactors::getCostFactor(const string& key) const {
+double QueryPlanningCostFactors::getCostFactor(const std::string& key) const {
   return _factors.find(key)->second;
 }

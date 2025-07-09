@@ -67,7 +67,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec,
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
-string GroupByImpl::getCacheKeyImpl() const {
+std::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -99,7 +99,7 @@ string GroupByImpl::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-string GroupByImpl::getDescriptor() const {
+std::string GroupByImpl::getDescriptor() const {
   if (_groupByVariables.empty()) {
     return "GroupBy (implicit)";
   }

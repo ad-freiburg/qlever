@@ -6,20 +6,14 @@
 #define QLEVER_SRC_INDEX_DOCSDB_H
 
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "../global/Id.h"
-#include "../util/File.h"
-
-using std::pair;
-using std::string;
-using std::vector;
+#include "global/IndexTypes.h"
+#include "util/File.h"
 
 class DocsDB {
  public:
-  void init(const string& fileName);
-  string getTextExcerpt(TextRecordIndex cid) const;
+  void init(const std::string& fileName);
+  std::string getTextExcerpt(TextRecordIndex cid) const;
 
   mutable ad_utility::File _dbFile;
   off_t _startOfOffsets;

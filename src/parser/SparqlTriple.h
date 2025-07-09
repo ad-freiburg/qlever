@@ -73,7 +73,7 @@ class SparqlTriple
              std::move(o)} {}
 
   // ___________________________________________________________________________
-  [[nodiscard]] string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   // Convert to a simple triple. Fails with an exception if the predicate
   // actually is a property path.

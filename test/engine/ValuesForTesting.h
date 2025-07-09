@@ -137,7 +137,7 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  string getCacheKeyImpl() const override {
+  std::string getCacheKeyImpl() const override {
     std::stringstream str;
     auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
@@ -160,7 +160,7 @@ class ValuesForTesting : public Operation {
   }
 
  public:
-  string getDescriptor() const override {
+  std::string getDescriptor() const override {
     return "explicit values for testing";
   }
 
@@ -170,7 +170,7 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables_.at(0).numColumns();
   }
 
-  vector<ColumnIndex> resultSortedOn() const override {
+  std::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -188,7 +188,7 @@ class ValuesForTesting : public Operation {
     return static_cast<float>(col + 1) * 42.0f;
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(

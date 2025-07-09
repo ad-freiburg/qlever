@@ -73,7 +73,7 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   validators::check_first_occurrence(v);
   // Extract the first string from 'values'. If there is more than
   // one string, it's an error, and exception will be thrown.
-  const string& s = validators::get_single_string(values);
+  const std::string& s = validators::get_single_string(values);
 
   // Convert the string to `MemorySize` and put it into the option.
   v = MemorySize::parse(s);
@@ -133,7 +133,7 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   validators::check_first_occurrence(v);
   // Extract the first string from 'values'. If there is more than
   // one string, it's an error, and exception will be thrown.
-  const string& s = validators::get_single_string(values);
+  const std::string& s = validators::get_single_string(values);
 
   // Convert the string to `MemorySize` and put it into the option.
   v = VocabularyType::fromString(s);

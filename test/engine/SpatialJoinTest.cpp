@@ -389,7 +389,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -402,7 +402,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
@@ -461,7 +461,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -474,7 +474,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
