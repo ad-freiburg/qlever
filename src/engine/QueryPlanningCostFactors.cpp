@@ -9,8 +9,9 @@
 
 #include <fstream>
 
-#include "../util/Exception.h"
-#include "../util/Log.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/StringUtils.h"
 
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {

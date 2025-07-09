@@ -17,7 +17,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
 #include "util/CopyableSynchronization.h"

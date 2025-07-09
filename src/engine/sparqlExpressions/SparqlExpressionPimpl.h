@@ -10,7 +10,7 @@
 
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
 
 namespace sparqlExpression {

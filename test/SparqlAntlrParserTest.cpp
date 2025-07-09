@@ -25,9 +25,9 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
-#include "parser/Iri.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/Iri.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 

@@ -9,10 +9,10 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "index/IndexImpl.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 #include "util/HashSet.h"
 
 using namespace ad_utility::triple_component;
