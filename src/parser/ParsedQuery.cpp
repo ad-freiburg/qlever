@@ -16,8 +16,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
-#include "parser/RdfEscaping.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 

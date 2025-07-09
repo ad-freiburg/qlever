@@ -431,6 +431,7 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/rdfTypes)
 add_subdirectory(src/global)
 add_subdirectory(benchmark)
 

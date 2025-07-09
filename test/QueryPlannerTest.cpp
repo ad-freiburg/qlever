@@ -16,8 +16,8 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
-#include "parser/data/Variable.h"
 #include "range/v3/view/cartesian_product.hpp"
+#include "rdfTypes/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 

@@ -1,6 +1,6 @@
-//
-// Created by johannes on 16.05.21.
-//
+//  Copyright 2022-2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLPARSERHELPERS_H
 #define QLEVER_SPARQLPARSERHELPERS_H
@@ -8,40 +8,23 @@
 #include <memory>
 #include <string>
 
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../util/antlr/ANTLRErrorHandling.h"
-#include "./ParsedQuery.h"
+#include "parser/ParsedQuery.h"
+#include "parser/ParserAndVisitorBase.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
-#include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
-
-template <typename ResultOfParse>
-struct ResultOfParseAndRemainingText {
-  ResultOfParse resultOfParse_;
-  std::string remainingText_;
-  ResultOfParseAndRemainingText(ResultOfParse&& resultOfParse,
-                                std::string&& remainingText)
-      : resultOfParse_{std::move(resultOfParse)},
-        remainingText_{std::move(remainingText)} {}
-};
-
-struct ParserAndVisitor {
+// The actual `ParserAndVisitor` class that can be used to fully parse SPARQL
+// using the automatically generated parser + the manually written
+// `SparqlQLeverVisitor`.
+struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
  private:
-  string input_;
-  antlr4::ANTLRInputStream stream_{input_};
-  SparqlAutomaticLexer lexer_{&stream_};
-  antlr4::CommonTokenStream tokens_{&lexer_};
-  ad_utility::antlr_utility::ThrowingErrorListener<InvalidSparqlQueryException>
-      errorListener_{};
-
   // Unescapes unicode sequences like \U01234567 and \u0123 in the input string
   // before beginning with actual parsing as the SPARQL standard mandates.
   static std::string unescapeUnicodeSequences(std::string input);
 
+  using Base = ParserAndVisitorBase<SparqlQleverVisitor>;
+
  public:
-  SparqlAutomaticParser parser_{&tokens_};
-  SparqlQleverVisitor visitor_;
   explicit ParserAndVisitor(
       string input,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
@@ -52,18 +35,6 @@ struct ParserAndVisitor {
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
-
-  template <typename ContextType>
-  auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
-    auto resultOfParse = visitor_.visit(std::invoke(F, parser_));
-
-    // The `startIndex()` denotes the index of a Unicode codepoint, but `input_`
-    // is UTF-8 encoded.
-    auto remainingString = ad_utility::getUTF8Substring(
-        input_, parser_.getCurrentToken()->getStartIndex());
-    return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                         std::string{remainingString}};
-  }
 };
 }  // namespace sparqlParserHelpers
 
