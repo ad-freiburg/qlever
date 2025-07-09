@@ -115,7 +115,7 @@ std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 }
 
 // ____________________________________________________________________________
-MetricLength metricLength(const ParsedWkt& geometry) {
+MetricLength computeMetricLength(const ParsedWkt& geometry) {
   return {std::visit(
       [](const auto& geom) -> float {
         using T = std::decay_t<decltype(geom)>;
@@ -193,7 +193,8 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
   auto [type, parsed] = parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return {type, boundingBoxAsGeoPoints(parsed.value()),
-          centroidAsGeoPoint(parsed.value()), metricLength(parsed.value())};
+          centroidAsGeoPoint(parsed.value()),
+          computeMetricLength(parsed.value())};
 }
 
 // ____________________________________________________________________________
@@ -202,7 +203,7 @@ GeometryType::GeometryType(uint8_t type) : type_{type} {
 };
 
 // ____________________________________________________________________________
-MetricLength::MetricLength(float length) : length_{length} {
+MetricLength::MetricLength(double length) : length_{length} {
   AD_CORRECTNESS_CHECK(length_ >= 0, "Metric length must be positive");
 };
 
@@ -265,7 +266,7 @@ MetricLength GeometryInfo::getMetricLength() const { return {metricLength_}; };
 MetricLength GeometryInfo::getMetricLength(const std::string_view& wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
-  return {detail::metricLength(parsed.value())};
+  return {detail::computeMetricLength(parsed.value())};
 };
 
 // ____________________________________________________________________________

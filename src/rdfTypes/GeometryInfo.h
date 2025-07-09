@@ -52,8 +52,8 @@ struct GeometryType {
 
 // Represents the length of the geometry in meters.
 struct MetricLength {
-  float length_;
-  MetricLength(float length);
+  double length_;
+  MetricLength(double length);
 };
 
 // Forward declaration for concept
@@ -74,7 +74,7 @@ class GeometryInfo {
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
 
-  float metricLength_ = 0.0;
+  double metricLength_ = 0.0;
   // TODO: Support length for polygon etc. as requested by standard
 
   // TODO<ullingerc>: Implement the behavior for the following two
@@ -115,10 +115,10 @@ class GeometryInfo {
   // Parse an arbitrary WKT literal and compute only the bounding box.
   static BoundingBox getBoundingBox(const std::string_view& wkt);
 
-  //
+  // Extract the length in meters.
   MetricLength getMetricLength() const;
 
-  //
+  // Parse an arbitrary WKT literal and compute only the length in meters.
   static MetricLength getMetricLength(const std::string_view& wkt);
 
   // Extract the requested information from this object.
