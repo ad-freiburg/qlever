@@ -12,7 +12,7 @@
 #include "global/Id.h"
 #include "parser/PropertyPath.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // Data container for parsed triples from the where clause.
 // It is templated on the predicate type, see the instantiations below.

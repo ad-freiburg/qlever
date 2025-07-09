@@ -5,10 +5,10 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
-#include "util/GeometryInfo.h"
-#include "util/GeometryInfoHelpersImpl.h"
 
 namespace {
 
