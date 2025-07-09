@@ -11,10 +11,10 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "global/RuntimeParameters.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -49,8 +49,9 @@ void checkSetPrefilterExpressionVariablePair(
     std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
     ColumnIndex columnIdx, bool prefilterIsApplicable,
     bool enablePrefilterForFilter = true) {
-  RuntimeParameters().set<"enable-prefilter-on-index-scans">(
-      enablePrefilterForFilter);
+  const auto& rtp =
+      setRuntimeParameterForTest<"enable-prefilter-on-index-scans">(
+          enablePrefilterForFilter);
   Filter filter{
       qec,
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
