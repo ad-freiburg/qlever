@@ -14,10 +14,10 @@
 
 #include "engine/CallFixedSize.h"
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"

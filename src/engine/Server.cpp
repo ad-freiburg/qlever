@@ -977,18 +977,23 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         tracer.endTrace("waitingForUpdateThread");
         std::vector<UpdateMetadata> results;
         std::vector<DeltaTriplesModifyTimings> timings;
+        // TODO<qup42> We currently create a new snapshot after each update in
+        // the chain, which is expensive. Instead, the updates could operate
+        // directly on the `DeltaTriples` (we have an exclusive lock on them
+        // anyway).
         for (ParsedQuery& update : updates) {
+          // Make the snapshot before the query planning. Otherwise, it could
+          // happen that the query planner "knows" that a result is empty, when
+          // actually it is not due to a preceding update in the chain. Also,
+          // this improves the size estimates and hence the query plan.
+          tracer.beginTrace("snapshot");
+          qec.updateLocatedTriplesSnapshot();
+          tracer.endTrace("snapshot");
           tracer.beginTrace("planning");
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
           tracer.endTrace("planning");
           tracer.beginTrace("execution");
-          // TODO<qup42>: optimize the case of chained updates
-          // As we have an exclusive lock on the DeltaTriples we the
-          // execution could happen directly against the DeltaTriples
-          // instead of the snapshot that has to be refreshed after each
-          // step.
-          qec.updateLocatedTriplesSnapshot();
           // Update the delta triples.
           auto [updateMetadata, updateTiming] =
               index_.deltaTriplesManager().modify<UpdateMetadata>(

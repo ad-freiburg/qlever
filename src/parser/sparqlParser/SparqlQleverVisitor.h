@@ -375,12 +375,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an exception
-  // because the corresponding feature is not (yet) supported by QLever. Most
-  // of them have a return type of `void`. Some of the don't, in order to make
-  // the usage of abstractions like `visitAlternative` easier.
-
-  [[noreturn]] static void visit(Parser::PathModContext* ctx);
+  // Turn the modifiers `+`, `*`, `?` into a pair of integers that indicate the
+  // lower and upper bounds of the path length.
+  static std::pair<size_t, size_t> visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
