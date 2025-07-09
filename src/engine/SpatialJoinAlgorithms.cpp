@@ -21,6 +21,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
+#include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -306,6 +307,11 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   auto joinTypeVal = joinType.value_or(SpatialJoinType::INTERSECTS);
+  // Within should be replaced by contains on swapped tables.
+  auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
+  if (swapBack) {
+    joinTypeVal = SpatialJoinType::CONTAINS;
+  }
 
   // Add number of threads to runtime information.
   spatialJoin_.value()->runtimeInfo().addDetail("spatialjoin num threads",
@@ -349,15 +355,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         results[t].push_back({std::atoi(a), std::atoi(b)});
         resultDists[t].push_back(atof(pred));
-      } else {
-        if (joinTypeVal == SpatialJoinType::WITHIN &&
-            pred[0] == static_cast<char>(SpatialJoinType::CONTAINS)) {
-          // If we are looking for `a WITHIN b` and have encountered `b CONTAINS
-          // a`, swap and add to result.
-          results[t].push_back({std::atoi(b), std::atoi(a)});
-        } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-          results[t].push_back({std::atoi(a), std::atoi(b)});
-        }
+      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+        results[t].push_back({std::atoi(a), std::atoi(b)});
       }
     };
     cfg.logCb = {};
@@ -412,7 +411,8 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
       }
-      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
+      addResultTableEntry(&result, swapBack ? idTableRight : idTableLeft,
+                          swapBack ? idTableLeft : idTableRight, res.first,
                           res.second, Id::makeFromDouble(dist));
     }
   }
