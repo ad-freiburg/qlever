@@ -806,7 +806,7 @@ TEST(SpatialJoin, getDescriptor) {
 
 // _____________________________________________________________________________
 TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
-  // The `SpatialJoin`'s descriptor should contain a readble representation of
+  // The `SpatialJoin`'s descriptor should contain a readable representation of
   // the join type
   auto qec = getQec();
   TripleComponent subject{Variable{"?subject"}};
