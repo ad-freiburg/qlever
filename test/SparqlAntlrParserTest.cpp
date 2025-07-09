@@ -25,9 +25,9 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
-#include "parser/Iri.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/Iri.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 
@@ -38,6 +38,10 @@ auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
+PropertyPath PathIri(std::string_view iri) {
+  return PropertyPath::fromIri(
+      ad_utility::triple_component::Iri::fromIriref(iri));
+}
 }  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
@@ -622,14 +626,13 @@ TEST(SparqlParser, InlineData) {
 
 TEST(SparqlParser, propertyPaths) {
   auto expectPathOrVar = ExpectCompleteParse<&Parser::verbPathOrSimple>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
   auto Inverse = &PropertyPath::makeInverse;
   auto Negated = &PropertyPath::makeNegated;
-  auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
-  auto OneOrMore = &PropertyPath::makeOneOrMore;
-  auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
+  auto WithLength = &PropertyPath::makeWithLength;
+  size_t max = std::numeric_limits<size_t>::max();
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
@@ -675,36 +678,29 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
                   {{"a", "<http://www.example.com/>"}});
-  expectPathOrVar("a:a+", OneOrMore({Iri("<http://www.example.com/a>")}),
+  expectPathOrVar("a:a+", WithLength(Iri("<http://www.example.com/a>"), 1, max),
                   {{"a", "<http://www.example.com/>"}});
-  {
-    PropertyPath expected = ZeroOrOne({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
-  }
-  {
-    PropertyPath expected = ZeroOrMore({Iri("<http://www.example.com/a>")});
-    expected.canBeNull_ = true;
-    expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
-  }
+  expectPathOrVar("a:a?", WithLength(Iri("<http://www.example.com/a>"), 0, 1),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a*", WithLength(Iri("<http://www.example.com/a>"), 0, max),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected = Alternative(
         {Sequence({
              Iri("<http://www.example.com/a/a>"),
-             ZeroOrMore({Iri("<http://www.example.com/b/b>")}),
+             WithLength(Iri("<http://www.example.com/b/b>"), 0, max),
          }),
          Iri("<http://www.example.com/c/c>"),
-         OneOrMore(
-             {Sequence({Iri("<http://www.example.com/a/a>"),
-                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})}),
+         WithLength(
+             Sequence({Iri("<http://www.example.com/a/a>"),
+                       Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
+             1, max),
          Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
          Negated(
              {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
               Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
               Inverse(Iri("<http://www.example.com/a/a>"))})});
-    expected.computeCanBeNull();
-    expected.canBeNull_ = false;
     expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
                     {{"a", "<http://www.example.com/a/>"},
                      {"b", "<http://www.example.com/b/>"},
@@ -713,33 +709,10 @@ TEST(SparqlParser, propertyPaths) {
 }
 
 // _____________________________________________________________________________
-TEST(SparqlParser, propertyPathsWriteToStream) {
-  auto toString = [](const PropertyPath& path) {
-    std::ostringstream os;
-    path.writeToStream(os);
-    return std::move(os).str();
-  };
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>"))});
-    EXPECT_EQ("!(^(<a>))", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated(
-        {PropertyPath::makeInverse(PropertyPath::fromIri("<a>")),
-         PropertyPath::fromIri("<b>")});
-    EXPECT_EQ("!(^(<a>)|<b>)", toString(path));
-  }
-  {
-    auto path = PropertyPath::makeNegated({});
-    EXPECT_EQ("!()", toString(path));
-  }
-}
-
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
-  auto Iri = &PropertyPath::fromIri;
+  auto Iri = &PathIri;
   expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
       "<bar> ?foo ; <mehr> ?f",
@@ -753,7 +726,7 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto internal0 = m::InternalVariable("0");
   auto internal1 = m::InternalVariable("1");
   auto internal2 = m::InternalVariable("2");
-  auto bar = m::Predicate("<bar>");
+  auto bar = m::Predicate(iri("<bar>"));
   expectPropertyListPath(
       "?x [?y ?z; <bar> ?b, ?p, [?d ?e], [<bar> ?e]]; ?u ?v",
       Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
@@ -769,7 +742,6 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
 
 TEST(SparqlParser, triplesSameSubjectPath) {
   auto expectTriples = ExpectCompleteParse<&Parser::triplesSameSubjectPath>{};
-  auto PathIri = &PropertyPath::fromIri;
   expectTriples("?foo <bar> ?baz",
                 {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("?foo <bar> ?baz ; <mehr> ?t",
@@ -1441,457 +1413,6 @@ TEST(SparqlParser, Query) {
   RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 
-// ___________________________________________________________________________
-TEST(SparqlParser, primaryExpression) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  auto expectPrimaryExpression =
-      ExpectCompleteParse<&Parser::primaryExpression>{};
-  auto expectFails = ExpectParseFails<&Parser::primaryExpression>{};
-
-  expectPrimaryExpression("<x>", matchLiteralExpression(iri("<x>")));
-  expectPrimaryExpression("\"x\"@en",
-                          matchLiteralExpression(lit("\"x\"", "@en")));
-  expectPrimaryExpression("27", matchLiteralExpression(IntId(27)));
-}
-
-// ___________________________________________________________________________
-TEST(SparqlParser, builtInCall) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
-  auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
-  expectBuiltInCall("StrLEN(?x)", matchUnary(&makeStrlenExpression));
-  expectBuiltInCall("ucaSe(?x)", matchUnary(&makeUppercaseExpression));
-  expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
-  expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
-  expectBuiltInCall(
-      "iRI(?x)",
-      matchNaryWithChildrenMatchers(
-          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
-  expectBuiltInCall(
-      "uRI(?x)",
-      matchNaryWithChildrenMatchers(
-          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
-          matchLiteralExpression(ad_utility::triple_component::Iri{})));
-  expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
-  expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
-  expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
-  expectBuiltInCall("timezone(?x)", matchUnary(&makeTimezoneExpression));
-  expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
-  expectBuiltInCall("NOW()", matchPtr<NowDatetimeExpression>());
-  expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
-  expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));
-  expectBuiltInCall("seconds(?x)", matchUnary(&makeSecondsExpression));
-  expectBuiltInCall("abs(?x)", matchUnary(&makeAbsExpression));
-  expectBuiltInCall("ceil(?x)", matchUnary(&makeCeilExpression));
-  expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
-  expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
-  expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
-  expectBuiltInCall("ISUri(?x)", matchUnary(&makeIsIriExpression));
-  expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
-  expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
-  expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
-  expectBuiltInCall("DATATYPE(?x)", matchUnary(&makeDatatypeExpression));
-  expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
-  expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
-  expectBuiltInCall("STRUUID()", matchPtr<StrUuidExpression>());
-  expectBuiltInCall("UUID()", matchPtr<UuidExpression>());
-  expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
-  expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
-  expectBuiltInCall("COALESCE(?x, ?y, ?z)",
-                    matchNary(makeCoalesceExpressionVariadic, Var{"?x"},
-                              Var{"?y"}, Var{"?z"}));
-  expectBuiltInCall("CONCAT(?x)", matchUnary(makeConcatExpressionVariadic));
-  expectBuiltInCall("concaT()", matchNary(makeConcatExpressionVariadic));
-  expectBuiltInCall(
-      "concat(?x, ?y, ?z)",
-      matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
-
-  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
-                                           auto&& arg2) {
-    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
-                                 nullptr);
-  };
-
-  expectBuiltInCall("replace(?x, ?y, ?z)",
-                    matchNary(makeReplaceExpressionThreeArgs, Var{"?x"},
-                              Var{"?y"}, Var{"?z"}));
-  expectBuiltInCall(
-      "replace(?x, ?y, ?z, \"imsU\")",
-      matchNaryWithChildrenMatchers(
-          makeReplaceExpressionThreeArgs, variableExpressionMatcher(Var{"?x"}),
-          matchNaryWithChildrenMatchers(
-              &makeMergeRegexPatternAndFlagsExpression,
-              variableExpressionMatcher(Var{"?y"}),
-              matchLiteralExpression(lit("imsU"))),
-          variableExpressionMatcher(Var{"?z"})));
-  expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
-                                                Var{"?h"}, Var{"?c"}));
-  expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
-  expectFails("LANGMATCHES()");
-  expectFails("LANGMATCHES(?x)");
-
-  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
-                                                     Var{"?x"}, Var{"?y"}));
-  expectFails("STRDT()");
-  expectFails("STRDT(?x)");
-  expectBuiltInCall("STRDT(?x, ?y)",
-                    matchNary(&makeStrIriDtExpression, Var{"?x"}, Var{"?y"}));
-  expectBuiltInCall(
-      "STRDT(?x, <http://example/romanNumeral>)",
-      matchNaryWithChildrenMatchers(
-          &makeStrIriDtExpression, variableExpressionMatcher(Var{"?x"}),
-          matchLiteralExpression(iri("<http://example/romanNumeral>"))));
-
-  expectFails("STRLANG()");
-  expectFails("STRALANG(?x)");
-  expectBuiltInCall("STRLANG(?x, ?y)",
-                    matchNary(&makeStrLangTagExpression, Var{"?x"}, Var{"?y"}));
-  expectBuiltInCall(
-      "STRLANG(?x, \"en\")",
-      matchNaryWithChildrenMatchers(&makeStrLangTagExpression,
-                                    variableExpressionMatcher(Var{"?x"}),
-                                    matchLiteralExpression(lit("en"))));
-
-  // The following three cases delegate to a separate parsing function, so we
-  // only perform rather simple checks.
-  expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
-  auto makeRegexExpressionTwoArgs = [](auto&& arg0, auto&& arg1) {
-    return makeRegexExpression(AD_FWD(arg0), AD_FWD(arg1), nullptr);
-  };
-  expectBuiltInCall(
-      "regex(?x, \"ab\")",
-      matchNaryWithChildrenMatchers(makeRegexExpressionTwoArgs,
-                                    variableExpressionMatcher(Var{"?x"}),
-                                    matchLiteralExpression(lit("ab"))));
-  expectBuiltInCall(
-      "regex(?x, \"ab\", \"imsU\")",
-      matchNaryWithChildrenMatchers(
-          makeRegexExpressionTwoArgs, variableExpressionMatcher(Var{"?x"}),
-          matchNaryWithChildrenMatchers(
-              &makeMergeRegexPatternAndFlagsExpression,
-              matchLiteralExpression(lit("ab")),
-              matchLiteralExpression(lit("imsU")))));
-
-  expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
-  expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
-  expectBuiltInCall("SHA256(?x)", matchUnary(&makeSHA256Expression));
-  expectBuiltInCall("SHA384(?x)", matchUnary(&makeSHA384Expression));
-  expectBuiltInCall("SHA512(?x)", matchUnary(&makeSHA512Expression));
-
-  expectBuiltInCall("encode_for_uri(?x)",
-                    matchUnary(&makeEncodeForUriExpression));
-
-  const auto& blankNodeExpression = makeUniqueBlankNodeExpression();
-  const auto& reference = *blankNodeExpression;
-  expectBuiltInCall(
-      "bnode()", testing::Pointee(::testing::ResultOf(
-                     [](const SparqlExpression& expr) -> const std::type_info& {
-                       return typeid(expr);
-                     },
-                     Eq(std::reference_wrapper(typeid(reference))))));
-  expectBuiltInCall("bnode(?x)", matchUnary(&makeBlankNodeExpression));
-  // Not implemented yet
-  expectFails("sameTerm(?a, ?b)");
-}
-
-TEST(SparqlParser, unaryExpression) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  auto expectUnary = ExpectCompleteParse<&Parser::unaryExpression>{};
-
-  expectUnary("-?x", matchUnary(&makeUnaryMinusExpression));
-  expectUnary("!?x", matchUnary(&makeUnaryNegateExpression));
-}
-
-TEST(SparqlParser, multiplicativeExpression) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  Variable x{"?x"};
-  Variable y{"?y"};
-  Variable z{"?z"};
-  auto expectMultiplicative =
-      ExpectCompleteParse<&Parser::multiplicativeExpression>{};
-  expectMultiplicative("?x * ?y", matchNary(&makeMultiplyExpression, x, y));
-  expectMultiplicative("?y / ?x", matchNary(&makeDivideExpression, y, x));
-  expectMultiplicative(
-      "?z * ?y / abs(?x)",
-      matchNaryWithChildrenMatchers(&makeDivideExpression,
-                                    matchNary(&makeMultiplyExpression, z, y),
-                                    matchUnary(&makeAbsExpression)));
-  expectMultiplicative(
-      "?y / ?z * abs(?x)",
-      matchNaryWithChildrenMatchers(&makeMultiplyExpression,
-                                    matchNary(&makeDivideExpression, y, z),
-                                    matchUnary(&makeAbsExpression)));
-}
-
-TEST(SparqlParser, relationalExpression) {
-  Variable x{"?x"};
-  Variable y{"?y"};
-  Variable z{"?z"};
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
-  expectRelational("?x IN (?y, ?z)",
-                   matchPtrWithVariables<InExpression>(x, y, z));
-  expectRelational("?x NOT IN (?y, ?z)",
-                   matchNaryWithChildrenMatchers(
-                       &makeUnaryNegateExpression,
-                       matchPtrWithVariables<InExpression>(x, y, z)));
-  // TODO<joka921> Technically the other relational expressions (=, <, >, etc.)
-  // are also untested.
-}
-
-// Return a matcher for an `OperatorAndExpression`.
-::testing::Matcher<const SparqlQleverVisitor::OperatorAndExpression&>
-matchOperatorAndExpression(
-    SparqlQleverVisitor::Operator op,
-    const ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&>&
-        expressionMatcher) {
-  using OpAndExp = SparqlQleverVisitor::OperatorAndExpression;
-  return ::testing::AllOf(AD_FIELD(OpAndExp, operator_, ::testing::Eq(op)),
-                          AD_FIELD(OpAndExp, expression_, expressionMatcher));
-}
-
-TEST(SparqlParser, multiplicativeExpressionLeadingSignButNoSpaceContext) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  Variable x{"?x"};
-  Variable y{"?y"};
-  Variable z{"?z"};
-  using Op = SparqlQleverVisitor::Operator;
-  auto expectMultiplicative = ExpectCompleteParse<
-      &Parser::multiplicativeExpressionWithLeadingSignButNoSpace>{};
-  auto matchVariableExpression = [](Variable var) {
-    return matchPtr<VariableExpression>(
-        AD_PROPERTY(VariableExpression, value, ::testing::Eq(var)));
-  };
-  auto matchIdExpression = [](Id id) {
-    return matchPtr<IdExpression>(
-        AD_PROPERTY(IdExpression, value, ::testing::Eq(id)));
-  };
-
-  expectMultiplicative("-3 * ?y",
-                       matchOperatorAndExpression(
-                           Op::Minus, matchNaryWithChildrenMatchers(
-                                          &makeMultiplyExpression,
-                                          matchIdExpression(Id::makeFromInt(3)),
-                                          matchVariableExpression(y))));
-  expectMultiplicative(
-      "-3.7 / ?y",
-      matchOperatorAndExpression(
-          Op::Minus,
-          matchNaryWithChildrenMatchers(
-              &makeDivideExpression, matchIdExpression(Id::makeFromDouble(3.7)),
-              matchVariableExpression(y))));
-
-  expectMultiplicative("+5 * ?y",
-                       matchOperatorAndExpression(
-                           Op::Plus, matchNaryWithChildrenMatchers(
-                                         &makeMultiplyExpression,
-                                         matchIdExpression(Id::makeFromInt(5)),
-                                         matchVariableExpression(y))));
-  expectMultiplicative(
-      "+3.9 / ?y", matchOperatorAndExpression(
-                       Op::Plus, matchNaryWithChildrenMatchers(
-                                     &makeDivideExpression,
-                                     matchIdExpression(Id::makeFromDouble(3.9)),
-                                     matchVariableExpression(y))));
-  expectMultiplicative(
-      "-3.2 / abs(?x) * ?y",
-      matchOperatorAndExpression(
-          Op::Minus, matchNaryWithChildrenMatchers(
-                         &makeMultiplyExpression,
-                         matchNaryWithChildrenMatchers(
-                             &makeDivideExpression,
-                             matchIdExpression(Id::makeFromDouble(3.2)),
-                             matchUnary(&makeAbsExpression)),
-                         matchVariableExpression(y))));
-}
-
-TEST(SparqlParser, FunctionCall) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
-  auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
-  // These prefixes are currently stored without the leading "<", so we have to
-  // manually add it when constructing parser inputs.
-  auto geof = absl::StrCat("<", GEOF_PREFIX.second);
-  auto math = absl::StrCat("<", MATH_PREFIX.second);
-  auto xsd = absl::StrCat("<", XSD_PREFIX.second);
-  auto ql = absl::StrCat("<", QL_PREFIX.second);
-
-  // Correct function calls. Check that the parser picks the correct expression.
-  expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
-                     matchUnary(&makeLatitudeExpression));
-  expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
-                     matchUnary(&makeLongitudeExpression));
-  expectFunctionCall(absl::StrCat(geof, "centroid>(?x)"),
-                     matchUnary(&makeCentroidExpression));
-  expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
-                     matchUnary(&makeIsGeoPointExpression));
-  expectFunctionCall(absl::StrCat(geof, "envelope>(?x)"),
-                     matchUnary(&makeEnvelopeExpression));
-
-  // The different distance functions:
-  expectFunctionCall(
-      absl::StrCat(geof, "metricDistance>(?a, ?b)"),
-      matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
-  // Compatibility version of geof:distance with two arguments
-  expectFunctionCall(
-      absl::StrCat(geof, "distance>(?a, ?b)"),
-      matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
-  // geof:distance with IRI as unit in third argument
-  expectFunctionCall(
-      absl::StrCat(geof, "distance>(?a, ?b, <http://qudt.org/vocab/unit/M>)"),
-      matchNaryWithChildrenMatchers(
-          &makeDistWithUnitExpression,
-          variableExpressionMatcher(Variable{"?a"}),
-          variableExpressionMatcher(Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Iri>(
-              ad_utility::triple_component::Iri::fromIriref(
-                  "<http://qudt.org/vocab/unit/M>"))));
-
-  // geof:distance with xsd:anyURI literal as unit in third argument
-  expectFunctionCall(
-      absl::StrCat(geof,
-                   "distance>(?a, ?b, "
-                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
-                   "XMLSchema#anyURI>)"),
-      matchNaryWithChildrenMatchers(
-          &makeDistWithUnitExpression,
-          variableExpressionMatcher(Variable{"?a"}),
-          variableExpressionMatcher(Variable{"?b"}),
-          matchLiteralExpression<ad_utility::triple_component::Literal>(
-              ad_utility::triple_component::Literal::fromStringRepresentation(
-                  "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
-                  "XMLSchema#anyURI>"))));
-
-  // geof:distance with variable as unit in third argument
-  expectFunctionCall(absl::StrCat(geof, "distance>(?a, ?b, ?unit)"),
-                     matchNaryWithChildrenMatchers(
-                         &makeDistWithUnitExpression,
-                         variableExpressionMatcher(Variable{"?a"}),
-                         variableExpressionMatcher(Variable{"?b"}),
-                         variableExpressionMatcher(Variable{"?unit"})));
-
-  // Math functions
-  expectFunctionCall(absl::StrCat(math, "log>(?x)"),
-                     matchUnary(&makeLogExpression));
-  expectFunctionCall(absl::StrCat(math, "exp>(?x)"),
-                     matchUnary(&makeExpExpression));
-  expectFunctionCall(absl::StrCat(math, "sqrt>(?x)"),
-                     matchUnary(&makeSqrtExpression));
-  expectFunctionCall(absl::StrCat(math, "sin>(?x)"),
-                     matchUnary(&makeSinExpression));
-  expectFunctionCall(absl::StrCat(math, "cos>(?x)"),
-                     matchUnary(&makeCosExpression));
-  expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
-                     matchUnary(&makeTanExpression));
-  expectFunctionCall(
-      absl::StrCat(math, "pow>(?a, ?b)"),
-      matchNary(&makePowExpression, Variable{"?a"}, Variable{"?b"}));
-  expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
-                     matchUnary(&makeConvertToIntExpression));
-  expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
-                     matchUnary(&makeConvertToIntExpression));
-  expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
-                     matchUnary(&makeConvertToDoubleExpression));
-  expectFunctionCall(absl::StrCat(xsd, "float>(?x)"),
-                     matchUnary(&makeConvertToDoubleExpression));
-  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
-                     matchUnary(&makeConvertToDecimalExpression));
-  expectFunctionCall(absl::StrCat(xsd, "boolean>(?x)"),
-                     matchUnary(&makeConvertToBooleanExpression));
-  expectFunctionCall(absl::StrCat(xsd, "date>(?x)"),
-                     matchUnary(&makeConvertToDateExpression));
-  expectFunctionCall(absl::StrCat(xsd, "dateTime>(?x)"),
-                     matchUnary(&makeConvertToDateTimeExpression));
-
-  expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
-                     matchUnary(&makeConvertToStringExpression));
-
-  // Wrong number of arguments.
-  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "distance>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
-  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
-  expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
-
-  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
-  expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
-  expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
-  expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
-  expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
-
-  // Prefix for which no function is known.
-  std::string prefixNexistepas = "<http://nexiste.pas/";
-  expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
-
-  // Check that arbitrary nonexisting functions with a single argument silently
-  // return an `IdExpression(UNDEF)` in the syntax test mode.
-  auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
-  expectFunctionCall(
-      absl::StrCat(prefixNexistepas, "nada>(?x)"),
-      matchPtr<IdExpression>(AD_PROPERTY(IdExpression, value,
-                                         ::testing::Eq(Id::makeUndefined()))));
-}
-
-// ______________________________________________________________________________
-TEST(SparqlParser, substringExpression) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  using V = Variable;
-  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
-  auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
-  expectBuiltInCall("SUBSTR(?x, ?y, ?z)", matchNary(&makeSubstrExpression,
-                                                    V{"?x"}, V{"?y"}, V{"?z"}));
-  // Note: The large number (the default value for the length, which is
-  // automatically truncated) is the largest integer that is representable by
-  // QLever. Should this ever change, then this test has to be changed
-  // accordingly.
-  expectBuiltInCall(
-      "SUBSTR(?x, 7)",
-      matchNaryWithChildrenMatchers(&makeSubstrExpression,
-                                    variableExpressionMatcher(V{"?x"}),
-                                    idExpressionMatcher(IntId(7)),
-                                    idExpressionMatcher(IntId(Id::maxInt))));
-  // Too few arguments
-  expectBuiltInCallFails("SUBSTR(?x)");
-  // Too many arguments
-  expectBuiltInCallFails("SUBSTR(?x, 3, 8, 12)");
-}
-
-// _________________________________________________________
-TEST(SparqlParser, binaryStringExpressions) {
-  using namespace sparqlExpression;
-  using namespace m::builtInCall;
-  using V = Variable;
-  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
-  auto expectBuiltInCallFails = ExpectParseFails<&Parser::builtInCall>{};
-
-  auto makeMatcher = [](auto function) {
-    return matchNary(function, V{"?x"}, V{"?y"});
-  };
-
-  expectBuiltInCall("STRSTARTS(?x, ?y)", makeMatcher(&makeStrStartsExpression));
-  expectBuiltInCall("STRENDS(?x, ?y)", makeMatcher(&makeStrEndsExpression));
-  expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
-  expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
-  expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
-}
-
 // _____________________________________________________________________________
 TEST(SparqlParser, Exists) {
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
@@ -2352,9 +1873,8 @@ TEST(ParserTest, propertyPathInCollection) {
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
                 iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>")},
                {Var{"?_QLever_internal_variable_1"},
-                PropertyPath::makeWithChildren(
-                    {PropertyPath::fromIri("<http://example.org/r>")},
-                    PropertyPath::Operation::INVERSE),
+                PropertyPath::makeInverse(
+                    PropertyPath::fromIri(iri("<http://example.org/r>"))),
                 lit("\"hello\"")},
                {Var{"?_QLever_internal_variable_3"},
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
@@ -2363,8 +1883,9 @@ TEST(ParserTest, propertyPathInCollection) {
                 "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
                 Var{"?_QLever_internal_variable_2"}},
                {Var{"?_QLever_internal_variable_0"},
-                PropertyPath::makeModified(
-                    PropertyPath::fromIri("<http://example.org/p>"), "*"),
+                PropertyPath::makeWithLength(
+                    PropertyPath::fromIri(iri("<http://example.org/p>")), 0,
+                    std::numeric_limits<size_t>::max()),
                 123},
                {Var{"?s"}, Var{"?p"}, Var{"?_QLever_internal_variable_3"}}}))));
 }
