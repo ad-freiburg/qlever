@@ -976,7 +976,6 @@ CPP_template_def(typename RequestT, typename ResponseT)(
        &plannedUpdate, &tracer]() {
         tracer.endTrace("waitingForUpdateThread");
         std::vector<UpdateMetadata> results;
-        std::vector<DeltaTriplesModifyTimings> timings;
         // TODO<qup42> We currently create a new snapshot after each update in
         // the chain, which is expensive. Instead, the updates could operate
         // directly on the `DeltaTriples` (we have an exclusive lock on them
@@ -995,7 +994,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           tracer.endTrace("planning");
           tracer.beginTrace("execution");
           // Update the delta triples.
-          auto [updateMetadata, updateTiming] =
+          auto updateMetadata =
               index_.deltaTriplesManager().modify<UpdateMetadata>(
                   [this, &requestTimer, &cancellationHandle, &plannedUpdate,
                    &tracer](auto& deltaTriples) {
@@ -1010,13 +1009,12 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                   },
                   true, tracer);
           results.push_back(updateMetadata);
-          timings.push_back(updateTiming);
           tracer.endTrace("execution");
         }
-        return std::make_pair(results, timings);
+        return results;
       },
       cancellationHandle);
-  auto [updateMetadata, timings] = co_await std::move(coroutine);
+  auto updateMetadata = co_await std::move(coroutine);
   tracer.endTrace("update");
   AD_LOG(INFO) << "TimeTracer output: " << tracer.get().getJSONShort().dump()
                << std::endl;

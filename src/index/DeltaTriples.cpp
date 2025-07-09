@@ -253,9 +253,7 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 
 // _____________________________________________________________________________
 template <typename ReturnType>
-std::conditional_t<std::is_void_v<ReturnType>, DeltaTriplesModifyTimings,
-                   std::tuple<ReturnType, DeltaTriplesModifyTimings>>
-DeltaTriplesManager::modify(
+ReturnType DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
     bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
@@ -274,43 +272,35 @@ DeltaTriplesManager::modify(
     };
     auto writeAndUpdateSnapshot = [&updateSnapshot, &deltaTriples, &tracer,
                                    writeToDiskAfterRequest]() {
-      ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
-      DeltaTriplesModifyTimings timings;
       if (writeToDiskAfterRequest) {
         tracer.beginTrace("diskWriteback");
         deltaTriples.writeToDisk();
         tracer.endTrace("diskWriteback");
-        timings.diskWritebackTime_ = timer.msecs();
-        timer.start();
       }
       tracer.beginTrace("snapshotCreation");
       updateSnapshot();
       tracer.endTrace("snapshotCreation");
-      timings.snapshotUpdateTime_ = timer.msecs();
-      return timings;
     };
 
     tracer.endTrace("acquiringDeltaTriplesWriteLock");
     if constexpr (std::is_void_v<ReturnType>) {
       function(deltaTriples);
-      return writeAndUpdateSnapshot();
+      writeAndUpdateSnapshot();
     } else {
       ReturnType returnValue = function(deltaTriples);
-      auto timings = writeAndUpdateSnapshot();
-      return std::make_tuple(returnValue, timings);
+      writeAndUpdateSnapshot();
+      return returnValue;
     }
   });
 }
 // Explicit instantiations
-template DeltaTriplesModifyTimings DeltaTriplesManager::modify<void>(
+template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
     ad_utility::timer::TimeTracerOpt);
-template std::tuple<UpdateMetadata, DeltaTriplesModifyTimings>
-DeltaTriplesManager::modify<UpdateMetadata>(
+template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
     const std::function<UpdateMetadata(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt);
-template std::tuple<DeltaTriplesCount, DeltaTriplesModifyTimings>
-DeltaTriplesManager::modify<DeltaTriplesCount>(
+template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
     bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt);
 
