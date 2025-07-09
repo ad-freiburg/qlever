@@ -97,7 +97,8 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 
 // _____________________________________________________________________________
 bool Variable::isValidVariableName(std::string_view var) {
-  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
+  ad_utility::BlankNodeManager bn;
+  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{&bn, std::string{var}};
   try {
     auto [result, remaining] =
         parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);

@@ -19,6 +19,7 @@
 #include "parser/Quads.h"
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
+#include "util/BlankNodeManager.h"
 
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
@@ -65,6 +66,7 @@ class SparqlQleverVisitor {
  private:
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
+  ad_utility::BlankNodeManager* blankNodeManager_;
 
   size_t _blankNodeCounter = 0;
   int64_t numGraphPatterns_ = 0;
@@ -126,21 +128,26 @@ class SparqlQleverVisitor {
                              Func iriStringToPredicate);
 
  public:
-  SparqlQleverVisitor() = default;
+  SparqlQleverVisitor(ad_utility::BlankNodeManager* bnodeManager)
+      : blankNodeManager_{bnodeManager} {
+    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
+  }
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      PrefixMap prefixMap,
+      ad_utility::BlankNodeManager* bnodeManager, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : blankNodeManager_{bnodeManager},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
       activeDatasetClauses_ = std::move(*datasetOverride);
       datasetsAreFixed_ = true;
     }
+    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
   }
 
   const PrefixMap& prefixMap() const { return prefixMap_; }

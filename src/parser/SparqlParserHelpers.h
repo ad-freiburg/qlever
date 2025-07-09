@@ -8,11 +8,12 @@
 #include <memory>
 #include <string>
 
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../util/antlr/ANTLRErrorHandling.h"
-#include "./ParsedQuery.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/ParsedQuery.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
+#include "util/BlankNodeManager.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 
 namespace sparqlParserHelpers {
 
@@ -42,13 +43,14 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
-  explicit ParserAndVisitor(
-      string input,
+  ParserAndVisitor(
+      ad_utility::BlankNodeManager* blankNodeManager, string input,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
-      string input, SparqlQleverVisitor::PrefixMap prefixes,
+      ad_utility::BlankNodeManager* blankNodeManager, string input,
+      SparqlQleverVisitor::PrefixMap prefixes,
       std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);

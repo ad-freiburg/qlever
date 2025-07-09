@@ -16,11 +16,12 @@ using std::string;
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    std::string input,
+    ad_utility::BlankNodeManager* blankNodeManager, std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : input_{unescapeUnicodeSequences(std::move(input))},
-      visitor_{{}, std::move(datasetClauses), disableSomeChecks} {
+      visitor_{
+          blankNodeManager, {}, std::move(datasetClauses), disableSomeChecks} {
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.
@@ -32,11 +33,12 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    std::string input, SparqlQleverVisitor::PrefixMap prefixes,
+    ad_utility::BlankNodeManager* blankNodeManager, std::string input,
+    SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{std::move(input), std::move(datasetClauses),
-                       disableSomeChecks} {
+    : ParserAndVisitor{blankNodeManager, std::move(input),
+                       std::move(datasetClauses), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
 

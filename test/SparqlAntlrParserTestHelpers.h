@@ -1194,8 +1194,11 @@ auto parse =
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
-                         disableSomeChecks};
+      // We might parse updates here, should we move the blank node manager out
+      // to make it testable/accessible?
+      static ad_utility::BlankNodeManager blankNodeManager;
+      ParserAndVisitor p{&blankNodeManager, input, std::move(prefixes),
+                         std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }

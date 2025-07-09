@@ -4,6 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
 
 #include <utility>
@@ -1459,16 +1460,19 @@ TEST(ParserTest, parseWithDatasets) {
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       datasets, noGraphs));
 
+  ad_utility::BlankNodeManager bnm;
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+      SparqlParser::parseUpdate(&bnm,
+                                "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate("WITH <g> DELETE { ?x <b> <c> } WHERE { ?x ?y "
+      SparqlParser::parseUpdate(&bnm,
+                                "WITH <g> DELETE { ?x <b> <c> } WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
       ::testing::HasSubstr("`WITH` is disallowed"));
@@ -1506,17 +1510,18 @@ TEST(ParserTest, parseWithDatasets) {
   auto insertDataOp = m::GraphUpdate(
       {}, {SparqlTripleSimpleWithGraph{Iri("<a>"), Iri("<b>"), Iri("<c>"),
                                        std::monostate{}}});
-  EXPECT_THAT(SparqlParser::parseUpdate(
-                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-                  {DatasetClause{Iri("<foo>"), false},
-                   DatasetClause{Iri("<bar>"), true}}),
-              testing::ElementsAre(
-                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
-                                  m::datasetClausesMatcher({{Iri("<foo>")}},
-                                                           {{Iri("<bar>")}})),
-                  m::UpdateClause(insertDataOp, m::GraphPattern(),
-                                  m::datasetClausesMatcher({{Iri("<foo>")}},
-                                                           {{Iri("<bar>")}}))));
+  EXPECT_THAT(
+      SparqlParser::parseUpdate(
+          &bnm, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+          {DatasetClause{Iri("<foo>"), false},
+           DatasetClause{Iri("<bar>"), true}}),
+      testing::ElementsAre(
+          m::UpdateClause(
+              deleteWhereOp, deleteWherePattern,
+              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}})),
+          m::UpdateClause(
+              insertDataOp, m::GraphPattern(),
+              m::datasetClausesMatcher({{Iri("<foo>")}}, {{Iri("<bar>")}}))));
 }
 
 // _____________________________________________________________________________

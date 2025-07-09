@@ -840,19 +840,15 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
   return makeCopy(from, to);
 }
 
-// TODO<joka921> The `BlankNodeManager` is currently hackily used, properly pass
-// along the correct Ids.
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
-  ad_utility::BlankNodeManager manager;
-  Quads::BlankNodeAdder bn{{}, {}, &manager};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
   return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
 }
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  ad_utility::BlankNodeManager manager;
-  Quads::BlankNodeAdder bn{{}, {}, &manager};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
   return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
@@ -874,8 +870,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  ad_utility::BlankNodeManager manager;
-  Quads::BlankNodeAdder bn{{}, {}, &manager};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
@@ -889,8 +884,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
                                     " was not bound in the query body."));
     }
   };
-  ad_utility::BlankNodeManager manager;
-  Quads::BlankNodeAdder bn{{}, {}, &manager};
+  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
   auto visitTemplateClause = [&bn, &ensureVariableIsVisible, this](
                                  auto* ctx, auto* target,
                                  const auto& defaultGraph) {

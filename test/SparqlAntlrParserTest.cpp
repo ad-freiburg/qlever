@@ -68,7 +68,8 @@ TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
   {
-    ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
+    static ad_utility::BlankNodeManager blankNodeManager;
+    ParserAndVisitor p{&blankNodeManager, "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
     p.visitor_.visit(p.parser_.prefixDecl());
@@ -1889,8 +1890,10 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
+  // TODO<joka921> `parseQuery` shouldn't take a blank node manager.
+  static ad_utility::BlankNodeManager bnm;
   EXPECT_THAT(
-      SparqlParser::parseQuery(std::move(query)),
+      SparqlParser::parseQuery(&bnm, std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(

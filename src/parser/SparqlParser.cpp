@@ -8,12 +8,15 @@
 
 using AntlrParser = SparqlAutomaticParser;
 
+using BnodeMgr = ad_utility::BlankNodeManager*;
+
 namespace {
 // _____________________________________________________________________________
 // Parse the given string as the given clause. If the datasets are not empty,
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
-auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
+auto parseOperation(BnodeMgr bnodeMgr,
+                    ContextType* (SparqlAutomaticParser::*F)(void),
                     std::string operation,
                     const std::vector<DatasetClause>& datasets) {
   using S = std::string;
@@ -21,6 +24,7 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
   // The third argument are the datasets from outside the query, which override
   // any datasets in the query.
   sparqlParserHelpers::ParserAndVisitor p{
+      bnodeMgr,
       std::move(operation),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
@@ -37,12 +41,25 @@ auto parseOperation(ContextType* (SparqlAutomaticParser::*F)(void),
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
+    BnodeMgr bnodeMgr, std::string query,
+    const std::vector<DatasetClause>& datasets) {
+  return parseOperation(bnodeMgr, &AntlrParser::query, std::move(query),
+                        datasets);
+}
+
+// _____________________________________________________________________________
+ParsedQuery SparqlParser::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(&AntlrParser::query, std::move(query), datasets);
+  // TODO<joka921> Assert that `parseQuery` doesn't add blank nodes and it is
+  // safe to discard the manager.
+  static ad_utility::BlankNodeManager bnodeMgr;
+  return parseQuery(&bnodeMgr, std::move(query), datasets);
 }
 
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
-    std::string update, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(&AntlrParser::update, std::move(update), datasets);
+    BnodeMgr bnodeMgr, std::string update,
+    const std::vector<DatasetClause>& datasets) {
+  return parseOperation(bnodeMgr, &AntlrParser::update, std::move(update),
+                        datasets);
 }
