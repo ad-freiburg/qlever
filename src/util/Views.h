@@ -12,9 +12,11 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/span.h"
+#include "util/ExceptionHandling.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+#include "util/ResetWhenMoved.h"
 
 namespace ad_utility {
 
@@ -177,6 +179,77 @@ constexpr auto allView(Range&& range) {
 }
 template <typename Range>
 using all_t = decltype(allView(std::declval<Range>()));
+
+// This view is an input view that wraps another `view` transparently. When the
+// view is destroyed, or the iteration reaches `end`, whichever happens first,
+// the given `callback` is invoked.
+CPP_template(typename V, typename F)(
+    requires ql::ranges::input_range<V> CPP_and
+        ql::ranges::view<V>&& std::invocable<F&>) class CallbackOnEndView
+    : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
+ private:
+  V base_;
+  F callback_;
+  // Don't invoke the callback if the view was moved from.
+  ad_utility::ResetWhenMoved<bool, true> called_ = false;
+
+  // Invoke the `callback` iff it hasn't been invoked yet.
+  void maybeInvoke() {
+    if (!std::exchange(called_, true)) {
+      callback_();
+    }
+  }
+
+  class Iterator {
+   private:
+    ql::ranges::iterator_t<V> current_;
+    CallbackOnEndView* parent_ = nullptr;
+
+   public:
+    using value_type = ql::ranges::range_value_t<V>;
+    using reference_type = ql::ranges::range_reference_t<V>;
+    using difference_type = ql::ranges::range_difference_t<V>;
+
+    Iterator() = default;
+    Iterator(ql::ranges::iterator_t<V> current, CallbackOnEndView* parent)
+        : current_(current), parent_(parent) {}
+
+    decltype(auto) operator*() const { return *current_; }
+
+    Iterator& operator++() {
+      ++current_;
+      if (current_ == ql::ranges::end(parent_->base_)) {
+        parent_->maybeInvoke();
+      }
+      return *this;
+    }
+
+    void operator++(int) { ++(*this); }
+
+    bool operator==(ql::ranges::sentinel_t<V> s) const { return current_ == s; }
+  };
+
+ public:
+  CallbackOnEndView() = default;
+  CallbackOnEndView(V base, F callback)
+      : base_(std::move(base)), callback_(std::move(callback)) {}
+
+  CallbackOnEndView(const CallbackOnEndView&) = delete;
+  CallbackOnEndView& operator=(const CallbackOnEndView&) = delete;
+
+  CallbackOnEndView(CallbackOnEndView&&) = default;
+  CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
+
+  ~CallbackOnEndView() { maybeInvoke(); }
+
+  auto begin() { return Iterator{ql::ranges::begin(base_), this}; }
+
+  auto end() { return ql::ranges::end(base_); }
+};
+
+// Deduction guide
+template <class R, class F>
+CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
