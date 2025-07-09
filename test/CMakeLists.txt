@@ -1,7 +1,7 @@
 include(GoogleTest)
 
 # Needed for creating the `testUil`-library.
-add_subdirectory(util)
+add_subdirectory(util EXCLUDE_FROM_ALL)
 
 # Link binary ${basename} against `gmock_main`, the threading library, the
 # general test utilities and all libraries that are specified as additional
@@ -39,7 +39,8 @@ endfunction()
 
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
-    add_executable(QLeverAllUnitTestsMain)
+    add_executable(QLeverAllUnitTestsMain
+            parser/UpdateTriplesTest.cpp)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
     # unit tests as a single test case and will simply run the executable (using the main function from `gtest_main`.
@@ -121,6 +122,7 @@ add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
 add_subdirectory(backports)
+add_subdirectory(rdfTypes)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -246,8 +248,6 @@ addLinkAndDiscoverTest(StreamableBodyTest http)
 addLinkAndDiscoverTest(StreamableGeneratorTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
-
-addLinkAndDiscoverTest(RdfEscapingTest parser)
 
 addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
 

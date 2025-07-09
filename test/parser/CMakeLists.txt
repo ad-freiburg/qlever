@@ -1,7 +1,7 @@
-add_subdirectory(data)
 addLinkAndDiscoverTest(ParallelBufferTest parser)
 addLinkAndDiscoverTest(LiteralOrIriTest engine)
 addLinkAndDiscoverTest(PayloadVariablesTest engine)
 addLinkAndDiscoverTest(QuadTest engine)
 addLinkAndDiscoverTest(BlankNodeExpressionTest engine)
 addLinkAndDiscoverTest(PropertyPathTest parser)
+addLinkAndDiscoverTest(UpdateTriplesTest parser)

@@ -1,5 +1,3 @@
-add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
-qlever_target_link_libraries(rdfEscaping)
 
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
@@ -15,7 +13,6 @@ add_library(parser
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
-        GeoPoint.cpp
         GraphPatternOperation.cpp
         MagicServiceQuery.cpp
         PathQuery.cpp
@@ -25,10 +22,7 @@ add_library(parser
         data/SparqlFilter.cpp
         SelectClause.cpp
         GraphPatternOperation.cpp
-        # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
-        GraphPattern.cpp data/Variable.cpp
-        Iri.cpp
-        Literal.cpp
+        GraphPattern.cpp
         LiteralOrIri.cpp
         DatasetClauses.cpp
         TextSearchQuery.cpp
@@ -36,5 +30,5 @@ add_library(parser
         UpdateTriples.cpp
         UpdateTriples.h
 )
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index rdfTypes)
 

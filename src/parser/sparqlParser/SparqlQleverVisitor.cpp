@@ -41,7 +41,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"

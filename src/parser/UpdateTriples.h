@@ -5,6 +5,11 @@
 #ifndef QLEVER_SRC_PARSER_UPDATETRIPLES_H
 #define QLEVER_SRC_PARSER_UPDATETRIPLES_H
 
+#include <vector>
+
+#include "engine/LocalVocab.h"
+#include "parser/SparqlTriple.h"
+
 namespace updateClause {
 // A class that combines a vector of triples with a `LocalVocab`. The local
 // vocab is currently only used to store blank node IDs, all IRIs and literals

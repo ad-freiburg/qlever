@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include "parser/Literal.h"
+#include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
 #include "util/SourceLocation.h"
 

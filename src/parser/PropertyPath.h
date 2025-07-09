@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
-#include "parser/Iri.h"
+#include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"

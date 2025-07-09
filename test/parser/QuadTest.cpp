@@ -12,6 +12,7 @@ namespace tc {
 auto Iri = ad_utility::triple_component::Iri::fromIriref;
 }
 
+// _____________________________________________________________________________
 TEST(QuadTest, getQuads) {
   auto expectGetQuads =
       [](ad_utility::sparql_types::Triples triples,
@@ -20,14 +21,14 @@ TEST(QuadTest, getQuads) {
          ad_utility::source_location l =
              ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
-        // TODO<joka921> Properly test this mechanism after properly integrating
-        // it.
+        // For this test, there are no blank nodes. Below you find a dedicated
+        // test with blank nodes.
         ad_utility::BlankNodeManager manager;
         Quads::BlankNodeAdder bn{{}, {}, &manager};
         const Quads quads{std::move(triples), std::move(graphs)};
-        // TODO<joka921> Also check the local vocab wrt the blank nodes.
-        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}, bn).triples_,
-                    testing::UnorderedElementsAreArray(expected));
+        auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
+        EXPECT_THAT(res.triples_, testing::UnorderedElementsAreArray(expected));
+        EXPECT_EQ(manager.numBlocksUsed(), 0);
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
     return {t, t, t};
@@ -52,6 +53,34 @@ TEST(QuadTest, getQuads) {
        QuadOf(tc::Iri("<a>"), tc::Iri("<b>")),
        QuadOf(tc::Iri("<b>"), tc::Iri("<b>")),
        QuadOf(tc::Iri("<c>"), tc::Iri("<b>"))});
+}
+
+// _____________________________________________________________________________
+TEST(QuadTest, getQuadsWithBlankNodes) {
+  auto bn = [](std::string_view s) {
+    return GraphTerm{BlankNode{false, std::string{s}}};
+  };
+
+  std::array tr{bn("a"), bn("b"), bn("a")};
+  ad_utility::BlankNodeManager manager;
+  Quads::BlankNodeAdder adder{{}, {}, &manager};
+  const Quads quads{{tr}, {}};
+  auto res = quads.toTriplesWithGraph(std::monostate{}, adder);
+  EXPECT_EQ(res.triples_.size(), 1ul);
+  const auto& triple = res.triples_.at(0);
+  EXPECT_EQ(triple.s_, triple.o_);
+  EXPECT_NE(triple.p_, triple.o_);
+  EXPECT_EQ(triple.s_.getId().getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(triple.p_.getId().getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(triple.o_.getId().getDatatype(), Datatype::BlankNodeIndex);
+
+  EXPECT_TRUE(res.localVocab_.isBlankNodeIndexContained(
+      triple.s_.getId().getBlankNodeIndex()));
+  EXPECT_TRUE(res.localVocab_.isBlankNodeIndexContained(
+      triple.p_.getId().getBlankNodeIndex()));
+  EXPECT_TRUE(res.localVocab_.isBlankNodeIndexContained(
+      triple.o_.getId().getBlankNodeIndex()));
+  EXPECT_GT(manager.numBlocksUsed(), 0);
 }
 
 TEST(QuadTest, getOperations) {

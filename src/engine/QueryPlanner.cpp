@@ -61,7 +61,7 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
