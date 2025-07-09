@@ -230,6 +230,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     }
     return results;
   };
+
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
@@ -258,6 +259,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         EXPECT_THAT(graphUpdateQuads,
                     testing::ElementsAreArray(transformedMatchers));
       };
+
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,

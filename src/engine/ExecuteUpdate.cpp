@@ -9,7 +9,8 @@
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
+    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
+    ad_utility::timer::TimeTracerOpt tracer) {
   UpdateMetadata metadata{};
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
@@ -17,17 +18,25 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   auto result = qet.getResult(false);
   auto [toInsert, toDelete] =
       computeGraphUpdateQuads(index, query, *result, qet.getVariableColumns(),
-                              cancellationHandle, metadata);
+                              cancellationHandle, metadata, tracer);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
-  deltaTriples.deleteTriples(cancellationHandle,
-                             std::move(toDelete.idTriples_));
+  tracer.beginTrace("deleteTriples");
+  if (!toDelete.idTriples_.empty()) {
+    deltaTriples.deleteTriples(cancellationHandle,
+                               std::move(toDelete.idTriples_), tracer);
+  }
+  tracer.endTrace("deleteTriples");
+  tracer.beginTrace("insertTriples");
   metadata.deletionTime_ = timer.msecs();
-  timer.reset();
-  deltaTriples.insertTriples(cancellationHandle,
-                             std::move(toInsert.idTriples_));
+  timer.start();
+  if (!toInsert.idTriples_.empty()) {
+    deltaTriples.insertTriples(cancellationHandle,
+                               std::move(toInsert.idTriples_), tracer);
+  }
+  tracer.endTrace("insertTriples");
   metadata.insertionTime_ = timer.msecs();
   return metadata;
 }
@@ -131,12 +140,17 @@ std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
-    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
+    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
+    ad_utility::timer::TimeTracerOpt tracer) {
+  // Evaluate the WHERE clause.
+  tracer.beginTrace("where");
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   auto& graphUpdate = updateClause.op_;
+  tracer.endTrace("where");
 
   // Start the timer once the where clause has been evaluated.
+  tracer.beginTrace("preparation");
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
 
@@ -180,6 +194,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
                                          static_cast<int64_t>(toDelete.size())};
   toDelete = setMinus(toDelete, toInsert);
   metadata.triplePreparationTime_ = timer.msecs();
+  tracer.endTrace("preparation");
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
