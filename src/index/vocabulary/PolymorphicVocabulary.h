@@ -1,6 +1,7 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
