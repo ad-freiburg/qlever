@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "global/Id.h"
-#include "index/CompressedString.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"

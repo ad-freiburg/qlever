@@ -112,7 +112,7 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     }
     char c = regex[i];
     constexpr std::string_view regexSpecialChars = "[]^$.|?*+()";
-    bool isControlChar = regexSpecialChars.find(c) != std::string::npos;
+    bool isControlChar = regexSpecialChars.find(c) != std::string_view::npos;
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {

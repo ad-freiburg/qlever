@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
