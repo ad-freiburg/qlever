@@ -48,7 +48,7 @@ class VocabularyInMemoryBinSearch
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const {

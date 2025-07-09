@@ -436,7 +436,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -466,7 +466,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -506,7 +506,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery
@@ -538,7 +538,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
   }
 
@@ -583,7 +583,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 1)
@@ -611,7 +611,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
@@ -636,7 +636,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
-    vector<string> vvars_sub_subquery = {"?year"};
+    vector<std::string> vvars_sub_subquery = {"?year"};
     ASSERT_EQ(vvars_sub_subquery,
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }

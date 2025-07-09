@@ -117,7 +117,7 @@ std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getCacheKeyImpl() const {
+std::string SpatialJoin::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
     std::ostringstream os;
     // This includes all attributes that change the result
@@ -171,7 +171,7 @@ string SpatialJoin::getCacheKeyImpl() const {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getDescriptor() const {
+std::string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
   auto visitor = [this](const auto& config) -> std::string {
     using T = std::decay_t<decltype(config)>;

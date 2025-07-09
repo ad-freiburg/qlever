@@ -33,6 +33,7 @@
 
 namespace {
 using namespace sparqlParserTestHelpers;
+using std::string;
 
 auto iri = ad_utility::testing::iri;
 

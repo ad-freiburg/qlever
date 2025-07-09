@@ -11,10 +11,9 @@
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 
+namespace ad_utility {
 using std::string;
 using std::string_view;
-
-namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
 //! a templated version using std::basic_string<T> instead of
 //! std::string. However, it is not required so far.

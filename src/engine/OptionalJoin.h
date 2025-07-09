@@ -37,10 +37,10 @@ class OptionalJoin : public Operation {
                std::shared_ptr<QueryExecutionTree> t2);
 
  private:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

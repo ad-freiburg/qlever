@@ -158,7 +158,8 @@ void expectCompleteParse(
  */
 template <typename Result, typename Matcher>
 void expectIncompleteParse(
-    const Result& resultOfParseAndText, const string& rest, Matcher&& matcher,
+    const Result& resultOfParseAndText, const std::string& rest,
+    Matcher&& matcher,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
@@ -361,13 +362,12 @@ auto GraphPatternOperation =
 }  // namespace detail
 
 inline auto BindExpression =
-    [](const string& expression) -> Matcher<const p::Bind&> {
+    [](const std::string& expression) -> Matcher<const p::Bind&> {
   return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
-inline auto Bind =
-    [](const ::Variable& variable,
-       const string& expression) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Bind = [](const ::Variable& variable, const std::string& expression)
+    -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
       testing::AllOf(BindExpression(expression),
                      AD_FIELD(p::Bind, _target, testing::Eq(variable))));
@@ -405,7 +405,7 @@ inline auto VariableOrderKeys =
   return testing::ElementsAreArray(matchers);
 };
 
-inline auto ExpressionOrderKey = [](const string& expr,
+inline auto ExpressionOrderKey = [](const std::string& expr,
                                     bool desc) -> Matcher<const OrderKey&> {
   return testing::VariantWith<::ExpressionOrderKey>(testing::AllOf(
       AD_FIELD(::ExpressionOrderKey, expression_, detail::Expression(expr)),
@@ -438,19 +438,19 @@ inline auto OrderKeys =
 };
 
 inline auto VariableGroupKey =
-    [](const string& key) -> Matcher<const GroupKey&> {
+    [](const std::string& key) -> Matcher<const GroupKey&> {
   return testing::VariantWith<::Variable>(
       AD_PROPERTY(Variable, name, testing::Eq(key)));
 };
 
 inline auto ExpressionGroupKey =
-    [](const string& expr) -> Matcher<const GroupKey&> {
+    [](const std::string& expr) -> Matcher<const GroupKey&> {
   return testing::VariantWith<sparqlExpression::SparqlExpressionPimpl>(
       detail::Expression(expr));
 };
 
 inline auto AliasGroupKey =
-    [](const string& expr,
+    [](const std::string& expr,
        const ::Variable& variable) -> Matcher<const GroupKey&> {
   return testing::VariantWith<Alias>(
       testing::AllOf(AD_FIELD(Alias, _target, testing::Eq(variable)),
@@ -554,7 +554,7 @@ inline auto AsteriskSelect = [](bool distinct = false,
 };
 
 inline auto VariablesSelect =
-    [](const vector<string>& variables, bool distinct = false,
+    [](const vector<std::string>& variables, bool distinct = false,
        bool reduced = false) -> Matcher<const p::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
@@ -584,7 +584,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
         return false;
       }
     } else {
-      auto pair = get<std::pair<string, ::Variable>>(selection[i]);
+      auto pair = get<std::pair<std::string, ::Variable>>(selection[i]);
       if (alias_counter >= arg.getAliases().size()) {
         *result_listener << "where selected Variables contain less Aliases ("
                          << testing::PrintToString(alias_counter)
@@ -633,10 +633,10 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
 }  // namespace detail
 
 inline auto Select =
-    [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
+    [](std::vector<std::variant<::Variable, std::pair<std::string, ::Variable>>>
            selection,
        bool distinct = false, bool reduced = false,
-       std::vector<std::pair<string, ::Variable>> hiddenAliases = {})
+       std::vector<std::pair<std::string, ::Variable>> hiddenAliases = {})
     -> Matcher<const p::SelectClause&> {
   return testing::SafeMatcherCast<const p::SelectClause&>(detail::Select(
       distinct, reduced, std::move(selection), std::move(hiddenAliases)));
@@ -979,7 +979,7 @@ inline auto UpdateClause =
 template <typename T>
 auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
 
-auto inline GraphRefIri = [](const string& iri) {
+auto inline GraphRefIri = [](const std::string& iri) {
   return testing::VariantWith<GraphRef>(AD_PROPERTY(
       TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
@@ -1183,7 +1183,7 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
 
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
-    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+    [](const std::string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
@@ -1220,27 +1220,27 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
-  auto operator()(const string& input, const Value& value,
+  auto operator()(const std::string& input, const Value& value,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
     return operator()(input, value, prefixMap_, l);
-  };
+  }
 
-  auto operator()(const string& input,
+  auto operator()(const std::string& input,
                   const testing::Matcher<const Value&>& matcher,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
     return operator()(input, matcher, prefixMap_, l);
-  };
+  }
 
-  auto operator()(const string& input, const Value& value,
+  auto operator()(const std::string& input, const Value& value,
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
-  };
+  }
 
-  auto operator()(const string& input,
+  auto operator()(const std::string& input,
                   const testing::Matcher<const Value&>& matcher,
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
@@ -1252,9 +1252,9 @@ struct ExpectCompleteParse {
               input, std::move(prefixMap), std::nullopt, disableSomeChecks),
           matcher, l);
     });
-  };
+  }
 
-  auto operator()(const string& input,
+  auto operator()(const std::string& input,
                   const testing::Matcher<const Value&>& matcher,
                   ParsedQuery::DatasetClauses activeDatasetClauses,
                   ad_utility::source_location l =
@@ -1266,7 +1266,7 @@ struct ExpectCompleteParse {
               input, {}, std::move(activeDatasetClauses), disableSomeChecks),
           matcher, l);
     });
-  };
+  }
 };
 
 template <auto Clause>
@@ -1276,14 +1276,14 @@ struct ExpectParseFails {
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
   auto operator()(
-      const string& input,
+      const std::string& input,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
       ad_utility::source_location l = ad_utility::source_location::current()) {
     return operator()(input, prefixMap_, messageMatcher, l);
   }
 
   auto operator()(
-      const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+      const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap,
       const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
       ad_utility::source_location l = ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);

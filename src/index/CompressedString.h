@@ -5,17 +5,16 @@
 #ifndef QLEVER_SRC_INDEX_COMPRESSEDSTRING_H
 #define QLEVER_SRC_INDEX_COMPRESSEDSTRING_H
 
-#include <functional>
 #include <string>
-
-using std::string;
 
 // Class to store strings that have been compressed.
 // Forbids automatic conversion from the compressed strings in the vocabulary to
 // "ordinary" strings to avoid bugs.
 // only implements/inherits functionality from std::string that is actually used
 // TODO<niklas> is there a better way to do this?
-class CompressedString : private string {
+class CompressedString : private std::string {
+  using string = std::string;
+
  public:
   CompressedString() : string() {}
 
@@ -42,10 +41,10 @@ class CompressedString : private string {
  private:
   // private constructors and assignments internally used by the to and from
   // string conversions
-  CompressedString(string&& other) : string(std::move(other)){};
+  CompressedString(string&& other) : string(std::move(other)) {}
 
   // _____________________________________________________________
-  CompressedString(const string& other) : string(other){};
+  CompressedString(const string& other) : string(other) {}
 
   // _____________________________________________________________
   CompressedString& operator=(string&& other) {

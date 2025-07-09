@@ -267,7 +267,7 @@ bool TurtleParser<T>::blankNodePropertyList() {
   auto savedSubject = activeSubject_;
   auto savedPredicate = activePredicate_;
   // new triple with blank node as object
-  string blank = createAnonNode();
+  std::string blank = createAnonNode();
   // the following triples have the blank node as subject
   activeSubject_ = blank;
   check(predicateObjectList());
@@ -649,7 +649,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   auto view = tok_.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
+  std::array<std::string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (view.starts_with(q)) {
@@ -659,7 +659,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
         return false;
       }
       endPos = view.find(q, startPos);
-      while (endPos != string::npos) {
+      while (endPos != std::string::npos) {
         if (view[endPos - 1] == '\\') {
           size_t numBackslash = 1;
           auto slashPos = endPos - 2;
@@ -684,7 +684,7 @@ bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   if (!foundString) {
     return false;
   }
-  if (endPos == string::npos) {
+  if (endPos == std::string::npos) {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
@@ -830,14 +830,14 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
   auto pos = view.find(':');
-  if (pos == string::npos) {
+  if (pos == std::string::npos) {
     return false;
   }
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
   auto posEnd = view.find_first_of(" \t\r\n,;", pos);
-  if (posEnd == string::npos) {
+  if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();
   }
@@ -862,7 +862,7 @@ bool TurtleParser<T>::iriref() {
     return false;
   }
   auto endPos = view.find_first_of("<>\"\n", 1);
-  if (endPos == string::npos || view[endPos] != '>') {
+  if (endPos == std::string::npos || view[endPos] != '>') {
     raise(
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
@@ -944,7 +944,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const string& filename,
+void RdfStreamParser<T>::initialize(const std::string& filename,
                                     ad_utility::MemorySize bufferSize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
@@ -1154,7 +1154,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename T>
-void RdfParallelParser<T>::initialize(const string& filename,
+void RdfParallelParser<T>::initialize(const std::string& filename,
                                       ad_utility::MemorySize bufferSize) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");

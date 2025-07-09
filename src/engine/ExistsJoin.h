@@ -53,10 +53,10 @@ class ExistsJoin : public Operation {
   // All following functions are inherited from `Operation`, see there for
   // comments.
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

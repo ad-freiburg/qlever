@@ -43,10 +43,10 @@ class VocabularyInMemory
 
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   /// Write the vocabulary to a file.
-  void writeToFile(const string& fileName) const;
+  void writeToFile(const std::string& fileName) const;
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }

@@ -7,7 +7,7 @@
 #include "index/Index.h"
 
 // ____________________________________________________________________________
-static void logWordNotFound(const string& word,
+static void logWordNotFound(const std::string& word,
                             size_t& wordNotFoundErrorMsgCount) {
   if (wordNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "The following word was found in the docsfile but not in "
@@ -29,7 +29,7 @@ static void logWordNotFound(const string& word,
 }
 
 // ____________________________________________________________________________
-void ScoreData::calculateScoreData(const string& docsFileName,
+void ScoreData::calculateScoreData(const std::string& docsFileName,
                                    bool addWordsFromLiterals,
                                    const Index::TextVocab& textVocab,
                                    const Index::Vocab& vocab) {
