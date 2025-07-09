@@ -144,8 +144,9 @@ IdTable IndexImpl::mergeTextBlockResults(
   for (const auto& partialResult : partialResults) {
     result.insertAtEnd(partialResult);
   }
-  // Sort the result
-  ql::ranges::sort(result, [](const auto& a, const auto& b) {
+  auto toSort = std::move(result).toStatic<3>();
+  // Sort the table
+  ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
     return ql::ranges::lexicographical_compare(
         std::begin(a), std::end(a), std::begin(b), std::end(b),
         [](const Id& x, const Id& y) {
@@ -154,12 +155,12 @@ IdTable IndexImpl::mergeTextBlockResults(
   });
   // If not entitySearch don't filter duplicates
   if (textScanMode == TextScanMode::WordScan) {
-    return result;
+    return std::move(toSort).toDynamic<>();
   }
   // Filter duplicates
-  auto [newEnd, _] = std::ranges::unique(result);
-  result.erase(newEnd, result.end());
-  return result;
+  auto [newEnd, _] = std::ranges::unique(toSort);
+  toSort.erase(newEnd, toSort.end());
+  return std::move(toSort).toDynamic<>();
 }
 
 // _____________________________________________________________________________
