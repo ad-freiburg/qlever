@@ -9,7 +9,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -125,10 +127,6 @@ class CompactVectorOfStrings {
     size_t size = offsets_[i + 1] - offset;
     return {ptr, size};
   }
-
-  // Forward iterator for a `CompactVectorOfStrings` that reads directly from
-  // disk without buffering the whole `Vector`.
-  static cppcoro::generator<vector_type> diskIterator(string filename);
 
   using Iterator = ad_utility::IteratorForAccessOperator<
       CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,
