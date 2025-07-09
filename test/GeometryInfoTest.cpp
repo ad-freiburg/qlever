@@ -36,6 +36,7 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
+// TODO<#1951>
 // constexpr std::string_view litInvalid =
 //     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
@@ -82,22 +83,25 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
   checkGeoInfo(g3, exp3);
 
-  // TODO determine and insert the expected values
-  // auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  // GeometryInfo exp4{3, {{2, 2}, {4, 4}}, {3, 3}};
-  // checkGeoInfo(g4, exp4);
+  auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
+  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}};
+  checkGeoInfo(g4, exp4);
 
-  // auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  // GeometryInfo exp5{3, {{2, 2}, {4, 4}}, {3, 3}};
-  // checkGeoInfo(g5, exp5);
+  auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
+  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}};
+  checkGeoInfo(g5, exp5);
 
-  // auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  // GeometryInfo exp6{3, {{2, 2}, {4, 4}}, {3, 3}};
-  // checkGeoInfo(g6, exp6);
+  auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
+  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}};
+  checkGeoInfo(g6, exp6);
 
-  // auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  // GeometryInfo exp7{3, {{2, 2}, {4, 4}}, {3, 3}};
-  // checkGeoInfo(g7, exp7);
+  auto g7 = GeometryInfo::fromWktLiteral(litCollection);
+  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
+  checkGeoInfo(g7, exp7);
+
+  // TODO<#1951>
+  // auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  // checkGeoInfo(g8, std::nullopt);
 }
 
 // ____________________________________________________________________________
