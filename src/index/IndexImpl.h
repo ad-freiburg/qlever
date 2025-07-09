@@ -348,6 +348,12 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
+  struct TextBlockMetadataAndWordInfo {
+    TextBlockMetaData tbmd_;
+    bool hasToBeFiltered_;
+    IdRange<WordVocabIndex> idRange_;
+  };
+
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
   /**
@@ -367,8 +373,12 @@ class IndexImpl {
    *       actual wordId range.
    *       TODO: improve size estimate by adding a correction factor.
    */
-  size_t getSizeOfTextBlocks(const string& word,
-                             TextScanMode textScanMode) const;
+  size_t getSizeOfTextBlocksSum(const string& word,
+                                TextScanMode textScanMode) const;
+
+  static size_t getSizeOfTextBlocksSum(
+      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+      TextScanMode textScanMode);
 
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
@@ -585,17 +595,8 @@ class IndexImpl {
   // block, and additional filtering is thus required. `idRange_` is the range
   // `[first, last]` of the `WordVocabIndex`es that correspond to the word
   // (which might also be a prefix, thus it is a range).
-  struct TextBlockMetadataAndWordInfo {
-    TextBlockMetaData tbmd_;
-    bool hasToBeFiltered_;
-    IdRange<WordVocabIndex> idRange_;
-  };
   std::vector<TextBlockMetadataAndWordInfo> getTextBlockMetadataForWordOrPrefix(
       const std::string& word) const;
-
-  static size_t getSizeOfTextBlocksSum(
-      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
-      TextScanMode textScanMode);
 
   /**
    * @brief This method is used to combine the IdTables of multiple blocks
@@ -617,9 +618,12 @@ class IndexImpl {
    *              record. It is checked that no duplicates occur in one block
    *              but when combining multiple blocks they have to be accounted
    *              for.
-   *
    */
   template <typename Reader>
+  requires ad_utility::InvocableWithExactReturnType<
+      Reader, IdTable, const TextBlockMetaData&,
+      const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
+      TextScoringMetric>
   IdTable mergeTextBlockResults(
       const Reader& reader,
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,

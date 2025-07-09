@@ -37,15 +37,10 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   auto endIndex = static_cast<size_t>(
       std::distance(_blockUpperBoundWordIds.begin(), upperIt));
 
-  // Lambda to transform index to block
-  auto indexToBlock = [this](size_t index) {
-    return std::cref(_blocks[index]);
-  };
-
   // Collect all blocks
   vector<std::reference_wrapper<const TextBlockMetaData>> output;
-  ql::ranges::copy(ql::views::iota(startIndex, endIndex + 1) |
-                       ql::views::transform(indexToBlock),
+  ql::ranges::copy(ql::ranges::subrange(_blocks.begin() + startIndex,
+                                        _blocks.begin() + endIndex + 1),
                    std::back_inserter(output));
   return output;
 }

@@ -100,9 +100,9 @@ std::string_view Index::wordIdToString(WordIndex wordIndex) const {
   return pimpl_->wordIdToString(wordIndex);
 }
 // ____________________________________________________________________________
-size_t Index::getSizeOfTextBlocks(const string& word,
-                                  TextScanMode textScanMode) const {
-  return pimpl_->getSizeOfTextBlocks(word, textScanMode);
+size_t Index::getSizeOfTextBlocksSum(const string& word,
+                                     TextScanMode textScanMode) const {
+  return pimpl_->getSizeOfTextBlocksSum(word, textScanMode);
 }
 
 // ____________________________________________________________________________

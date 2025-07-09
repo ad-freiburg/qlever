@@ -20,23 +20,6 @@
 #include "util/MmapVector.h"
 #include "util/TransparentFunctors.h"
 
-size_t IndexImpl::getSizeOfTextBlocksSum(
-    const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
-    TextScanMode textScanMode) {
-  auto getSizeOfBlock =
-      [&textScanMode](const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
-        if (textScanMode == TextScanMode::WordScan) {
-          return tbmdAndWordInfo.tbmd_._cl._nofElements;
-        }
-        return tbmdAndWordInfo.tbmd_._entityCl._nofElements;
-      };
-  size_t sum = 0;
-  for (const auto& tbmdAndWordInfo : tbmds) {
-    sum += getSizeOfBlock(tbmdAndWordInfo);
-  }
-  return sum;
-};
-
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
@@ -104,12 +87,12 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
 
-  IdTable output = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
+  IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
                                          allocator, TextScanMode::WordScan);
 
   LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << output.getColumn(0).size() << '\n';
-  return output;
+             << ": cids: " << result.getColumn(0).size() << '\n';
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -124,6 +107,10 @@ IdTable IndexImpl::getEntityMentionsForWord(
 
 // _____________________________________________________________________________
 template <typename Reader>
+requires ad_utility::InvocableWithExactReturnType<
+    Reader, IdTable, const TextBlockMetaData&,
+    const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
+    TextScoringMetric>
 IdTable IndexImpl::mergeTextBlockResults(
     const Reader& reader,
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
@@ -144,10 +131,16 @@ IdTable IndexImpl::mergeTextBlockResults(
   }
   // If only one block was requested return the IdTable
   if (partialResults.size() == 1) {
-    return std::move(partialResults[0]);
+    return std::move(partialResults.at(0));
   }
   // Combine the partial results to one IdTable
   IdTable result{3, allocator};
+  size_t resultSize = 0;
+  result.resize(std::accumulate(partialResults.begin(), partialResults.end(),
+                                resultSize,
+                                [](size_t acc, const IdTable& partialResult) {
+                                  return acc + partialResult.size();
+                                }));
   for (const auto& partialResult : partialResults) {
     result.insertAtEnd(partialResult);
   }
@@ -187,12 +180,12 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
         i, getSizeOfTextBlocksSum(tbmds, TextScanMode::EntityScan));
   }
   ql::ranges::sort(toBeSorted, std::less<>{}, ad_utility::second);
-  return std::get<0>(toBeSorted[0]);
+  return std::get<0>(toBeSorted.at(0));
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlocks(const string& word,
-                                      TextScanMode textScanMode) const {
+size_t IndexImpl::getSizeOfTextBlocksSum(const string& word,
+                                         TextScanMode textScanMode) const {
   if (word.empty()) {
     return 0;
   }
@@ -202,6 +195,22 @@ size_t IndexImpl::getSizeOfTextBlocks(const string& word,
   }
   return getSizeOfTextBlocksSum(tbmds, textScanMode);
 }
+
+// _____________________________________________________________________________
+size_t IndexImpl::getSizeOfTextBlocksSum(
+    const vector<TextBlockMetadataAndWordInfo>& tbmds,
+    TextScanMode textScanMode) {
+  auto addSizeOfBlock =
+      [&textScanMode](size_t acc,
+                      const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
+        if (textScanMode == TextScanMode::WordScan) {
+          return acc + tbmdAndWordInfo.tbmd_._cl._nofElements;
+        }
+        return acc + tbmdAndWordInfo.tbmd_._entityCl._nofElements;
+      };
+  size_t sum = 0;
+  return std::accumulate(tbmds.begin(), tbmds.end(), sum, addSizeOfBlock);
+};
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
@@ -229,15 +238,14 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
   auto tbmdVector = textMeta_.getBlockInfoByWordRange(idRange.first().get(),
                                                       idRange.last().get());
 
-  bool hasToBeFiltered = false;
-  std::vector<TextBlockMetadataAndWordInfo> output;
-  for (auto tbmd : tbmdVector) {
+  std::vector<TextBlockMetadataAndWordInfo> result;
+  for (bool hasToBeFiltered = false; auto tbmd : tbmdVector) {
     hasToBeFiltered = tbmd.get()._cl.hasMultipleWords() &&
                       !(tbmd.get()._firstWordId == idRange.first().get() &&
                         tbmd.get()._lastWordId == idRange.last().get());
-    output.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
+    result.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
   }
-  return output;
+  return result;
 }
 
 // _____________________________________________________________________________

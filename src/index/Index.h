@@ -157,8 +157,8 @@ class Index {
   // --------------------------------------------------------------------------
   [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  [[nodiscard]] size_t getSizeOfTextBlocks(const string& word,
-                                           TextScanMode textScanMode) const;
+  [[nodiscard]] size_t getSizeOfTextBlocksSum(const string& word,
+                                              TextScanMode textScanMode) const;
 
   IdTable getWordPostingsForTerm(
       const std::string& term,
