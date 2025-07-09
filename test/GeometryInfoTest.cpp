@@ -147,6 +147,12 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
 
   auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
   ASSERT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
+
+  ASSERT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
+  ASSERT_FALSE(wktTypeToIri(0).has_value());
+  ASSERT_FALSE(wktTypeToIri(8).has_value());
+  ASSERT_TRUE(wktTypeToIri(1).has_value());
+  ASSERT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
 }
 
 }  // namespace
