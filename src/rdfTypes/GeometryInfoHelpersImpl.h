@@ -7,10 +7,9 @@
 
 #include <util/geo/Geo.h>
 
-#include "parser/GeoPoint.h"
-#include "parser/Literal.h"
-#include "parser/NormalizedString.h"
-#include "util/GeometryInfo.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Literal.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this

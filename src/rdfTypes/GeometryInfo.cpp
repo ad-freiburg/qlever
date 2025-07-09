@@ -6,12 +6,9 @@
 
 #include <cstdint>
 
-#include "parser/NormalizedString.h"
 #include "rdfTypes/GeoPoint.h"
-#include "rdfTypes/Literal.h"
-#include "util/BitUtils.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
-#include "util/GeometryInfoHelpersImpl.h"
 
 namespace ad_utility {
 
