@@ -24,7 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/StringExpressions.cpp"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -1339,6 +1339,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkCentroid = testUnaryExpression<&makeCentroidExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
+  auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
   // auto checkLength = std::bind_front(testNaryExpression,
   // &makeLengthExpression);
@@ -1387,7 +1388,18 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       IdOrLiteralOrIriVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                           geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
 
-  // TODO tests
+  auto sfGeoType = [](std::string_view type) {
+    return lit(absl::StrCat("http://www.opengis.net/ont/sf#", type),
+               "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  };
+  checkGeometryType(
+      IdOrLiteralOrIriVec{U, D(0.0), v, geoLit("LINESTRING(2 2, 4 4)"),
+                          geoLit("POLYGON((2 4, 4 4, 4 2, 2 2))"),
+                          geoLit("BLABLIBLU(1 1, 2 2)")},
+      IdOrLiteralOrIriVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
+                          sfGeoType("Polygon"), U});
+
+  // TODO tests length
 }
 
 // ________________________________________________________________________________________

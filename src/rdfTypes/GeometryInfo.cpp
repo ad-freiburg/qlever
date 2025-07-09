@@ -2,19 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
-#include "util/GeometryInfo.h"
+#include "rdfTypes/GeometryInfo.h"
 
 #include <util/geo/Geo.h>
 
 #include <cstdint>
 #include <type_traits>
 
-#include "parser/GeoPoint.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/StringUtils.h"
 #include "util/geo/Point.h"
 
 namespace ad_utility {
@@ -33,14 +34,18 @@ using ParsedWkt =
 using ParseResult = std::pair<WKTType, std::optional<ParsedWkt>>;
 
 // ____________________________________________________________________________
-ParseResult parseWkt(const std::string_view& wkt) {
-  // TODO<ullingerc> Remove unnecessary string copying
+std::string removeDatatype(const std::string_view& wkt) {
   auto lit = ad_utility::triple_component::Literal::fromStringRepresentation(
-      std::string(wkt));
-  auto wktLiteral = std::string(asStringViewUnsafe(lit.getContent()));
+      std::string{wkt});
+  return std::string{asStringViewUnsafe(lit.getContent())};
+}
 
+// ____________________________________________________________________________
+ParseResult parseWkt(const std::string_view& wkt) {
+  auto wktLiteral = removeDatatype(wkt);
   std::optional<ParsedWkt> parsed = std::nullopt;
   auto type = getWKTType(wktLiteral);
+
   switch (type) {
     case WKTType::POINT: {
       parsed = pointFromWKT<CoordType>(wktLiteral);
@@ -125,6 +130,35 @@ MetricLength metricLength(const ParsedWkt& geometry) {
       geometry)};
 }
 
+// ____________________________________________________________________________
+namespace {
+// Compile-time helpers to simplify `wktTypeToIri` below.
+
+template <detail::constexpr_str_cat_impl::ConstexprString suffix>
+constexpr std::string_view addSfPrefix() {
+  return constexprStrCat<SF_PREFIX, suffix>();
+}
+
+constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
+    std::nullopt,
+    addSfPrefix<"Point">(),
+    addSfPrefix<"LineString">(),
+    addSfPrefix<"Polygon">(),
+    addSfPrefix<"MultiPoint">(),
+    addSfPrefix<"MultiLineString">(),
+    addSfPrefix<"MultiPolygon">(),
+    addSfPrefix<"GeometryCollection">()};
+
+}  // namespace
+
+// ____________________________________________________________________________
+std::optional<std::string_view> wktTypeToIri(uint8_t type) {
+  if (type < 8) {
+    return SF_WKT_TYPE_IRI[type];
+  }
+  return std::nullopt;
+}
+
 }  // namespace detail
 
 // ____________________________________________________________________________
@@ -174,7 +208,7 @@ MetricLength::MetricLength(float length) : length_{length} {
 
 // ____________________________________________________________________________
 GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
-  return static_cast<uint8_t>(detail::getWKTType(wkt.data()));
+  return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
 };
 
 // ____________________________________________________________________________
@@ -186,6 +220,11 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
 GeometryType GeometryInfo::getWktType() const {
   return static_cast<uint8_t>(
       (geometryTypeAndCentroid_ & bitMaskGeometryType) >> ValueId::numDataBits);
+}
+
+// ____________________________________________________________________________
+std::optional<std::string_view> GeometryType::asIri() const {
+  return detail::wktTypeToIri(type_);
 }
 
 // ____________________________________________________________________________

@@ -11,7 +11,7 @@
 
 #include "concepts/concepts.hpp"
 #include "global/ValueId.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
 namespace ad_utility {
@@ -44,7 +44,10 @@ using EncodedBoundingBox = std::pair<uint64_t, uint64_t>;
 // `WKTType`.
 struct GeometryType {
   uint8_t type_;
-  GeometryType(uint8_t type);
+  GeometryType(uint8_t type) : type_{type} {};
+
+  // Returns an IRI without brackets of the OGC Simple Features geometry type.
+  std::optional<std::string_view> asIri() const;
 };
 
 // Represents the length of the geometry in meters. 0 for everything except

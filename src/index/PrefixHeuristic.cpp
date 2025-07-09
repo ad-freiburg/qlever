@@ -2,17 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./PrefixHeuristic.h"
+#include "index/PrefixHeuristic.h"
 
 #include <fstream>
 
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "backports/algorithm.h"
+#include "util/Exception.h"
+#include "util/StringUtils.h"
 
 using std::string;
 

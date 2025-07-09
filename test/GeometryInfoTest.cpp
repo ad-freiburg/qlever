@@ -5,9 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GTestHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace {
 
@@ -109,8 +109,27 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, GeometryTypeAsIri) {
+  ASSERT_EQ(GeometryType{1}.asIri().value(),
+            "http://www.opengis.net/ont/sf#Point");
+  ASSERT_EQ(GeometryType{2}.asIri().value(),
+            "http://www.opengis.net/ont/sf#LineString");
+  ASSERT_EQ(GeometryType{3}.asIri().value(),
+            "http://www.opengis.net/ont/sf#Polygon");
+  ASSERT_EQ(GeometryType{4}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiPoint");
+  ASSERT_EQ(GeometryType{5}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiLineString");
+  ASSERT_EQ(GeometryType{6}.asIri().value(),
+            "http://www.opengis.net/ont/sf#MultiPolygon");
+  ASSERT_EQ(GeometryType{7}.asIri().value(),
+            "http://www.opengis.net/ont/sf#GeometryCollection");
+  ASSERT_FALSE(GeometryType{8}.asIri().has_value());
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, MetricLength) {
-  //
+  // TODO
 }
 
 }  // namespace

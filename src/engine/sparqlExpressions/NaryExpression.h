@@ -16,7 +16,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
 // expressions as arguments. The actual types and implementations of the
@@ -68,6 +68,7 @@ SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);

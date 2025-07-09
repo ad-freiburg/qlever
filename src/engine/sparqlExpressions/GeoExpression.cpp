@@ -15,8 +15,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -46,6 +46,10 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<ad_utility::WktGeometryType,
+                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
 NARY_EXPRESSION(LengthExpression, 2,
                 FV<NumericIdWrapper<ad_utility::WktLength, true>,
@@ -109,6 +113,11 @@ SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryTypeExpression>(std::move(child));
 }
 
 // _____________________________________________________________________________

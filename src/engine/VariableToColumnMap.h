@@ -6,7 +6,7 @@
 #define QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H
 
 #include "global/Id.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
 
 // TODO<joka921> We have a cyclic dependency between `Id.h` and

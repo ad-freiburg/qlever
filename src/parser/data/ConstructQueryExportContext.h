@@ -7,7 +7,7 @@
 
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
