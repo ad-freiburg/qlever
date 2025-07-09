@@ -163,12 +163,12 @@ TransitivePathBase::decideDirection() {
 // _____________________________________________________________________________
 Result::Generator TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    size_t skipCol, bool yieldOnce, size_t inputWidth) const {
+    bool yieldOnce, size_t inputWidth) const {
   return ad_utility::callFixedSizeVi(
       std::array{inputWidth, getResultWidth()},
       [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
-            std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
+            std::move(hull), startSideCol, targetSideCol, yieldOnce);
       });
 }
 
@@ -187,7 +187,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::Generator TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    bool yieldOnce, size_t skipCol) const {
+    bool yieldOnce) const {
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
@@ -201,7 +201,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       table.reserve(linkedNodes.size());
     }
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable != nullptr) {
+    if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
     for (Id linkedNode : linkedNodes) {
@@ -211,7 +211,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 
       if (inputView.has_value()) {
         copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow, skipCol);
+                                               inputRow, outputRow);
       }
 
       outputRow++;
@@ -537,28 +537,15 @@ bool TransitivePathBase::isBoundOrId() const {
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                                     size_t inputRow, size_t outputRow,
-                                     size_t skipCol) {
+                                     size_t inputRow, size_t outputRow) {
   size_t inCol = 0;
   size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 == outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
-    if (skipCol == inCol) {
-      inCol++;
-      continue;
-    }
-
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;
   }
-}
-
-// _____________________________________________________________________________
-void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
-  auto [it, success] = map.try_emplace(key, allocator());
-  it->second.insert(value);
 }
 
 // _____________________________________________________________________________

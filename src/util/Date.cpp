@@ -33,33 +33,34 @@ std::pair<std::string, const char*> Date::toStringAndType() const {
   const char* type = nullptr;
 
   if (getMonth() == 0) {
-    constexpr static std::string_view formatString = "%04d";
-    dateString = absl::StrFormat(formatString, getYear());
+    dateString = getFormattedYear();
     type = XSD_GYEAR_TYPE;
   } else if (getDay() == 0) {
-    constexpr static std::string_view formatString = "%04d-%02d";
-    dateString = absl::StrFormat(formatString, getYear(), getMonth());
+    dateString = absl::StrFormat("%s-%02d", getFormattedYear(), getMonth());
     type = XSD_GYEARMONTH_TYPE;
   } else if (!hasTime()) {
-    constexpr static std::string_view formatString = "%04d-%02d-%02d";
-    dateString = absl::StrFormat(formatString, getYear(), getMonth(), getDay());
+    dateString = absl::StrFormat("%s-%02d-%02d", getFormattedYear(), getMonth(),
+                                 getDay());
     type = XSD_DATE_TYPE;
   } else {
     type = XSD_DATETIME_TYPE;
     double seconds = getSecond();
     double dIntPart;
     if (std::modf(seconds, &dIntPart) == 0.0) {
-      constexpr std::string_view formatString = "%04d-%02d-%02dT%02d:%02d:%02d";
-      dateString =
-          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
-                          getHour(), getMinute(), static_cast<int>(seconds));
+      dateString = absl::StrFormat(
+          "%s-%02d-%02dT%02d:%02d:%02d", getFormattedYear(), getMonth(),
+          getDay(), getHour(), getMinute(), static_cast<int>(seconds));
     } else {
-      constexpr std::string_view formatString =
-          "%04d-%02d-%02dT%02d:%02d:%06.3f";
-      dateString =
-          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
-                          getHour(), getMinute(), getSecond());
+      dateString = absl::StrFormat("%s-%02d-%02dT%02d:%02d:%06.3f",
+                                   getFormattedYear(), getMonth(), getDay(),
+                                   getHour(), getMinute(), getSecond());
     }
   }
   return {absl::StrCat(dateString, formatTimeZone()), type};
+}
+
+// _____________________________________________________________________________
+std::string Date::getFormattedYear() const {
+  return getYear() >= 0 ? absl::StrFormat("%04d", getYear())
+                        : absl::StrFormat("%05d", getYear());
 }

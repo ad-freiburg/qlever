@@ -10,6 +10,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/GeoSparqlHelpers.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -571,3 +572,60 @@ template class RelationalExpression<Comparison::NE>;
 template class RelationalExpression<Comparison::GT>;
 template class RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
+
+namespace sparqlExpression {
+
+// _____________________________________________________________________________
+std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
+getGeoDistanceFilter(const SparqlExpression& expr) {
+  // TODO<ullingerc> Add support for more optimizable filters:
+  // * `geof:distance() < constant`
+  // * `constant > geof:distance()`
+  // * `constant >= geof:distance()`
+  // The supported patterns are documented in the header declaration of this
+  // function.
+
+  // Supported comparison operator
+  auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);
+  if (compareExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Left child must be distance function
+  auto children = compareExpr->children();
+  const auto& leftChild = *children[0];
+
+  // Right child must be constant
+  auto rightChild = children[1].get();
+  auto literalExpr =
+      dynamic_cast<detail::LiteralExpression<ValueId>*>(rightChild);
+  if (literalExpr == nullptr) {
+    return std::nullopt;
+  }
+  ValueId constant = literalExpr->value();
+  // Extract distance. Here we don't know the unit of this number yet. It is
+  // extracted from the function call in the next step.
+  double maxDistAnyUnit = 0;
+  if (constant.getDatatype() == Datatype::Double) {
+    maxDistAnyUnit = constant.getDouble();
+  } else if (constant.getDatatype() == Datatype::Int) {
+    maxDistAnyUnit = static_cast<double>(constant.getInt());
+  } else {
+    return std::nullopt;
+  }
+
+  // Extract variables and distance unit from function call
+  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
+  if (!geoFuncCall.has_value()) {
+    return std::nullopt;
+  }
+
+  // Convert unit to meters
+  double maxDist = ad_utility::detail::valueInUnitToKilometer(
+                       maxDistAnyUnit, geoFuncCall.value().unit_) *
+                   1000;
+
+  return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
+}
+
+}  // namespace sparqlExpression

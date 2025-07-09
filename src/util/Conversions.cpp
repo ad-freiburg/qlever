@@ -27,12 +27,6 @@ triple_component::Iri convertLangtagToEntityUri(const string& tag) {
 }
 
 // _________________________________________________________
-std::string convertToLanguageTaggedPredicate(const string& pred,
-                                             const string& langtag) {
-  return absl::StrCat("@", langtag, "@", pred);
-}
-
-// _________________________________________________________
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag) {
   return triple_component::Iri::fromIriref(absl::StrCat(
