@@ -77,8 +77,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
   }
 
   auto range = CachingContinuableTransformInputRange(
-      std::move(input),
-      [this, getDistinctResult](auto& idTableAndVocab) mutable {
+      std::move(input), [getDistinctResult](auto& idTableAndVocab) mutable {
         IdTable result = getDistinctResult(std::move(idTableAndVocab.idTable_));
         return result.empty()
                    ? Result::IdTableLoopControl::makeContinue()
