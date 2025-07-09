@@ -47,6 +47,10 @@ NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<ad_utility::WktGeometryType,
+                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -101,6 +105,11 @@ SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryTypeExpression>(std::move(child));
 }
 
 // _____________________________________________________________________________
