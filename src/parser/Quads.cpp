@@ -5,6 +5,16 @@
 #include "Quads.h"
 
 // ____________________________________________________________________________________
+Id Quads::BlankNodeAdder::getBlankNodeIndex(const std::string& label) {
+  auto [it, isNew] = map_.try_emplace(label, Id::makeUndefined());
+  auto& id = it->second;
+  if (isNew) {
+    id = Id::makeFromBlankNodeIndex(
+        localVocab_.getBlankNodeIndex(bnodeManager_));
+  }
+  return id;
+}
+
 // Transform the triples and sets the graph on all triples.
 static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
@@ -12,14 +22,7 @@ static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     Quads::BlankNodeAdder& blankNodeAdder) {
   auto toTc = [&blankNodeAdder](const GraphTerm& t) -> TripleComponent {
     if (auto blank = std::get_if<BlankNode>(&t)) {
-      auto [it, wasInserted] = blankNodeAdder.map_.try_emplace(
-          blank->toSparql(), Id::makeUndefined());
-      if (wasInserted) {
-        it->second = Id::makeFromBlankNodeIndex(
-            blankNodeAdder.localVocab_.getBlankNodeIndex(
-                blankNodeAdder.bnodeManager_));
-      }
-      return it->second;
+      return blankNodeAdder.getBlankNodeIndex(blank->toSparql());
     } else {
       return t.toTripleComponent();
     }
@@ -67,8 +70,8 @@ std::vector<parsedQuery::GraphPatternOperation>
 Quads::toGraphPatternOperations() const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
     return SparqlTriple::fromSimple(SparqlTripleSimple(
-        triple[0].toTripleComponent(true), triple[1].toTripleComponent(true),
-        triple[2].toTripleComponent(true)));
+        triple[0].toTripleComponent(), triple[1].toTripleComponent(),
+        triple[2].toTripleComponent()));
   };
 
   using namespace parsedQuery;

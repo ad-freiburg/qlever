@@ -41,19 +41,14 @@ auto parseOperation(BnodeMgr bnodeMgr,
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
-    BnodeMgr bnodeMgr, std::string query,
-    const std::vector<DatasetClause>& datasets) {
-  return parseOperation(bnodeMgr, &AntlrParser::query, std::move(query),
-                        datasets);
-}
-
-// _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(
     std::string query, const std::vector<DatasetClause>& datasets) {
-  // TODO<joka921> Assert that `parseQuery` doesn't add blank nodes and it is
-  // safe to discard the manager.
-  static ad_utility::BlankNodeManager bnodeMgr;
-  return parseQuery(&bnodeMgr, std::move(query), datasets);
+  ad_utility::BlankNodeManager bnodeMgr;
+  auto res = parseOperation(&bnodeMgr, &AntlrParser::query, std::move(query),
+                            datasets);
+  // Queries never contain blank nodes in the body since they are always turned
+  // into internal variables.
+  AD_CORRECTNESS_CHECK(bnodeMgr.numBlocksUsed() == 0);
+  return res;
 }
 
 // _____________________________________________________________________________

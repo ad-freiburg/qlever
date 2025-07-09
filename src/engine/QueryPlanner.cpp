@@ -578,13 +578,15 @@ CPP_concept TriplePosition =
 SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-  // TODO<joka921> This only works properly because we add no blank nodes.
-  // Ad a mode to the `ParserAndVisitor` that allows passing no blank node
-  // manager and throws on encountered blank nodes.
+
   ad_utility::BlankNodeManager bn;
-  return sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
-      .parseTypesafe(&SparqlAutomaticParser::filterR)
-      .resultOfParse_;
+  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, filterString}
+                    .parseTypesafe(&SparqlAutomaticParser::filterR)
+                    .resultOfParse_;
+
+  // The `filter` rule never adds blank nodes.
+  AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
+  return result;
 };
 
 // Helper function for `handleRepeatedVariables` below. Replace a single

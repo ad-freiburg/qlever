@@ -473,11 +473,11 @@ CPP_template_def(typename RequestT, typename ResponseT)(
           std::move(request), send, timeLimit.value(), plannedQuery);
     }
   };
-  auto visitQuery = [this, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = SparqlParser::parseQuery(
-        index().getBlankNodeManager(), query.query_, query.datasetClauses_);
+    auto parsedQuery =
+        SparqlParser::parseQuery(query.query_, query.datasetClauses_);
     return visitOperation(
         {std::move(parsedQuery)}, "SPARQL Query", std::move(query.query_),
         std::not_fn(&ParsedQuery::hasUpdateClause),

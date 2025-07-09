@@ -76,7 +76,5 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   } else {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
-  // TODO<joka921> Allow `parseQuery` without blank node Managers.
-  ad_utility::BlankNodeManager bnm;
-  return SparqlParser::parseQuery(&bnm, query);
+  return SparqlParser::parseQuery(query);
 }

@@ -21,9 +21,6 @@ class SparqlParser {
   // Passing no datasets means that the datasets are set normally from the
   // query or update.
   static ParsedQuery parseQuery(
-      ad_utility::BlankNodeManager* bnodeManager, std::string query,
-      const std::vector<DatasetClause>& datasets = {});
-  static ParsedQuery parseQuery(
       std::string query, const std::vector<DatasetClause>& datasets = {});
   static std::vector<ParsedQuery> parseUpdate(
       ad_utility::BlankNodeManager* bnodeManager, std::string update,

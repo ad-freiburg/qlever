@@ -4,7 +4,6 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include <absl/functional/bind_front.h>
 #include <gmock/gmock.h>
 
 #include <utility>

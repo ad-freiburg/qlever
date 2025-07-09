@@ -66,6 +66,9 @@ class SparqlQleverVisitor {
  private:
   // NOTE: adjust `resetStateForMultipleUpdates()` when adding or updating
   // members.
+
+  // The blank node manager is needed to handle blank nodes in the templates of
+  // UPDATE requests.
   ad_utility::BlankNodeManager* blankNodeManager_;
 
   size_t _blankNodeCounter = 0;
@@ -103,14 +106,21 @@ class SparqlQleverVisitor {
 
   // In most contexts, blank node labels in a SPARQL query are actually
   // variables. But sometimes they are in fact blank node labels (e.g. in
-  // CONSTRUCT templates) and sometimes they are simply forbidden by the
-  // standard. The following enum keeps track of which of these modes is
-  // currently active.
+  // CONSTRUCT or UPDATE templates) and sometimes they are simply forbidden by
+  // the standard (e.g. in DELETE clauses). The following enum keeps track of
+  // which of these modes is currently active.
   enum struct TreatBlankNodesAs { InternalVariables, BlankNodes, Illegal };
   TreatBlankNodesAs treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
 
+  // Set the blank node treatment (see above) the `newValue` and return a
+  // cleanup object that in its destructor restores the original blank node
+  // treatment. If before calling this function blank nodes were already
+  // illegal, then they remain illegal (because "blank nodes forbidden" from an
+  // outer scope is more important than a local rule).
   [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
-    auto previous = std::exchange(treatBlankNodesAs_, newValue);
+    bool wasIllegal = treatBlankNodesAs_ == TreatBlankNodesAs::Illegal;
+    auto previous = wasIllegal ? treatBlankNodesAs_
+                               : std::exchange(treatBlankNodesAs_, newValue);
     return absl::Cleanup{[previous, this]() { treatBlankNodesAs_ = previous; }};
   }
 

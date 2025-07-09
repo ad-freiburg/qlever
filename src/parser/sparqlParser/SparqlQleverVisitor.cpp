@@ -863,10 +863,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   GraphPattern pattern;
-  auto prevState =
-      std::exchange(treatBlankNodesAs_, TreatBlankNodesAs::Illegal);
+  auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto triples = visit(ctx->quadPattern());
-  treatBlankNodesAs_ = prevState;
   pattern._graphPatterns = triples.toGraphPatternOperations();
   parsedQuery_._rootGraphPattern = std::move(pattern);
   // The query body and template are identical. No need to check that variables
@@ -888,13 +886,13 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
                                     " was not bound in the query body."));
     }
   };
-  Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
-  auto visitTemplateClause = [&bn, &ensureVariableIsVisible, this](
+  auto visitTemplateClause = [&ensureVariableIsVisible, this](
                                  auto* ctx, auto* target,
                                  const auto& defaultGraph) {
     if (ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
+      Quads::BlankNodeAdder bn{{}, {}, blankNodeManager_};
       *target = quads.toTriplesWithGraph(defaultGraph, bn);
     }
   };

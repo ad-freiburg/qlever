@@ -133,7 +133,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
-  const auto& updateClause = query.updateClause();
+  auto updateClause = query.updateClause();
   auto& graphUpdate = updateClause.op_;
 
   // Start the timer once the where clause has been evaluated.
@@ -142,7 +142,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   auto prepareTemplateAndResultContainer =
       [&vocab, &variableColumns,
-       &result](std::vector<SparqlTripleSimpleWithGraph> tripleTemplates) {
+       &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(vocab, variableColumns,
                                      std::move(tripleTemplates));

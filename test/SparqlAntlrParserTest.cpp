@@ -1862,10 +1862,8 @@ TEST(ParserTest, propertyPathInCollection) {
   std::string query =
       "PREFIX : <http://example.org/>\n"
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
-  // TODO<joka921> `parseQuery` shouldn't take a blank node manager.
-  static ad_utility::BlankNodeManager bnm;
   EXPECT_THAT(
-      SparqlParser::parseQuery(&bnm, std::move(query)),
+      SparqlParser::parseQuery(std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
