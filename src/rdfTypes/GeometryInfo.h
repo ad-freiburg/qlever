@@ -50,8 +50,7 @@ struct GeometryType {
   std::optional<std::string_view> asIri() const;
 };
 
-// Represents the length of the geometry in meters. 0 for everything except
-// lines.
+// Represents the length of the geometry in meters.
 struct MetricLength {
   float length_;
   MetricLength(float length);
