@@ -26,7 +26,8 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
-  // Same as for normal it
+  // Same as for normal it. This has to be done since the range is [lower,
+  // upper]
   if (upperIt == _blockUpperBoundWordIds.end()) {
     --upperIt;
   }
