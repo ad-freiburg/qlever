@@ -44,7 +44,7 @@ using EncodedBoundingBox = std::pair<uint64_t, uint64_t>;
 // `WKTType`.
 struct GeometryType {
   uint8_t type_;
-  GeometryType(uint8_t type) : type_{type} {};
+  GeometryType(uint8_t type);
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
