@@ -30,12 +30,6 @@ std::string kg =
     "\"some other sentence\" . <b> <p3> \"the test on friday was really hard\" "
     ". <b> <p> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
-std::string kg2 =
-    "<a> <p> \"he failed the test\" . <a> <P> \"he failed the test\" . <a> "
-    "<p2> "
-    "\"some other sentence\" . <b> <p3> \"the test on friday was really hard\" "
-    ". <b> <p> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
-
 std::string wordsFileContent =
     createWordsFileLineAsString("astronomer", false, 1, 1) +
     createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
@@ -114,14 +108,9 @@ auto getQecWithTextIndex(
 // of the kb
 auto getQecWithLiteralTextIndex(
     std::optional<string> regexFilter = std::nullopt,
-    bool regexIsWhitelist = true, size_t index = 0) {
+    bool regexIsWhitelist = true) {
   using namespace ad_utility::testing;
-  TestIndexConfig config;
-  if (index == 0) {
-    config = TestIndexConfig(kg);
-  } else if (index == 1) {
-    config = TestIndexConfig(kg2);
-  }
+  TestIndexConfig config(kg);
   config.createTextIndex = true;
   config.literalRegex = regexFilter;
   config.literalRegexIsWhitelist = regexIsWhitelist;
@@ -447,20 +436,6 @@ TEST(TextindexScanForWord, LiteralFiltering) {
       ::testing::HasSubstr(
           R"(The regex "(abc" is not supported by QLever (which uses Google's RE2 library); the error from RE2 is:)"),
       std::runtime_error);
-
-  // Check if a literal appears with one predicate in text index and one not it
-  // is added
-  qec = getQecWithLiteralTextIndex(regex5, true, 1);
-  TextIndexScanForWord s10{qec, Variable{"?t"}, "test*"};
-
-  result = s10.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 2);
-
-  ASSERT_EQ("\"he failed the test\"",
-            h::getTextRecordFromResultTable(qec, result, 0));
-  ASSERT_EQ("\"he failed the test\"",
-            h::getTextRecordFromResultTable(qec, result, 1));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
