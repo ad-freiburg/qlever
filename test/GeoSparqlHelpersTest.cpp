@@ -180,6 +180,7 @@ TEST(GeoSparqlHelpers, WktGeometricRelation) {
   checkGeoRelationDummyImpl<TOUCHES>();
   checkGeoRelationDummyImpl<EQUALS>();
   checkGeoRelationDummyImpl<OVERLAPS>();
+  checkGeoRelationDummyImpl<WITHIN>();
 }
 
 }  // namespace

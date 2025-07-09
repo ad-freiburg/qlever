@@ -170,6 +170,8 @@ std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
     return res;
   } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
     return res;
+  } else if ((res = getGeoRelationExpressionParameters<WITHIN>(expr))) {
+    return res;
   }
   return std::nullopt;
 }
@@ -274,3 +276,4 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(CROSSES);
 QL_INSTANTIATE_GEO_RELATION_EXPR(TOUCHES);
 QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);
+QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);

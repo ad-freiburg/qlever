@@ -27,6 +27,7 @@ enum class SpatialJoinType {
   TOUCHES,
   EQUALS,
   OVERLAPS,
+  WITHIN,
   WITHIN_DIST
 };
 

@@ -349,8 +349,15 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         results[t].push_back({std::atoi(a), std::atoi(b)});
         resultDists[t].push_back(atof(pred));
-      } else if (pred[0] == static_cast<char>(joinTypeVal)) {
-        results[t].push_back({std::atoi(a), std::atoi(b)});
+      } else {
+        if (joinTypeVal == SpatialJoinType::WITHIN &&
+            pred[0] == static_cast<char>(SpatialJoinType::CONTAINS)) {
+          // If we are looking for `a WITHIN b` and have encountered `b CONTAINS
+          // a`, swap and add to result.
+          results[t].push_back({std::atoi(b), std::atoi(a)});
+        } else if (pred[0] == static_cast<char>(joinTypeVal)) {
+          results[t].push_back({std::atoi(a), std::atoi(b)});
+        }
       }
     };
     cfg.logCb = {};
