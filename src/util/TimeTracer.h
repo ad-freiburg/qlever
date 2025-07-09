@@ -69,7 +69,7 @@ class TimeTracer {
   // TimeTracer(const TimeTracer&) = delete;
   // TimeTracer& operator=(const TimeTracer&) = delete;
 
-  void beginTrace(std::string name) {
+  virtual void beginTrace(std::string name) {
     if (activeTraces_.empty()) {
       throw std::runtime_error("The trace has ended.");
     }
@@ -78,7 +78,7 @@ class TimeTracer {
     activeTraces_.emplace_back(activeTraces_.back().get().children_.back());
   }
 
-  void endTrace(std::string_view name) {
+  virtual void endTrace(std::string_view name) {
     if (activeTraces_.empty()) {
       throw std::runtime_error("The trace has ended.");
     }
@@ -93,38 +93,24 @@ class TimeTracer {
     activeTraces_.pop_back();
   }
 
-  nlohmann::ordered_json getJSON() const { return {rootTrace_}; }
-  nlohmann::ordered_json getJSONShort() const {
+  virtual nlohmann::ordered_json getJSON() const { return {rootTrace_}; }
+  virtual nlohmann::ordered_json getJSONShort() const {
     nlohmann::ordered_json j;
     to_json_short(j, rootTrace_);
     return j;
   }
 };
 
-class TimeTracerOpt {
-  std::optional<std::reference_wrapper<TimeTracer>> tracer_;
-
+class DummyTimeTracer : public TimeTracer {
  public:
-  TimeTracerOpt() : tracer_(std::nullopt){};
-  explicit TimeTracerOpt(TimeTracer& tracer) : tracer_(tracer){};
-
-  void beginTrace(std::string name) {
-    if (tracer_) {
-      tracer_->get().beginTrace(std::move(name));
-    }
-  }
-
-  void endTrace(std::string_view name) {
-    if (tracer_) {
-      tracer_->get().endTrace(name);
-    }
-  }
-
-  TimeTracer& get() {
-    AD_CONTRACT_CHECK(tracer_);
-    return tracer_->get();
-  }
+  DummyTimeTracer(std::string name) : TimeTracer(name) {}
+  void beginTrace(std::string) override {}
+  void endTrace(std::string_view) override {}
+  nlohmann::ordered_json getJSON() const override { return {}; }
+  nlohmann::ordered_json getJSONShort() const override { return {}; }
 };
+
+TimeTracer DEFAULT_TRACER = DummyTimeTracer(std::string());
 
 }  // namespace ad_utility::timer
 

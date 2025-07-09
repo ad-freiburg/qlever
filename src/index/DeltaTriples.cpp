@@ -37,7 +37,7 @@ std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                   ql::span<const IdTriple<0>> triples,
                                   bool insertOrDelete,
-                                  ad_utility::timer::TimeTracerOpt tracer) {
+                                  ad_utility::timer::TimeTracer& tracer) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -89,7 +89,7 @@ DeltaTriplesCount DeltaTriples::getCounts() const {
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
-                                 ad_utility::timer::TimeTracerOpt tracer) {
+                                 ad_utility::timer::TimeTracer& tracer) {
   LOG(DEBUG) << "Inserting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
@@ -100,7 +100,7 @@ void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
                                  Triples triples,
-                                 ad_utility::timer::TimeTracerOpt tracer) {
+                                 ad_utility::timer::TimeTracer& tracer) {
   LOG(DEBUG) << "Deleting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
@@ -168,7 +168,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      Triples triples, bool insertOrDelete,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap,
-                                     ad_utility::timer::TimeTracerOpt tracer) {
+                                     ad_utility::timer::TimeTracer& tracer) {
   tracer.beginTrace("rewriteLocalVocabEntries");
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   tracer.endTrace("rewriteLocalVocabEntries");
@@ -255,7 +255,7 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
 template <typename ReturnType>
 ReturnType DeltaTriplesManager::modify(
     const std::function<ReturnType(DeltaTriples&)>& function,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt tracer) {
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer& tracer) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
@@ -296,13 +296,13 @@ ReturnType DeltaTriplesManager::modify(
 // Explicit instantiations
 template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&, bool writeToDiskAfterRequest,
-    ad_utility::timer::TimeTracerOpt);
+    ad_utility::timer::TimeTracer&);
 template UpdateMetadata DeltaTriplesManager::modify<UpdateMetadata>(
     const std::function<UpdateMetadata(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt);
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
 template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
     const std::function<DeltaTriplesCount(DeltaTriples&)>&,
-    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracerOpt);
+    bool writeToDiskAfterRequest, ad_utility::timer::TimeTracer&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

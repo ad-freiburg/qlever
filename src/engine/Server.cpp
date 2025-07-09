@@ -971,9 +971,8 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  ad_utility::timer::TimeTracer tracerInner =
+  ad_utility::timer::TimeTracer tracer =
       ad_utility::timer::TimeTracer("update");
-  ad_utility::timer::TimeTracerOpt tracer(tracerInner);
   tracer.beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -1028,7 +1027,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   auto updateMetadata = co_await std::move(coroutine);
   tracer.endTrace("update");
-  AD_LOG(INFO) << "TimeTracer output: " << tracer.get().getJSONShort().dump()
+  AD_LOG(INFO) << "TimeTracer output: " << tracer.getJSONShort().dump()
                << std::endl;
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
@@ -1036,7 +1035,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // TODO: display timings for all operations
   auto response = createResponseMetadataForUpdate(
       index_, index_.deltaTriplesManager().getCurrentSnapshot(), *plannedUpdate,
-      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer.get());
+      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer);
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
