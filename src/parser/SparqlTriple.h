@@ -67,12 +67,9 @@ class SparqlTriple
   using Base = SparqlTripleBase<ad_utility::sparql_types::VarOrPath>;
   using Base::Base;
 
-  // TODO<RobinTF> make this constructor accept a type-safe IRI instead of a
-  // string
   // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
-      : Base{std::move(s),
-             PropertyPath::fromIri(TripleComponent::Iri::fromIriref(iri)),
+  SparqlTriple(TripleComponent s, TripleComponent::Iri iri, TripleComponent o)
+      : Base{std::move(s), PropertyPath::fromIri(std::move(iri)),
              std::move(o)} {}
 
   // ___________________________________________________________________________

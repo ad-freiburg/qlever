@@ -650,13 +650,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
-    EXPECT_THAT(pq_1,
-                m::ConstructQuery(
-                    {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
-                      Variable{"?name"}}},
-                    m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://example.com/ns#employeeName>",
-                        Variable{"?name"}}}))));
+    EXPECT_THAT(
+        pq_1,
+        m::ConstructQuery(
+            {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+              Variable{"?name"}}},
+            m::GraphPattern(m::Triples({SparqlTriple{
+                Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
+                Variable{"?name"}}}))));
 
     // Check Parse Construct (2)
     auto pq_2 = SparqlParser::parseQuery(
@@ -671,7 +672,7 @@ TEST(ParserTest, testParse) {
                       Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://xmlns.com/foaf/0.1/name>",
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
                         Variable{"?name"}}}))));
   }
 
