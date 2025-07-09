@@ -12,6 +12,7 @@ ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  host_ = request[boost::beast::http::field::host];
   parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
                     std::move(parsedUrl.parameters_), None{}};
 }
@@ -45,6 +46,12 @@ bool ParsedRequestBuilder::isGraphStoreOperation() const {
 }
 
 // ____________________________________________________________________________
+bool ParsedRequestBuilder::isGraphStoreOperationIndirect() const {
+  // TODO: improve
+  return parsedRequest_.path_.starts_with("/http-graph-store");
+}
+
+// ____________________________________________________________________________
 void ParsedRequestBuilder::extractGraphStoreOperation() {
   // SPARQL Graph Store HTTP Protocol with indirect graph identification
   if (parameterIsContainedExactlyOnce("graph") &&
@@ -59,6 +66,15 @@ void ParsedRequestBuilder::extractGraphStoreOperation() {
   // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
   parsedRequest_.operation_ =
       GraphStoreOperation{extractTargetGraph(parsedRequest_.parameters_)};
+}
+
+// ____________________________________________________________________________
+void ParsedRequestBuilder::extractGraphStoreOperationIndirect() {
+  // SPARQL Graph Store HTTP Protocol with direct graph identification
+  AD_CORRECTNESS_CHECK(std::holds_alternative<None>(parsedRequest_.operation_));
+  parsedRequest_.operation_ =
+      GraphStoreOperation{GraphRef::fromIrirefWithoutBrackets(
+          absl::StrCat("http://", host_, parsedRequest_.path_))};
 }
 
 // ____________________________________________________________________________
