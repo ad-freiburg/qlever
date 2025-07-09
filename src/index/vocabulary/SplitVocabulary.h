@@ -157,7 +157,7 @@ class SplitVocabulary {
   [[nodiscard]] uint64_t size() const {
     uint64_t total = 0;
     for (auto& vocab : underlying_) {
-      total += std::visit([](auto& v) { return v.size(); }, vocab);
+      total += std::visit([](auto& v) -> uint64_t { return v.size(); }, vocab);
     }
     return total;
   }
@@ -170,8 +170,8 @@ class SplitVocabulary {
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
                          uint8_t marker = 0) const {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
-    WordAndIndex subResult = std::visit(
-        [&](auto& v) {
+    auto subResult = std::visit(
+        [&](auto& v) -> WordAndIndex {
           if constexpr (getUpperBound) {
             return v.upper_bound(word, comparator);
           } else {
@@ -207,9 +207,10 @@ class SplitVocabulary {
                    word, comparator, marker)
                    .positionOfWord(word);
     if (!pos.has_value()) {
-      auto end = addMarker(
-          std::visit([](auto& v) { return v.size(); }, underlying_[marker]),
-          marker);
+      auto end =
+          addMarker(std::visit([](auto& v) -> uint64_t { return v.size(); },
+                               underlying_[marker]),
+                    marker);
       return {end, end};
     }
     return pos.value();
