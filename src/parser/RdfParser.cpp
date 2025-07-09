@@ -1161,26 +1161,24 @@ void RdfParallelParser<T>::initialize(const string& filename,
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_->open(filename);
   RdfStringParser<T> declarationParser{};
-  while (true) {
+  std::string_view remainder;
+  while (remainder.empty()) {
     if (auto batch = fileBuffer_->getNextBlock()) {
       declarationParser.setInputStream(std::move(batch.value()));
       while (declarationParser.parseDirectiveManually()) {
       }
-      auto remainder = declarationParser.getUnparsedRemainder();
-      if (remainder.empty()) {
-        continue;
-      }
-      this->prefixMap_ = std::move(declarationParser.getPrefixMap());
-      remainingBatchFromInitialization.reserve(remainder.size());
-      ql::ranges::copy(remainder,
-                       std::back_inserter(remainingBatchFromInitialization));
+      remainder = declarationParser.getUnparsedRemainder();
     } else {
       AD_LOG_WARN
           << "Empty input to the TURTLE parser, is this what you intended?"
           << std::endl;
+      break;
     }
-    break;
   }
+  this->prefixMap_ = std::move(declarationParser.getPrefixMap());
+  remainingBatchFromInitialization.reserve(remainder.size());
+  ql::ranges::copy(remainder,
+                   std::back_inserter(remainingBatchFromInitialization));
 
   auto feedBatches = [this, firstBatch = std::move(
                                 remainingBatchFromInitialization)]() mutable {
