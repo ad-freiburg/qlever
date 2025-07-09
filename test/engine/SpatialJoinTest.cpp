@@ -804,6 +804,31 @@ TEST(SpatialJoin, getDescriptor) {
   ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
+  // The `SpatialJoin`'s descriptor should contain a readble representation of
+  // the join type
+  auto qec = getQec();
+  TripleComponent subject{Variable{"?subject"}};
+  TripleComponent object{Variable{"?object"}};
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{
+              SpatialJoinConfig{SpatialJoinType::INTERSECTS},
+              subject.getVariable(), object.getVariable()},
+          std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+
+  auto description = spatialJoin->getDescriptor();
+  ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
+  ASSERT_THAT(description, ::testing::HasSubstr("?object"));
+  ASSERT_THAT(description, ::testing::HasSubstr("intersects"));
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, getCacheKeyImpl) {
   auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
