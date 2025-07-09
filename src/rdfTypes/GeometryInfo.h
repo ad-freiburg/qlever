@@ -21,18 +21,34 @@ namespace ad_utility {
 
 // Represents the centroid of a geometry as a `GeoPoint`.
 struct Centroid {
+ private:
   GeoPoint centroid_;
 
+ public:
   Centroid(GeoPoint centroid) : centroid_{centroid} {};
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
+
+  GeoPoint centroid() const { return centroid_; }
 };
 
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
 struct BoundingBox {
+ private:
   GeoPoint lowerLeft_;
   GeoPoint upperRight_;
 
+ public:
+  BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight);
+
+  GeoPoint lowerLeft() const { return lowerLeft_; }
+  GeoPoint upperRight() const { return upperRight_; }
+  std::pair<GeoPoint, GeoPoint> pair() const {
+    return {lowerLeft_, upperRight_};
+  }
+
+  // Return a `POLYGON` WKT literal without quotes or datatype representing this
+  // bounding box.
   std::string asWkt() const;
 };
 
@@ -43,8 +59,13 @@ using EncodedBoundingBox = std::pair<uint64_t, uint64_t>;
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
 struct GeometryType {
+ private:
   uint8_t type_;
+
+ public:
   GeometryType(uint8_t type);
+
+  uint8_t type() const { return type_; }
 
   // Returns an IRI without brackets of the OGC Simple Features geometry type.
   std::optional<std::string_view> asIri() const;
@@ -52,8 +73,13 @@ struct GeometryType {
 
 // Represents the length of the geometry in meters.
 struct MetricLength {
+ private:
   double length_;
+
+ public:
   MetricLength(double length);
+
+  double length() const { return length_; }
 };
 
 // Forward declaration for concept

@@ -18,21 +18,21 @@ using Loc = source_location;
 inline void checkGeometryType(GeometryType a, GeometryType b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_EQ(a.type_, b.type_);
+  ASSERT_EQ(a.type(), b.type());
 }
 
 inline void checkCentroid(Centroid a, Centroid b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.centroid_.getLat(), b.centroid_.getLat(), 0.001);
-  ASSERT_NEAR(a.centroid_.getLng(), b.centroid_.getLng(), 0.001);
+  ASSERT_NEAR(a.centroid().getLat(), b.centroid().getLat(), 0.001);
+  ASSERT_NEAR(a.centroid().getLng(), b.centroid().getLng(), 0.001);
 }
 
 inline void checkBoundingBox(BoundingBox a, BoundingBox b,
                              Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto [all, aur] = a;
-  auto [bll, bur] = b;
+  auto [all, aur] = a.pair();
+  auto [bll, bur] = b.pair();
   ASSERT_NEAR(all.getLat(), bll.getLat(), 0.001);
   ASSERT_NEAR(all.getLng(), bll.getLng(), 0.001);
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
@@ -42,9 +42,9 @@ inline void checkBoundingBox(BoundingBox a, BoundingBox b,
 inline void checkMetricLength(MetricLength a, MetricLength b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.length_, b.length_,
+  ASSERT_NEAR(a.length(), b.length(),
               // The metric length may be off by up to 1%
-              0.01 * a.length_);
+              0.01 * a.length());
 }
 
 // Helper that asserts (approx.) equality of two GeometryInfo objects

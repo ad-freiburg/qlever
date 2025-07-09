@@ -164,9 +164,9 @@ std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                            Centroid centroid, MetricLength metricLength)
-    : boundingBox_{boundingBox.lowerLeft_.toBitRepresentation(),
-                   boundingBox.upperRight_.toBitRepresentation()},
-      metricLength_{metricLength.length_} {
+    : boundingBox_{boundingBox.lowerLeft().toBitRepresentation(),
+                   boundingBox.upperRight().toBitRepresentation()},
+      metricLength_{metricLength.length()} {
   // The WktType only has 8 different values and we have 4 unused bits for the
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
@@ -174,16 +174,10 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1,
                        "WKT Type out of range");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
-  uint64_t centroidBits = centroid.centroid_.toBitRepresentation();
+  uint64_t centroidBits = centroid.centroid().toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
                        "Centroid bit representation exceeds available bits.");
   geometryTypeAndCentroid_ = typeBits | centroidBits;
-
-  AD_CORRECTNESS_CHECK(
-      boundingBox.lowerLeft_.getLat() <= boundingBox.upperRight_.getLat() &&
-          boundingBox.lowerLeft_.getLng() <= boundingBox.upperRight_.getLng(),
-      "Bounding box coordinates invalid: first point must be lower "
-      "left and second point must be upper right of a rectangle.");
 };
 
 // ____________________________________________________________________________
@@ -253,6 +247,16 @@ BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return detail::boundingBoxAsGeoPoints(parsed.value());
 }
+
+// ____________________________________________________________________________
+BoundingBox::BoundingBox(GeoPoint lowerLeft, GeoPoint upperRight)
+    : lowerLeft_{lowerLeft}, upperRight_{upperRight} {
+  AD_CORRECTNESS_CHECK(
+      lowerLeft.getLat() <= upperRight.getLat() &&
+          lowerLeft.getLng() <= upperRight.getLng(),
+      "Bounding box coordinates invalid: first point must be lower "
+      "left and second point must be upper right of a rectangle.");
+};
 
 // ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {

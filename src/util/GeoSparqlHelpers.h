@@ -116,7 +116,7 @@ class WktLength {
       return std::numeric_limits<double>::quiet_NaN();
     }
     return detail::kilometerToUnit(
-        static_cast<double>(len.value().length_) / 1000.0, unit);
+        static_cast<double>(len.value().length()) / 1000.0, unit);
   }
 };
 
@@ -135,7 +135,7 @@ class WktCentroid {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid_);
+    return ValueId::makeFromGeoPoint(geom.value().centroid());
   }
 };
 

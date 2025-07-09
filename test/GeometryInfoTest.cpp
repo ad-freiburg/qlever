@@ -28,15 +28,15 @@ constexpr std::string_view lit3 =
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
   GeometryInfo g{5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {900}};
-  ASSERT_EQ(g.getWktType().type_, 5);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLat(), 1.5, 0.0001);
-  ASSERT_NEAR(g.getCentroid().centroid_.getLng(), 1.5, 0.0001);
-  auto [lowerLeft, upperRight] = g.getBoundingBox();
+  ASSERT_EQ(g.getWktType().type(), 5);
+  ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
+  ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
+  auto [lowerLeft, upperRight] = g.getBoundingBox().pair();
   ASSERT_NEAR(lowerLeft.getLat(), 1, 0.0001);
   ASSERT_NEAR(lowerLeft.getLng(), 1, 0.0001);
   ASSERT_NEAR(upperRight.getLat(), 2, 0.0001);
   ASSERT_NEAR(upperRight.getLng(), 2, 0.0001);
-  ASSERT_NEAR(g.getMetricLength().length_, 900, 0.0001);
+  ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
