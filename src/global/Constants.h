@@ -167,6 +167,8 @@ constexpr inline std::string_view UNIT_KILOMETER_IRI =
 constexpr inline std::string_view UNIT_MILE_IRI =
     ad_utility::constexprStrCat<UNIT_PREFIX, "MI">();
 
+constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";
+
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
 constexpr inline std::string_view CONFIGURATION_FILE = ".meta-data.json";

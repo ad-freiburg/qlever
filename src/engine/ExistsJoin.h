@@ -90,6 +90,8 @@ class ExistsJoin : public Operation {
   Result lazyExistsJoin(std::shared_ptr<const Result> left,
                         std::shared_ptr<const Result> right,
                         bool requestLaziness);
+
+  FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

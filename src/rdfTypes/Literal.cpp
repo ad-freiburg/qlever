@@ -2,17 +2,21 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include "parser/Literal.h"
+#include "rdfTypes/Literal.h"
 
 #include <utility>
 #include <variant>
 
 #include "backports/shift.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/RdfEscaping.h"
+#include "util/Exception.h"
+#include "util/OverloadCallOperator.h"
 
 static constexpr char quote{'"'};
 static constexpr char at{'@'};
 static constexpr char hat{'^'};
+using std::string;
+using namespace std::string_view_literals;
 
 namespace ad_utility::triple_component {
 // __________________________________________
@@ -70,7 +74,7 @@ Literal Literal::fromEscapedRdfLiteral(
 // __________________________________________
 Literal Literal::literalWithoutQuotes(
     std::string_view rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
 

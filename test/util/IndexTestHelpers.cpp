@@ -9,6 +9,7 @@
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "index/TextIndexBuilder.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "util/ProgressBar.h"
 
 namespace ad_utility::testing {
@@ -185,7 +186,9 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     // randomly choose one of the vocabulary implementations
-    index.getImpl().setVocabularyTypeForIndexBuilding(VocabularyType::random());
+    index.getImpl().setVocabularyTypeForIndexBuilding(
+        c.vocabularyType.has_value() ? c.vocabularyType.value()
+                                     : VocabularyType::random());
     index.createFromFiles({spec});
     if (c.createTextIndex) {
       TextIndexBuilder textIndexBuilder = TextIndexBuilder(
@@ -331,9 +334,11 @@ QueryExecutionContext* getQec(TestIndexConfig c) {
 }
 
 // _____________________________________________________________________________
-QueryExecutionContext* getQec(std::optional<std::string> turtleInput) {
+QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
+                              std::optional<VocabularyType> vocabularyType) {
   TestIndexConfig config;
   config.turtleInput = std::move(turtleInput);
+  config.vocabularyType = vocabularyType;
   return getQec(std::move(config));
 }
 
