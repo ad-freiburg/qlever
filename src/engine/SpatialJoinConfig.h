@@ -30,6 +30,11 @@ enum class SpatialJoinType {
   WITHIN_DIST
 };
 
+// String representation of the `SpatialJoinType` values.
+static constexpr std::string_view SpatialJoinTypeString[8]{
+    "intersects", "contains", "covers",   "crosses",
+    "touches",    "equals",   "overlaps", "within-dist"};
+
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
