@@ -24,9 +24,9 @@ namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 
-const std::string getIriString(
+const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
-  return std::get<PropertyPath>(varOrPath).iri_;
+  return std::get<PropertyPath>(varOrPath).getIri().toStringRepresentation();
 }
 }  // namespace
 
@@ -66,7 +66,7 @@ TEST(ParserTest, testParse) {
               getIriString(triples[1].p_));
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
-    ASSERT_EQ("<nsx:rel2>", std::get<PropertyPath>(triples[2].p_).iri_);
+    ASSERT_EQ("<nsx:rel2>", getIriString(triples[2].p_));
     ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
@@ -1196,7 +1196,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ((SparqlTriple{Var{"?x"},
                             PropertyPath::fromIri(
                                 ad_utility::convertToLanguageTaggedPredicate(
-                                    "<label>", "en")),
+                                    iri("<label>"), "en")),
                             Var{"?y"}}),
               triples[0]);
   }
@@ -1209,13 +1209,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(2u, triples.size());
     ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ(
-        (SparqlTriple{
-            Var{"?y"},
-            PropertyPath::fromIri(
-                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            ad_utility::convertLangtagToEntityUri("en")}),
-        triples[1]);
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?y"},
+                  PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                            "builtin-functions/langtag>")),
+                  ad_utility::convertLangtagToEntityUri("en")}),
+              triples[1]);
   }
 
   // Test that the language filter never changes triples with
@@ -1231,14 +1230,14 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ((SparqlTriple{Var{"?x"},
                             PropertyPath::fromIri(
                                 ad_utility::convertToLanguageTaggedPredicate(
-                                    "<label>", "en")),
+                                    iri("<label>"), "en")),
                             Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?text"},
-                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
-                  Var{"?y"}}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
   }
   {
     ParsedQuery q = SparqlParser::parseQuery(
@@ -1250,16 +1249,16 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(3u, triples.size());
     ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?text"},
-                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
-                  Var{"?y"}}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
     ASSERT_EQ(
         (SparqlTriple{
             Var{"?y"},
-            PropertyPath::fromIri(
-                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                      "builtin-functions/langtag>")),
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }

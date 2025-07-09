@@ -11,7 +11,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
