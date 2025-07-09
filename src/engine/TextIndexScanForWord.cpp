@@ -88,14 +88,14 @@ size_t TextIndexScanForWord::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getCostEstimate() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlocks(config_.word_,
-                                                               true);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocks(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________
 uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
-  return getExecutionContext()->getIndex().getSizeOfTextBlocks(config_.word_,
-                                                               true);
+  return getExecutionContext()->getIndex().getSizeOfTextBlocks(
+      config_.word_, TextScanMode::WordScan);
 }
 
 // _____________________________________________________________________________

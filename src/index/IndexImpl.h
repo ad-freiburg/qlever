@@ -353,8 +353,8 @@ class IndexImpl {
   /**
    *
    * @param word: The word used to do the entity- or wordscan
-   * @param forWord: If true then the context lists are checked. If false the
-   *                 entity lists of the text blocks are checked.
+   * @param textScanMode: If set to WordScan the contextLists are looked at, if
+   *                      set to EntityScan the entityLists are looked at.
    * @return Sum of context list sizes or entity list sizes of all touched
    *         blocks. If 'forWord' is true and the word is not a prefix only a
    *         small number of words actually match. So the final result is much
@@ -367,7 +367,8 @@ class IndexImpl {
    *       actual wordId range.
    *       TODO: improve size estimate by adding a correction factor.
    */
-  size_t getSizeOfTextBlocks(const string& word, bool forWord) const;
+  size_t getSizeOfTextBlocks(const string& word,
+                             TextScanMode textScanMode) const;
 
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
@@ -589,12 +590,12 @@ class IndexImpl {
     bool hasToBeFiltered_;
     IdRange<WordVocabIndex> idRange_;
   };
-  std::optional<std::vector<TextBlockMetadataAndWordInfo>>
-  getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
+  std::vector<TextBlockMetadataAndWordInfo> getTextBlockMetadataForWordOrPrefix(
+      const std::string& word) const;
 
   static size_t getSizeOfTextBlocksSum(
       const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
-      bool forWord);
+      TextScanMode textScanMode);
 
   /**
    * @brief This method is used to combine the IdTables of multiple blocks
@@ -603,18 +604,19 @@ class IndexImpl {
    * @param tbmds: The tbmds are all TextBlockMetadataAndWordInfo returned by
    *               the getTextBlockMetadaForWordOrPrefix function
    * @param allocator: The allocator is used to create the result IdTable.
-   * @param isEntitySearch:
-   *        if false: The contextLists of the blocks are read and filtered
+   * @param textScanMode:
+   *        if WordScan: The contextLists of the blocks are read and filtered
    *              given the respective wordId range. The wordId range was
    *              previously calculated and saved in the
    *              TextBlockMetadataAndWordInfo.Those filtered IdTables are then
    *              merged into one. Sorted by TextRecordIndex (contextId).
-   *         if true: The entityLists of the blocks are read and NOT filtered.
-   *              During the merging exact duplicate entries are removed.
-   *              Duplicates can occur since the same entity in the same text
-   *              record is saved to all words occurring in this text record.
-   *              It is checked that no duplicates occur in one block but when
-   *              combining multiple blocks they have to be accounted for.
+   *         if EntityScan: The entityLists of the blocks are read and NOT
+   *              filtered. During the merging exact duplicate entries are
+   *              removed. Duplicates can occur since the same entity in the
+   *              same text record is saved to all words occurring in this text
+   *              record. It is checked that no duplicates occur in one block
+   *              but when combining multiple blocks they have to be accounted
+   *              for.
    *
    */
   template <typename Reader>
@@ -622,7 +624,7 @@ class IndexImpl {
       const Reader& reader,
       const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      bool isEntitySearch) const;
+      TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 

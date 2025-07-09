@@ -22,10 +22,10 @@
 
 size_t IndexImpl::getSizeOfTextBlocksSum(
     const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
-    bool forWord) {
+    TextScanMode textScanMode) {
   auto getSizeOfBlock =
-      [&forWord](const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
-        if (forWord) {
+      [&textScanMode](const TextBlockMetadataAndWordInfo& tbmdAndWordInfo) {
+        if (textScanMode == TextScanMode::WordScan) {
           return tbmdAndWordInfo.tbmd_._cl._nofElements;
         }
         return tbmdAndWordInfo.tbmd_._entityCl._nofElements;
@@ -98,14 +98,14 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
-  auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
-  if (!optionalTbmd.has_value()) {
+  auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
+  if (tbmds.empty()) {
     idTable.setNumColumns(term.ends_with(PREFIX_CHAR) ? 3 : 2);
     return idTable;
   }
 
-  IdTable output = mergeTextBlockResults(
-      textIndexReadWrite::readWordCl, optionalTbmd.value(), allocator, false);
+  IdTable output = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
+                                         allocator, TextScanMode::WordScan);
 
   LOG(DEBUG) << "Word postings for term: " << term
              << ": cids: " << output.getColumn(0).size() << '\n';
@@ -116,12 +116,10 @@ IdTable IndexImpl::getWordPostingsForTerm(
 IdTable IndexImpl::getEntityMentionsForWord(
     const string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
-  if (!optTbmd.has_value()) {
-    return IdTable{allocator};
-  }
-  return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl,
-                               optTbmd.value(), allocator, true);
+  auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
+  AD_CORRECTNESS_CHECK(!tbmds.empty());
+  return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl, tbmds,
+                               allocator, TextScanMode::EntityScan);
 }
 
 // _____________________________________________________________________________
@@ -130,7 +128,7 @@ IdTable IndexImpl::mergeTextBlockResults(
     const Reader& reader,
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    bool isEntitySearch) const {
+    TextScanMode textScanMode) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
   vector<IdTable> partialResults;
@@ -138,7 +136,7 @@ IdTable IndexImpl::mergeTextBlockResults(
     IdTable partialResult{allocator};
     partialResult =
         reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
-    if (!isEntitySearch && tbmd.hasToBeFiltered_) {
+    if (textScanMode == TextScanMode::WordScan && tbmd.hasToBeFiltered_) {
       partialResult =
           FTSAlgorithms::filterByRange(tbmd.idRange_, partialResult);
     }
@@ -162,7 +160,7 @@ IdTable IndexImpl::mergeTextBlockResults(
         });
   });
   // If not entitySearch don't filter duplicates
-  if (!isEntitySearch) {
+  if (textScanMode == TextScanMode::WordScan) {
     return result;
   }
   // Filter duplicates
@@ -181,26 +179,28 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
   // are later filtered out.
   std::vector<std::pair<size_t, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
-    auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
-    if (!optTbmd.has_value()) {
+    auto tbmds = getTextBlockMetadataForWordOrPrefix(terms[i]);
+    if (tbmds.empty()) {
       return i;
     }
-    toBeSorted.emplace_back(i, getSizeOfTextBlocksSum(optTbmd.value(), false));
+    toBeSorted.emplace_back(
+        i, getSizeOfTextBlocksSum(tbmds, TextScanMode::EntityScan));
   }
   ql::ranges::sort(toBeSorted, std::less<>{}, ad_utility::second);
   return std::get<0>(toBeSorted[0]);
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlocks(const string& word, bool forWord) const {
+size_t IndexImpl::getSizeOfTextBlocks(const string& word,
+                                      TextScanMode textScanMode) const {
   if (word.empty()) {
     return 0;
   }
-  auto optTbmd = getTextBlockMetadataForWordOrPrefix(word);
-  if (!optTbmd.has_value()) {
+  auto tbmds = getTextBlockMetadataForWordOrPrefix(word);
+  if (tbmds.empty()) {
     return 0;
   }
-  return getSizeOfTextBlocksSum(optTbmd.value(), forWord);
+  return getSizeOfTextBlocksSum(tbmds, textScanMode);
 }
 
 // _____________________________________________________________________________
@@ -208,21 +208,21 @@ void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
-    const -> std::optional<std::vector<TextBlockMetadataAndWordInfo>> {
+    const -> std::vector<TextBlockMetadataAndWordInfo> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
   if (word.ends_with(PREFIX_CHAR)) {
     auto idRangeOpt = textVocab_.getIdRangeForFullTextPrefix(word);
     if (!idRangeOpt.has_value()) {
       LOG(INFO) << "Prefix: " << word << " not in vocabulary\n";
-      return std::nullopt;
+      return {};
     }
     idRange = idRangeOpt.value();
   } else {
     WordVocabIndex idx;
     if (!textVocab_.getId(word, &idx)) {
       LOG(INFO) << "Term: " << word << " not in vocabulary\n";
-      return std::nullopt;
+      return {};
     }
     idRange = IdRange{idx, idx};
   }
@@ -237,7 +237,7 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                         tbmd.get()._lastWordId == idRange.last().get());
     output.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
   }
-  return std::optional{std::move(output)};
+  return output;
 }
 
 // _____________________________________________________________________________
