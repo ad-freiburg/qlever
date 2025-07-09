@@ -300,8 +300,10 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
   for (auto* triplePtr : matchingTriples) {
     AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
     auto& predicate = std::get<PropertyPath>(triplePtr->p_);
-    predicate.iri_ =
-        ad_utility::convertToLanguageTaggedPredicate(predicate.iri_, langTag);
+    AD_CORRECTNESS_CHECK(predicate.isIri());
+    predicate =
+        PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+            predicate.getIri(), langTag));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
@@ -329,9 +331,11 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple(variable,
-                        PropertyPath::fromIri(std::string{LANGUAGE_PREDICATE}),
-                        langEntity);
+    SparqlTriple triple{
+        variable,
+        PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
+        langEntity};
     t.push_back(std::move(triple));
   }
   return true;
