@@ -99,15 +99,9 @@ size_t Index::getNumDistinctSubjectPredicatePairs() const {
 std::string_view Index::wordIdToString(WordIndex wordIndex) const {
   return pimpl_->wordIdToString(wordIndex);
 }
-
 // ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForWord(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForWord(word);
-}
-
-// ____________________________________________________________________________
-size_t Index::getSizeOfTextBlockForEntities(const std::string& word) const {
-  return pimpl_->getSizeOfTextBlockForEntities(word);
+size_t Index::getSizeOfTextBlocks(const string& word, bool forWord) const {
+  return pimpl_->getSizeOfTextBlocks(word, forWord);
 }
 
 // ____________________________________________________________________________
