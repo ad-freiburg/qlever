@@ -106,6 +106,30 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
   return getWKT(box);
 }
 
+// ____________________________________________________________________________
+template <detail::constexpr_str_cat_impl::ConstexprString suffix>
+inline constexpr std::string_view addSfPrefix() {
+  return constexprStrCat<SF_PREFIX, suffix>();
+}
+
+static constexpr std::optional<std::string_view> SF_WKT_TYPE_IRI[8]{
+    std::nullopt,
+    addSfPrefix<"Point">(),
+    addSfPrefix<"LineString">(),
+    addSfPrefix<"Polygon">(),
+    addSfPrefix<"MultiPoint">(),
+    addSfPrefix<"MultiLineString">(),
+    addSfPrefix<"MultiPolygon">(),
+    addSfPrefix<"GeometryCollection">()};
+
+// ____________________________________________________________________________
+inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
+  if (type < 8) {
+    return SF_WKT_TYPE_IRI[type];
+  }
+  return std::nullopt;
+}
+
 }  // namespace ad_utility::detail
 
 #endif  // QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H

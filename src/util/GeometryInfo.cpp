@@ -48,7 +48,7 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
-  return static_cast<uint8_t>(detail::getWKTType(wkt.data()));
+  return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
 };
 
 // ____________________________________________________________________________
@@ -60,6 +60,11 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
 GeometryType GeometryInfo::getWktType() const {
   return static_cast<uint8_t>(
       (geometryTypeAndCentroid_ & bitMaskGeometryType) >> ValueId::numDataBits);
+}
+
+// ____________________________________________________________________________
+std::optional<std::string_view> GeometryType::asIri() const {
+  return detail::wktTypeToIri(type_);
 }
 
 // ____________________________________________________________________________
