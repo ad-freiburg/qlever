@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility::streams {
 
@@ -46,7 +47,7 @@ class stream_generator_promise {
 
  public:
   using value_type = std::string_view;
-  using reference_type = value_type&;
+  using reference_type = std::string_view;
   using pointer_type = value_type*;
   stream_generator_promise() = default;
 
@@ -76,16 +77,15 @@ class stream_generator_promise {
     return suspend_sometimes{true};
   }
 
-  // Overload so we can also pass char values.
-  suspend_sometimes yield_value(char value) noexcept {
+  // Overload so we can also pass char values, template such that all types that
+  // implicitly convert to char are not accepted.
+  CPP_template(typename CharT)(requires SimilarTo<CharT, char>)
+      suspend_sometimes yield_value(CharT value) noexcept {
     std::string_view singleView{&value, 1};
     // This is only safe to do if we can write into the buffer immediately.
     AD_CORRECTNESS_CHECK(isBufferLargeEnough(singleView));
     return yield_value(singleView);
   }
-
-  // Prevent accidental implicit conversions to char
-  suspend_sometimes yield_value(int value) noexcept = delete;
 
   // Return true if the overflow has been completely consumed.
   bool doneProcessing() const noexcept {
@@ -103,7 +103,7 @@ class stream_generator_promise {
 
   constexpr void return_void() const noexcept {}
 
-  value_type value() const noexcept {
+  reference_type value() const noexcept {
     return std::string_view{data_.data(), currentIndex_};
   }
 
@@ -135,15 +135,15 @@ class stream_generator_iterator {
  public:
   using iterator_category = std::input_iterator_tag;
   using difference_type = std::ptrdiff_t;
-  using value_type = std::string;
-  using reference = value_type&;
+  using value_type = std::string_view;
+  using reference = std::string_view;
   using pointer = value_type*;
 
   // Iterator needs to be default-constructible to satisfy the Range concept.
   stream_generator_iterator() noexcept : coroutine_{nullptr} {}
 
   explicit stream_generator_iterator(coroutine_handle coroutine) noexcept
-      : coroutine_{coroutine}, value_{coroutine_.promise().value()} {}
+      : coroutine_{coroutine} {}
 
   friend bool operator==(const stream_generator_iterator& it,
                          stream_generator_sentinel) noexcept {
@@ -180,8 +180,6 @@ class stream_generator_iterator {
       }
     }
 
-    value_ = std::string{coroutine_.promise().value()};
-
     return *this;
   }
 
@@ -190,13 +188,12 @@ class stream_generator_iterator {
   // not support post-increment
   void operator++(int) { (void)operator++(); }
 
-  reference operator*() noexcept { return value_; }
+  reference operator*() noexcept { return coroutine_.promise().value(); }
 
   pointer operator->() noexcept { return std::addressof(operator*()); }
 
  private:
   coroutine_handle coroutine_;
-  value_type value_;
 };
 
 }  // namespace detail
