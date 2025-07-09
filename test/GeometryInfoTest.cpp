@@ -5,7 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "GeometryInfoTestHelpers.h"
-#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/GTestHelpers.h"
@@ -15,15 +14,36 @@ namespace {
 using namespace ad_utility;
 using namespace geoInfoTestHelpers;
 
-// Example WKT literals for the tests below
-constexpr std::string_view lit1 =
+// Example WKT literals for all supported geometry types
+constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-constexpr std::string_view lit2 =
-    "\"LINESTRING(2 2, 4 "
-    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
-constexpr std::string_view lit3 =
-    "\"POLYGON(2 4, 4 4, 4 "
-    "2, 2 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litLineString =
+    "\"LINESTRING(2 2, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPolygon =
+    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litMultiPoint =
+    "\"MULTIPOINT((2 2), (4 4))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litMultiLineString =
+    "\"MULTILINESTRING((2 2, 4 4), (2 2, 6 8))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litMultiPolygon =
+    "\"MULTIPOLYGON(((2 4,8 4,8 6,2 6,2 4)), ((2 4, 4 4, 4 2, 2 2)))\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litCollection =
+    "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
+    "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+// constexpr std::string_view litInvalid =
+//     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+const auto getAllTestLiterals = []() {
+  return std::vector<std::string_view>{
+      litPoint,           litLineString,   litPolygon,   litMultiPoint,
+      litMultiLineString, litMultiPolygon, litCollection};
+};
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, BasicTests) {
@@ -50,17 +70,34 @@ TEST(GeometryInfoTest, BasicTests) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
-  auto g = GeometryInfo::fromWktLiteral(lit1);
+  auto g = GeometryInfo::fromWktLiteral(litPoint);
   GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
   checkGeoInfo(g, exp);
 
-  auto g2 = GeometryInfo::fromWktLiteral(lit2);
+  auto g2 = GeometryInfo::fromWktLiteral(litLineString);
   GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}};
   checkGeoInfo(g2, exp2);
 
-  auto g3 = GeometryInfo::fromWktLiteral(lit3);
+  auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
   GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
   checkGeoInfo(g3, exp3);
+
+  // TODO determine and insert the expected values
+  // auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
+  // GeometryInfo exp4{3, {{2, 2}, {4, 4}}, {3, 3}};
+  // checkGeoInfo(g4, exp4);
+
+  // auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
+  // GeometryInfo exp5{3, {{2, 2}, {4, 4}}, {3, 3}};
+  // checkGeoInfo(g5, exp5);
+
+  // auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
+  // GeometryInfo exp6{3, {{2, 2}, {4, 4}}, {3, 3}};
+  // checkGeoInfo(g6, exp6);
+
+  // auto g7 = GeometryInfo::fromWktLiteral(litCollection);
+  // GeometryInfo exp7{3, {{2, 2}, {4, 4}}, {3, 3}};
+  // checkGeoInfo(g7, exp7);
 }
 
 // ____________________________________________________________________________
@@ -78,16 +115,16 @@ TEST(GeometryInfoTest, FromGeoPoint) {
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, RequestedInfoInstance) {
-  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit1));
-  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit2));
-  checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit3));
+  for (auto lit : getAllTestLiterals()) {
+    checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+  }
 }
 
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, RequestedInfoLiteral) {
-  checkRequestedInfoForWktLiteral(lit1);
-  checkRequestedInfoForWktLiteral(lit2);
-  checkRequestedInfoForWktLiteral(lit3);
+  for (auto lit : getAllTestLiterals()) {
+    checkRequestedInfoForWktLiteral(lit);
+  }
 }
 
 // ____________________________________________________________________________
@@ -133,9 +170,9 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   ASSERT_NEAR(g.getLng(), p2.getX(), 0.0001);
   ASSERT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
-  ASSERT_EQ(removeDatatype(lit1), "POINT(3 4)");
+  ASSERT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
-  auto parseRes1 = parseWkt(lit1);
+  auto parseRes1 = parseWkt(litPoint);
   ASSERT_TRUE(parseRes1.second.has_value());
   auto parsed1 = parseRes1.second.value();
 
