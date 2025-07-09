@@ -41,7 +41,8 @@ TEST(ExecuteUpdate, executeUpdate) {
         const auto sharedHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
-        auto pqs = SparqlParser::parseUpdate(update);
+        ad_utility::BlankNodeManager bnm;
+        auto pqs = SparqlParser::parseUpdate(&bnm, update);
         for (auto& pq : pqs) {
           QueryPlanner qp{&qec, sharedHandle};
           const auto qet = qp.createExecutionTree(pq);
@@ -214,7 +215,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     const std::vector<DatasetClause> datasets = {};
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
-    auto pqs = SparqlParser::parseUpdate(update);
+    ad_utility::BlankNodeManager bnm;
+    auto pqs = SparqlParser::parseUpdate(&bnm, update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;

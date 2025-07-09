@@ -42,7 +42,8 @@ class GraphTerm : public GraphTermBase,
   }
 
   // ___________________________________________________________________________
-  // Constructs a TripleComponent from the GraphTerm.
+  // Constructs a TripleComponent from the GraphTerm. Blank nodes are
+  // automatically turned into internal variables.
   [[nodiscard]] TripleComponent toTripleComponent() const {
     return visit([](const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
@@ -53,7 +54,11 @@ class GraphTerm : public GraphTermBase,
         return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
             element.toSparql());
       } else {
-        return element.toSparql();
+        static_assert(std::is_same_v<T, BlankNode>);
+        const auto& blankNode = element.toSparql();
+        AD_CORRECTNESS_CHECK(blankNode.starts_with("_:"));
+        return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                                     blankNode.substr(2))};
       }
     });
   }

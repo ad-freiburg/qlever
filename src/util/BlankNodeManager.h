@@ -135,6 +135,9 @@ class BlankNodeManager {
   // Allocate and retrieve a block of new blank node indexes.
   [[nodiscard]] Block allocateBlock();
 
+  // Get the number of currently used blocks
+  size_t numBlocksUsed() const { return usedBlocksSet_.rlock()->size(); }
+
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
   FRIEND_TEST(BlankNodeManager, moveLocalBlankNodeManager);
 };

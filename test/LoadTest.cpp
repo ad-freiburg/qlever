@@ -37,6 +37,7 @@ class LoadTest : public ::testing::Test {
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> testAllocator =
       ad_utility::testing::makeAllocator();
+  ad_utility::BlankNodeManager blankNodeManager_;
 
   // Factory for generating mocks of the `sendHttpOrHttpsRequest` that returns a
   // predefined response for testing.
@@ -270,7 +271,8 @@ TEST_F(LoadTest, clone) {
 }
 
 TEST_F(LoadTest, Integration) {
-  auto parsedUpdate = SparqlParser::parseUpdate("LOAD <https://mundhahs.dev>");
+  auto parsedUpdate = SparqlParser::parseUpdate(&blankNodeManager_,
+                                                "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

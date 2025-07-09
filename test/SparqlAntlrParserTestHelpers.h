@@ -949,9 +949,16 @@ inline auto GraphUpdate =
     [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
        const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
     -> Matcher<const updateClause::GraphUpdate&> {
-  return testing::AllOf(
-      AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
-      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)));
+  // This matcher currently doesn't test the local vocab of `toInsert_` and
+  // `toDelete_`.
+  auto getVec = [](const GraphUpdate::Triples& tr) -> decltype(auto) {
+    return tr.triples_;
+  };
+  using namespace testing;
+  return AllOf(AD_FIELD(GraphUpdate, toInsert_,
+                        ResultOf(getVec, ElementsAreArray(toInsert))),
+               AD_FIELD(GraphUpdate, toDelete_,
+                        ResultOf(getVec, ElementsAreArray(toDelete))));
 };
 
 inline auto EmptyDatasets = [] {
@@ -1187,8 +1194,11 @@ auto parse =
        std::optional<ParsedQuery::DatasetClauses> clauses = std::nullopt,
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), std::move(clauses),
-                         disableSomeChecks};
+      // We might parse updates here, should we move the blank node manager out
+      // to make it testable/accessible?
+      static ad_utility::BlankNodeManager blankNodeManager;
+      ParserAndVisitor p{&blankNodeManager, input, std::move(prefixes),
+                         std::move(clauses), disableSomeChecks};
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
