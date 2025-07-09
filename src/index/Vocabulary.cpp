@@ -12,10 +12,8 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
-#include "index/vocabulary/VocabularyTypes.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/GeometryInfo.h"
-#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 
 using std::string;

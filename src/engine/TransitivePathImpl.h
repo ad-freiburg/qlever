@@ -19,15 +19,17 @@ namespace detail {
 // the correct lifetime).
 template <typename ColumnType>
 struct TableColumnWithVocab {
-  const IdTable* table_;
-  ColumnType column_;
+  PayloadTable payload_;
+  ColumnType startNodes_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(const IdTable* table, ColumnType column,
-                       LocalVocab vocab)
-      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {}
+  TableColumnWithVocab(std::optional<IdTableView<0>> payload,
+                       ColumnType startNodes, LocalVocab vocab)
+      : payload_{std::move(payload)},
+        startNodes_{std::move(startNodes)},
+        vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
 
@@ -71,16 +73,15 @@ class TransitivePathImpl : public TransitivePathBase {
     // Setup nodes returns a generator, so this time measurement won't include
     // the time for each iteration, but every iteration step should have
     // constant overhead, which should be safe to ignore.
-    runtimeInfo().addDetail("Initialization time", timer.msecs().count());
+    runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
                        targetSide.value_, yieldOnce);
 
     auto result = fillTableWithHull(
-        std::move(hull), startSide.outputCol_, targetSide.outputCol_,
-        startSide.treeAndCol_.value().second, yieldOnce,
-        startSide.treeAndCol_.value().first->getResultWidth());
+        std::move(hull), startSide.outputCol_, targetSide.outputCol_, yieldOnce,
+        startSide.treeAndCol_.value().first->getResultWidth() - 1);
 
     // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
@@ -106,19 +107,14 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
-    auto nodesWithDuplicates =
-        setupNodes(sub->idTable(), startSide, targetSide, edges);
-    Set nodesWithoutDuplicates{allocator()};
-    for (const auto& span : nodesWithDuplicates) {
-      nodesWithoutDuplicates.insert(span.begin(), span.end());
-    }
+    auto nodes = setupNodes(sub->idTable(), startSide, edges);
 
     runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
-    detail::TableColumnWithVocab<const Set&> tableInfo{
-        nullptr, nodesWithoutDuplicates, LocalVocab{}};
+    detail::TableColumnWithVocab<const Set&> tableInfo{std::nullopt, nodes,
+                                                       LocalVocab{}};
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(),
@@ -181,9 +177,8 @@ class TransitivePathImpl : public TransitivePathBase {
   Set findConnectedNodes(const T& edges, Id startNode,
                          const std::optional<Id>& target) const {
     std::vector<std::pair<Id, size_t>> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{
-        getExecutionContext()->getAllocator()};
-    Set connectedNodes{getExecutionContext()->getAllocator()};
+    ad_utility::HashSetWithMemoryLimit<Id> marks{allocator()};
+    Set connectedNodes{allocator()};
     stack.emplace_back(startNode, 0);
 
     while (!stack.empty()) {
@@ -244,7 +239,7 @@ class TransitivePathImpl : public TransitivePathBase {
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(edgesVocab);
       size_t currentRow = 0;
-      for (Id startNode : tableColumn.column_) {
+      for (Id startNode : tableColumn.startNodes_) {
         if (sameVariableOnBothSides) {
           targetId = startNode;
         }
@@ -253,7 +248,7 @@ class TransitivePathImpl : public TransitivePathBase {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           timer.stop();
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
-                                   mergedVocab.clone(), tableColumn.table_,
+                                   mergedVocab.clone(), tableColumn.payload_,
                                    currentRow};
           timer.cont();
           // Reset vocab to prevent merging the same vocab over and over again.
@@ -273,39 +268,31 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @param sub The sub table result
    * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::vector<ql::span<const Id>> An vector of spans of (nodes)
-   * for the transitive hull computation
+   * @param edges Templated datastructure representing the edges of the graph
+   * @return Set A set of starting nodes for the transitive hull computation
    */
-  std::vector<ql::span<const Id>> setupNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide, const T& edges) const {
-    std::vector<ql::span<const Id>> result;
-
-    // id -> var|id
-    if (!startSide.isVariable()) {
-      AD_CORRECTNESS_CHECK(minDist_ != 0,
-                           "If minDist_ is 0 with a hardcoded side, we should "
-                           "call the overload for a bound transitive path.");
-      LocalVocab helperVocab;
-      Id startId = TripleComponent{startSide.value_}.toValueId(
-          _executionContext->getIndex().getVocab(), helperVocab);
-      // Make sure we retrieve the Id from an IndexScan, so we don't have to
-      // pass this LocalVocab around. If it's not present then no result needs
-      // to be returned anyways.
-      if (const Id* id = edges.getEquivalentId(startId)) {
-        result.emplace_back(id, 1);
-      }
-      // var -> var
-    } else {
-      ql::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
-      result.emplace_back(startNodes);
-      if (minDist_ == 0) {
-        ql::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
-        result.emplace_back(targetNodes);
-      }
+  Set setupNodes(const IdTable& sub, const TransitivePathSide& startSide,
+                 const T& edges) const {
+    AD_CORRECTNESS_CHECK(minDist_ != 0,
+                         "If minDist_ is 0 with a hardcoded side, we should "
+                         "call the overload for a bound transitive path.");
+    Set result{allocator()};
+    // var -> var
+    if (startSide.isVariable()) {
+      auto col = sub.getColumn(startSide.subCol_);
+      result.insert(col.begin(), col.end());
+      return result;
     }
-
+    // id -> var|id
+    LocalVocab helperVocab;
+    Id startId = TripleComponent{startSide.value_}.toValueId(
+        _executionContext->getIndex().getVocab(), helperVocab);
+    // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
+    // this LocalVocab around. If it's not present then no result needs to be
+    // returned anyways.
+    if (const Id* id = edges.getEquivalentId(startId)) {
+      result.insert(*id);
+    }
     return result;
   }
 
@@ -324,16 +311,25 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> startSideResult) {
     using namespace ad_utility;
 
-    auto getStartNodes = [&startSide](const IdTable& idTable) {
-      return idTable.getColumn(startSide.treeAndCol_.value().second);
+    const auto& [startOperation, joinColumn] = startSide.treeAndCol_.value();
+    std::vector<ColumnIndex> columnsWithoutJoinColumn =
+        computeColumnsWithoutJoinColumn(joinColumn,
+                                        startOperation->getResultWidth());
+
+    auto toView = [columnsWithoutJoinColumn = std::move(
+                       columnsWithoutJoinColumn)](const IdTable& idTable) {
+      return idTable.asColumnSubsetView(columnsWithoutJoinColumn);
+    };
+    auto getStartNodes = [joinColumn](const IdTable& idTable) {
+      return idTable.getColumn(joinColumn);
     };
 
     if (startSideResult->isFullyMaterialized()) {
-      auto getter = [getStartNodes,
+      auto getter = [toView = std::move(toView), getStartNodes,
                      startSideResult = std::move(startSideResult)]() {
         const IdTable& idTable = startSideResult->idTable();
         return LoopControl<TableColumnWithVocab>::breakWithValue(
-            TableColumnWithVocab{&idTable, getStartNodes(idTable),
+            TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
                                  startSideResult->getCopyOfLocalVocab()});
       };
 
@@ -345,11 +341,12 @@ class TransitivePathImpl : public TransitivePathBase {
         startSideResult->idTables(),
         // the lambda uses a buffer to ensure the lifetime of the pointer to the
         // idTable, but releases ownership of the localVocab
-        [getStartNodes, buf = std::optional<Result::IdTableVocabPair>{
-                            std::nullopt}](auto& idTableAndVocab) mutable {
+        [toView = std::move(toView), getStartNodes,
+         buf = std::optional<Result::IdTableVocabPair>{std::nullopt}](
+            auto& idTableAndVocab) mutable {
           buf = std::move(idTableAndVocab);
           auto& [idTable, localVocab] = buf.value();
-          return TableColumnWithVocab{&idTable, getStartNodes(idTable),
+          return TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
                                       std::move(localVocab)};
         });
 
@@ -359,6 +356,22 @@ class TransitivePathImpl : public TransitivePathBase {
   virtual T setupEdgesMap(const IdTable& dynSub,
                           const TransitivePathSide& startSide,
                           const TransitivePathSide& targetSide) const = 0;
+
+ private:
+  // Helper function to filter the join column to not add it twice to the
+  // result.
+  static std::vector<ColumnIndex> computeColumnsWithoutJoinColumn(
+      ColumnIndex joinColumn, size_t totalColumns) {
+    std::vector<ColumnIndex> columnsWithoutJoinColumn;
+    AD_CORRECTNESS_CHECK(totalColumns > 0);
+    columnsWithoutJoinColumn.reserve(totalColumns - 1);
+    ql::ranges::copy(ql::views::iota(static_cast<size_t>(0), totalColumns) |
+                         ql::views::filter([joinColumn](size_t i) {
+                           return i != joinColumn;
+                         }),
+                     std::back_inserter(columnsWithoutJoinColumn));
+    return columnsWithoutJoinColumn;
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHIMPL_H
