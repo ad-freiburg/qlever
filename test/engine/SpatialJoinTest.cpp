@@ -808,21 +808,14 @@ TEST(SpatialJoin, getDescriptor) {
 TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
   // The `SpatialJoin`'s descriptor should contain a readable representation of
   // the join type
-  auto qec = getQec();
-  TripleComponent subject{Variable{"?subject"}};
-  TripleComponent object{Variable{"?object"}};
-
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
-          qec,
+          getQec(),
           SpatialJoinConfiguration{
               SpatialJoinConfig{SpatialJoinType::INTERSECTS},
-              subject.getVariable(), object.getVariable()},
+              Variable{"?subject"}, Variable{"?object"}},
           std::nullopt, std::nullopt);
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-
-  auto description = spatialJoin->getDescriptor();
+  auto description = spatialJoinOperation->getRootOperation()->getDescriptor();
   ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
   ASSERT_THAT(description, ::testing::HasSubstr("?object"));
   ASSERT_THAT(description, ::testing::HasSubstr("intersects"));
