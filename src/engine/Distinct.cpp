@@ -65,11 +65,10 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
          aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
           for (auto& [idTable, localVocab] : input) {
             IdTable result = getDistinctResult(std::move(idTable));
-            if (result.empty()) {
-              continue;
+            if (!result.empty()) {
+              aggregateVocab.mergeWith(std::array{std::move(localVocab)});
+              aggregateTable.insertAtEnd(result);
             }
-            aggregateVocab.mergeWith(std::array{std::move(localVocab)});
-            aggregateTable.insertAtEnd(result);
           }
           return Result::IdTableLoopControl::breakWithValue(
               Result::IdTableVocabPair{std::move(aggregateTable),
