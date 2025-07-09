@@ -167,14 +167,14 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   using namespace ad_utility::detail;
   Point<double> p{50, 60};
   auto g = utilPointToGeoPoint(p);
-  ASSERT_NEAR(g.getLng(), p.getX(), 0.0001);
-  ASSERT_NEAR(g.getLat(), p.getY(), 0.0001);
+  EXPECT_NEAR(g.getLng(), p.getX(), 0.0001);
+  EXPECT_NEAR(g.getLat(), p.getY(), 0.0001);
 
   auto p2 = geoPointToUtilPoint(g);
-  ASSERT_NEAR(g.getLng(), p2.getX(), 0.0001);
-  ASSERT_NEAR(g.getLat(), p2.getY(), 0.0001);
+  EXPECT_NEAR(g.getLng(), p2.getX(), 0.0001);
+  EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
-  ASSERT_EQ(removeDatatype(litPoint), "POINT(3 4)");
+  EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
   ASSERT_TRUE(parseRes1.second.has_value());
@@ -187,13 +187,13 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   checkBoundingBox(bb1, {{4, 3}, {4, 3}});
 
   auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
-  ASSERT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
+  EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
-  ASSERT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
-  ASSERT_FALSE(wktTypeToIri(0).has_value());
-  ASSERT_FALSE(wktTypeToIri(8).has_value());
-  ASSERT_TRUE(wktTypeToIri(1).has_value());
-  ASSERT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+  EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
+  EXPECT_FALSE(wktTypeToIri(0).has_value());
+  EXPECT_FALSE(wktTypeToIri(8).has_value());
+  EXPECT_TRUE(wktTypeToIri(1).has_value());
+  EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
 }
 
 }  // namespace
