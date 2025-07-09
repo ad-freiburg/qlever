@@ -5,11 +5,11 @@
 #ifndef QLEVER_SRC_PARSER_UPDATECLAUSE_H
 #define QLEVER_SRC_PARSER_UPDATECLAUSE_H
 
-#include "parser/Iri.h"
 #include "parser/SelectClause.h"
 #include "parser/SparqlTriple.h"
 #include "parser/data/GraphRef.h"
 #include "parser/data/Types.h"
+#include "rdfTypes/Iri.h"
 
 namespace updateClause {
 // A Graph Update is an Update operation that inserts or deletes some triples.

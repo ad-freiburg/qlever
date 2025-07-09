@@ -8,9 +8,9 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/ValueId.h"
-#include "parser/GeoPoint.h"
-#include "parser/Literal.h"
 #include "parser/TripleComponent.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Literal.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace std::literals;

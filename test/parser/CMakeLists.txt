@@ -1,4 +1,3 @@
-add_subdirectory(data)
 addLinkAndDiscoverTest(ParallelBufferTest parser)
 addLinkAndDiscoverTest(LiteralOrIriTest engine)
 addLinkAndDiscoverTest(PayloadVariablesTest engine)

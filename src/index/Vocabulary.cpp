@@ -9,8 +9,8 @@
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
-#include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/HashSet.h"
 #include "util/json.h"
 
