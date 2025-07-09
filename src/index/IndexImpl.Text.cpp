@@ -136,11 +136,11 @@ IdTable IndexImpl::mergeTextBlockResults(
   // Combine the partial results to one IdTable
   IdTable result{3, allocator};
   size_t resultSize = 0;
-  result.resize(std::accumulate(partialResults.begin(), partialResults.end(),
-                                resultSize,
-                                [](size_t acc, const IdTable& partialResult) {
-                                  return acc + partialResult.size();
-                                }));
+  result.reserve(std::accumulate(partialResults.begin(), partialResults.end(),
+                                 resultSize,
+                                 [](size_t acc, const IdTable& partialResult) {
+                                   return acc + partialResult.numRows();
+                                 }));
   for (const auto& partialResult : partialResults) {
     result.insertAtEnd(partialResult);
   }
@@ -239,10 +239,11 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                                                       idRange.last().get());
 
   std::vector<TextBlockMetadataAndWordInfo> result;
-  for (bool hasToBeFiltered = false; auto tbmd : tbmdVector) {
-    hasToBeFiltered = tbmd.get()._cl.hasMultipleWords() &&
-                      !(tbmd.get()._firstWordId == idRange.first().get() &&
-                        tbmd.get()._lastWordId == idRange.last().get());
+  bool hasToBeFiltered = false;
+  for (auto tbmd : tbmdVector) {
+    hasToBeFiltered = tbmd.get()._firstWordId != tbmd.get()._lastWordId &&
+                      !(tbmd.get()._firstWordId >= idRange.first().get() &&
+                        tbmd.get()._lastWordId <= idRange.last().get());
     result.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
   }
   return result;

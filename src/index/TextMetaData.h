@@ -51,8 +51,6 @@ class ContextListMetaData {
     return static_cast<size_t>(_lastByte + 1 - _startScorelist);
   }
 
-  bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
-
   static constexpr size_t sizeOnDisk() {
     return sizeof(size_t) + 4 * sizeof(off_t);
   }
