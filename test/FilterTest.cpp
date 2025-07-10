@@ -47,7 +47,7 @@ void checkSetPrefilterExpressionVariablePair(
     SparqlTripleSimple triple,
     std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
     bool prefilterIsApplicable, bool enablePrefilterForFilter = true) {
-  const auto& rtp =
+  [[maybe_unused]] const auto& rtp =
       setRuntimeParameterForTest<"enable-prefilter-on-index-scans">(
           enablePrefilterForFilter);
   auto subtree =
@@ -179,13 +179,13 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
   // construction.
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
-      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
+      ltSprql(Variable{"?z"}, IntId(10)), true);
   // If the runtime parameter `enable-prefilter-on-index-scans` is set to
   // false, we expect that no prefilter is set although it would be possible
   // (last argument is set to false).
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
-      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true, false);
+      ltSprql(Variable{"?z"}, IntId(10)), true, false);
   checkSetPrefilterExpressionVariablePair(
       qec, Permutation::POS, {Variable{"?x"}, iri("<p>"), Variable{"?z"}},
       andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
@@ -195,7 +195,7 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
       qec, Permutation::PSO,
       {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
        Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), true);
   // If the runtime parameter `enable-prefilter-on-index-scans` is set to
   // false, we expect that no prefilter is set although it would be possible
   // (last argument is set to false).
@@ -203,8 +203,7 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
       qec, Permutation::PSO,
       {makeSparqlExpression::Iri::fromIriref("<a>"), iri("<p>"),
        Variable{"?z"}},
-      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true,
-      false);
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), true, false);
 
   // We expect that no <PrefilterExpression, Variable> pair is assigned
   // (no prefilter procedure applicable) with Filter construction.
