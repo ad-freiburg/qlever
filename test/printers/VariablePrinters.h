@@ -5,7 +5,7 @@
 #ifndef QLEVER_TEST_PRINTERS_VARIABLEPRINTERS_H
 #define QLEVER_TEST_PRINTERS_VARIABLEPRINTERS_H
 
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // _____________________________________________________________
 inline void PrintTo(const Variable& var, std::ostream* os) {

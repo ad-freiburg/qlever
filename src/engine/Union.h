@@ -36,10 +36,10 @@ class Union : public Operation {
         std::vector<ColumnIndex> targetOrder = {});
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 

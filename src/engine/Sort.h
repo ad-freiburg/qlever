@@ -27,7 +27,7 @@ class Sort : public Operation {
        std::vector<ColumnIndex> sortColumnIndices);
 
  public:
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
@@ -78,7 +78,7 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

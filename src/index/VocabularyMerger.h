@@ -241,7 +241,7 @@ class VocabularyMerger {
 
 // ____________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const string& mmapFilename);
+    const std::string& mmapFilename);
 
 /**
  * @brief Create a hashMap that maps the Id of the pair<string, Id> to the
@@ -274,7 +274,8 @@ void writeMappedIdsToExtVec(const T& input,
  * @param els The input
  * @param fileName will write to this file. If it exists it will be overwritten
  */
-void writePartialVocabularyToFile(const ItemVec& els, const string& fileName);
+void writePartialVocabularyToFile(const ItemVec& els,
+                                  const std::string& fileName);
 
 /**
  * @brief Take an Array of HashMaps of strings to Ids and insert all the

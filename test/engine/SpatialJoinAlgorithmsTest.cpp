@@ -15,7 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
