@@ -42,6 +42,12 @@ class Minus : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  // Create a variant of functions that find undefined values in a range. In
+  // case the selected operation (via `left`) is guaranteed to not contain any
+  // undefined values in the join columns, the function will be replaced with
+  // no-op.
+  auto makeUndefRangesChecker(bool left) const;
+
  public:
   size_t getCostEstimate() override;
 
