@@ -85,7 +85,7 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
+bool Vocabulary<S, C, I>::shouldBeExternalized(std::string_view s) const {
   // TODO<joka921> We should have a completely separate layer that handles the
   // externalization, not the Vocab.
   if (!stringIsLiteral(s)) {

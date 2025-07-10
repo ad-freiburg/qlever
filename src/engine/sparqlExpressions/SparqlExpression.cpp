@@ -66,10 +66,10 @@ std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
 }
 
 // _____________________________________________________________________________
-const string& SparqlExpression::descriptor() const { return _descriptor; }
+const std::string& SparqlExpression::descriptor() const { return _descriptor; }
 
 // _____________________________________________________________________________
-string& SparqlExpression::descriptor() { return _descriptor; }
+std::string& SparqlExpression::descriptor() { return _descriptor; }
 
 // _____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::VariableAndDistinctness>

@@ -117,7 +117,7 @@ std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getCacheKeyImpl() const {
+std::string SpatialJoin::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
     std::ostringstream os;
     // This includes all attributes that change the result
@@ -171,7 +171,7 @@ string SpatialJoin::getCacheKeyImpl() const {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getDescriptor() const {
+std::string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
   auto visitor = [this](const auto& config) -> std::string {
     using T = std::decay_t<decltype(config)>;
@@ -184,8 +184,9 @@ string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
-      return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
-                          config.joinType_);
+      return absl::StrCat(
+          "Spatial Join of ", left, " and ", right, " using ",
+          SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,

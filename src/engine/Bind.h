@@ -23,11 +23,11 @@ class Bind : public Operation {
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;

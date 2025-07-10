@@ -31,9 +31,6 @@
 #include "util/HashSet.h"
 #include "util/Log.h"
 
-using std::string;
-using std::vector;
-
 template <typename IndexT = WordVocabIndex>
 class IdRange {
  public:
@@ -94,8 +91,8 @@ class Vocabulary {
   //
   // NOTE: Qlever-internal prefixes are currently always internalized, no matter
   // how `internalizedLangs_` and `externalizedPrefixes_` are set.
-  vector<std::string> internalizedLangs_;
-  vector<std::string> externalizedPrefixes_{""};
+  std::vector<std::string> internalizedLangs_;
+  std::vector<std::string> externalizedPrefixes_{""};
 
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
@@ -122,7 +119,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& filename);
+  void readFromFile(const std::string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -148,7 +145,7 @@ class Vocabulary {
   // which is OK because for the text index, the external vocabulary is always
   // empty.
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
-      const string& word) const;
+      const std::string& word) const;
 
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set,
@@ -167,7 +164,7 @@ class Vocabulary {
 
   bool shouldLiteralBeExternalized(std::string_view word) const;
 
-  static string_view getLanguage(std::string_view literal);
+  static std::string_view getLanguage(std::string_view literal);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -208,7 +205,7 @@ class Vocabulary {
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  IndexType upper_bound(const string& word,
+  IndexType upper_bound(const std::string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
 
   // The position where a word is stored or would be stored if it does not

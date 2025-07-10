@@ -63,10 +63,10 @@ class HasPredicateScan : public Operation {
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 

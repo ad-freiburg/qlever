@@ -124,13 +124,14 @@ IdTable Index::getWordPostingsForTerm(
 
 // ____________________________________________________________________________
 IdTable Index::getEntityMentionsForWord(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   return pimpl_->getEntityMentionsForWord(term, allocator);
 }
 
 // ____________________________________________________________________________
-size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+size_t Index::getIndexOfBestSuitedElTerm(
+    const vector<std::string>& terms) const {
   return pimpl_->getIndexOfBestSuitedElTerm(terms);
 }
 
