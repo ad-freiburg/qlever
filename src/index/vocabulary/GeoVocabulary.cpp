@@ -12,9 +12,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 
-namespace {
 using ad_utility::GeometryInfo;
-}
 
 // ____________________________________________________________________________
 template <typename V>
@@ -90,7 +88,7 @@ template <typename V>
 std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   AD_CONTRACT_CHECK(index < size());
   // Allocate the required number of bytes
-  uint8_t buffer[geoInfoOffset];
+  std::array<uint8_t, geoInfoOffset> buffer;
   void* ptr = &buffer;
 
   // Read into the buffer
@@ -99,14 +97,12 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an
   // all-zero binary representation.
-  if (std::all_of(static_cast<uint8_t*>(ptr),
-                  static_cast<uint8_t*>(ptr) + geoInfoOffset,
-                  [](uint8_t byte) { return byte == 0; })) {
+  if (buffer == invalidGeometryInfo) {
     return std::nullopt;
   }
 
   // Interpret the buffer as a `GeometryInfo` object
-  return *absl::bit_cast<GeometryInfo*>(ptr);
+  return absl::bit_cast<GeometryInfo>(buffer);
 }
 
 // Explicit template instantiations

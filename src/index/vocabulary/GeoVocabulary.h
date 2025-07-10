@@ -40,6 +40,12 @@ class GeoVocabulary {
   // Offset per index inside the geometry information file
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
 
+  // Serialized version of `GeometryInfo`
+  using GeometryInfoBuffer = std::array<uint8_t, geoInfoOffset>;
+
+  // For an invalid WKT literal, the serialized geometry info is all-zero
+  static constexpr GeometryInfoBuffer invalidGeometryInfo = {};
+
   // Offset for the header of the geometry information file
   static constexpr size_t geoInfoHeader =
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
