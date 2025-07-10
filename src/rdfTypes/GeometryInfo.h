@@ -37,8 +37,12 @@ struct BoundingBox {
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
-// `BoundingBox`'s two `GeoPoint`s.
-using EncodedBoundingBox = std::pair<uint64_t, uint64_t>;
+// `BoundingBox`'s two `GeoPoint`s. Due to `std::pair` not being trivially
+// copyable, this is implemented as a `struct`.
+struct EncodedBoundingBox {
+  uint64_t lowerLeftEncoded_;
+  uint64_t upperRightEncoded_;
+};
 
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
@@ -127,6 +131,10 @@ class GeometryInfo {
   requires RequestedInfoT<RequestedInfo>
   static RequestedInfo getRequestedInfo(const std::string_view& wkt);
 };
+
+// For the disk serialization we require that a `GeometryInfo` is trivially
+// copyable.
+static_assert(std::is_trivially_copyable_v<GeometryInfo>);
 
 }  // namespace ad_utility
 

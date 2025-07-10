@@ -86,8 +86,8 @@ Centroid GeometryInfo::getCentroid(const std::string_view& wkt) {
 
 // ____________________________________________________________________________
 BoundingBox GeometryInfo::getBoundingBox() const {
-  return {GeoPoint::fromBitRepresentation(boundingBox_.first),
-          GeoPoint::fromBitRepresentation(boundingBox_.second)};
+  return {GeoPoint::fromBitRepresentation(boundingBox_.lowerLeftEncoded_),
+          GeoPoint::fromBitRepresentation(boundingBox_.upperRightEncoded_)};
 }
 
 // ____________________________________________________________________________
