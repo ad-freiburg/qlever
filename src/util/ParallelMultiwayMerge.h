@@ -69,7 +69,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
   Range1 range1_;
   Range2 range2_;
   ComparisonFuncT comparison_;
-  mutable bool finished_{false};
+  bool finished_{false};
   std::vector<T> buffer_{};
 
   std::pair<ql::ranges::iterator_t<Range1>, ql::ranges::sentinel_t<Range1>>
@@ -78,6 +78,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
       it2_{};
 
  public:
+  using value_type = std::vector<T>;
   LazyBinaryMerge(MemorySize maxMem, size_t maxBlockSize, Range1 range1,
                   Range2 range2, ComparisonFuncT comparison)
       : maxMem_{maxMem},
@@ -111,15 +112,6 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
       return exhausted(itPair);
     };
 
-    // Push the next element from the range denoted by `itPair` to the `buffer`,
-    // and advance the iterator.
-    auto push_no_check = [this, &sizeOfCurrentBlock](auto& itPair) {
-      auto& it = itPair.first;
-      detail::pushSingleElement<moveElements, T, SizeGetter>(
-          buffer_, sizeOfCurrentBlock, *it);
-      ++it;
-    };
-
     // Push the smaller element one of `*it1` and `*it2` to the `buffer` and
     // advance the corresponding iterator. Return true iff that iterator
     // reaches the end after the increment.
@@ -132,24 +124,14 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     };
 
     if (!exhausted(it1_) && !exhausted(it2_)) {
-      while (true) {
-        if (pushSmaller()) {
-          break;
-        }
-        if (isBufferLargeEnough()) {
-          break;
-        }
+      while (!pushSmaller() && !isBufferLargeEnough()) {
       }
     }
 
-    auto pushRemainder = [&isBufferLargeEnough, &push_no_check,
+    auto pushRemainder = [&isBufferLargeEnough, &push,
                           &exhausted](auto& itPair) {
-      if (!isBufferLargeEnough()) {
-        while (!exhausted(itPair)) {
-          push_no_check(itPair);
-          if (isBufferLargeEnough()) {
-            break;
-          }
+      if (!isBufferLargeEnough() && !exhausted(itPair)) {
+        while (!push(itPair) && !isBufferLargeEnough()) {
         }
       }
     };
@@ -205,7 +187,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     while (it_ != range_.end()) {
       detail::pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem,
                                                              *it_);
-      it_++;
+      ++it_;
       if (buffer_.size() >= blocksize_ || curMem >= maxMem_) {
         break;
       }
@@ -246,13 +228,14 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     }
   };
 
+  using ResultT = InputRangeTypeErased<std::vector<T>>;
+
   if (rangeOfRanges.size() == 1) {
-    return ad_utility::InputRangeTypeErased<std::vector<T>>{
-        detail::BatchToVector<T, moveElements, SizeGetter,
-                              ql::ranges::range_value_t<R>>(
-            maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
+    return ResultT{detail::BatchToVector<T, moveElements, SizeGetter,
+                                         ql::ranges::range_value_t<R>>(
+        maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
   } else if (rangeOfRanges.size() == 2) {
-    return ad_utility::InputRangeTypeErased<std::vector<T>>{
+    return ResultT{
         detail::LazyBinaryMerge<T, moveElements, SizeGetter,
                                 ql::ranges::range_value_t<R>,
                                 ql::ranges::range_value_t<R>, ComparisonFuncT>(
@@ -278,15 +261,13 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto mergeRange1 = parallelMerge(beg, splitIt);
     auto mergeRange2 = parallelMerge(splitIt, end);
 
-    return ad_utility::InputRangeTypeErased<std::vector<T>>{
-        ad_utility::streams::runStreamAsync(
-            ad_utility::InputRangeTypeErased<std::vector<T>>{
-                detail::LazyBinaryMerge<T, moveElements, SizeGetter,
-                                        decltype(mergeRange1),
-                                        decltype(mergeRange2), ComparisonFuncT>(
-                    maxMemPerNode, blocksize, std::move(mergeRange1),
-                    std::move(mergeRange2), comparison)},
-            2)};
+    return ResultT{ad_utility::streams::runStreamAsync(
+        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
+                                decltype(mergeRange1), decltype(mergeRange2),
+                                ComparisonFuncT>(
+            maxMemPerNode, blocksize, std::move(mergeRange1),
+            std::move(mergeRange2), comparison),
+        2)};
   }
 }
 }  // namespace detail

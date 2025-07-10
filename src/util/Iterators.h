@@ -1,7 +1,6 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_UTIL_ITERATORS_H
 #define QLEVER_SRC_UTIL_ITERATORS_H
@@ -430,7 +429,6 @@ class InputRangeTypeErased {
   decltype(auto) end() { return impl_->end(); }
   decltype(auto) get() { return impl_->get(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
-  using value_type = ValueType;
 };
 
 template <typename Range>
