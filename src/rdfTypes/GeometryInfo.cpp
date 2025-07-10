@@ -23,8 +23,9 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
   // ValueId datatype of the centroid (it is always a point). Therefore we fold
   // the attributes together. On OSM planet this will save approx. 1 GiB in
   // index size.
-  AD_CORRECTNESS_CHECK(wktType < (1 << ValueId::numDatatypeBits) - 1,
-                       "WKT Type out of range");
+  AD_CORRECTNESS_CHECK(
+      wktType <= 7 && wktType < (1 << ValueId::numDatatypeBits) - 1,
+      "WKT Type out of range");
   uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
   uint64_t centroidBits = centroid.centroid().toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
@@ -44,9 +45,7 @@ GeometryInfo GeometryInfo::fromWktLiteral(const std::string_view& wkt) {
 }
 
 // ____________________________________________________________________________
-GeometryType::GeometryType(uint8_t type) : type_{type} {
-  AD_CORRECTNESS_CHECK(type_ <= 7, "WKT Type out of range");
-};
+GeometryType::GeometryType(uint8_t type) : type_{type} {};
 
 // ____________________________________________________________________________
 MetricLength::MetricLength(double length) : length_{length} {
