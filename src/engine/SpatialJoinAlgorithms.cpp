@@ -412,8 +412,10 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
         dist = resultDists[t][i];
       }
       addResultTableEntry(&result, swapBack ? idTableRight : idTableLeft,
-                          swapBack ? idTableLeft : idTableRight, res.first,
-                          res.second, Id::makeFromDouble(dist));
+                          swapBack ? idTableLeft : idTableRight,
+                          swapBack ? res.second : res.first,
+                          swapBack ? res.first : res.second,
+                          Id::makeFromDouble(dist));
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
