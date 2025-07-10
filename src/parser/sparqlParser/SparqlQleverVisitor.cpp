@@ -200,7 +200,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
       {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
       {"sfEquals", &makeGeoRelationExpression<EQUALS>},
-      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
