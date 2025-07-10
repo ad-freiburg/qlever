@@ -36,9 +36,8 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-// TODO<#1951>
-// constexpr std::string_view litInvalid =
-//     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalid =
+    "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -99,9 +98,8 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
   checkGeoInfo(g7, exp7);
 
-  // TODO<#1951>
-  // auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
-  // checkGeoInfo(g8, std::nullopt);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  checkGeoInfo(g8, std::nullopt);
 }
 
 // ____________________________________________________________________________

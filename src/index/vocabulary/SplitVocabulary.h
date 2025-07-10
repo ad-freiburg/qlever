@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/BitUtils.h"
 #include "util/Exception.h"
@@ -84,7 +85,7 @@ class SplitVocabulary {
 
  private:
   // Array that holds all underlying vocabularies.
-  UnderlyingVocabsArray underlying_;
+  UnderlyingVocabsArray underlying_{UnderlyingVocabularies{}...};
 
  public:
   // Check validity of vocabIndex and marker, then return a new 64 bit index
@@ -156,7 +157,8 @@ class SplitVocabulary {
   [[nodiscard]] uint64_t size() const {
     uint64_t total = 0;
     for (auto& vocab : underlying_) {
-      total += std::visit([](auto& v) { return v.size(); }, vocab);
+      total += std::visit(
+          [](auto& v) { return static_cast<uint64_t>(v.size()); }, vocab);
     }
     return total;
   }
@@ -169,8 +171,8 @@ class SplitVocabulary {
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
                          uint8_t marker = 0) const {
     AD_CORRECTNESS_CHECK(marker < numberOfVocabs);
-    WordAndIndex subResult = std::visit(
-        [&](auto& v) {
+    auto subResult = std::visit(
+        [&](auto& v) -> WordAndIndex {
           if constexpr (getUpperBound) {
             return v.upper_bound(word, comparator);
           } else {
@@ -206,9 +208,10 @@ class SplitVocabulary {
                    word, comparator, marker)
                    .positionOfWord(word);
     if (!pos.has_value()) {
-      auto end = addMarker(
-          std::visit([](auto& v) { return v.size(); }, underlying_[marker]),
-          marker);
+      auto end =
+          addMarker(std::visit([](auto& v) -> uint64_t { return v.size(); },
+                               underlying_[marker]),
+                    marker);
       return {end, end};
     }
     return pos.value();
@@ -261,6 +264,11 @@ class SplitVocabulary {
       const std::string& filename) const {
     return std::make_unique<WordWriter>(underlying_, filename);
   }
+
+  // Retrieve GeometryInfo from an underlying vocabulary, if it is a
+  // GeoVocabulary.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(
+      uint64_t indexWithMarker) const;
 };
 
 // Concrete implementations of split function and split filename function
@@ -285,12 +293,10 @@ namespace detail::splitVocabulary {
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
 // vocabulary. This can be used for precomputations for spatial features.
-// TODO<ullingerc>: Switch 2nd Vocab to GeoVocabulary<UnderlyingVocabulary>
-// after merge of #1951
 template <class UnderlyingVocabulary>
 using SplitGeoVocabulary =
     SplitVocabulary<decltype(detail::splitVocabulary::geoSplitFunc),
                     decltype(detail::splitVocabulary::geoFilenameFunc),
-                    UnderlyingVocabulary, UnderlyingVocabulary>;
+                    UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

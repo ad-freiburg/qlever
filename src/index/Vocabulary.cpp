@@ -1,18 +1,20 @@
-// Copyright 2024, University of Freiburg,
+// Copyright 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include "index/Vocabulary.h"
 
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
-#include "parser/Tokenizer.h"
-#include "rdfTypes/RdfEscaping.h"
-#include "util/HashSet.h"
-#include "util/json.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
+#include "index/vocabulary/SplitVocabulary.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 using std::string;
 
@@ -219,6 +221,20 @@ auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
   auto wordAndIndex = vocabulary_.lower_bound(word, level);
   return IndexType::make(wordAndIndex.indexOrDefault(size()));
 }
+
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+std::optional<ad_utility::GeometryInfo> Vocabulary<S, C, I>::getGeoInfo(
+    IndexType idx) const {
+  // `PolymorphicVocabulary` or `SplitVocabulary` may have an underlying
+  // `GeoVocabulary`, which provides precomputed `GeometryInfo`
+  if constexpr (std::is_same_v<S, PolymorphicVocabulary> ||
+                ad_utility::isInstantiation<S, SplitVocabulary>) {
+    return vocabulary_.getUnderlyingVocabulary().getGeoInfo(idx.get());
+  } else {
+    return std::nullopt;
+  }
+};
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>
