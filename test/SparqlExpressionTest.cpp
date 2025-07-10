@@ -1341,6 +1341,12 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
+  // auto checkLength = std::bind_front(testNaryExpression,
+  // &makeLengthExpression);
+
+  // auto checkMetricLength =
+  // testUnaryExpression<&makeMetricLengthExpression>;
+
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
 
@@ -1392,6 +1398,8 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                           geoLit("BLABLIBLU(1 1, 2 2)")},
       IdOrLiteralOrIriVec{U, U, sfGeoType("Point"), sfGeoType("LineString"),
                           sfGeoType("Polygon"), U});
+
+  // TODO tests length
 }
 
 // ________________________________________________________________________________________

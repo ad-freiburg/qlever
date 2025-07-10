@@ -106,6 +106,28 @@ class WktMetricDistGeoPoints {
   }
 };
 
+// Compute the length of a WKT geometry.
+class WktLength {
+ public:
+  double operator()(
+      const std::optional<MetricLength>& len,
+      const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
+    if (!len.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::kilometerToUnit(
+        static_cast<double>(len.value().length()) / 1000.0, unit);
+  }
+};
+
+// Compute the length of a WKT geometry in meters.
+class WktMetricLength {
+ public:
+  double operator()(const std::optional<MetricLength>& len) const {
+    return WktLength{}(len, UnitOfMeasurement::METERS);
+  }
+};
+
 // Get the centroid of a geometry.
 class WktCentroid {
  public:
@@ -113,7 +135,7 @@ class WktCentroid {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid_);
+    return ValueId::makeFromGeoPoint(geom.value().centroid());
   }
 };
 
