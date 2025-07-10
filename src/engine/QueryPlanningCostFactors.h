@@ -7,20 +7,18 @@
 
 #include <string>
 
-#include "../util/HashMap.h"
-
-using std::string;
+#include "util/HashMap.h"
 
 // Simple container for cost factors.
 // Comes with default values, that can be set and read from a file
 class QueryPlanningCostFactors {
  public:
   QueryPlanningCostFactors();
-  void readFromFile(const string& fileName);
-  double getCostFactor(const string& key) const;
+  void readFromFile(const std::string& fileName);
+  double getCostFactor(const std::string& key) const;
 
  private:
-  ad_utility::HashMap<string, double> _factors;
+  ad_utility::HashMap<std::string, double> _factors;
 };
 
 #endif  // QLEVER_SRC_ENGINE_QUERYPLANNINGCOSTFACTORS_H

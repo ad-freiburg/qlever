@@ -73,7 +73,7 @@ SparqlExpression::AggregateStatus CountStarExpression::isAggregate() const {
 }
 
 // _____________________________________________________________________________
-string CountStarExpression::getCacheKey(
+std::string CountStarExpression::getCacheKey(
     [[maybe_unused]] const VariableToColumnMap& varColMap) const {
   return absl::StrCat("COUNT * with DISTINCT = ", distinct_);
 }

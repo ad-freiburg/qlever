@@ -26,7 +26,7 @@ class CountStarExpression : public SparqlExpression {
   AggregateStatus isAggregate() const override;
 
   // ___________________________________________________________________________
-  string getCacheKey(
+  std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override;
 
   // ___________________________________________________________________________

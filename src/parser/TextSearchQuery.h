@@ -152,7 +152,7 @@ struct TextIndexScanForEntityConfiguration {
  */
 struct TextIndexScanForWordConfiguration {
   Variable varToBindText_;
-  string word_;
+  std::string word_;
   std::optional<Variable> matchVar_ = std::nullopt;
   std::optional<Variable> scoreVar_ = std::nullopt;
   bool isPrefix_ = false;

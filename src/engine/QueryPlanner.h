@@ -121,7 +121,7 @@ class QueryPlanner {
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
-    string asString() const;
+    std::string asString() const;
 
     bool isTextNode(size_t i) const;
 
@@ -135,7 +135,7 @@ class QueryPlanner {
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes)
+        ad_utility::HashMap<std::string, vector<size_t>>& contextVarTotextNodes)
         const;
 
     vector<SparqlFilter> pickFilters(const vector<SparqlFilter>& origFilters,
@@ -464,8 +464,8 @@ class QueryPlanner {
 
   static JoinColumns getJoinColumns(const SubtreePlan& a, const SubtreePlan& b);
 
-  string getPruningKey(const SubtreePlan& plan,
-                       const vector<ColumnIndex>& orderedOnColumns) const;
+  std::string getPruningKey(const SubtreePlan& plan,
+                            const vector<ColumnIndex>& orderedOnColumns) const;
 
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {

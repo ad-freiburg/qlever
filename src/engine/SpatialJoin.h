@@ -48,8 +48,8 @@ class SpatialJoin : public Operation {
               bool substitutesFilterOp = false);
 
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -65,7 +65,7 @@ class SpatialJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different

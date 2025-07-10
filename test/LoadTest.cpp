@@ -83,7 +83,7 @@ TEST_F(LoadTest, basicMethods) {
 TEST_F(LoadTest, computeResult) {
   auto expectThrowOnlyIfNotSilent =
       [this](parsedQuery::Load pq, SendRequestType sendFunc,
-             const testing::Matcher<string>& expectedError,
+             const testing::Matcher<std::string>& expectedError,
              ad_utility::source_location loc =
                  ad_utility::source_location::current()) {
         auto g = generateLocationTrace(loc);
@@ -95,21 +95,21 @@ TEST_F(LoadTest, computeResult) {
         Load silentLoad{testQec, pq, sendFunc};
         EXPECT_NO_THROW(silentLoad.computeResultOnlyForTesting());
       };
-  auto expectThrowAlways = [this](parsedQuery::Load pq,
-                                  SendRequestType sendFunc,
-                                  const testing::Matcher<string>& expectedError,
-                                  ad_utility::source_location loc =
-                                      ad_utility::source_location::current()) {
-    auto g = generateLocationTrace(loc);
-    Load load{testQec, pq, sendFunc};
+  auto expectThrowAlways =
+      [this](parsedQuery::Load pq, SendRequestType sendFunc,
+             const testing::Matcher<std::string>& expectedError,
+             ad_utility::source_location loc =
+                 ad_utility::source_location::current()) {
+        auto g = generateLocationTrace(loc);
+        Load load{testQec, pq, sendFunc};
 
-    AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
-                                 expectedError);
-    pq.silent_ = true;
-    Load silentLoad{testQec, pq, sendFunc};
-    AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
-                                 expectedError);
-  };
+        AD_EXPECT_THROW_WITH_MESSAGE(load.computeResultOnlyForTesting(),
+                                     expectedError);
+        pq.silent_ = true;
+        Load silentLoad{testQec, pq, sendFunc};
+        AD_EXPECT_THROW_WITH_MESSAGE(silentLoad.computeResultOnlyForTesting(),
+                                     expectedError);
+      };
   auto expectLoad =
       [this](std::string responseBody, std::string contentType,
              std::vector<std::array<TripleComponent, 3>> expectedIdTable,

@@ -270,7 +270,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyItemAt) {
-  HashSet<string> s;
+  HashSet<std::string> s;
   s.insert("a");
   s.insert("ab");
   s.insert(

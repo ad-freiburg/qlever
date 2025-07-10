@@ -188,7 +188,7 @@ struct Bind {
            ql::views::transform(ad_utility::dereference);
   }
 
-  [[nodiscard]] string getDescriptor() const;
+  [[nodiscard]] std::string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`

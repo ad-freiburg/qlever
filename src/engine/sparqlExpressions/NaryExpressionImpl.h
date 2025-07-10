@@ -42,7 +42,7 @@ class NaryExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
  private:
@@ -183,9 +183,9 @@ ql::span<SparqlExpression::Ptr> NaryExpression<Op>::childrenImpl() {
 
 // __________________________________________________________________________
 template <typename Op>
-[[nodiscard]] string NaryExpression<Op>::getCacheKey(
+[[nodiscard]] std::string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  string key = typeid(*this).name();
+  std::string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
       children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);
