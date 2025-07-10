@@ -4,6 +4,8 @@
 
 #include "engine/QueryRewriteUtils.h"
 
+#include <stdexcept>
+
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -32,6 +34,13 @@ std::optional<SpatialJoinConfiguration> rewriteFilterToSpatialJoinConfig(
 
   // Construct spatial join
   auto [type, left, right] = geoFuncCall.value();
+  if (left == right) {
+    // TODO<ullingerc> As soon as we have a baseline implementation of
+    // `WktGeometricRelation`, replace this `throw` by `return std::nullopt;`.
+    throw std::runtime_error(
+        absl::StrCat("Unsupported GeoSPARQL filter: Variable ", left.name(),
+                     " on both sides. Is this what you intended?"));
+  }
   return SpatialJoinConfiguration{SpatialJoinConfig{type, maxDist},
                                   std::move(left),
                                   std::move(right),

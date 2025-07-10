@@ -15,8 +15,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -46,6 +46,10 @@ NARY_EXPRESSION(
 NARY_EXPRESSION(EnvelopeExpression, 1,
                 FV<ad_utility::WktEnvelope,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
+
+NARY_EXPRESSION(GeometryTypeExpression, 1,
+                FV<ad_utility::WktGeometryType,
+                   GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
@@ -104,6 +108,11 @@ SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
 }
 
 // _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryTypeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
 template <SpatialJoinType Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2) {
@@ -111,10 +120,57 @@ SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                            std::move(child2));
 }
 
+namespace {
+
+// Helper to check if `expr` is a `SparqlExpression` on the `geof:sf[Relation]`
+// function, given the templated `Relation`.
+template <SpatialJoinType Relation>
+std::optional<GeoFunctionCall> getGeoRelationExpressionParameters(
+    const SparqlExpression& expr) {
+  // Is this `expr` a call to `geof:sf[Relation](?x, ?y)`?
+  auto geoRelExpr = dynamic_cast<const GeoRelationExpression<Relation>*>(&expr);
+  if (geoRelExpr == nullptr) {
+    return std::nullopt;
+  }
+
+  // Extract variables
+  auto p1 = geoRelExpr->children()[0]->getVariableOrNullopt();
+  if (!p1.has_value()) {
+    return std::nullopt;
+  }
+  auto p2 = geoRelExpr->children()[1]->getVariableOrNullopt();
+  if (!p2.has_value()) {
+    return std::nullopt;
+  }
+
+  return GeoFunctionCall{Relation, p1.value(), p2.value()};
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
 std::optional<GeoFunctionCall> getGeoFunctionExpressionParameters(
-    const SparqlExpression&) {
-  // TODO<ullingerc> handle geo relation functions in subsequent PR
+    const SparqlExpression& expr) {
+  // Check against all possible geo relation types
+  std::optional<GeoFunctionCall> res;
+  using enum SpatialJoinType;
+
+  // TODO<C++26 reflection> get all values of `SpatialJoinType` enum
+  if ((res = getGeoRelationExpressionParameters<INTERSECTS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CONTAINS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<COVERS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<CROSSES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<TOUCHES>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<EQUALS>(expr))) {
+    return res;
+  } else if ((res = getGeoRelationExpressionParameters<OVERLAPS>(expr))) {
+    return res;
+  }
   return std::nullopt;
 }
 

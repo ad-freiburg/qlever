@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 
+#include "engine/QueryExecutionTree.h"
 #include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 

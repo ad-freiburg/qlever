@@ -9,11 +9,11 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
-#include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Literal.h"
 #include "util/Conversions.h"
 #include "util/GeoSparqlHelpers.h"
-#include "util/GeometryInfo.h"
 
 using namespace sparqlExpression::detail;
 
@@ -217,7 +217,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // _____________________________________________________________________________
-std::optional<string> LiteralFromIdGetter::operator()(
+std::optional<std::string> LiteralFromIdGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(

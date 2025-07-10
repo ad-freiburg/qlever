@@ -12,7 +12,7 @@
 #include "global/Id.h"
 #include "parser/PropertyPath.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 // Data container for parsed triples from the where clause.
 // It is templated on the predicate type, see the instantiations below.
@@ -68,21 +68,24 @@ class SparqlTriple
   using Base::Base;
 
   // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(iri), std::move(o)} {}
+  SparqlTriple(TripleComponent s, TripleComponent::Iri iri, TripleComponent o)
+      : Base{std::move(s), PropertyPath::fromIri(std::move(iri)),
+             std::move(o)} {}
 
   // ___________________________________________________________________________
-  [[nodiscard]] string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   // Convert to a simple triple. Fails with an exception if the predicate
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
     bool holdsVariable = std::holds_alternative<Variable>(p_);
-    AD_CONTRACT_CHECK(holdsVariable || getSimplePredicate().has_value());
-    TripleComponent p = holdsVariable
-                            ? TripleComponent{std::get<Variable>(p_)}
-                            : TripleComponent(TripleComponent::Iri::fromIriref(
-                                  std::get<PropertyPath>(p_).getIri()));
+    auto predicate = getSimplePredicate();
+    AD_CONTRACT_CHECK(holdsVariable || predicate.has_value());
+    TripleComponent p =
+        holdsVariable
+            ? TripleComponent{std::get<Variable>(p_)}
+            : TripleComponent(ad_utility::triple_component::Iri::fromIriref(
+                  predicate.value()));
     return {s_, p, o_, additionalScanColumns_};
   }
 
@@ -93,9 +96,7 @@ class SparqlTriple
     if (triple.p_.isVariable()) {
       return {triple.s_, triple.p_.getVariable(), triple.o_};
     }
-    return {triple.s_,
-            PropertyPath::fromIri(triple.p_.getIri().toStringRepresentation()),
-            triple.o_};
+    return {triple.s_, PropertyPath::fromIri(triple.p_.getIri()), triple.o_};
   }
 
   // If the predicate of the triple is a simple IRI (neither a variable nor a
@@ -107,8 +108,10 @@ class SparqlTriple
       return std::nullopt;
     }
     const auto& path = std::get<PropertyPath>(p_);
-    return path.isIri() ? std::optional<std::string_view>{path.iri_}
-                        : std::nullopt;
+    return path.isIri()
+               ? std::optional<std::string_view>{path.getIri()
+                                                     .toStringRepresentation()}
+               : std::nullopt;
   }
 
   // If the predicate of the triples is a variable, return it. Note:

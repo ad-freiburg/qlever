@@ -70,13 +70,13 @@ struct TransitivePathSide {
   }
 };
 
-// We deliberately use the `std::` variants of a hash set and hash map because
-// `absl`s types are not exception safe.
+// We deliberately use the `std::` variants of a hash set because `absl`s types
+// are not exception safe.
 using Set = std::unordered_set<Id, absl::Hash<Id>, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
-using Map = std::unordered_map<
-    Id, Set, absl::Hash<Id>, std::equal_to<Id>,
-    ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
+
+// Alias for common type
+using PayloadTable = std::optional<IdTableView<0>>;
 
 // Helper struct, that allows a generator to yield a a node and all its
 // connected nodes (the `targets`), along with a local vocabulary and the row
@@ -87,17 +87,17 @@ struct NodeWithTargets {
   Id node_;
   Set targets_;
   LocalVocab localVocab_;
-  const IdTable* idTable_;
+  PayloadTable idTable_;
   size_t row_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  const IdTable* idTable, size_t row)
+                  PayloadTable idTable, size_t row)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
-        idTable_{idTable},
+        idTable_{std::move(idTable)},
         row_{row} {}
 };
 
@@ -198,15 +198,13 @@ class TransitivePathBase : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param skipCol This column contains the Ids of the start side in the
-   * startSideTable and will be skipped.
    * @param yieldOnce If true, the generator will yield only a single time.
    * @param inputWidth The width of the input table that is referenced by the
    * elements of `hull`.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
-                                      size_t targetSideCol, size_t skipCol,
-                                      bool yieldOnce, size_t inputWidth) const;
+                                      size_t targetSideCol, bool yieldOnce,
+                                      size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -227,12 +225,7 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   static void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                           IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                          size_t inputRow, size_t outputRow, size_t skipCol);
-
-  // A small helper function: Insert the `value` to the set at `map[key]`.
-  // As the sets all have an allocator with memory limit, this construction is a
-  // little bit more involved, so this can be a separate helper function.
-  void insertIntoMap(Map& map, Id key, Id value) const;
+                          size_t inputRow, size_t outputRow);
 
  public:
   std::string getDescriptor() const override;
@@ -251,8 +244,8 @@ class TransitivePathBase : public Operation {
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
-                                          size_t targetSideCol, bool yieldOnce,
-                                          size_t skipCol = 0) const;
+                                          size_t targetSideCol,
+                                          bool yieldOnce) const;
 
   // Return an execution tree, that "joins" the given `tripleComponent` with all
   // of the subjects or objects in the knowledge graph, so if the graph does not

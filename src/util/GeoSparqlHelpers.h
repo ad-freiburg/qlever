@@ -17,12 +17,11 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "index/LocalVocabEntry.h"
-#include "parser/GeoPoint.h"
-#include "parser/Iri.h"
-#include "parser/Literal.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
-#include "util/GeometryInfo.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 
 namespace ad_utility {
 
@@ -42,13 +41,13 @@ std::pair<double, double> parseWktPoint(const std::string_view point);
 // Calculate geographic distance between points in kilometers using s2geometry.
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
-// Convert kilometers to other supported units. If `unit` is `std::nullopt` is
+// Convert kilometers to other supported units. If `unit` is `std::nullopt` it
 // is treated as kilometers.
 double kilometerToUnit(double kilometers,
                        std::optional<UnitOfMeasurement> unit);
 
 // Convert value from any supported unit to kilometers. If `unit` is
-// `std::nullopt` is is treated as kilometers.
+// `std::nullopt` it is treated as kilometers.
 double valueInUnitToKilometer(double valueInUnit,
                               std::optional<UnitOfMeasurement> unit);
 
@@ -133,8 +132,31 @@ class WktEnvelope {
   }
 };
 
+// Compute the distance between two WKT points in meters.
+class WktGeometryType {
+ public:
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<GeometryType>& geometryType) const {
+    if (!geometryType.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    auto typeIri = geometryType.value().asIri();
+    if (!typeIri.has_value()) {
+      return ValueId::makeUndefined();
+    }
+
+    // The geometry type should be returned as an xsd:anyURI literal according
+    // to the GeoSPARQL standard.
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(typeIri.value());
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(XSD_ANYURI_TYPE));
+    return {LiteralOrIri{lit}};
+  }
+};
+
 // A generic operation for all geometric relation functions, like
-// geof:sfIntersects.
+// `geof:sfIntersects`.
 template <SpatialJoinType Relation>
 class WktGeometricRelation {
  public:
@@ -144,10 +166,9 @@ class WktGeometricRelation {
       [[maybe_unused]] const std::optional<GeoPoint>& geoLeft,
       [[maybe_unused]] const std::optional<GeoPoint>& geoRight) const {
     AD_THROW(
-        "Geometric relations via the `geof:sf...` functions are not yet "
-        "implemented in QLever. Please refer to the custom `SERVICE qlss:` "
-        "with algorithm `qlss:libspatialjoin` for now. More details can be "
-        "found on the QLever Wiki.");
+        "Geometric relations via the `geof:sfIntersects` ... functions are "
+        "currently only implemented for a subset of all possible queries. More "
+        "details on GeoSPARQL support can be found on the QLever Wiki.");
   }
 };
 

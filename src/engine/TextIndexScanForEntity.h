@@ -27,7 +27,7 @@ class TextIndexScanForEntity : public Operation {
 
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
                          std::variant<Variable, std::string> entity,
-                         string word);
+                         std::string word);
   ~TextIndexScanForEntity() override = default;
 
   bool hasFixedEntity() const {
@@ -48,9 +48,9 @@ class TextIndexScanForEntity : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

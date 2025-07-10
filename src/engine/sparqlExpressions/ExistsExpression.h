@@ -46,7 +46,7 @@ class ExistsExpression : public SparqlExpression {
   // been set up yet (because the query planning is not yet complete). Since we
   // cannot cache incomplete operations, we return a random cache key in this
   // case.
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     if (varColMap.contains(variable_)) {
       return absl::StrCat("ExistsExpression col# ",

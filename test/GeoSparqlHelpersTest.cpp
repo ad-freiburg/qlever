@@ -10,8 +10,8 @@
 
 #include "engine/SpatialJoinConfig.h"
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
-#include "parser/Iri.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/Iri.h"
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -165,7 +165,8 @@ void checkGeoRelationDummyImpl(
   const auto geoRelationFunction = WktGeometricRelation<SJType>();
   AD_EXPECT_THROW_WITH_MESSAGE(
       geoRelationFunction(GeoPoint{1, 1}, GeoPoint{2, 2}),
-      ::testing::HasSubstr("not yet implemented"));
+      ::testing::HasSubstr(
+          "currently only implemented for a subset of all possible queries"));
 }
 
 // _____________________________________________________________________________

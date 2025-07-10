@@ -21,7 +21,7 @@ CountAvailablePredicates::CountAvailablePredicates(
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getCacheKeyImpl() const {
+std::string CountAvailablePredicates::getCacheKeyImpl() const {
   std::ostringstream os;
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
@@ -33,7 +33,7 @@ string CountAvailablePredicates::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getDescriptor() const {
+std::string CountAvailablePredicates::getDescriptor() const {
   if (subtree_ == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }

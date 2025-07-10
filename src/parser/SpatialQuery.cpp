@@ -5,13 +5,9 @@
 
 #include "parser/SpatialQuery.h"
 
-#include <type_traits>
-#include <variant>
-
 #include "engine/SpatialJoinConfig.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/PayloadVariables.h"
-#include "parser/data/Variable.h"
 
 namespace parsedQuery {
 
@@ -210,10 +206,11 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
 
 // ____________________________________________________________________________
 SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
-  AD_CONTRACT_CHECK(triple.getSimplePredicate().has_value(),
+  auto predicate = triple.getSimplePredicate();
+  AD_CONTRACT_CHECK(predicate.has_value(),
                     "The config triple for SpatialJoin must have a special IRI "
                     "as predicate");
-  const std::string& input = std::get<PropertyPath>(triple.p_).iri_;
+  std::string_view input = predicate.value();
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),

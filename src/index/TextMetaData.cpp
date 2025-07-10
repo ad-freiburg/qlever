@@ -50,7 +50,7 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
 size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
-string TextMetaData::statistics() const {
+std::string TextMetaData::statistics() const {
   // TODO: What does totalElementsEntityLists count?
   size_t totalElementsClassicLists = 0;
   // size_t totalElementsEntityLists = 0;
