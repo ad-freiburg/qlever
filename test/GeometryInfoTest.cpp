@@ -79,31 +79,31 @@ TEST(GeometryInfoTest, BasicTests) {
 // ____________________________________________________________________________
 TEST(GeometryInfoTest, FromWktLiteral) {
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}};
+  GeometryInfo exp{1, {{4, 3}, {4, 3}}, {4, 3}, {0}};
   checkGeoInfo(g, exp);
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp2{2, {{2, 2}, {4, 4}}, {3, 3}, {0}};
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {0}};
   checkGeoInfo(g3, exp3);
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}};
+  GeometryInfo exp4{4, {{2, 2}, {4, 4}}, {3, 3}, {0}};
   checkGeoInfo(g4, exp4);
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}};
+  GeometryInfo exp5{5, {{2, 2}, {8, 6}}, {4.436542, 3.718271}, {0}};
   checkGeoInfo(g5, exp5);
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}};
+  GeometryInfo exp6{6, {{2, 2}, {6, 8}}, {4.5, 4.5}, {0}};
   checkGeoInfo(g6, exp6);
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}};
+  GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {0}};
   checkGeoInfo(g7, exp7);
 
   // TODO<#1951>
@@ -193,7 +193,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
   checkBoundingBox(bb1, {{4, 3}, {4, 3}});
 
-  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
+  auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft(), bb1.upperRight());
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<"Example">(), "http://www.opengis.net/ont/sf#Example");
@@ -201,6 +201,8 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_FALSE(wktTypeToIri(8).has_value());
   EXPECT_TRUE(wktTypeToIri(1).has_value());
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+
+  // TODO computeMetricLength
 }
 
 // ____________________________________________________________________________
