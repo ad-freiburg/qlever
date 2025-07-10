@@ -14,6 +14,7 @@
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
+#include "index/TextIndexConfig.h"
 #include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -212,7 +213,8 @@ class Index {
   size_t getNofTextRecords() const;
   size_t getNofWordPostings() const;
   size_t getNofEntityPostings() const;
-  size_t getNofNonLiteralsInTextIndex() const;
+  // This is only used for testing
+  size_t getLastTextRecordIndexOfNonLiterals() const;
 
   NumNormalAndInternal numDistinctSubjects() const;
   NumNormalAndInternal numDistinctObjects() const;
