@@ -5,8 +5,10 @@
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 
+#include <array>
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include "parser/PayloadVariables.h"
@@ -29,6 +31,11 @@ enum class SpatialJoinType {
   OVERLAPS,
   WITHIN_DIST
 };
+
+// String representation of the `SpatialJoinType` values.
+inline constexpr std::array<std::string_view, 8> SpatialJoinTypeString{
+    "intersects", "contains", "covers",   "crosses",
+    "touches",    "equals",   "overlaps", "within-dist"};
 
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
