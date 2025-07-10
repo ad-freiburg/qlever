@@ -7,9 +7,11 @@
 
 #include <util/geo/Geo.h>
 
+#include "range/v3/numeric/accumulate.hpp"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/TypeTraits.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -130,17 +132,68 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
 }
 
 // ____________________________________________________________________________
+inline double computeMetricLengthPolygon(const Polygon<CoordType>& geom) {
+  return latLngLen<CoordType>(geom.getOuter());
+}
+
+// ____________________________________________________________________________
+template <typename T>
+inline double computeMetricLengthMulti(
+    const std::vector<T>& geom, std::function<double(const T&)> lenFunction) {
+  return ::ranges::accumulate(::ranges::transform_view(geom, lenFunction), 0);
+}
+
+// ____________________________________________________________________________
+inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
+  switch (geom.getType()) {
+    case 0:  // Point
+      return 0.0;
+    case 1:  // Line
+      return latLngLen<CoordType>(geom.getLine());
+    case 2:  // Polygon
+      return computeMetricLengthPolygon(geom.getPolygon());
+    case 3:  // MultiLine
+      return computeMetricLengthMulti<Line<CoordType>>(geom.getMultiLine(),
+                                                       latLngLen<CoordType>);
+    case 4:  // MultiPolygon
+      return computeMetricLengthMulti<Polygon<CoordType>>(
+          geom.getMultiPolygon(), computeMetricLengthPolygon);
+    case 5:  // Collection
+      return computeMetricLengthMulti<AnyGeometry<CoordType>>(
+          geom.getCollection(), computeMetricLengthAnyGeom);
+    case 6:  // MultiPoint
+    default:
+      return 0.0;
+  }
+}
+
+// ____________________________________________________________________________
 inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
   return {std::visit(
-      [](const auto& geom) -> float {
+      [](const auto& geom) -> double {
         using T = std::decay_t<decltype(geom)>;
-        if constexpr (std::is_same_v<T, Line<CoordType>>) {
+        // This is redundant with `computeMetricLengthAnyGeom`, however the
+        // decision can be made at compile time here, unlike with `AnyGeometry`
+        // which is a runtime construct.
+        if constexpr (SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>>) {
+          return 0.0;
+        } else if constexpr (std::is_same_v<T, Line<CoordType>>) {
           return latLngLen<CoordType>(geom);
         } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
-          return latLngLen<CoordType>(geom.getOuter());
+          return computeMetricLengthPolygon(geom);
+        } else if constexpr (std::is_same_v<T, MultiLine<CoordType>>) {
+          return computeMetricLengthMulti<Line<CoordType>>(
+              geom, latLngLen<CoordType>);
+        } else if constexpr (std::is_same_v<T, MultiPolygon<CoordType>>) {
+          return computeMetricLengthMulti<Polygon<CoordType>>(
+              geom, computeMetricLengthPolygon);
+        } else if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+          return computeMetricLengthMulti<AnyGeometry<CoordType>>(
+              geom, computeMetricLengthAnyGeom);
+        } else {
+          // Check that there are no further geometry types
+          static_assert(alwaysFalse<T>);
         }
-        // TODO other geometries -> e.g. MultiLineString -> max(member line len)
-        return 0.0;
       },
       geometry)};
 }

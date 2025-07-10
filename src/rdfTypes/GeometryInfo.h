@@ -99,9 +99,7 @@ class GeometryInfo {
  private:
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
-
   double metricLength_ = 0.0;
-  // TODO: Support length for polygon etc. as requested by standard
 
   // TODO<ullingerc>: Implement the behavior for the following two
   // attributes
