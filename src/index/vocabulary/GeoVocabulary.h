@@ -52,9 +52,10 @@ class GeoVocabulary {
 
  public:
   CPP_variadic_template(typename... Args)(
-      requires std::constructible_from<
-          UnderlyingVocabulary,
-          Args&&...>) explicit GeoVocabulary(Args&&... args)
+      requires std::constructible_from<UnderlyingVocabulary, Args&&...> CPP_and(
+          !std::derived_from<
+              std::remove_cvref_t<UnderlyingVocabulary>,
+              GeoVocabulary>)) explicit GeoVocabulary(Args&&... args)
       : literals_{AD_FWD(args)...} {};
 
   // Load the precomputed `GeometryInfo` object for the literal with
