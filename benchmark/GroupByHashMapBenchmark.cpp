@@ -212,8 +212,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
   void runStringBenchmarks(BenchmarkResults& results) {
     for (auto multiplicity : multiplicities) {
-      // runTests<GroupConcatExpression>(results, multiplicity,
-      //                                 ValueIdType::Strings, false, false);
+      runTests<GroupConcatExpression>(results, multiplicity,
+                                      ValueIdType::Strings, false, false);
       runTests<GroupConcatExpression>(results, multiplicity,
                                       ValueIdType::Strings, true, false);
     }
