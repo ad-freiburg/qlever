@@ -356,6 +356,29 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
+  // no aliases = no aggregates → skip everything else
+  if (_aliases.empty()) {
+    // force the child to deliver a full, in‐memory table
+    auto childRes = _subtree->getResult(false);
+    // collect the group‐by‐column indices
+    vector<size_t> groupByCols;
+    groupByCols.reserve(_groupByVariables.size());
+    for (auto& var : _groupByVariables) {
+      groupByCols.push_back(
+        _subtree->getVariableColumns().at(var).columnIndex_
+      );
+    }
+    auto localVocab = childRes->getCopyOfLocalVocab();
+    // doGroupBy will simply collapse duplicates (no aggregates → empty list)
+    IdTable t = CALL_FIXED_SIZE(
+      (std::array{_subtree->getResultWidth(), getResultWidth()}),
+      &GroupByImpl::doGroupBy, this, childRes->idTable(),
+      groupByCols, /*aggregates=*/std::vector<Aggregate>{},
+      &localVocab
+    );
+    return {std::move(t), resultSortedOn(), std::move(localVocab)};
+  }
+
   if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
@@ -426,24 +449,17 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     groupByColumns.push_back(it->second.columnIndex_);
   }
 
-  // Why remove this?
-  std::vector<size_t> groupByCols;
-  groupByCols.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
-  }
-
   if (useHashMapOptimization) {
     // Helper lambda that calls `computeGroupByForHashMapOptimization` for the
     // given `subresults`.
     auto computeWithHashMap = [this, &metadataForUnsequentialData,
-                               &groupByCols](auto&& subresults) {
+                               &groupByColumns](auto&& subresults) {
       auto doCompute = [&](auto numCols) {
         return computeGroupByForHashMapOptimization<numCols>(
             metadataForUnsequentialData->aggregateAliases_, AD_FWD(subresults),
-            groupByCols);
+            groupByColumns);
       };
-      return ad_utility::callFixedSizeVi(groupByCols.size(), doCompute);
+      return ad_utility::callFixedSizeVi(groupByColumns.size(), doCompute);
     };
 
     // Now call `computeWithHashMap` and return the result. It expects a range
@@ -468,7 +484,7 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
         (std::array{inWidth, outWidth}), &GroupByImpl::computeResultLazily,
         this, std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
-        std::move(groupByCols), !requestLaziness);
+        std::move(groupByColumns), !requestLaziness);
 
     return requestLaziness
                ? Result{std::move(generator), resultSortedOn()}
@@ -745,8 +761,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
       "GROUP BY variable, this is a bug in the query planner",
       permutedTriple[1]->toString(), groupByVariable.name());
 
-  // There must be exactly one alias, which is a non-distinct count of one of
-  // the two variables of the index scan.
+  // There must be exactly one alias, which is a non-distinct count of one of the
+  // two variables of the index scan.
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
   bool countedVariableIsOneOfIndexScanVariables =
       countedVariable == *(permutedTriple[1]) ||
@@ -983,10 +999,6 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   if (_groupByVariables.empty()) {
     return std::nullopt;
   }
-  // Early out: no aliases means no aggregates, so we can skip the optimization
-  if (_aliases.empty()) {
-    return std::nullopt;
-  }
 
   // Fall back to existing optimized paths
   if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
@@ -1060,10 +1072,6 @@ GroupByImpl::computeUnsequentialProcessingMetadata(
 std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::checkIfHashMapOptimizationPossible(
     std::vector<Aggregate>& aliases) const {
-  if (aliases.empty()) {
-    return std::nullopt;
-  }
-
   if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
     return std::nullopt;
   }
