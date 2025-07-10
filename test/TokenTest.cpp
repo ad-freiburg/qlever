@@ -7,10 +7,10 @@
 #include <iostream>
 #include <string>
 
-#include "../src/parser/RdfEscaping.h"
-#include "../src/parser/Tokenizer.h"
-#include "../src/parser/TokenizerCtre.h"
 #include "./TokenTestCtreHelper.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
+#include "rdfTypes/RdfEscaping.h"
 
 using std::string;
 TEST(TokenTest, Numbers) {

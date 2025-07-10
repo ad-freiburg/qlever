@@ -42,7 +42,8 @@ class ScoreData {
 
   // Parses docsFile and if true literals to fill the InvertedIndex and the
   // extra values needed to calculate scores
-  void calculateScoreData(const string& docsFileName, bool addWordsFromLiterals,
+  void calculateScoreData(const std::string& docsFileName,
+                          bool addWordsFromLiterals,
                           const Index::TextVocab& textVocab,
                           const Index::Vocab& vocab);
 

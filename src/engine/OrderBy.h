@@ -35,10 +35,10 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   // The function `resultSortedOn` refers to the `internal` sorting by ID value.
   // This is different from the `semantic` sorting that the ORDER BY operation

@@ -25,7 +25,7 @@ class TextIndexBuilder : public IndexImpl {
   void buildTextIndexFile(TextIndexConfig config);
 
   // Build docsDB file from given file (one text record per line).
-  void buildDocsDB(const string& docsFileName) const;
+  void buildDocsDB(const std::string& docsFileName) const;
 
  private:
   // Creates a vocabulary filled with the words given in the respective words-
@@ -46,7 +46,7 @@ class TextIndexBuilder : public IndexImpl {
   // parsed in parallel to ensure a correct TextRecordIndex for the entities.
   template <typename T>
   void wordsFromDocsFileEntitiesFromWordsFile(
-      const string& wordsFile, const string& docsFile,
+      const std::string& wordsFile, const std::string& docsFile,
       const LocaleManager& localeManager, T processLine) const;
 
   // Generator that returns all words in all literals.
@@ -66,14 +66,14 @@ class TextIndexBuilder : public IndexImpl {
       ad_utility::HashMap<WordIndex, Score>& wordsInContext,
       ScoreData& scoreData) const;
 
-  static void logEntityNotFound(const string& word,
+  static void logEntityNotFound(const std::string& word,
                                 size_t& entityNotFoundErrorMsgCount);
 
   void addContextToVector(TextVec& vec, TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities) const;
 
-  void createTextIndex(const string& filename, TextVec& vec);
+  void createTextIndex(const std::string& filename, TextVec& vec);
 
   /// Calculate the block boundaries for the text index. The boundary of a
   /// block is the index in the `textVocab_` of the last word that belongs

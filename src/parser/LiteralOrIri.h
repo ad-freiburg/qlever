@@ -7,8 +7,8 @@
 
 #include <variant>
 
-#include "parser/Iri.h"
-#include "parser/Literal.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
 
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';

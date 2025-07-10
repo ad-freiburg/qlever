@@ -29,8 +29,8 @@ std::string kg =
 // given wordsFileContent and docsFileContent to build the text index.
 auto qecWithTextIndex =
     [](bool useDocsFileForVocab = false, bool addEntitiesFromWordsFile = false,
-       std::optional<string> wordsFileContent = std::nullopt,
-       std::optional<string> docsFileContent = std::nullopt) {
+       std::optional<std::string> wordsFileContent = std::nullopt,
+       std::optional<std::string> docsFileContent = std::nullopt) {
       TestIndexConfig config{kg};
       config.createTextIndex = true;
       config.useDocsFileForVocab = useDocsFileForVocab;
@@ -74,7 +74,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
 TEST(TextIndexScanForEntity, FixedEntityScan) {
   auto qec = qecWithTextIndex();
 
-  string fixedEntity = "\"some other sentence\"";
+  std::string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s3{qec, Variable{"?text3"}, fixedEntity, "sentence"};
 
   auto result = s3.computeResultOnlyForTesting();
@@ -218,7 +218,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
   ASSERT_NE(s1.getCacheKeyImpl(), s4.getCacheKeyImpl());
 
   // fixed entity case
-  string fixedEntity = "\"some other sentence\"";
+  std::string fixedEntity = "\"some other sentence\"";
   TextIndexScanForEntity s5{qec, Variable{"?text3"}, fixedEntity, "sentence"};
   // Same text var, different entities (one entity var, one fixed entity), same
   // word
@@ -228,7 +228,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
   // Different text vars, same fixed entity, same word
   ASSERT_EQ(s5.getCacheKeyImpl(), s6.getCacheKeyImpl());
 
-  string newFixedEntity = "\"he failed the test\"";
+  std::string newFixedEntity = "\"he failed the test\"";
   TextIndexScanForEntity s7{qec, Variable{"?text7"}, newFixedEntity,
                             "sentence"};
   // Different text vars, different fixed entities, same word
@@ -247,7 +247,7 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
                             "nonExistentWord*"};
   ASSERT_TRUE(s1.knownEmptyResult());
 
-  string fixedEntity = "\"non existent entity\"";
+  std::string fixedEntity = "\"non existent entity\"";
   AD_EXPECT_THROW_WITH_MESSAGE(
       TextIndexScanForEntity(qec, Variable{"?text"}, fixedEntity, "test*"),
       ::testing::ContainsRegex(absl::StrCat(

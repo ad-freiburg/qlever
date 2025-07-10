@@ -9,11 +9,11 @@
 // _____________________________________________________________________________
 void TextIndexBuilder::buildTextIndexFile(TextIndexConfig textIndexConfig) {
   const auto config = TextIndexConfig(std::move(textIndexConfig));
-  const string wordsFile = config.getWordsFile();
-  const string docsFile = config.getDocsFile();
+  const std::string wordsFile = config.getWordsFile();
+  const std::string docsFile = config.getDocsFile();
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
-  const string indexFilename = onDiskBase_ + ".text.index";
+  const std::string indexFilename = onDiskBase_ + ".text.index";
   // Either read words from wordsfile or docsfile or consider each literal as
   // text record or both (but at least one of them, otherwise this function is
   // not called)
@@ -63,7 +63,7 @@ size_t TextIndexBuilder::processWordsForVocabulary(
                                ? textIndexConfig.getDocsFile()
                                : textIndexConfig.getWordsFile();
   size_t numLines = 0;
-  ad_utility::HashSet<string> distinctWords;
+  ad_utility::HashSet<std::string> distinctWords;
   auto processLine = [&numLines, &distinctWords](const WordsFileLine& line) {
     ++numLines;
     if (!line.isEntity_) {
@@ -208,7 +208,7 @@ cppcoro::generator<WordsFileLine> TextIndexBuilder::wordsInLiterals(
 // _____________________________________________________________________________
 template <typename T>
 void TextIndexBuilder::wordsFromDocsFileEntitiesFromWordsFile(
-    const string& wordsFile, const string& docsFile,
+    const std::string& wordsFile, const std::string& docsFile,
     const LocaleManager& localeManager, T processLine) const {
   // Initialize DocsFileParser and WordsFileParser and the respective
   // iterators to parse in parallel
@@ -293,7 +293,7 @@ void TextIndexBuilder::processWordCaseDuringInvertedListProcessing(
 }
 
 // _____________________________________________________________________________
-void TextIndexBuilder::logEntityNotFound(const string& word,
+void TextIndexBuilder::logEntityNotFound(const std::string& word,
                                          size_t& entityNotFoundErrorMsgCount) {
   if (entityNotFoundErrorMsgCount < 20) {
     LOG(WARN) << "Entity from text not in KB: " << word << '\n';
@@ -340,7 +340,8 @@ void TextIndexBuilder::addContextToVector(
 }
 
 // _____________________________________________________________________________
-void TextIndexBuilder::createTextIndex(const string& filename, TextVec& vec) {
+void TextIndexBuilder::createTextIndex(const std::string& filename,
+                                       TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   currenttOffset_ = 0;
   // Detect block boundaries from the main key of the vec.
@@ -550,7 +551,7 @@ void TextIndexBuilder::calculateBlockBoundaries() {
 }
 
 // _____________________________________________________________________________
-void TextIndexBuilder::buildDocsDB(const string& docsFileName) const {
+void TextIndexBuilder::buildDocsDB(const std::string& docsFileName) const {
   LOG(INFO) << "Building DocsDB...\n";
   std::ifstream docsFile{docsFileName};
   std::ofstream ofs{onDiskBase_ + ".text.docsDB"};
@@ -559,7 +560,7 @@ void TextIndexBuilder::buildDocsDB(const string& docsFileName) const {
   ad_utility::MmapVectorTmp<off_t> offsets{onDiskBase_ + ".text.docsDB.tmp"};
   off_t currentOffset = 0;
   uint64_t currentContextId = 0;
-  string line;
+  std::string line;
   line.reserve(BUFFER_SIZE_DOCSFILE_LINE);
   while (std::getline(docsFile, line)) {
     std::string_view lineView = line;

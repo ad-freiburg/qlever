@@ -4,8 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "../../util/GTestHelpers.h"
-#include "parser/data/Variable.h"
+#include "../util/GTestHelpers.h"
+#include "rdfTypes/Variable.h"
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
