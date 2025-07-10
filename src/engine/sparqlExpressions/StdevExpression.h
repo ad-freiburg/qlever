@@ -42,7 +42,7 @@ class DeviationExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
   }
@@ -66,7 +66,7 @@ class DeviationAggExpression
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct, std::make_unique<DeviationExpression>(std::move(child)),
-            aggregateOp){};
+            aggregateOp) {}
 };
 
 // The final operation for dividing by degrees of freedom and calculation square

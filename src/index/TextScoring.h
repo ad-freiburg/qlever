@@ -15,18 +15,18 @@ class ScoreData {
   ScoreData() = default;
 
   explicit ScoreData(LocaleManager localeManager)
-      : localeManager_(std::move(localeManager)){};
+      : localeManager_(std::move(localeManager)) {}
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(std::move(scoringMetric)),
-        localeManager_(std::move(localeManager)){};
+        localeManager_(std::move(localeManager)) {}
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
             const std::pair<float, float>& bAndKParam)
       : scoringMetric_(std::move(scoringMetric)),
         b_(bAndKParam.first),
         k_(bAndKParam.second),
-        localeManager_(std::move(localeManager)){};
+        localeManager_(std::move(localeManager)) {}
 
   TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
@@ -35,7 +35,8 @@ class ScoreData {
 
   // Parses docsFile and if true literals to fill the InvertedIndex and the
   // extra values needed to calculate scores
-  void calculateScoreData(const string& docsFileName, bool addWordsFromLiterals,
+  void calculateScoreData(const std::string& docsFileName,
+                          bool addWordsFromLiterals,
                           const Index::TextVocab& textVocab,
                           const Index::Vocab& vocab);
 

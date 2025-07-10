@@ -77,7 +77,7 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-[[nodiscard]] string Bind::getDescriptor() const {
+[[nodiscard]] std::string Bind::getDescriptor() const {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }

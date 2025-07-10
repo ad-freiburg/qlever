@@ -60,7 +60,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
-  auto filename = string(onDiskBase + ".index" + fileSuffix_);
+  auto filename = std::string(onDiskBase + ".index" + fileSuffix_);
   ad_utility::File file;
   try {
     file.open(filename, "r");

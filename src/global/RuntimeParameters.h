@@ -83,6 +83,16 @@ inline auto& RuntimeParameters() {
         // false,
         // the result will be `NaN` or `infinity` respectively.
         Bool<"division-by-zero-is-undef">{true},
+        // If set to `true`, the contained `FILTER` expressions in the query
+        // try to set and apply a corresponding `PrefilterExpression` (see
+        // `PrefilterExpressionIndex.h`) on its variable-related `IndexScan`
+        // operation.
+        //
+        // If set to `false`, the queries `FILTER` expressions omit setting and
+        // applying `PrefilterExpression`s. This is useful to set a
+        // prefilter-free baseline, or for debugging, as wrong results may be
+        // related to the `PrefilterExpression`s.
+        Bool<"enable-prefilter-on-index-scans">{true},
     };
   }();
   return params;

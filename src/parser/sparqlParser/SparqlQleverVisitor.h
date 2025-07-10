@@ -55,7 +55,7 @@ class SparqlQleverVisitor {
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
-  using PrefixMap = ad_utility::HashMap<string, string>;
+  using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
@@ -497,15 +497,15 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  string visit(Parser::IrirefContext* ctx) const;
+  std::string visit(Parser::IrirefContext* ctx) const;
 
-  string visit(Parser::PrefixedNameContext* ctx);
+  std::string visit(Parser::PrefixedNameContext* ctx);
 
   GraphTerm visit(Parser::BlankNodeContext* ctx);
 
-  string visit(Parser::PnameLnContext* ctx);
+  std::string visit(Parser::PnameLnContext* ctx);
 
-  string visit(Parser::PnameNsContext* ctx);
+  std::string visit(Parser::PnameNsContext* ctx);
 
   DatasetClause visit(Parser::UsingClauseContext* ctx);
 

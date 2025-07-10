@@ -153,7 +153,7 @@ constexpr auto NeutralElement = []() -> QetMatcher {
 };
 
 constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
-                                         string word) -> QetMatcher {
+                                         std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(2 + word.ends_with('*'))),
@@ -183,7 +183,7 @@ constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
 
 inline auto TextIndexScanForEntity =
     [](Variable textRecordVar, std::variant<Variable, std::string> entity,
-       string word) -> QetMatcher {
+       std::string word) -> QetMatcher {
   // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
   // here to test the contract-checks in entityVariable() and fixedEntity().
   if (std::holds_alternative<Variable>(entity)) {
@@ -377,7 +377,7 @@ struct PathSearch {
 };
 constexpr inline PathSearch pathSearch;
 
-inline auto ValuesClause = [](string cacheKey) {
+inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
       AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };

@@ -242,8 +242,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
         ASSERT_THAT(toInsertMatchers, testing::SizeIs(toDeleteMatchers.size()));
         auto graphUpdateQuads = executeComputeGraphUpdateQuads(update);
         ASSERT_THAT(graphUpdateQuads, testing::SizeIs(toInsertMatchers.size()));
-        std::vector<Matcher<pair<ExecuteUpdate::IdTriplesAndLocalVocab,
-                                 ExecuteUpdate::IdTriplesAndLocalVocab>>>
+        std::vector<Matcher<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
+                                      ExecuteUpdate::IdTriplesAndLocalVocab>>>
             transformedMatchers;
         ql::ranges::transform(
             toInsertMatchers, toDeleteMatchers,

@@ -62,11 +62,12 @@ class SparqlExpression {
       size_t childIndex, std::unique_ptr<SparqlExpression> newExpression);
 
   // Get a unique identifier for this expression, used as cache key.
-  virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
+  virtual std::string getCacheKey(
+      const VariableToColumnMap& varColMap) const = 0;
 
   // Get a short, human-readable identifier for this expression.
-  virtual const string& descriptor() const final;
-  virtual string& descriptor() final;
+  virtual const std::string& descriptor() const final;
+  virtual std::string& descriptor() final;
 
   // For the pattern trick we need to know, whether this expression
   // is a non-distinct count of a single variable. In this case we return

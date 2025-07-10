@@ -21,7 +21,7 @@ class SampleExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // __________________________________________________________________________
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
   }
 

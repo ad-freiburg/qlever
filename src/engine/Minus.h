@@ -30,10 +30,10 @@ class Minus : public Operation {
   explicit Minus(OnlyForTestingTag) {}
 
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

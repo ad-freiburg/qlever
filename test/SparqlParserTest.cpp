@@ -436,7 +436,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -466,7 +466,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -506,7 +506,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery
@@ -538,7 +538,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
   }
 
@@ -583,7 +583,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 1)
@@ -611,7 +611,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
@@ -636,7 +636,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
-    vector<string> vvars_sub_subquery = {"?year"};
+    vector<std::string> vvars_sub_subquery = {"?year"};
     ASSERT_EQ(vvars_sub_subquery,
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
@@ -650,13 +650,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
-    EXPECT_THAT(pq_1,
-                m::ConstructQuery(
-                    {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
-                      Variable{"?name"}}},
-                    m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://example.com/ns#employeeName>",
-                        Variable{"?name"}}}))));
+    EXPECT_THAT(
+        pq_1,
+        m::ConstructQuery(
+            {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+              Variable{"?name"}}},
+            m::GraphPattern(m::Triples({SparqlTriple{
+                Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
+                Variable{"?name"}}}))));
 
     // Check Parse Construct (2)
     auto pq_2 = SparqlParser::parseQuery(
@@ -671,7 +672,7 @@ TEST(ParserTest, testParse) {
                       Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://xmlns.com/foaf/0.1/name>",
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
                         Variable{"?name"}}}))));
   }
 

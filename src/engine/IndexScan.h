@@ -36,7 +36,7 @@ class IndexScan final : public Operation {
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
-  vector<float> multiplicity_;
+  std::vector<float> multiplicity_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
   // the "ordinary" subjects, predicates, or objects, as well as the variables
@@ -75,7 +75,7 @@ class IndexScan final : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
@@ -188,7 +188,7 @@ class IndexScan final : public Operation {
 
   Result computeResult(bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
   // `IndexScan`.
