@@ -31,7 +31,7 @@ TEST(ParseException, illegalConstructorArguments) {
 
 // _____________________________________________________________________________
 void expectParseExceptionWithMetadata(
-    const string& input, const std::optional<ExceptionMetadata>& metadata,
+    const std::string& input, const std::optional<ExceptionMetadata>& metadata,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   try {

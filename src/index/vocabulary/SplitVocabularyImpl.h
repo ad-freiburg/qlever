@@ -17,8 +17,8 @@
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
-  auto readSingle = [](auto& vocab, const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::readFromFile(const std::string& filename) {
+  auto readSingle = [](auto& vocab, const std::string& filename) {
     LOG(INFO) << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
     vocab.close();
@@ -48,7 +48,7 @@ void SplitVocabulary<SF, SFN, S...>::readFromFile(const string& filename) {
 // _____________________________________________________________________________
 template <typename SF, typename SFN, typename... S>
 requires SplitFunctionT<SF> && SplitFilenameFunctionT<SFN, sizeof...(S)>
-void SplitVocabulary<SF, SFN, S...>::open(const string& filename) {
+void SplitVocabulary<SF, SFN, S...>::open(const std::string& filename) {
   auto vocabFilenames = splitFilenameFunction_(filename);
   for (uint8_t i = 0; i < numberOfVocabs; i++) {
     std::visit([&](auto& vocab) { vocab.open(vocabFilenames[i]); },

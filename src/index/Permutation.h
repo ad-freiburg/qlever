@@ -147,7 +147,7 @@ class Permutation {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // _______________________________________________________
-  void setKbName(const string& name) { meta_.setName(name); }
+  void setKbName(const std::string& name) { meta_.setName(name); }
 
   // _______________________________________________________
   const std::string& getKbName() const { return meta_.getName(); }

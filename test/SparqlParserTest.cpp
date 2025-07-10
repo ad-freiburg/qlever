@@ -24,9 +24,9 @@ namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 
-const std::string getIriString(
+const std::string& getIriString(
     const ad_utility::sparql_types::VarOrPath& varOrPath) {
-  return std::get<PropertyPath>(varOrPath).iri_;
+  return std::get<PropertyPath>(varOrPath).getIri().toStringRepresentation();
 }
 }  // namespace
 
@@ -66,7 +66,7 @@ TEST(ParserTest, testParse) {
               getIriString(triples[1].p_));
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
-    ASSERT_EQ("<nsx:rel2>", std::get<PropertyPath>(triples[2].p_).iri_);
+    ASSERT_EQ("<nsx:rel2>", getIriString(triples[2].p_));
     ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
@@ -436,7 +436,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.reduced_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -466,7 +466,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director"};
+    vector<std::string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
 
@@ -506,7 +506,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery
@@ -538,7 +538,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
   }
 
@@ -583,7 +583,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
-    vector<string> vvars = {"?movie", "?director", "?year"};
+    vector<std::string> vvars = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 1)
@@ -611,7 +611,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
-    vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+    vector<std::string> vvars_subquery = {"?movie", "?director", "?year"};
     ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
     // -- SubQuery (level 2)
@@ -636,7 +636,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
-    vector<string> vvars_sub_subquery = {"?year"};
+    vector<std::string> vvars_sub_subquery = {"?year"};
     ASSERT_EQ(vvars_sub_subquery,
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
@@ -650,13 +650,14 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
-    EXPECT_THAT(pq_1,
-                m::ConstructQuery(
-                    {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
-                      Variable{"?name"}}},
-                    m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://example.com/ns#employeeName>",
-                        Variable{"?name"}}}))));
+    EXPECT_THAT(
+        pq_1,
+        m::ConstructQuery(
+            {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+              Variable{"?name"}}},
+            m::GraphPattern(m::Triples({SparqlTriple{
+                Variable{"?x"}, iri("<http://example.com/ns#employeeName>"),
+                Variable{"?name"}}}))));
 
     // Check Parse Construct (2)
     auto pq_2 = SparqlParser::parseQuery(
@@ -671,7 +672,7 @@ TEST(ParserTest, testParse) {
                       Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
                       Variable{"?name"}}},
                     m::GraphPattern(m::Triples({SparqlTriple{
-                        Variable{"?x"}, "<http://xmlns.com/foaf/0.1/name>",
+                        Variable{"?x"}, iri("<http://xmlns.com/foaf/0.1/name>"),
                         Variable{"?name"}}}))));
   }
 
@@ -1196,7 +1197,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ((SparqlTriple{Var{"?x"},
                             PropertyPath::fromIri(
                                 ad_utility::convertToLanguageTaggedPredicate(
-                                    "<label>", "en")),
+                                    iri("<label>"), "en")),
                             Var{"?y"}}),
               triples[0]);
   }
@@ -1209,13 +1210,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(2u, triples.size());
     ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ(
-        (SparqlTriple{
-            Var{"?y"},
-            PropertyPath::fromIri(
-                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            ad_utility::convertLangtagToEntityUri("en")}),
-        triples[1]);
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?y"},
+                  PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                            "builtin-functions/langtag>")),
+                  ad_utility::convertLangtagToEntityUri("en")}),
+              triples[1]);
   }
 
   // Test that the language filter never changes triples with
@@ -1231,14 +1231,14 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ((SparqlTriple{Var{"?x"},
                             PropertyPath::fromIri(
                                 ad_utility::convertToLanguageTaggedPredicate(
-                                    "<label>", "en")),
+                                    iri("<label>"), "en")),
                             Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?text"},
-                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
-                  Var{"?y"}}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
   }
   {
     ParsedQuery q = SparqlParser::parseQuery(
@@ -1250,16 +1250,16 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(3u, triples.size());
     ASSERT_EQ((SparqlTriple{iri("<somebody>"), Var{"?p"}, Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?text"},
-                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
-                  Var{"?y"}}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{Var{"?text"},
+                      PropertyPath::fromIri(iri(CONTAINS_ENTITY_PREDICATE)),
+                      Var{"?y"}}),
+        triples[1]);
     ASSERT_EQ(
         (SparqlTriple{
             Var{"?y"},
-            PropertyPath::fromIri(
-                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            PropertyPath::fromIri(iri("<http://qlever.cs.uni-freiburg.de/"
+                                      "builtin-functions/langtag>")),
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }

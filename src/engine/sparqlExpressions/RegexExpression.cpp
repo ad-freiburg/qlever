@@ -111,8 +111,8 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
       continue;
     }
     char c = regex[i];
-    const static string regexSpecialChars = "[]^$.|?*+()";
-    bool isControlChar = regexSpecialChars.find(c) != string::npos;
+    constexpr std::string_view regexSpecialChars = "[]^$.|?*+()";
+    bool isControlChar = regexSpecialChars.find(c) != std::string_view::npos;
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
@@ -153,7 +153,7 @@ PrefixRegexExpression::PrefixRegexExpression(Ptr child, std::string prefixRegex,
 }
 
 // _____________________________________________________________________________
-string PrefixRegexExpression::getCacheKey(
+std::string PrefixRegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("Prefix REGEX expression: ", prefixRegex_,
                       " child:", child_->getCacheKey(varColMap),

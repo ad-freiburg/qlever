@@ -3,12 +3,18 @@
 // Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "parser/Iri.h"
+#include "rdfTypes/Iri.h"
+
+#include <absl/strings/str_cat.h>
 
 #include <utility>
 
 #include "parser/LiteralOrIri.h"
+#include "rdfTypes/RdfEscaping.h"
+#include "util/Log.h"
 #include "util/StringUtils.h"
+
+using namespace std::string_view_literals;
 
 namespace ad_utility::triple_component {
 // ____________________________________________________________________________
@@ -55,8 +61,8 @@ Iri Iri::getBaseIri(bool domainOnly) const {
   // `/` at all if there is no scheme).
   size_t pos = iri_.find(schemePattern);
   if (pos == std::string::npos) {
-    LOG(WARN) << "No scheme found in base IRI: \"" << iri_ << "\""
-              << " (but we accept it anyway)" << std::endl;
+    AD_LOG_WARN << "No scheme found in base IRI: \"" << iri_ << "\""
+                << " (but we accept it anyway)" << std::endl;
     pos = 1;
   } else {
     pos += schemePattern.size();
@@ -88,17 +94,17 @@ Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
       basePrefixForAbsoluteIris.empty()) {
     // Case 1: IRI with scheme (like `<http://...>`) or `BASE_IRI_FOR_TESTING`
     // (which is `<@>`, and no valid base IRI has length 3).
-    return TripleComponent::Iri::fromIriref(iriSv);
+    return fromIriref(iriSv);
   } else if (iriSv[1] == '/') {
     // Case 2: Absolute IRI without scheme (like `</prosite/PS51927>`).
     AD_CORRECTNESS_CHECK(!basePrefixForAbsoluteIris.empty());
-    return TripleComponent::Iri::fromPrefixAndSuffix(
-        basePrefixForAbsoluteIris, iriSv.substr(2, iriSv.size() - 3));
+    return fromPrefixAndSuffix(basePrefixForAbsoluteIris,
+                               iriSv.substr(2, iriSv.size() - 3));
   } else {
     // Case 3: Relative IRI (like `<UPI001AF4585D>`).
     AD_CORRECTNESS_CHECK(!basePrefixForRelativeIris.empty());
-    return TripleComponent::Iri::fromPrefixAndSuffix(
-        basePrefixForRelativeIris, iriSv.substr(1, iriSv.size() - 2));
+    return fromPrefixAndSuffix(basePrefixForRelativeIris,
+                               iriSv.substr(1, iriSv.size() - 2));
   }
 }
 

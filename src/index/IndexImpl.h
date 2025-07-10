@@ -50,7 +50,6 @@ using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
 using std::array;
 using std::shared_ptr;
-using std::string;
 using std::tuple;
 using std::vector;
 
@@ -118,8 +117,8 @@ class IndexImpl {
 
   // Private data members.
  protected:
-  string onDiskBase_;
-  string settingsFileName_;
+  std::string onDiskBase_;
+  std::string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
   // Note: `std::nullopt` means `not specified by the user`.
   std::optional<bool> useParallelParser_ = std::nullopt;
@@ -159,8 +158,8 @@ class IndexImpl {
   NumNormalAndInternal numPredicates_;
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
-  string indexId_;
-  string gitShortHash_ = "git short hash not set";
+  std::string indexId_;
+  std::string gitShortHash_ = "git short hash not set";
 
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
@@ -259,7 +258,7 @@ class IndexImpl {
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase,
+  void createFromOnDiskIndex(const std::string& onDiskBase,
                              bool persistUpdatesOnDisk);
 
   // Adds text index from on disk index that has previously been constructed.
@@ -350,7 +349,7 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getSizeOfTextBlockForEntities(const string& words) const;
+  size_t getSizeOfTextBlockForEntities(const std::string& words) const;
 
   // Returns the size of the whole textblock. If the word is very long or not
   // prefixed then only a small number of words actually match. So the final
@@ -359,16 +358,16 @@ class IndexImpl {
   // have to read the complete block and then filter by the actually needed
   // words.
   // TODO: improve size estimate by adding a correction factor.
-  size_t getSizeOfTextBlockForWord(const string& words) const;
+  size_t getSizeOfTextBlockForWord(const std::string& words) const;
 
-  size_t getSizeEstimate(const string& words) const;
+  size_t getSizeEstimate(const std::string& words) const;
 
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
   // that has wordOrPrefix as a prefix. Returned IdTable has columns:
   // textRecord, word. Sorted by textRecord.
   IdTable getWordPostingsForTerm(
-      const string& wordOrPrefix,
+      const std::string& wordOrPrefix,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
   // Returns a set of textRecords and their corresponding entities and
@@ -379,12 +378,12 @@ class IndexImpl {
   // unfitting words are filtered out later by the join with the
   // TextIndexScanForWords operation.
   IdTable getEntityMentionsForWord(
-      const string& term,
+      const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
+  size_t getIndexOfBestSuitedElTerm(const vector<std::string>& terms) const;
 
-  string getTextExcerpt(TextRecordIndex cid) const {
+  std::string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
       return "";
     }
@@ -395,9 +394,9 @@ class IndexImpl {
     return textMeta_.getAverageNofEntityContexts();
   };
 
-  void setKbName(const string& name);
+  void setKbName(const std::string& name);
 
-  void setTextName(const string& name);
+  void setTextName(const std::string& name);
 
   bool& usePatterns();
 
@@ -429,11 +428,11 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  const string& getTextName() const { return textMeta_.getName(); }
-  const string& getKbName() const { return pso_.getKbName(); }
-  const string& getOnDiskBase() const { return onDiskBase_; }
-  const string& getIndexId() const { return indexId_; }
-  const string& getGitShortHash() const { return gitShortHash_; }
+  const std::string& getTextName() const { return textMeta_.getName(); }
+  const std::string& getKbName() const { return pso_.getKbName(); }
+  const std::string& getOnDiskBase() const { return onDiskBase_; }
+  const std::string& getIndexId() const { return indexId_; }
+  const std::string& getGitShortHash() const { return gitShortHash_; }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -526,8 +525,8 @@ class IndexImpl {
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
              IndexMetaDataMmapDispatcher::WriteType>
-  createPermutationPairImpl(size_t numColumns, const string& fileName1,
-                            const string& fileName2, T&& sortedTriples,
+  createPermutationPairImpl(size_t numColumns, const std::string& fileName1,
+                            const std::string& fileName2, T&& sortedTriples,
                             Permutation::KeyOrder permutation,
                             Callbacks&&... perTripleCallbacks);
 
@@ -616,7 +615,7 @@ class IndexImpl {
    * Delete a temporary file unless the keepTempFiles_ flag is set
    * @param path
    */
-  void deleteTemporaryFile(const string& path);
+  void deleteTemporaryFile(const std::string& path);
 
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
