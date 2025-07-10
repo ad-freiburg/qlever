@@ -28,9 +28,8 @@ jobs:
       - name: Checkout qlever-test-suite
         uses: actions/checkout@v3
         with:
-          repository: "joka921/sparql-conformance"
+          repository: "ad-freiburg/sparql-conformance"
           path: qlever-test-suite
-          ref: "verbose-update-tests"
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
