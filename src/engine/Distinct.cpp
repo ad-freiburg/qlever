@@ -107,7 +107,8 @@ Result Distinct::computeResult(bool requestLaziness) {
                                    subRes->idTables(), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
-             : Result{std::move(*generator.begin()), resultSortedOn()};
+             : Result{ad_utility::getSingleElement(std::move(generator)),
+                      resultSortedOn()};
 }
 
 // _____________________________________________________________________________
