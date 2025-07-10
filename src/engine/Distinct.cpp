@@ -76,7 +76,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
         })};
   }
 
-  auto range = CachingContinuableTransformInputRange(
+  return Result::LazyResult{CachingContinuableTransformInputRange(
       std::move(input), [getDistinctResult](auto& idTableAndVocab) mutable {
         IdTable result = getDistinctResult(std::move(idTableAndVocab.idTable_));
         return result.empty()
@@ -85,9 +85,7 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
                          Result::IdTableVocabPair{
                              std::move(result),
                              std::move(idTableAndVocab.localVocab_)});
-      });
-
-  return Result::LazyResult{std::move(range)};
+      })};
 }
 
 // _____________________________________________________________________________
