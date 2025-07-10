@@ -157,7 +157,8 @@ class SplitVocabulary {
   [[nodiscard]] uint64_t size() const {
     uint64_t total = 0;
     for (auto& vocab : underlying_) {
-      total += std::visit([](auto& v) -> uint64_t { return v.size(); }, vocab);
+      total += std::visit(
+          [](auto& v) { return static_cast<uint64_t>(v.size()); }, vocab);
     }
     return total;
   }
