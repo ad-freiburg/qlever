@@ -353,6 +353,17 @@ sparqlExpression::EvaluationContext GroupByImpl::createEvaluationContext(
 }
 
 // _____________________________________________________________________________
+// Hybrid GROUP BY fallback strategy:
+// 1) If no aliases, the result is simply a collapsed version of the input
+// 2) If no grouping columns, handled by doGroupBy directly.
+// 3) Sample a fraction of rows and estimate distinct group count via hash sketch;
+//    if estimated groups exceed threshold, skip hash-map path entirely.
+// 4) Attempt index-scan-based shortcuts (single index count, full index scan,
+//    join full scan, object count).
+// 5) Otherwise, compute subresult (lazy if possible) and apply hash-map grouping.
+// 6) If the hash-map grows too large mid-aggregation, buffer remaining data and
+//    switch to sort-based aggregation via mergeSortedTailIntoPartial.
+// 7) If all optimizations fail or threshold crossed, fallback to standard doGroupBy (sort+group-by).
 Result GroupByImpl::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -640,7 +651,7 @@ Result::Generator GroupByImpl::computeResultLazily(
     if (!singleIdTable && !resultTable.empty()) {
       currentLocalVocab.mergeWith(storedLocalVocabs);
       Result::IdTableVocabPair outputPair{std::move(resultTable),
-                                           std::move(currentLocalVocab)};
+                                          std::move(currentLocalVocab)};
       co_yield outputPair;
       // Reuse buffer if not moved out
       resultTable = std::move(outputPair.idTable_);
@@ -761,8 +772,8 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
       "GROUP BY variable, this is a bug in the query planner",
       permutedTriple[1]->toString(), groupByVariable.name());
 
-  // There must be exactly one alias, which is a non-distinct count of one of the
-  // two variables of the index scan.
+  // There must be exactly one alias, which is a non-distinct count of one of
+  // the two variables of the index scan.
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
   bool countedVariableIsOneOfIndexScanVariables =
       countedVariable == *(permutedTriple[1]) ||
@@ -1000,7 +1011,6 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
     return std::nullopt;
   }
 
-  // Fall back to existing optimized paths
   if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
     if (auto result = computeGroupByForSingleIndexScan()) {
       return result;
@@ -1021,16 +1031,7 @@ std::optional<IdTable> GroupByImpl::computeOptimizedGroupByIfPossible() const {
   return std::nullopt;
 }
 
-// Hybrid GROUP BY fallback strategy:
-// 1) If no grouping columns, handled by doGroupBy directly.
-// 2) Sample a fraction of rows and estimate distinct group count via hash sketch;
-//    if estimated groups exceed threshold, skip hash-map path entirely.
-// 3) Attempt index-scan-based shortcuts (single index count, full index scan,
-//    join full scan, object count).
-// 4) Otherwise, compute subresult (lazy if possible) and apply hash-map grouping.
-// 5) If the hash-map grows too large mid-aggregation, buffer remaining data and
-//    switch to sort-based aggregation via mergeSortedTailIntoPartial.
-// 6) If all optimizations fail or threshold crossed, fallback to standard doGroupBy (sort+group-by).
+// _____________________________________________________________________________
 std::optional<GroupByImpl::HashMapOptimizationData>
 GroupByImpl::computeUnsequentialProcessingMetadata(
     std::vector<Aggregate>& aliases,
@@ -1616,7 +1617,7 @@ template <size_t NUM_GROUP_COLUMNS, typename SubResults>
 Result GroupByImpl::computeGroupByForHashMapOptimization(
     std::vector<HashMapAliasInformation>& aggregateAliases,
     SubResults subresults, const std::vector<size_t>& columnIndices) const {
-  // Contract check(?)
+  // [Benke] Contract check instead? (AI suggested)
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;
