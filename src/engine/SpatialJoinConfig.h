@@ -5,8 +5,10 @@
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 #define QLEVER_SRC_ENGINE_SPATIALJOINCONFIG_H
 
+#include <array>
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <variant>
 
 #include "parser/PayloadVariables.h"
@@ -31,7 +33,7 @@ enum class SpatialJoinType {
 };
 
 // String representation of the `SpatialJoinType` values.
-static constexpr std::string_view SpatialJoinTypeString[8]{
+inline constexpr std::array<std::string_view, 8> SpatialJoinTypeString{
     "intersects", "contains", "covers",   "crosses",
     "touches",    "equals",   "overlaps", "within-dist"};
 
