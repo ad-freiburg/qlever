@@ -8,6 +8,7 @@
 #define QLEVER_SRC_UTIL_VIEWS_H
 
 #include <future>
+#include <optional>
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
@@ -15,6 +16,48 @@
 #include "util/Generator.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
+
+namespace {
+
+CPP_template(typename Range, typename ElementType)(
+    requires ql::ranges::input_range<Range>) struct ReChunkAtSeparatorFromGet
+    : ad_utility::InputRangeFromGet<ql::span<ElementType>> {
+
+  std::vector<ElementType> buffer_;
+  decltype(buffer_.begin()) iter_;
+  ElementType separator_;
+
+  ReChunkAtSeparatorFromGet(Range generator, ElementType separator)
+      : buffer_{ql::ranges::to<std::vector<ElementType>>(
+            ql::views::join(generator))},
+        iter_{buffer_.begin()},
+        separator_{separator} {}
+
+  std::optional<ql::span<ElementType>> get() override {
+    if (iter_ == buffer_.end()) return std::nullopt;
+
+    auto found = std::find(iter_, buffer_.end(), separator_);
+    if (found == buffer_.end()) {
+      auto retVal =
+          ql::span<ElementType>{const_cast<char*>(&*iter_),
+                                static_cast<ql::span<ElementType>::index_type>(
+                                    std::distance(iter_, buffer_.end()))};
+      iter_ = buffer_.end();  // mark info that end is reached
+      return retVal;
+    }
+
+    auto retVal =
+        ql::span<ElementType>{const_cast<char*>(&*iter_),
+                              static_cast<ql::span<ElementType>::index_type>(
+                                  std::distance(iter_, found))};
+
+    iter_ = found;
+    iter_++; // move past separator already found
+    return retVal;
+  }
+};
+
+}  // namespace
 
 namespace ad_utility {
 
@@ -98,13 +141,13 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
+  CPP_auto_member constexpr auto CPP_fun(begin) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end)()(
+  CPP_auto_member constexpr auto CPP_fun(end) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
@@ -125,12 +168,12 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto
+      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
+  CPP_auto_member constexpr auto CPP_fun(data) ()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
@@ -321,24 +364,13 @@ CPP_template(typename Range, typename Transformation)(
 /// Create a generator the consumes the input generator until it finds the given
 /// separator and the yields spans of the chunks of data received inbetween.
 CPP_template(typename Range, typename ElementType)(
-    requires ql::ranges::input_range<Range>) inline cppcoro::
-    generator<ql::span<ElementType>> reChunkAtSeparator(Range generator,
-                                                        ElementType separator) {
-  std::vector<ElementType> buffer;
-  for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
-       generator) {
-    for (ElementType c : chunk) {
-      if (c == separator) {
-        co_yield ql::span{buffer.data(), buffer.size()};
-        buffer.clear();
-      } else {
-        buffer.push_back(c);
-      }
-    }
-  }
-  if (!buffer.empty()) {
-    co_yield ql::span{buffer.data(), buffer.size()};
-  }
+    requires ql::ranges::input_range<
+        Range>) inline ReChunkAtSeparatorFromGet<Range,
+                                                 ElementType> reChunkAtSeparator(Range
+                                                                                     generator,
+                                                                                 ElementType
+                                                                                     separator) {
+  return ReChunkAtSeparatorFromGet{generator, separator};
 }
 }  // namespace ad_utility
 
