@@ -65,7 +65,7 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   checkGeoInfo(g2, exp2);
 
   auto g3 = GeometryInfo::fromWktLiteral(lit3);
-  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {0}};
+  GeometryInfo exp3{3, {{2, 2}, {4, 4}}, {3, 3}, {667239}};
   checkGeoInfo(g3, exp3);
 }
 
