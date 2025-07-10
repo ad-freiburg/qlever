@@ -38,8 +38,7 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
 };
 
 // ____________________________________________________________________________
-std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(
-    const std::string_view& wkt) {
+std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   // Parse WKT and compute info
   using namespace detail;
   auto [type, parsed] = parseWkt(wkt);
@@ -51,7 +50,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(
 }
 
 // ____________________________________________________________________________
-GeometryType GeometryInfo::getWktType(const std::string_view& wkt) {
+GeometryType GeometryInfo::getWktType(std::string_view wkt) {
   return static_cast<uint8_t>(detail::getWKTType(detail::removeDatatype(wkt)));
 };
 
@@ -78,7 +77,7 @@ Centroid GeometryInfo::getCentroid() const {
 }
 
 // ____________________________________________________________________________
-Centroid GeometryInfo::getCentroid(const std::string_view& wkt) {
+Centroid GeometryInfo::getCentroid(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return detail::centroidAsGeoPoint(parsed.value());
@@ -91,7 +90,7 @@ BoundingBox GeometryInfo::getBoundingBox() const {
 }
 
 // ____________________________________________________________________________
-BoundingBox GeometryInfo::getBoundingBox(const std::string_view& wkt) {
+BoundingBox GeometryInfo::getBoundingBox(std::string_view wkt) {
   auto [type, parsed] = detail::parseWkt(wkt);
   AD_CORRECTNESS_CHECK(parsed.has_value());
   return detail::boundingBoxAsGeoPoints(parsed.value());
@@ -128,7 +127,7 @@ template GeometryType GeometryInfo::getRequestedInfo<GeometryType>() const;
 // ____________________________________________________________________________
 template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
-RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
+RequestedInfo GeometryInfo::getRequestedInfo(std::string_view wkt) {
   if constexpr (std::is_same_v<RequestedInfo, GeometryInfo>) {
     auto optionalGeoInfo = GeometryInfo::fromWktLiteral(wkt);
     AD_CORRECTNESS_CHECK(optionalGeoInfo.has_value());
@@ -146,12 +145,12 @@ RequestedInfo GeometryInfo::getRequestedInfo(const std::string_view& wkt) {
 
 // Explicit instantiations
 template GeometryInfo GeometryInfo::getRequestedInfo<GeometryInfo>(
-    const std::string_view& wkt);
+    std::string_view wkt);
 template Centroid GeometryInfo::getRequestedInfo<Centroid>(
-    const std::string_view& wkt);
+    std::string_view wkt);
 template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>(
-    const std::string_view& wkt);
+    std::string_view wkt);
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>(
-    const std::string_view& wkt);
+    std::string_view wkt);
 
 }  // namespace ad_utility
