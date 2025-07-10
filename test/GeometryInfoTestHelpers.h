@@ -15,12 +15,14 @@ namespace geoInfoTestHelpers {
 using namespace ad_utility;
 using Loc = source_location;
 
+// ____________________________________________________________________________
 inline void checkGeometryType(GeometryType a, GeometryType b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
   ASSERT_EQ(a.type(), b.type());
 }
 
+// ____________________________________________________________________________
 inline void checkCentroid(Centroid a, Centroid b,
                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -28,6 +30,7 @@ inline void checkCentroid(Centroid a, Centroid b,
   ASSERT_NEAR(a.centroid().getLng(), b.centroid().getLng(), 0.001);
 }
 
+// ____________________________________________________________________________
 inline void checkBoundingBox(BoundingBox a, BoundingBox b,
                              Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -39,6 +42,7 @@ inline void checkBoundingBox(BoundingBox a, BoundingBox b,
   ASSERT_NEAR(aur.getLng(), bur.getLng(), 0.001);
 }
 
+// ____________________________________________________________________________
 inline void checkMetricLength(MetricLength a, MetricLength b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -47,7 +51,7 @@ inline void checkMetricLength(MetricLength a, MetricLength b,
               0.01 * a.length());
 }
 
-// Helper that asserts (approx.) equality of two GeometryInfo objects
+// ____________________________________________________________________________
 inline void checkGeoInfo(std::optional<GeometryInfo> actual,
                          std::optional<GeometryInfo> expected,
                          Loc sourceLocation = Loc::current()) {
@@ -69,6 +73,7 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
   checkMetricLength(a.getMetricLength(), b.getMetricLength());
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForInstance(GeometryInfo gi,
                                           Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
@@ -82,6 +87,7 @@ inline void checkRequestedInfoForInstance(GeometryInfo gi,
   checkMetricLength(gi.getMetricLength(), gi.getRequestedInfo<MetricLength>());
 }
 
+// ____________________________________________________________________________
 inline void checkRequestedInfoForWktLiteral(
     const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
