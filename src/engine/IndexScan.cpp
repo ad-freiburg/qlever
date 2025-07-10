@@ -40,8 +40,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       graphsToFilter_{std::move(graphsToFilter)},
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
-      scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value() ? true
-                                                                    : false},
+      scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
