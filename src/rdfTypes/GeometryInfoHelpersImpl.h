@@ -129,6 +129,22 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
   return std::nullopt;
 }
 
+// ____________________________________________________________________________
+inline MetricLength computeMetricLength(const ParsedWkt& geometry) {
+  return {std::visit(
+      [](const auto& geom) -> float {
+        using T = std::decay_t<decltype(geom)>;
+        if constexpr (std::is_same_v<T, Line<CoordType>>) {
+          return latLngLen<CoordType>(geom);
+        } else if constexpr (std::is_same_v<T, Polygon<CoordType>>) {
+          return latLngLen<CoordType>(geom.getOuter());
+        }
+        // TODO other geometries -> e.g. MultiLineString -> max(member line len)
+        return 0.0;
+      },
+      geometry)};
+}
+
 }  // namespace ad_utility::detail
 
 #endif  // QLEVER_SRC_UTIL_GEOMETRYINFOHELPERSIMPL_H
