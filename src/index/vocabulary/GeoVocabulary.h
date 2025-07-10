@@ -44,7 +44,7 @@ class GeoVocabulary {
   using GeometryInfoBuffer = std::array<uint8_t, geoInfoOffset>;
 
   // For an invalid WKT literal, the serialized geometry info is all-zero
-  static constexpr GeometryInfoBuffer invalidGeometryInfo = {};
+  static constexpr GeometryInfoBuffer invalidGeoInfoBuffer = {};
 
   // Offset for the header of the geometry information file
   static constexpr size_t geoInfoHeader =
@@ -63,8 +63,8 @@ class GeoVocabulary {
 
   // Construct a filename for the geo info file by appending a suffix to the
   // given filename.
-  static std::string getGeoInfoFilename(const std::string& filename) {
-    return absl::StrCat(filename, std::string(geoInfoSuffix));
+  static std::string getGeoInfoFilename(std::string_view filename) {
+    return absl::StrCat(filename, geoInfoSuffix);
   }
 
   // Forward all the standard operations to the underlying literal vocabulary.
@@ -108,8 +108,6 @@ class GeoVocabulary {
     std::unique_ptr<typename UnderlyingVocabulary::WordWriter>
         underlyingWordWriter_;
     ad_utility::File geoInfoFile_;
-
-    static constexpr uint8_t invalidGeoInfoBuffer[geoInfoOffset] = {};
 
    public:
     // Initialize the `geoInfoFile_` by writing its header and open a word

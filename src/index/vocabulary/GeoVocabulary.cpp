@@ -97,7 +97,7 @@ std::optional<GeometryInfo> GeoVocabulary<V>::getGeoInfo(uint64_t index) const {
   // If all bytes are zero, this record on disk represents an invalid geometry.
   // The `GeometryInfo` class makes the guarantee that it can not have an
   // all-zero binary representation.
-  if (buffer == invalidGeometryInfo) {
+  if (buffer == invalidGeoInfoBuffer) {
     return std::nullopt;
   }
 
