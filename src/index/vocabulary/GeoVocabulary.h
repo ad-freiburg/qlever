@@ -51,12 +51,7 @@ class GeoVocabulary {
       sizeof(ad_utility::GEOMETRY_INFO_VERSION);
 
  public:
-  CPP_variadic_template(typename... Args)(
-      requires std::constructible_from<UnderlyingVocabulary, Args&&...> CPP_and(
-          !std::derived_from<
-              std::remove_cvref_t<UnderlyingVocabulary>,
-              GeoVocabulary>)) explicit GeoVocabulary(Args&&... args)
-      : literals_{AD_FWD(args)...} {};
+  GeoVocabulary() = default;
 
   // Load the precomputed `GeometryInfo` object for the literal with
   // the given index from disk. Return `std::nullopt` for invalid geometries.
