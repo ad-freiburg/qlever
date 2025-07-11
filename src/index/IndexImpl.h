@@ -105,7 +105,7 @@ class IndexImpl {
  public:
   using TripleVec =
       ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
-  // Block Id, Context Id, Word Id, Score, entity
+  // Block Id, isEntity, Context Id, Word Id, Score
   using TextVec = ad_utility::CompressedExternalIdTableSorter<SortText, 5>;
 
   struct IndexMetaDataMmapDispatcher {
@@ -347,20 +347,63 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
+  // This struct is used to retrieve text blocks.
+  struct TextBlockMetadataAndWordInfo {
+    TextBlockMetadataAndWordInfo(
+        const TextBlockMetaData& tbmd,
+        const IdRange<WordVocabIndex>& includingIdRange)
+        : tbmd_{tbmd},
+          hasToBeFiltered_{hasToBeFiltered(includingIdRange)},
+          optIdRange_{
+              hasToBeFiltered_
+                  ? std::optional<IdRange<WordVocabIndex>>{includingIdRange}
+                  : std::nullopt} {}
+    // The TextBlockMetaData has the information on where the blocks boundaries
+    // and internal boundaries are. It is necessary to retrieve either the
+    // context list or entity list of a text block.
+    const TextBlockMetaData tbmd_;
+
+    // Is set to true if the text block contains entries outside of the
+    // requested range
+    const bool hasToBeFiltered_;
+
+    // The id range of the prefix or word used to retrieve the text block(s). It
+    // is only set if hasToBeFiltered_ was determined to be true during
+    // construction.
+    // Note: This range is inclusive so it is [lowerId, upperId],
+    // NOT [lowerId, upperId)
+    const std::optional<IdRange<WordVocabIndex>> optIdRange_;
+
+    // Returns true if the text block contains entries outside of the requested
+    // range
+    bool hasToBeFiltered(
+        const IdRange<WordVocabIndex>& includingIdRange) const {
+      return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
+               tbmd_._lastWordId <= includingIdRange.last().get());
+    }
+  };
+
   std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getSizeOfTextBlockForEntities(const std::string& words) const;
-
-  // Returns the size of the whole textblock. If the word is very long or not
-  // prefixed then only a small number of words actually match. So the final
-  // result is much smaller.
-  // Note that as a cost estimate the estimation is correct. Because we always
-  // have to read the complete block and then filter by the actually needed
-  // words.
-  // TODO: improve size estimate by adding a correction factor.
-  size_t getSizeOfTextBlockForWord(const std::string& words) const;
-
-  size_t getSizeEstimate(const std::string& words) const;
+  /**
+   *
+   * @param word: The word used to do the entity- or wordscan
+   * @param textScanMode: If set to WordScan the contextLists are looked at, if
+   *                      set to EntityScan the entityLists are looked at.
+   * @return Sum of context list sizes or entity list sizes of all touched
+   *         blocks. If 'forWord' is true and the word is not a prefix only a
+   *         small number of words actually match. So the final result is much
+   *         smaller. If 'forWord' is false and the word is a prefix then the
+   *         final result can be a little smaller since duplicate entities are
+   *         filtered out. For details see documentation of
+   *         mergeTextBlockResults.
+   * @note As a cost estimate the estimation is correct. Because we always have
+   *       to read the complete blocks and then (if needed) filter by the
+   *       actual wordId range.
+   *       TODO: improve size estimate by adding a correction factor.
+   */
+  size_t getSizeOfTextBlocksSum(const std::string& word,
+                                TextScanMode textScanMode) const;
 
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
@@ -577,13 +620,46 @@ class IndexImpl {
   // block, and additional filtering is thus required. `idRange_` is the range
   // `[first, last]` of the `WordVocabIndex`es that correspond to the word
   // (which might also be a prefix, thus it is a range).
-  struct TextBlockMetadataAndWordInfo {
-    TextBlockMetaData tbmd_;
-    bool hasToBeFiltered_;
-    IdRange<WordVocabIndex> idRange_;
-  };
-  std::optional<TextBlockMetadataAndWordInfo>
-  getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
+  std::vector<TextBlockMetadataAndWordInfo> getTextBlockMetadataForWordOrPrefix(
+      const std::string& word) const;
+
+  // Same as public getSizeOfTextBlocksSum method but works on metadata objects
+  // instead of word or prefix. The public method uses this method internally.
+  static size_t getSizeOfTextBlocksSum(
+      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+      TextScanMode textScanMode);
+
+  /**
+   * @brief This method is used to combine the IdTables of multiple blocks
+   * returned from a word or entity scan into one IdTable.
+   * @param reader: The reader is the function used to read the blocks from disk
+   * @param tbmds: The tbmds are all TextBlockMetadataAndWordInfo returned by
+   *               the getTextBlockMetadaForWordOrPrefix function
+   * @param allocator: The allocator is used to create the result IdTable.
+   * @param textScanMode:
+   *        if WordScan: The contextLists of the blocks are read and filtered
+   *              given the respective wordId range. The wordId range was
+   *              previously calculated and saved in the
+   *              TextBlockMetadataAndWordInfo.Those filtered IdTables are then
+   *              merged into one. Sorted by TextRecordIndex (contextId).
+   *         if EntityScan: The entityLists of the blocks are read and NOT
+   *              filtered. During the merging exact duplicate entries are
+   *              removed. Duplicates can occur since the same entity in the
+   *              same text record is saved to all words occurring in this text
+   *              record. It is checked that no duplicates occur in one block
+   *              but when combining multiple blocks they have to be accounted
+   *              for.
+   */
+  CPP_template(typename Reader)(
+      requires ad_utility::InvocableWithExactReturnType<
+          Reader, IdTable, const TextBlockMetaData&,
+          const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
+          TextScoringMetric>) IdTable
+      mergeTextBlockResults(
+          const Reader& reader,
+          const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+          const ad_utility::AllocatorWithLimit<Id>& allocator,
+          TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
