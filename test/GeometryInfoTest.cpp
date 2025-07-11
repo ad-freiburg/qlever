@@ -142,6 +142,23 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
 }
 
 // ____________________________________________________________________________
+TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
+  using enum ad_utility::BoundingCoordinate;
+
+  BoundingBox bb1{{2, 1}, {4, 3}};
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_Y>(), 2, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_X>(), 3, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_Y>(), 4, 0.0001);
+
+  BoundingBox bb2{{-20, -5}, {-4, -3}};
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_X>(), -5, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_Y>(), -20, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_X>(), -3, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_Y>(), -4, 0.0001);
+}
+
+// ____________________________________________________________________________
 TEST(GeometryInfoTest, GeometryTypeAsIri) {
   ASSERT_EQ(GeometryType{1}.asIri().value(),
             "http://www.opengis.net/ont/sf#Point");

@@ -102,6 +102,35 @@ std::string BoundingBox::asWkt() const {
 }
 
 // ____________________________________________________________________________
+template <BoundingCoordinate RequestedCoordinate>
+double BoundingBox::getBoundingCoordinate() const {
+  using enum BoundingCoordinate;
+  if constexpr (RequestedCoordinate == MIN_X) {
+    return lowerLeft_.getLng();
+  } else if constexpr (RequestedCoordinate == MIN_Y) {
+    return lowerLeft_.getLat();
+  } else if constexpr (RequestedCoordinate == MAX_X) {
+    return upperRight_.getLng();
+  } else if constexpr (RequestedCoordinate == MAX_Y) {
+    return upperRight_.getLat();
+  } else {
+    // Unfortunately, we cannot use a `static_assert` here because some compiler
+    // versions don't like it.
+    AD_FAIL();
+  }
+};
+
+// Explicit instantiations
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MIN_X>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MIN_Y>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MAX_X>()
+    const;
+template double BoundingBox::getBoundingCoordinate<BoundingCoordinate::MAX_Y>()
+    const;
+
+// ____________________________________________________________________________
 template <typename RequestedInfo>
 requires RequestedInfoT<RequestedInfo>
 RequestedInfo GeometryInfo::getRequestedInfo() const {
