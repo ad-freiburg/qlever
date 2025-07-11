@@ -114,7 +114,9 @@ double BoundingBox::getBoundingCoordinate() const {
   } else if constexpr (RequestedCoordinate == MAX_Y) {
     return upperRight_.getLat();
   } else {
-    static_assert(ad_utility::alwaysFalse<BoundingCoordinate>);
+    // Unfortunately, we cannot use a `static_assert` here because some compiler
+    // versions don't like it.
+    AD_FAIL();
   }
 };
 
