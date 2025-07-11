@@ -343,16 +343,13 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(
       absl::StrCat(geof, "metricDistance>(?a, ?b)"),
       matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
-  // Compatibility version of geof:distance with two
-  // arguments
+  // Compatibility version of geof:distance with two arguments
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
   // geof:distance with IRI as unit in third argument
   expectFunctionCall(
-      absl::StrCat(geof,
-                   "distance>(?a, ?b, "
-                   "<http://qudt.org/vocab/unit/M>)"),
+      absl::StrCat(geof, "distance>(?a, ?b, <http://qudt.org/vocab/unit/M>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
           variableExpressionMatcher(Variable{"?a"}),
@@ -361,13 +358,11 @@ TEST(SparqlParser, FunctionCall) {
               ad_utility::triple_component::Iri::fromIriref(
                   "<http://qudt.org/vocab/unit/M>"))));
 
-  // geof:distance with xsd:anyURI literal as unit in third
-  // argument
+  // geof:distance with xsd:anyURI literal as unit in third argument
   expectFunctionCall(
       absl::StrCat(geof,
                    "distance>(?a, ?b, "
-                   "\"http://qudt.org/vocab/unit/"
-                   "M\"^^<http://www.w3.org/2001/"
+                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
                    "XMLSchema#anyURI>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
@@ -375,8 +370,7 @@ TEST(SparqlParser, FunctionCall) {
           variableExpressionMatcher(Variable{"?b"}),
           matchLiteralExpression<ad_utility::triple_component::Literal>(
               ad_utility::triple_component::Literal::fromStringRepresentation(
-                  "\"http://qudt.org/vocab/unit/"
-                  "M\"^^<http://www.w3.org/2001/"
+                  "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
                   "XMLSchema#anyURI>"))));
 
   // geof:distance with variable as unit in third argument
@@ -480,8 +474,7 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
-  // Unknown function with `geof:`, `math:`, `xsd:`, or
-  // `ql` prefix.
+  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
@@ -491,9 +484,8 @@ TEST(SparqlParser, FunctionCall) {
   std::string prefixNexistepas = "<http://nexiste.pas/";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 
-  // Check that arbitrary nonexisting functions with a
-  // single argument silently return an
-  // `IdExpression(UNDEF)` in the syntax test mode.
+  // Check that arbitrary nonexisting functions with a single argument silently
+  // return an `IdExpression(UNDEF)` in the syntax test mode.
   auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
   expectFunctionCall(
       absl::StrCat(prefixNexistepas, "nada>(?x)"),
