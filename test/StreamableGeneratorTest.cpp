@@ -37,7 +37,10 @@ TEST(StreamableGenerator, EmptyGeneratorReturnsEmptyResult) {
 TEST(StreamableGenerator, GeneratorReturnsBufferedResults) {
   auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
     co_yield std::string(TEST_BUFFER_SIZE, 'A');
+    // Suppress false positive on GCC 11
+    DISABLE_OVERREAD_WARNINGS
     co_yield '1';
+    ENABLE_OVERREAD_WARNINGS
     co_yield "Abc";
   }();
 
