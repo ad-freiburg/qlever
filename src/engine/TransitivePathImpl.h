@@ -325,13 +325,13 @@ class TransitivePathImpl : public TransitivePathBase {
     };
 
     if (startSideResult->isFullyMaterialized()) {
-      return lazySingleValueRange(
+      return InputRangeTypeErased(lazySingleValueRange(
           [toView = std::move(toView), getStartNodes = std::move(getStartNodes),
            startSideResult = std::move(startSideResult)]() {
             const IdTable& idTable = startSideResult->idTable();
             return TableColumnWithVocab{toView(idTable), getStartNodes(idTable),
                                         startSideResult->getCopyOfLocalVocab()};
-          });
+          }));
     }
 
     return InputRangeTypeErased(CachingTransformInputRange(

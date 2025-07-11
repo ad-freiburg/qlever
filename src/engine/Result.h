@@ -218,7 +218,8 @@ class Result {
           std::is_same<std::invoke_result_t<F>,
                        IdTableVocabPair>::value) static Result::LazyResult
       lazyResultFromSingleValue(F singleValueGetter) {
-    return ad_utility::lazySingleValueRange(std::move(singleValueGetter));
+    return LazyResult(
+        ad_utility::lazySingleValueRange(std::move(singleValueGetter)));
   }
 
   // Overload for more than two `Results`
