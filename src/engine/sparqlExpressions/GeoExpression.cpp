@@ -291,7 +291,7 @@ QL_INSTANTIATE_GEO_RELATION_EXPR(EQUALS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(OVERLAPS);
 QL_INSTANTIATE_GEO_RELATION_EXPR(WITHIN);
 
-// Explicit instantiations for the bounding cordinate expressions
+// Explicit instantiations for the bounding coordinate expressions
 #ifdef QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR
 #error "Macro QL_INSTANTIATE_BOUNDING_COORDINATE_EXPR already defined"
 #endif
