@@ -328,4 +328,18 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
+
+// A function that returns a lazy range that yields a single value. The value
+// is the result of invoking `singleValueGetter`.
+CPP_template(typename F)(requires std::is_invocable_v<
+                         F>) auto lazySingleValueRange(F singleValueGetter) {
+  using T = std::invoke_result_t<F>;
+  static_assert(std::is_object_v<T>,
+                "The functor of `lazySingleValueRange` must yield an "
+                "object type, not a reference");
+  return InputRangeFromLoopControlGet(
+      [singleValueGetter = std::move(singleValueGetter)]() {
+        return LoopControl<T>::breakWithValue(std::move(singleValueGetter()));
+      });
+}
 }  // namespace ad_utility
