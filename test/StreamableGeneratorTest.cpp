@@ -4,24 +4,20 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/stream_generator.h"
+#include "util/stream_generator.h"
 
 using namespace ad_utility::streams;
 
 namespace {
 constexpr size_t TEST_BUFFER_SIZE = 10;
-
-stream_generator generateException() {
-  throw std::runtime_error("Test Exception");
-  co_return;
-}
-
-stream_generator generateNothing() { co_return; }
-
 }  // namespace
 
-TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
-  auto generator = generateException();
+// _____________________________________________________________________________
+TEST(StreamableGenerator, GeneratorExceptionResultsInException) {
+  auto generator = []() -> stream_generator {
+    throw std::runtime_error{"Test Exception"};
+    co_return;
+  }();
   try {
     generator.begin();
     FAIL() << "Generator should throw Exception";
@@ -30,38 +26,66 @@ TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
   }
 }
 
-TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
-  auto generator = generateNothing();
+// _____________________________________________________________________________
+TEST(StreamableGenerator, EmptyGeneratorReturnsEmptyResult) {
+  auto generator = []() -> stream_generator { co_return; }();
   auto iterator = generator.begin();
   ASSERT_EQ(iterator, generator.end());
 }
 
-namespace {
-const std::string MAX_TEST_BUFFER_STRING(TEST_BUFFER_SIZE, 'A');
-
-basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
-  co_yield MAX_TEST_BUFFER_STRING;
-  co_yield 1;
-  co_yield "Abc";
-}
-}  // namespace
-
-TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
-  auto generator = generateMultipleElements();
+// _____________________________________________________________________________
+TEST(StreamableGenerator, GeneratorReturnsBufferedResults) {
+  auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
+    co_yield std::string(TEST_BUFFER_SIZE, 'A');
+    // Suppress false positive on GCC 11
+    DISABLE_OVERREAD_WARNINGS
+    co_yield '1';
+    ENABLE_OVERREAD_WARNINGS
+    co_yield "Abc";
+  }();
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, MAX_TEST_BUFFER_STRING);
+  EXPECT_EQ(*iterator, "AAAAAAAAAA");
   ++iterator;
 
   ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, std::string("1Abc"));
+  EXPECT_EQ(*iterator, "1Abc");
   ++iterator;
 
   ASSERT_EQ(iterator, generator.end());
 }
 
-TEST(StreamableGeneratorTest, TestGeneratorDefaultInitialisesWithNoOp) {
+// _____________________________________________________________________________
+TEST(StreamableGenerator, GeneratorReturnsBufferedResultsIfTooLarge) {
+  auto generator = []() -> basic_stream_generator<TEST_BUFFER_SIZE> {
+    co_yield std::string(TEST_BUFFER_SIZE / 2, 'A');
+    co_yield std::string(TEST_BUFFER_SIZE, 'B');
+    co_yield std::string(TEST_BUFFER_SIZE * 2, 'C');
+  }();
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "AAAAABBBBB");
+  ++iterator;
+
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "BBBBBCCCCC");
+  ++iterator;
+
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "CCCCCCCCCC");
+  ++iterator;
+
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, "CCCCC");
+  ++iterator;
+
+  ASSERT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(StreamableGenerator, GeneratorDefaultInitialisesWithNoOp) {
   stream_generator generator;
   auto iterator = generator.begin();
   ASSERT_EQ(iterator, generator.end());

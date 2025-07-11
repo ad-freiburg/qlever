@@ -1029,7 +1029,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     std::optional<std::string> exceptionMessage;
     try {
       for (; it != innerGenerator.end(); ++it) {
-        co_yield std::move(*it);
+        co_yield std::string{*it};
       }
     } catch (const std::exception& e) {
       exceptionMessage = e.what();
