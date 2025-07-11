@@ -106,16 +106,15 @@ IdTable IndexImpl::getEntityMentionsForWord(
 }
 
 // _____________________________________________________________________________
-template <typename Reader>
-requires ad_utility::InvocableWithExactReturnType<
-    Reader, IdTable, const TextBlockMetaData&,
-    const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
-    TextScoringMetric>
-IdTable IndexImpl::mergeTextBlockResults(
-    const Reader& reader,
-    const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
-    const ad_utility::AllocatorWithLimit<Id>& allocator,
-    TextScanMode textScanMode) const {
+CPP_template(typename Reader)(requires ad_utility::InvocableWithExactReturnType<
+                              Reader, IdTable, const TextBlockMetaData&,
+                              const ad_utility::AllocatorWithLimit<Id>&,
+                              const ad_utility::File&, TextScoringMetric>)
+    IdTable IndexImpl::mergeTextBlockResults(
+        const Reader& reader,
+        const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+        const ad_utility::AllocatorWithLimit<Id>& allocator,
+        TextScanMode textScanMode) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
   vector<IdTable> partialResults;
@@ -124,8 +123,9 @@ IdTable IndexImpl::mergeTextBlockResults(
     partialResult =
         reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
     if (textScanMode == TextScanMode::WordScan && tbmd.hasToBeFiltered_) {
+      AD_CORRECTNESS_CHECK(tbmd.optIdRange_.has_value());
       partialResult =
-          FTSAlgorithms::filterByRange(tbmd.idRange_, partialResult);
+          FTSAlgorithms::filterByRange(tbmd.optIdRange_.value(), partialResult);
     }
     partialResults.push_back(std::move(partialResult));
   }
@@ -135,9 +135,8 @@ IdTable IndexImpl::mergeTextBlockResults(
   }
   // Combine the partial results to one IdTable
   IdTable result{3, allocator};
-  size_t resultSize = 0;
   result.reserve(std::accumulate(partialResults.begin(), partialResults.end(),
-                                 resultSize,
+                                 size_t{0},
                                  [](size_t acc, const IdTable& partialResult) {
                                    return acc + partialResult.numRows();
                                  }));
@@ -209,8 +208,7 @@ size_t IndexImpl::getSizeOfTextBlocksSum(
         }
         return acc + tbmdAndWordInfo.tbmd_._entityCl._nofElements;
       };
-  size_t sum = 0;
-  return std::accumulate(tbmds.begin(), tbmds.end(), sum, addSizeOfBlock);
+  return std::accumulate(tbmds.begin(), tbmds.end(), size_t{0}, addSizeOfBlock);
 };
 
 // _____________________________________________________________________________
@@ -242,12 +240,8 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                                                       idRange.last().get());
 
   std::vector<TextBlockMetadataAndWordInfo> result;
-  bool hasToBeFiltered = false;
   for (auto tbmd : tbmdVector) {
-    hasToBeFiltered = tbmd.get()._firstWordId != tbmd.get()._lastWordId &&
-                      !(tbmd.get()._firstWordId >= idRange.first().get() &&
-                        tbmd.get()._lastWordId <= idRange.last().get());
-    result.emplace_back(tbmd.get(), hasToBeFiltered, idRange);
+    result.emplace_back(tbmd.get(), idRange);
   }
   return result;
 }

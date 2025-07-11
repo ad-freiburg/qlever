@@ -347,10 +347,40 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
+  // This struct is used to retrieve text blocks.
   struct TextBlockMetadataAndWordInfo {
-    TextBlockMetaData tbmd_;
-    bool hasToBeFiltered_;
-    IdRange<WordVocabIndex> idRange_;
+    TextBlockMetadataAndWordInfo(
+        const TextBlockMetaData& tbmd,
+        const IdRange<WordVocabIndex>& includingIdRange)
+        : tbmd_{tbmd},
+          hasToBeFiltered_{hasToBeFiltered(includingIdRange)},
+          optIdRange_{
+              hasToBeFiltered_
+                  ? std::optional<IdRange<WordVocabIndex>>{includingIdRange}
+                  : std::nullopt} {}
+    // The TextBlockMetaData has the information on where the blocks boundaries
+    // and internal boundaries are. It is necessary to retrieve either the
+    // context list or entity list of a text block.
+    const TextBlockMetaData tbmd_;
+
+    // Is set to true if the text block contains entries outside of the
+    // requested range
+    const bool hasToBeFiltered_;
+
+    // The id range of the prefix or word used to retrieve the text block(s). It
+    // is only set if hasToBeFiltered_ was determined to be true during
+    // construction.
+    // Note: This range is inclusive so it is [lowerId, upperId],
+    // NOT [lowerId, upperId)
+    const std::optional<IdRange<WordVocabIndex>> optIdRange_;
+
+    // Returns true if the text block contains entries outside of the requested
+    // range
+    bool hasToBeFiltered(
+        const IdRange<WordVocabIndex>& includingIdRange) const {
+      return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
+               tbmd_._lastWordId <= includingIdRange.last().get());
+    }
   };
 
   std::string_view wordIdToString(WordIndex wordIndex) const;
@@ -374,10 +404,6 @@ class IndexImpl {
    */
   size_t getSizeOfTextBlocksSum(const std::string& word,
                                 TextScanMode textScanMode) const;
-
-  static size_t getSizeOfTextBlocksSum(
-      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
-      TextScanMode textScanMode);
 
   // Returns a set of [textRecord, term] pairs where the term is contained in
   // the textRecord. The term can be either the wordOrPrefix itself or a word
@@ -597,6 +623,12 @@ class IndexImpl {
   std::vector<TextBlockMetadataAndWordInfo> getTextBlockMetadataForWordOrPrefix(
       const std::string& word) const;
 
+  // Same as public getSizeOfTextBlocksSum method but works on metadata objects
+  // instead of word or prefix. The public method uses this method internally.
+  static size_t getSizeOfTextBlocksSum(
+      const vector<IndexImpl::TextBlockMetadataAndWordInfo>& tbmds,
+      TextScanMode textScanMode);
+
   /**
    * @brief This method is used to combine the IdTables of multiple blocks
    * returned from a word or entity scan into one IdTable.
@@ -618,16 +650,16 @@ class IndexImpl {
    *              but when combining multiple blocks they have to be accounted
    *              for.
    */
-  template <typename Reader>
-  requires ad_utility::InvocableWithExactReturnType<
-      Reader, IdTable, const TextBlockMetaData&,
-      const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
-      TextScoringMetric>
-  IdTable mergeTextBlockResults(
-      const Reader& reader,
-      const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      TextScanMode textScanMode) const;
+  CPP_template(typename Reader)(
+      requires ad_utility::InvocableWithExactReturnType<
+          Reader, IdTable, const TextBlockMetaData&,
+          const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
+          TextScoringMetric>) IdTable
+      mergeTextBlockResults(
+          const Reader& reader,
+          const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+          const ad_utility::AllocatorWithLimit<Id>& allocator,
+          TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
