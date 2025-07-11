@@ -217,8 +217,8 @@ class Result {
       requires std::is_invocable_v<F> CPP_and
           std::is_same<std::invoke_result_t<F>,
                        IdTableVocabPair>::value) static Result::LazyResult
-      lazyResultFromSingleValue(F transform) {
-    return ad_utility::lazySingleValueRange(std::move(transform));
+      lazyResultFromSingleValue(F singleValueGetter) {
+    return ad_utility::lazySingleValueRange(std::move(singleValueGetter));
   }
 
   // Overload for more than two `Results`

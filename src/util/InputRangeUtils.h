@@ -331,14 +331,14 @@ CachingContinuableTransformInputRange(Range&&, F)
 
 CPP_template(typename F)(requires std::is_invocable_v<F>)
     InputRangeTypeErased<std::invoke_result_t<F>> lazySingleValueRange(
-        F transform) {
+        F singleValueGetter) {
   using T = std::invoke_result_t<F>;
   static_assert(std::is_object_v<T>,
                 "The functor of `lazySingleValueRange` must yield an "
                 "object type, not a reference");
-  return InputRangeTypeErased(
-      InputRangeFromLoopControlGet([transform = std::move(transform)]() {
-        return LoopControl<T>::breakWithValue(std::move(transform()));
+  return InputRangeTypeErased(InputRangeFromLoopControlGet(
+      [singleValueGetter = std::move(singleValueGetter)]() {
+        return LoopControl<T>::breakWithValue(std::move(singleValueGetter()));
       }));
 }
 }  // namespace ad_utility
