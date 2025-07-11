@@ -508,8 +508,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   size_t numNodesInTripleGraph = 0;
-  ad_utility::HashMap<Variable, string> optTermForCvar;
-  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
+  ad_utility::HashMap<Variable, std::string> optTermForCvar;
+  ad_utility::HashMap<Variable, vector<std::string>> potentialTermsForCvar;
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
@@ -1150,7 +1150,7 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node,
     TextLimitMap& textLimits) const {
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
-  string word = node.wordPart_.value();
+  std::string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
@@ -1192,7 +1192,7 @@ vector<SubtreePlan> QueryPlanner::merge(
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
-  ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
+  ad_utility::HashMap<std::string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   LOG(TRACE) << "Considering joins that merge " << a.size() << " and "
              << b.size() << " plans...\n";
@@ -1224,7 +1224,7 @@ vector<SubtreePlan> QueryPlanner::merge(
   };
 
   if (isInTestMode()) {
-    std::vector<std::pair<string, vector<SubtreePlan>>> sortedCandidates{
+    std::vector<std::pair<std::string, vector<SubtreePlan>>> sortedCandidates{
         std::make_move_iterator(candidates.begin()),
         std::make_move_iterator(candidates.end())};
     std::sort(sortedCandidates.begin(), sortedCandidates.end(),
@@ -1239,7 +1239,7 @@ vector<SubtreePlan> QueryPlanner::merge(
 }
 
 // _____________________________________________________________________________
-string QueryPlanner::TripleGraph::asString() const {
+std::string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (!_nodeMap.find(i)->second->cvar_.has_value()) {
@@ -1315,7 +1315,7 @@ QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-string QueryPlanner::getPruningKey(
+std::string QueryPlanner::getPruningKey(
     const SubtreePlan& plan,
     const vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
@@ -1820,7 +1820,8 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
-    ad_utility::HashMap<string, vector<size_t>>& contextVarToTextNodes) const {
+    ad_utility::HashMap<std::string, vector<size_t>>& contextVarToTextNodes)
+    const {
   vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
@@ -1834,7 +1835,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 
     // For the next iteration / recursive call(s):
     // Leave out the first one because it has been worked on in this call.
-    ad_utility::HashMap<string, vector<size_t>> cTMapNextIteration;
+    ad_utility::HashMap<std::string, vector<size_t>> cTMapNextIteration;
     cTMapNextIteration.insert(++contextVarToTextNodes.begin(),
                               contextVarToTextNodes.end());
 

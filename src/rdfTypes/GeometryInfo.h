@@ -37,8 +37,12 @@ struct BoundingBox {
 };
 
 // The encoded bounding box is a pair of the bit encodings of the
-// `BoundingBox`'s two `GeoPoint`s.
-using EncodedBoundingBox = std::pair<uint64_t, uint64_t>;
+// `BoundingBox`'s two `GeoPoint`s. Due to `std::pair` not being trivially
+// copyable, this is implemented as a `struct`.
+struct EncodedBoundingBox {
+  uint64_t lowerLeftEncoded_;
+  uint64_t upperRightEncoded_;
+};
 
 // Represents the WKT geometry type, for the meaning see `libspatialjoin`'s
 // `WKTType`.
@@ -59,12 +63,20 @@ template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType>;
 
+// The version of the `GeometryInfo`: to ensure correctness when reading disk
+// serialized objects of this class.
+constexpr uint64_t GEOMETRY_INFO_VERSION = 1;
+
 // A geometry info object holds precomputed details on WKT literals.
 // IMPORTANT: Every modification of the attributes of this class will be an
-// index-breaking change regarding the GeoVocabulary. Please update the index
-// version accordingly.
+// index-breaking change regarding the `GeoVocabulary`. Please update the
+// `GEOMETRY_INFO_VERSION` constant above accordingly, which will invalidate all
+// indices using such a vocabulary.
 class GeometryInfo {
  private:
+  // `GeometryInfo` must ensure that its attributes' binary representation
+  // cannot be all-zero. This is currently used by the disk serialization of
+  // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
   uint64_t geometryTypeAndCentroid_;
 
@@ -82,8 +94,11 @@ class GeometryInfo {
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                Centroid centroid);
 
-  // Parse an arbitrary WKT literal and compute all attributes.
-  static GeometryInfo fromWktLiteral(const std::string_view& wkt);
+  GeometryInfo(const GeometryInfo& other) = default;
+
+  // Parse an arbitrary WKT literal and compute all attributes. Return
+  // `std:nullopt` if `wkt` cannot be parsed.
+  static std::optional<GeometryInfo> fromWktLiteral(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.
   static GeometryInfo fromGeoPoint(const GeoPoint& point);
@@ -92,19 +107,19 @@ class GeometryInfo {
   GeometryType getWktType() const;
 
   // Parse an arbitrary WKT literal and return only the geometry type.
-  static GeometryType getWktType(const std::string_view& wkt);
+  static GeometryType getWktType(std::string_view wkt);
 
   // Extract centroid from geometryTypeAndCentroid_ and convert it to GeoPoint.
   Centroid getCentroid() const;
 
   // Parse an arbitrary WKT literal and compute only the centroid.
-  static Centroid getCentroid(const std::string_view& wkt);
+  static Centroid getCentroid(std::string_view wkt);
 
   // Convert the bounding box to GeoPoints.
   BoundingBox getBoundingBox() const;
 
   // Parse an arbitrary WKT literal and compute only the bounding box.
-  static BoundingBox getBoundingBox(const std::string_view& wkt);
+  static BoundingBox getBoundingBox(std::string_view wkt);
 
   // Extract the requested information from this object.
   template <typename RequestedInfo = GeometryInfo>
@@ -113,8 +128,12 @@ class GeometryInfo {
   // Parse the given WKT literal and compute only the requested information.
   template <typename RequestedInfo = GeometryInfo>
   requires RequestedInfoT<RequestedInfo>
-  static RequestedInfo getRequestedInfo(const std::string_view& wkt);
+  static RequestedInfo getRequestedInfo(std::string_view wkt);
 };
+
+// For the disk serialization we require that a `GeometryInfo` is trivially
+// copyable.
+static_assert(std::is_trivially_copyable_v<GeometryInfo>);
 
 }  // namespace ad_utility
 

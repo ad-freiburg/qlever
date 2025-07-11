@@ -67,8 +67,8 @@ void Operation::forAllDescendants(F f) const {
 }
 
 // _____________________________________________________________________________
-vector<string> Operation::collectWarnings() const {
-  vector<string> res{*getWarnings().rlock()};
+vector<std::string> Operation::collectWarnings() const {
+  vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;

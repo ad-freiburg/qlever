@@ -394,6 +394,10 @@ TEST(SparqlParser, FunctionCall) {
       absl::StrCat(geof, "sfOverlaps>(?a, ?b)"),
       matchNary(&makeGeoRelationExpression<SpatialJoinType::OVERLAPS>,
                 Variable{"?a"}, Variable{"?b"}));
+  expectFunctionCall(
+      absl::StrCat(geof, "sfWithin>(?a, ?b)"),
+      matchNary(&makeGeoRelationExpression<SpatialJoinType::WITHIN>,
+                Variable{"?a"}, Variable{"?b"}));
 
   // Math functions
   expectFunctionCall(absl::StrCat(math, "log>(?x)"),
@@ -470,6 +474,10 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>()"));
   expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a, ?b, ?c)"));
+
+  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a)"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>()"));
+  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a, ?b, ?c)"));
 
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));

@@ -22,8 +22,8 @@ auto createVocabulary(const std::vector<std::string>& words) {
 
 using Level = SimpleStringComparator::Level;
 TEST(UnicodeVocabulary, LowercaseAscii) {
-  const std::vector<string> words{"alpha", "beta",    "camma",
-                                  "delta", "epsilon", "frikadelle"};
+  const std::vector<std::string> words{"alpha", "beta",    "camma",
+                                       "delta", "epsilon", "frikadelle"};
   std::vector<Level> levels{Level::PRIMARY,   Level::SECONDARY,
                             Level::TERTIARY,  Level::QUARTERNARY,
                             Level::IDENTICAL, Level::TOTAL};
@@ -44,7 +44,7 @@ TEST(UnicodeVocabulary, LowercaseAscii) {
 }
 
 TEST(UnicodeVocabulary, UpperAndLowercase) {
-  const std::vector<string> words{"alpha", "ALPHA", "beta", "BETA"};
+  const std::vector<std::string> words{"alpha", "ALPHA", "beta", "BETA"};
 
   // On the `PRIMARY` and `SECONDARY` Level, uppercase letters are equal to
   // their lowercase equivalents, so we cannot use these levels here.
