@@ -197,4 +197,21 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
 }
 
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
+  ASSERT_FALSE(GeometryInfo::fromWktLiteral(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getWktType(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getCentroid(litInvalid).has_value());
+  ASSERT_FALSE(GeometryInfo::getBoundingBox(litInvalid).has_value());
+
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<GeometryInfo>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<GeometryType>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<Centroid>(litInvalid).has_value());
+  ASSERT_FALSE(
+      GeometryInfo::getRequestedInfo<BoundingBox>(litInvalid).has_value());
+}
+
 }  // namespace
