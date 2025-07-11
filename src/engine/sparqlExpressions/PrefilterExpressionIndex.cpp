@@ -172,9 +172,8 @@ BlockMetadataRanges mapValueIdItRangesToBlockItRanges(
 
 }  // namespace mapping
 
-// SECTION HELPER LOGICAL OPERATORS
 namespace logicalOps {
-
+// SECTION HELPER LOGICAL OPERATORS
 //______________________________________________________________________________
 // (1) `mergeRelevantBlockItRanges<true>` returns the `union` (`logical-or
 // (||)`) of `BlockMetadataRanges r1` and `BlockMetadataRanges r2`.
@@ -245,6 +244,15 @@ BlockMetadataRanges mergeRelevantBlockItRanges(const BlockMetadataRanges& r1,
   return mergedRanges;
 }
 
+BlockMetadataRanges getIntersectionOfBlockRanges(
+    const BlockMetadataRanges& r1, const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<false>(r1, r2);
+}
+
+BlockMetadataRanges getUnionOfBlockRanges(const BlockMetadataRanges& r1,
+                                          const BlockMetadataRanges& r2) {
+  return mergeRelevantBlockItRanges<true>(r1, r2);
+}
 }  // namespace logicalOps
 }  // namespace detail
 
@@ -357,45 +365,42 @@ ValueId AccessValueIdFromBlockMetadata::operator()(
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
-std::vector<CompressedBlockMetadata> PrefilterExpression::evaluate(
+BlockMetadataRanges PrefilterExpression::evaluate(
     const Vocab& vocab, BlockMetadataSpan blockRange,
     size_t evaluationColumn) const {
   if (blockRange.size() < 3) {
-    return std::vector<CompressedBlockMetadata>(blockRange.begin(),
-                                                blockRange.end());
+    return {{blockRange.begin(), blockRange.end()}};
   }
 
-  std::optional<CompressedBlockMetadata> firstBlock = std::nullopt;
-  std::optional<CompressedBlockMetadata> lastBlock = std::nullopt;
+  std::optional<BlockMetadataRange> firstBlockRange = std::nullopt;
+  std::optional<BlockMetadataRange> lastBlockRange = std::nullopt;
   if (blockRange.front().containsInconsistentTriples(evaluationColumn)) {
-    firstBlock = blockRange.front();
+    firstBlockRange = {blockRange.begin(), std::next(blockRange.begin())};
     blockRange = blockRange.subspan(1);
   }
   if (blockRange.back().containsInconsistentTriples(evaluationColumn)) {
-    lastBlock = blockRange.back();
+    lastBlockRange = {std::prev(blockRange.end()), blockRange.end()};
     blockRange = blockRange.subspan(0, blockRange.size() - 1);
   }
 
-  std::vector<CompressedBlockMetadata> result;
+  BlockMetadataRanges result;
   if (!blockRange.empty()) {
     checkRequirementsBlockMetadata(blockRange, evaluationColumn);
     AccessValueIdFromBlockMetadata accessValueIdOp(evaluationColumn);
     ValueIdSubrange idRange{
         ValueIdIt{&blockRange, 0, accessValueIdOp},
         ValueIdIt{&blockRange, blockRange.size() * 2, accessValueIdOp}};
-    result = CompressedRelationReader::convertBlockMetadataRangesToVector(
-        detail::logicalOps::mergeRelevantBlockItRanges<true>(
-            evaluateImpl(vocab, idRange, blockRange, false),
-            // always add mixed datatype blocks
-            getRangesMixedDatatypeBlocks(idRange, blockRange)));
-    checkRequirementsBlockMetadata(result, evaluationColumn);
+    result = detail::logicalOps::mergeRelevantBlockItRanges<true>(
+        evaluateImpl(vocab, idRange, blockRange, false),
+        // always add mixed datatype blocks
+        getRangesMixedDatatypeBlocks(idRange, blockRange));
   }
 
-  if (firstBlock.has_value()) {
-    result.insert(result.begin(), firstBlock.value());
+  if (firstBlockRange.has_value()) {
+    result.insert(result.begin(), firstBlockRange.value());
   }
-  if (lastBlock.has_value()) {
-    result.push_back(lastBlock.value());
+  if (lastBlockRange.has_value()) {
+    result.push_back(lastBlockRange.value());
   }
   return result;
 };

@@ -181,20 +181,37 @@ void testLazyScanWithColumnThrows(
 
 //______________________________________________________________________________
 // Check that the `IndexScan` computes correct prefiltered `IdTable`s w.r.t.
-// the applied `PrefilterExpression` given a <PrefilterExpression, Variable>
-// pair was successfully set. For convenience we assert this for the IdTable
-// column on which the `PrefilterExpression` was applied.
+// the applied `PrefilterExpression` given a `<PrefilterExpression, Variable>`
+// pair was successfully set. In addition, if
+// `std::optional<IndexScan::PrefilterVariablePair> pr2` contains a value, its
+// additional `PrefilterExpression` is also applied (if possible). This
+// corresponds logically to a conjunction over two `PrefilterExpression`s
+// applied. For convenience we assert this for the IdTable column on which the
+// `PrefilterExpression` was applied.
 const auto testSetAndMakeScanWithPrefilterExpr =
     [](const std::string& kg, const SparqlTripleSimple& triple,
-       const Permutation::Enum permutation, IndexScan::PrefilterVariablePair pr,
+       const Permutation::Enum permutation,
+       IndexScan::PrefilterVariablePair pr1,
        const std::vector<ValueId>& expectedIdsOnFilterColumn,
-       bool prefilterCanBeSet = true,
+       bool prefilterCanBeSet,
+       std::optional<IndexScan::PrefilterVariablePair> pr2 = std::nullopt,
        source_location l = source_location::current()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
-      auto variable = pr.second;
+      auto variable = pr1.second;
       auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
-          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
+          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr1)));
+      if (pr2.has_value() && optUpdatedQet.has_value()) {
+        // Testing with a second `PrefilterExpression`s only makes sense if the
+        // first `PrefilterExpression` was successfully applied.
+        ASSERT_TRUE(optUpdatedQet.has_value());
+        optUpdatedQet =
+            optUpdatedQet.value()
+                ->setPrefilterGetUpdatedQueryExecutionTree(
+                    makeFilterExpression::filterHelper::makePrefilterVec(
+                        std::move(pr2.value())))
+                .value_or(optUpdatedQet.value());
+      }
       if (optUpdatedQet.has_value()) {
         auto updatedQet = optUpdatedQet.value();
         ASSERT_TRUE(prefilterCanBeSet);
@@ -671,7 +688,7 @@ TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
+TEST(IndexScan, verifyThatPrefilteredIndexScanResultIsNotCacheable) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
   using V = Variable;
@@ -681,30 +698,33 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
   auto prefilterPairs =
       makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
                        pr(lt(IntId(5)), V{"?x"}));
+  auto qet =
+      ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::PSO, triple);
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   auto updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
-  // We have a corresponding column for ?x (ColumnIndex 1), which is also the
-  // first sorted variable column. Thus, we expect that PrefilterExpression (<
-  // 5, ?x) will be set as a prefilter for this IndexScan.
-  auto setPrefilterExpr = lt(IntId(5));
-  ColumnIndex columnIdx = 1;
-  std::stringstream os;
-  os << "Added PrefiterExpression: \n";
-  os << *setPrefilterExpr;
-  os << "\nApplied on column: " << columnIdx << ".";
-  EXPECT_THAT(updatedQet.value()->getRootOperation()->getCacheKey(),
-              ::testing::HasSubstr(os.str()));
+      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // We have a corresponding column for ?x (at ColumnIndex 1), which is also the
+  // first sorted variable column. Thus, we expect that the PrefilterExpression
+  // (< 5, ?x) is applied for this `IndexScan`, resulting in prefiltered
+  // `BlockMetadataRanges`. For `IndexScan`s containing prefiltered
+  // `BlockMetadataRanges`, we expect that its result is not cacheable.
+  EXPECT_TRUE(updatedQet.has_value());
+  EXPECT_FALSE(updatedQet.value()->getRootOperation()->canResultBeCached());
 
   // Assert that we don't set a <PrefilterExpression, ColumnIndex> pair for the
   // second Variable.
   prefilterPairs = makePrefilterVec(pr(lt(IntId(10)), V{"?a"}),
                                     pr(gt(DoubleId(22)), V{"?z"}),
                                     pr(gt(IntId(10)), V{"?b"}));
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
   updatedQet =
-      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
-  // No PrefilterExpression should be set for this IndexScan, we don't expect a
-  // updated QueryExecutionTree.
+      qet->setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // No `PrefilterExpression` should be applied for this `IndexScan`, we don't
+  // expect an updated QueryExecutionTree. The `IndexScan` should remain
+  // unchanged, containing no prefiltered `BlockMetadataRanges`. Thus, it should
+  // be still cacheable.
   EXPECT_TRUE(!updatedQet.has_value());
+  EXPECT_TRUE(qet->getRootOperation()->canResultBeCached());
 }
 
 // _____________________________________________________________________________
@@ -725,15 +745,41 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
                                       pr(ge(IntId(10)), Variable{"?price"}),
                                       {I(10), I(12), I(18), I(22), I(25),
-                                       I(147), I(174), I(174), I(189), I(194)});
+                                       I(147), I(174), I(174), I(189), I(194)},
+                                      true);
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(lt(DoubleId(147.32)), Variable{"?price"}),
-      {I(10), I(12), I(18), I(22), I(25), I(147)});
+      {I(10), I(12), I(18), I(22), I(25), I(147)}, true);
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
-      {I(18), I(22), I(25), I(147), I(174), I(174)});
+      {I(18), I(22), I(25), I(147), I(174), I(174)}, true);
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(18), I(22), I(25), I(147)}, true,
+      pr(lt(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), lt(IntId(174))), Variable{"?price"}), {},
+      true, pr(eq(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(174), I(174)}, true, pr(eq(IntId(174)), Variable{"?price"}));
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(25), I(147)}, true,
+      pr(andExpr(gt(IntId(22)), lt(IntId(174))), Variable{"?price"}));
+  // The second `PrefilterExpression` is not applicable, since its variable
+  // `?some_var` doesn't match the sorted `IndexScan` columns.
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(18), I(22), I(25), I(147), I(174), I(174)}, true,
+      pr(andExpr(gt(IntId(22)), lt(IntId(174))), Variable{"?some_var"}));
 
   // For the following test, the Variable value doesn't match any of the scan
   // triple Variable values. We expect that the prefilter is not applicable (=>
@@ -767,11 +813,11 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(orExpr(gt(IntId(100)), le(IntId(10))), Variable{"?price"}),
-      {I(10), I(12), I(25), I(147), I(189), I(194)});
+      {I(10), I(12), I(25), I(147), I(189), I(194)}, true);
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
-      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)});
+      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
 }
 
 class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
@@ -1096,7 +1142,7 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
 }
 // _____________________________________________________________________________
 TEST(IndexScan, clone) {
-  auto* qec = getQec();
+  auto qec = getQec("<x> <price_tag> 10.");
   {
     SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
     IndexScan scan{qec, Permutation::PSO, xpy};
@@ -1109,19 +1155,32 @@ TEST(IndexScan, clone) {
   }
   {
     using namespace makeFilterExpression;
-    SparqlTripleSimple xpy{Tc{Var{"?x"}}, iri("<not_p>"), Tc{Var{"?y"}}};
-    IndexScan scan{
-        qec,
-        Permutation::PSO,
-        xpy,
-        std::nullopt,
-        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
-
-    auto clone = scan.clone();
+    using namespace filterHelper;
+    SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
+                              Tc{Variable{"?price"}}};
+    auto qet =
+        ad_utility::makeExecutionTree<IndexScan>(qec, Permutation::POS, triple);
+    ASSERT_TRUE(qet->getRootOperation()->canResultBeCached());
+    auto clone = qet->clone();
     ASSERT_TRUE(clone);
     const auto& cloneReference = *clone;
-    EXPECT_EQ(typeid(scan), typeid(cloneReference));
-    EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+    ASSERT_TRUE(cloneReference.getRootOperation()->canResultBeCached());
+    auto prefilterPairs =
+        makePrefilterVec(pr(eq(IntId(10)), Variable{"?price"}));
+    auto optUpdatedQet = qet->setPrefilterGetUpdatedQueryExecutionTree(
+        std::move(prefilterPairs));
+    ASSERT_TRUE(optUpdatedQet.has_value());
+    const auto& updatedQet = optUpdatedQet.value();
+    ASSERT_FALSE(updatedQet->getRootOperation()->canResultBeCached());
+    auto clonedQet = updatedQet->clone();
+    ASSERT_TRUE(clonedQet);
+    const auto& clonedQetReference = *clonedQet;
+    ASSERT_EQ(typeid(clonedQetReference), typeid(*updatedQet));
+    // If the `ScanSpecAndBlocks` of the prefiltered `IndexScan` operation is
+    // not copied properly while cloning, the following test fails. This is
+    // because the `ScanSpecAndBlocks` added by default via its constructor is
+    // not prefiltered, and subsequently would allow us to cache the result.
+    ASSERT_FALSE(clonedQetReference.getRootOperation()->canResultBeCached());
   }
 }
 
