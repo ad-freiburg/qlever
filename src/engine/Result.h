@@ -208,17 +208,19 @@ class Result {
         std::get<IdTableSharedLocalVocabPair>(data_).localVocab_};
   }
 
-  // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
-  // all the corresponding local vocabs.
-  static SharedLocalVocabWrapper getMergedLocalVocab(const Result& result1,
-                                                     const Result& result2);
-
+  // A function that returns a lazy result that yields a single value. The value
+  // is the result of invoking `singleValueGetter`.
   CPP_template(typename F)(requires ad_utility::InvocableWithExactReturnType<
                            F, IdTableVocabPair>) static Result::LazyResult
       lazyResultFromSingleValue(F singleValueGetter) {
     return LazyResult(
         ad_utility::lazySingleValueRange(std::move(singleValueGetter)));
   }
+
+  // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
+  // all the corresponding local vocabs.
+  static SharedLocalVocabWrapper getMergedLocalVocab(const Result& result1,
+                                                     const Result& result2);
 
   // Overload for more than two `Results`
   CPP_template(typename R)(

@@ -329,6 +329,8 @@ template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
 
+// A function that returns a lazy range that yields a single value. The value
+// is the result of invoking `singleValueGetter`.
 CPP_template(typename F)(requires std::is_invocable_v<
                          F>) auto lazySingleValueRange(F singleValueGetter) {
   using T = std::invoke_result_t<F>;
