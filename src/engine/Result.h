@@ -214,7 +214,7 @@ class Result {
                                                      const Result& result2);
 
   CPP_template(typename F)(
-      requires std::is_object_v<F> CPP_and
+      requires std::is_invocable_v<F> CPP_and
           std::is_same<std::invoke_result_t<F>,
                        IdTableVocabPair>::value) static Result::LazyResult
       lazyResultFromSingleValue(F transform) {
