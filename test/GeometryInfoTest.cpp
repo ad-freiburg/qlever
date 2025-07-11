@@ -138,7 +138,8 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+  ASSERT_TRUE(bb3.has_value());
+  ASSERT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
 }
 
 // ____________________________________________________________________________
@@ -179,10 +180,12 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   auto parsed1 = parseRes1.second.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
-  checkCentroid(centroid1, {{4, 3}});
+  Centroid centroidExp1{{4, 3}};
+  checkCentroid(centroid1, centroidExp1);
 
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
-  checkBoundingBox(bb1, {{4, 3}, {4, 3}});
+  BoundingBox bbExp1{{4, 3}, {4, 3}};
+  checkBoundingBox(bb1, bbExp1);
 
   auto bb1Wkt = boundingBoxAsWkt(bb1.lowerLeft_, bb1.upperRight_);
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
