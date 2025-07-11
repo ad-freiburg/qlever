@@ -213,6 +213,14 @@ class Result {
   static SharedLocalVocabWrapper getMergedLocalVocab(const Result& result1,
                                                      const Result& result2);
 
+  CPP_template(typename F)(
+      requires std::is_object_v<F> CPP_and
+          std::is_same<std::invoke_result_t<F>,
+                       IdTableVocabPair>::value) static Result::LazyResult
+      lazyResultFromSingleValue(F transform) {
+    return ad_utility::lazySingleValueRange(std::move(transform));
+  }
+
   // Overload for more than two `Results`
   CPP_template(typename R)(
       requires ql::ranges::forward_range<R> CPP_and
