@@ -1,6 +1,7 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_PARALLELMULTIWAYMERGE_H
 #define QLEVER_PARALLELMULTIWAYMERGE_H
@@ -48,7 +49,7 @@ CPP_concept RandomAccessRangeOfRanges =
     RangeWithValue<ql::ranges::range_value_t<Range>, T>;
 
 // Merge the elements from the presorted ranges `range1` and `range2` according
-// to the `comparator`. The result of the merging will be yielded in blocks of
+// to the `comparator`. The result of the merging will be returned in blocks of
 // size `blocksize`. If `moveElements` is true, then the elements from the
 // ranges will be moved.
 // TODO<joka921> Maybe add a `buffering generator` that automatically stores the
@@ -58,122 +59,155 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
     requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<Range1, T>
         CPP_and RangeWithValue<Range2, T>
             CPP_and ad_utility::InvocableWithExactReturnType<
-                ComparisonFuncT, bool, const T&, const T&>)
-    cppcoro::generator<std::vector<T>> lazyBinaryMerge(
-        MemorySize maxMem, size_t maxBlockSize, Range1 range1, Range2 range2,
-        ComparisonFuncT comparison) {
-  // Set up the buffer as well as a lambda to clear and reserve it.
-  std::vector<T> buffer;
-  MemorySize sizeOfCurrentBlock{};
+                ComparisonFuncT, bool, const T&,
+                const T&>) class LazyBinaryMerge
+    : public ad_utility::InputRangeMixin<LazyBinaryMerge<
+          T, moveElements, SizeGetter, Range1, Range2, ComparisonFuncT>> {
+ private:
+  MemorySize maxMem_;
+  size_t maxBlockSize_;
+  Range1 range1_;
+  Range2 range2_;
+  ComparisonFuncT comparison_;
+  bool finished_{false};
+  std::vector<T> buffer_{};
 
-  auto clearBuffer = [&buffer, maxBlockSize, &sizeOfCurrentBlock]() {
-    buffer.clear();
-    buffer.reserve(maxBlockSize);
-    sizeOfCurrentBlock = 0_B;
-  };
+  std::pair<ql::ranges::iterator_t<Range1>, ql::ranges::sentinel_t<Range1>>
+      it1_{};
+  std::pair<ql::ranges::iterator_t<Range2>, ql::ranges::sentinel_t<Range2>>
+      it2_{};
 
-  clearBuffer();
+ public:
+  using value_type = std::vector<T>;
+  LazyBinaryMerge(MemorySize maxMem, size_t maxBlockSize, Range1 range1,
+                  Range2 range2, ComparisonFuncT comparison)
+      : maxMem_{maxMem},
+        maxBlockSize_{maxBlockSize},
+        range1_{std::move(range1)},
+        range2_{std::move(range2)},
+        comparison_{comparison} {}
 
-  // Turn the ranges into `(iterator, end)` pairs.
-  auto makeItPair = [](auto& range) {
-    return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
-  };
+  void getNextBlock() {
+    MemorySize sizeOfCurrentBlock = 0_B;
 
-  auto it1 = makeItPair(range1);
-  auto it2 = makeItPair(range2);
+    buffer_.clear();
+    buffer_.reserve(maxBlockSize_);
 
-  // Helper lambda to check if we are at the end of a range.
-  auto exhausted = [](const auto& itPair) {
-    return itPair.first == itPair.second;
-  };
+    // Helper lambda to check if we are at the end of a range.
+    auto exhausted = [](const auto& itPair) {
+      return itPair.first == itPair.second;
+    };
 
-  auto pushToBuffer =
-      absl::bind_front(detail::pushSingleElement<moveElements, T, SizeGetter>,
-                       std::ref(buffer), std::ref(sizeOfCurrentBlock));
+    auto isBufferLargeEnough = [this, &sizeOfCurrentBlock] {
+      return buffer_.size() >= maxBlockSize_ || sizeOfCurrentBlock >= maxMem_;
+    };
 
-  auto isBufferLargeEnough = [&] {
-    return buffer.size() >= maxBlockSize || sizeOfCurrentBlock >= maxMem;
-  };
+    // Push the next element from the range denoted by `itPair` to the `buffer`,
+    // and advance the iterator. Return true if the range then is exhausted.
+    auto push = [this, &sizeOfCurrentBlock, &exhausted](auto& itPair) {
+      auto& it = itPair.first;
+      detail::pushSingleElement<moveElements, T, SizeGetter>(
+          buffer_, sizeOfCurrentBlock, *it);
+      ++it;
+      return exhausted(itPair);
+    };
 
-  // Push the next element from the range denoted by `itPair` to the `buffer`,
-  // and advance the iterator. Return true if the range then is exhausted.
-  auto push = [&pushToBuffer, &exhausted](auto& itPair) {
-    auto& it = itPair.first;
-    pushToBuffer(*it);
-    ++it;
-    return exhausted(itPair);
-  };
+    // Push the smaller element one of `*it1` and `*it2` to the `buffer` and
+    // advance the corresponding iterator. Return true iff that iterator
+    // reaches the end after the increment.
+    auto pushSmaller = [this, &push]() {
+      if (comparison_(*it1_.first, *it2_.first)) {
+        return push(it1_);
+      } else {
+        return push(it2_);
+      }
+    };
 
-  // Push the smaller element one of `*it1` and `*it2` to the `buffer` and
-  // advance the corresponding iterator. Return true iff that iterator reaches
-  // the end after the increment.
-  auto pushSmaller = [&comparison, &push, &it1, &it2]() {
-    if (comparison(*it1.first, *it2.first)) {
-      return push(it1);
-    } else {
-      return push(it2);
+    if (!exhausted(it1_) && !exhausted(it2_)) {
+      while (!pushSmaller() && !isBufferLargeEnough()) {
+        // The work is done inside the pushSmaller() function
+      }
     }
-  };
 
-  if (!exhausted(it1) && !exhausted(it2)) {
-    while (true) {
-      if (pushSmaller()) {
+    auto pushRemainder = [&isBufferLargeEnough, &push,
+                          &exhausted](auto& itPair) {
+      if (!isBufferLargeEnough() && !exhausted(itPair)) {
+        while (!push(itPair) && !isBufferLargeEnough()) {
+          // The work is done inside the push() function
+        }
+      }
+    };
+
+    pushRemainder(it1_);
+    pushRemainder(it2_);
+
+    finished_ = buffer_.empty();
+  }
+
+  void start() {
+    // Turn the ranges into `(iterator, end)` pairs.
+    auto makeItPair = [](auto& range) {
+      return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
+    };
+
+    it1_ = makeItPair(range1_);
+    it2_ = makeItPair(range2_);
+    getNextBlock();
+  }
+  bool isFinished() { return finished_; }
+  auto& get() { return buffer_; }
+  const auto& get() const { return buffer_; }
+
+  void next() { getNextBlock(); }
+};
+
+// Return the elements of the `range` in blocks of the given `blocksize`.
+// TODO<joka921> This gets much simpler with the buffering generator.
+CPP_template(typename T, bool moveElements, typename SizeGetter,
+             typename R)(requires ValueSizeGetter<SizeGetter, T> CPP_and
+                             RangeWithValue<R, T>) class BatchToVector
+    : public ad_utility::InputRangeMixin<
+          BatchToVector<T, moveElements, SizeGetter, R>> {
+ private:
+  MemorySize maxMem_;
+  size_t blocksize_;
+  R range_;
+  ql::ranges::iterator_t<R> it_{};
+  mutable bool finished_{false};
+  std::vector<T> buffer_{};
+
+ public:
+  BatchToVector(MemorySize maxMem, size_t blocksize, R range)
+      : maxMem_{maxMem}, blocksize_{blocksize}, range_{std::move(range)} {}
+
+  void getNextBlock() {
+    MemorySize curMem = 0_B;
+
+    buffer_.clear();
+    buffer_.reserve(blocksize_);
+
+    while (it_ != range_.end()) {
+      detail::pushSingleElement<moveElements, T, SizeGetter>(buffer_, curMem,
+                                                             *it_);
+      ++it_;
+      if (buffer_.size() >= blocksize_ || curMem >= maxMem_) {
         break;
       }
-      if (isBufferLargeEnough()) {
-        co_yield buffer;
-        clearBuffer();
-      }
     }
+
+    finished_ = buffer_.empty();
   }
 
-  // One of the buffers might still have unmerged contents, simply append them.
-  auto yieldRemainder =
-      [&buffer, &isBufferLargeEnough, &clearBuffer,
-       &pushToBuffer](auto& itPair) -> cppcoro::generator<std::vector<T>> {
-    for (auto& el : ql::ranges::subrange(itPair.first, itPair.second)) {
-      pushToBuffer(el);
-      if (isBufferLargeEnough()) {
-        co_yield buffer;
-        clearBuffer();
-      }
-    }
-  };
+  void start() {
+    it_ = ql::ranges::begin(range_);
+    getNextBlock();
+  }
+  bool isFinished() { return finished_; }
+  auto& get() { return buffer_; }
+  const auto& get() const { return buffer_; }
 
-  for (auto& block : yieldRemainder(it1)) {
-    co_yield block;
-  }
-  for (auto& block : yieldRemainder(it2)) {
-    co_yield block;
-  }
-  if (!buffer.empty()) {
-    co_yield buffer;
-  }
-}
-
-// Yield the elements of the `range` in blocks of the given `blocksize`.
-// TODO<joka921> This gets much simpler with the buffering generator.
-CPP_template(typename T, bool moveElements, typename SizeGetter, typename R)(
-    requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<R, T>)
-    cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
-                                                     size_t blocksize,
-                                                     R range) {
-  std::vector<T> buffer;
-  buffer.reserve(blocksize);
-  MemorySize curMem = 0_B;
-  for (auto& el : range) {
-    detail::pushSingleElement<moveElements, T, SizeGetter>(buffer, curMem, el);
-    if (buffer.size() >= blocksize || curMem >= maxMem) {
-      co_yield buffer;
-      buffer.clear();
-      buffer.reserve(blocksize);
-      curMem = 0_B;
-    }
-  }
-  if (!buffer.empty()) {
-    co_yield buffer;
-  }
-}
+  void next() { getNextBlock(); }
+};
 
 // The recursive implementation of `parallelMultiwayMerge` (see below). The
 // difference is, that the memory limit in this function is per node in the
@@ -184,7 +218,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
         ValueSizeGetter<SizeGetter, T>
             CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
                                                  const T&, const T&>)
-    cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
+    ad_utility::InputRangeTypeErased<std::vector<T>> parallelMultiwayMergeImpl(
         MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
         ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
@@ -195,13 +229,20 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
       return range;
     }
   };
+
+  using ResultT = InputRangeTypeErased<std::vector<T>>;
+
   if (rangeOfRanges.size() == 1) {
-    return detail::batchToVector<T, moveElements, SizeGetter>(
-        maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()));
+    return ResultT{detail::BatchToVector<T, moveElements, SizeGetter,
+                                         ql::ranges::range_value_t<R>>(
+        maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()))};
   } else if (rangeOfRanges.size() == 2) {
-    return detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
-        maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
-        moveIf(rangeOfRanges[1]), comparison);
+    return ResultT{
+        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
+                                ql::ranges::range_value_t<R>,
+                                ql::ranges::range_value_t<R>, ComparisonFuncT>(
+            maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
+            moveIf(rangeOfRanges[1]), comparison)};
   } else {
     size_t size = ql::ranges::size(rangeOfRanges);
     size_t split = size / 2;
@@ -222,11 +263,13 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
     auto mergeRange1 = parallelMerge(beg, splitIt);
     auto mergeRange2 = parallelMerge(splitIt, end);
 
-    return ad_utility::streams::runStreamAsync(
-        detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
+    return ResultT{ad_utility::streams::runStreamAsync(
+        detail::LazyBinaryMerge<T, moveElements, SizeGetter,
+                                decltype(mergeRange1), decltype(mergeRange2),
+                                ComparisonFuncT>(
             maxMemPerNode, blocksize, std::move(mergeRange1),
             std::move(mergeRange2), comparison),
-        2);
+        2)};
   }
 }
 }  // namespace detail
@@ -245,7 +288,7 @@ CPP_template(typename T, bool moveElements,
           ValueSizeGetter<SizeGetter, T>
               CPP_and
                   InvocableWithExactReturnType<Comp, bool, const T&, const T&>)
-      cppcoro::generator<std::vector<T>>
+      ad_utility::InputRangeTypeErased<std::vector<T>>
       operator()(MemorySize memoryLimit, R&& rangeOfRanges, Comp comparison,
                  size_t blocksize = 100) const {
     // There is one suboperation per input in the recursion tree, so we have to
