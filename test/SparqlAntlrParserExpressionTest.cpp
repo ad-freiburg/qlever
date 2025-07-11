@@ -10,12 +10,14 @@
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -327,17 +329,30 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
 
+  using enum ad_utility::BoundingCoordinate;
+  expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MIN_X>));
+  expectFunctionCall(absl::StrCat(geof, "minY>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MIN_Y>));
+  expectFunctionCall(absl::StrCat(geof, "maxX>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MAX_X>));
+  expectFunctionCall(absl::StrCat(geof, "maxY>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MAX_Y>));
+
   // The different distance functions:
   expectFunctionCall(
       absl::StrCat(geof, "metricDistance>(?a, ?b)"),
       matchNary(&makeMetricDistExpression, Variable{"?a"}, Variable{"?b"}));
-  // Compatibility version of geof:distance with two arguments
+  // Compatibility version of geof:distance with two
+  // arguments
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
   // geof:distance with IRI as unit in third argument
   expectFunctionCall(
-      absl::StrCat(geof, "distance>(?a, ?b, <http://qudt.org/vocab/unit/M>)"),
+      absl::StrCat(geof,
+                   "distance>(?a, ?b, "
+                   "<http://qudt.org/vocab/unit/M>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
           variableExpressionMatcher(Variable{"?a"}),
@@ -346,11 +361,13 @@ TEST(SparqlParser, FunctionCall) {
               ad_utility::triple_component::Iri::fromIriref(
                   "<http://qudt.org/vocab/unit/M>"))));
 
-  // geof:distance with xsd:anyURI literal as unit in third argument
+  // geof:distance with xsd:anyURI literal as unit in third
+  // argument
   expectFunctionCall(
       absl::StrCat(geof,
                    "distance>(?a, ?b, "
-                   "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+                   "\"http://qudt.org/vocab/unit/"
+                   "M\"^^<http://www.w3.org/2001/"
                    "XMLSchema#anyURI>)"),
       matchNaryWithChildrenMatchers(
           &makeDistWithUnitExpression,
@@ -358,7 +375,8 @@ TEST(SparqlParser, FunctionCall) {
           variableExpressionMatcher(Variable{"?b"}),
           matchLiteralExpression<ad_utility::triple_component::Literal>(
               ad_utility::triple_component::Literal::fromStringRepresentation(
-                  "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
+                  "\"http://qudt.org/vocab/unit/"
+                  "M\"^^<http://www.w3.org/2001/"
                   "XMLSchema#anyURI>"))));
 
   // geof:distance with variable as unit in third argument
@@ -441,48 +459,29 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b, ?c)"));
 
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a, ?b, ?c)"));
+  const std::vector<std::string> unaryGeofFunctionNames = {
+      "centroid", "envelope", "geometryType", "minX", "minY", "maxX", "maxY"};
+  for (const auto& func : unaryGeofFunctionNames) {
+    expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b)"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b, ?c)"));
+  }
 
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a, ?b, ?c)"));
+  const std::vector<std::string> binaryGeofFunctionNames = {
+      "sfIntersects", "sfContains", "sfCovers",   "sfCrosses",
+      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin"};
+  for (const auto& func : binaryGeofFunctionNames) {
+    expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a)"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b, ?c)"));
+  }
 
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
-  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
+  // Unknown function with `geof:`, `math:`, `xsd:`, or
+  // `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
@@ -492,8 +491,9 @@ TEST(SparqlParser, FunctionCall) {
   std::string prefixNexistepas = "<http://nexiste.pas/";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 
-  // Check that arbitrary nonexisting functions with a single argument silently
-  // return an `IdExpression(UNDEF)` in the syntax test mode.
+  // Check that arbitrary nonexisting functions with a
+  // single argument silently return an
+  // `IdExpression(UNDEF)` in the syntax test mode.
   auto cleanup = setRuntimeParameterForTest<"syntax-test-mode">(true);
   expectFunctionCall(
       absl::StrCat(prefixNexistepas, "nada>(?x)"),

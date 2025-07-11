@@ -1340,6 +1340,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
+  // TODO test minX,minY,maxX,maxY
 
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
