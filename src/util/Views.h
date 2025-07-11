@@ -19,10 +19,10 @@
 
 namespace {
 
+// Flattens double container and splits it at separator
 CPP_template(typename Range, typename ElementType)(
     requires ql::ranges::input_range<Range>) struct ReChunkAtSeparatorFromGet
     : ad_utility::InputRangeFromGet<ql::span<ElementType>> {
-
   std::vector<ElementType> buffer_;
   decltype(buffer_.begin()) iter_;
   ElementType separator_;
@@ -52,8 +52,51 @@ CPP_template(typename Range, typename ElementType)(
                                   std::distance(iter_, found))};
 
     iter_ = found;
-    iter_++; // move past separator already found
+    iter_++;  // move past separator already found
     return retVal;
+  }
+};
+
+template <typename SortedBlockView>
+struct uniqueBlockViewFromGet
+    : ad_utility::InputRangeFromGet<typename SortedBlockView::value_type> {
+  SortedBlockView view_;
+  decltype(view_.begin()) iter_;
+
+  std::optional<
+      ql::ranges::range_value_t<ql::ranges::range_value_t<SortedBlockView>>>
+      lastValueFromPreviousBlock_{std::nullopt};
+  size_t numInputs_{0};
+  size_t numUnique_{0};
+
+  uniqueBlockViewFromGet(SortedBlockView view)
+      : view_{std::move(view)}, iter_{view_.begin()} {}
+
+  std::optional<typename SortedBlockView::value_type> get() override {
+    if (iter_ == view_.end()) {
+      LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs_ << '\n';
+      LOG(INFO) << "Number of unique elements: " << numUnique_ << std::endl;
+      return std::nullopt;
+    }
+
+    auto block = *iter_;
+    if (block.empty()) {
+      iter_++;
+      return this->get();
+    }
+    numInputs_ += block.size();
+    auto beg = lastValueFromPreviousBlock_
+                   ? ql::ranges::find_if(
+                         block, [&p = lastValueFromPreviousBlock_.value()](
+                                    const auto& el) { return el != p; })
+                   : block.begin();
+    lastValueFromPreviousBlock_ = *(block.end() - 1);
+    auto it = std::unique(beg, block.end());
+    block.erase(it, block.end());
+    block.erase(block.begin(), beg);
+    numUnique_ += block.size();
+    iter_++;
+    return block;
   }
 };
 
@@ -74,31 +117,14 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 template <typename SortedBlockView,
           typename ValueType = ql::ranges::range_value_t<
               ql::ranges::range_value_t<SortedBlockView>>>
+// depends on changed in IndexImpl, change after merge
+// uniqueBlockViewFromGet<SortedBlockView> uniqueBlockView(
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
-  size_t numInputs = 0;
-  size_t numUnique = 0;
-  std::optional<ValueType> lastValueFromPreviousBlock = std::nullopt;
-
-  for (auto& block : view) {
-    if (block.empty()) {
-      continue;
-    }
-    numInputs += block.size();
-    auto beg = lastValueFromPreviousBlock
-                   ? ql::ranges::find_if(
-                         block, [&p = lastValueFromPreviousBlock.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
-    lastValueFromPreviousBlock = *(block.end() - 1);
-    auto it = std::unique(beg, block.end());
-    block.erase(it, block.end());
-    block.erase(block.begin(), beg);
-    numUnique += block.size();
-    co_yield block;
+  for (auto& elem : uniqueBlockViewFromGet{std::move(view)}) {
+    co_yield elem;
   }
-  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
+  // return uniqueBlockViewFromGet{std::move(view)};
 }
 
 // A view that owns its underlying storage. It is a replacement for
