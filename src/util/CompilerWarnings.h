@@ -13,9 +13,16 @@
   _Pragma("GCC diagnostic push")       \
       _Pragma("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
 #define ENABLE_UNINITIALIZED_WARNINGS _Pragma("GCC diagnostic pop")
+#define DISABLE_OVERREAD_WARNINGS \
+  _Pragma("GCC diagnostic push")  \
+      _Pragma("GCC diagnostic ignored \"-Wstringop-overread\"")
+#define ENABLE_OVERREAD_WARNINGS _Pragma("GCC diagnostic pop")
+
 #else
 #define DISABLE_UNINITIALIZED_WARNINGS
 #define ENABLE_UNINITIALIZED_WARNINGS
+#define DISABLE_OVERREAD_WARNINGS
+#define ENABLE_OVERREAD_WARNINGS
 #endif
 
 #endif  // QLEVER_COMPILERWARNINGS_H

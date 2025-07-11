@@ -9,6 +9,7 @@
 #include <exception>
 #include <sstream>
 
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -84,7 +85,10 @@ class stream_generator_promise {
     std::string_view singleView{&value, 1};
     // This is only safe to do if we can write into the buffer immediately.
     AD_CORRECTNESS_CHECK(isBufferLargeEnough(singleView));
+    // Disable false positive warning on GCC.
+    DISABLE_OVERREAD_WARNINGS
     return yield_value(singleView);
+    ENABLE_OVERREAD_WARNINGS
   }
 
   // Return true if the overflow has been completely consumed.
