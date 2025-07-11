@@ -81,6 +81,7 @@ class Filter : public Operation {
                                                   std::vector<ColumnIndex>
                                                       sortedBy) const;
 
+ public:
   // Run `computeFilterImpl` on the provided IdTable
   CPP_template(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
       IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
