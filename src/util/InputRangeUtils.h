@@ -328,4 +328,17 @@ CPP_class_template(typename View, typename F)(requires(
 template <typename Range, typename F>
 CachingContinuableTransformInputRange(Range&&, F)
     -> CachingContinuableTransformInputRange<all_t<Range>, F>;
+
+CPP_template(typename F)(requires std::is_invocable_v<F>)
+    InputRangeTypeErased<std::invoke_result_t<F>> lazySingleValueRange(
+        F transform) {
+  using T = std::invoke_result_t<F>;
+  static_assert(std::is_object_v<T>,
+                "The functor of `lazySingleValueRange` must yield an "
+                "object type, not a reference");
+  return InputRangeTypeErased(
+      InputRangeFromLoopControlGet([transform = std::move(transform)]() {
+        return LoopControl<T>::breakWithValue(std::move(transform()));
+      }));
+}
 }  // namespace ad_utility
