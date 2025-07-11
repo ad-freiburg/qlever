@@ -125,6 +125,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
 
     if (!exhausted(it1_) && !exhausted(it2_)) {
       while (!pushSmaller() && !isBufferLargeEnough()) {
+        // The work is done inside the pushSmaller() function
       }
     }
 
@@ -132,6 +133,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter,
                           &exhausted](auto& itPair) {
       if (!isBufferLargeEnough() && !exhausted(itPair)) {
         while (!push(itPair) && !isBufferLargeEnough()) {
+          // The work is done inside the push() function
         }
       }
     };
