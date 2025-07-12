@@ -1,6 +1,7 @@
 //  Copyright 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_POLYMORPHICVOCABULARY_H
@@ -92,6 +93,11 @@ class PolymorphicVocabulary {
   // Return the `i`-th word, throw if `i` is out of bounds.
   std::string operator[](uint64_t i) const;
 
+  // Return a reference to currently underlying vocabulary, as a variant of the
+  // possible types.
+  Variant& getUnderlyingVocabulary() { return vocab_; }
+  const Variant& getUnderlyingVocabulary() const { return vocab_; }
+
   // Same as `std::lower_bound`, return the smallest entry >= `word`.
   template <typename String, typename Comp>
   WordAndIndex lower_bound(const String& word, Comp comp) const {
@@ -137,6 +143,21 @@ class PolymorphicVocabulary {
         },
         vocab_);
   }
+
+  // Retrieve `GeometryInfo` from an underlying vocabulary, if it is a
+  // `GeoVocabulary`.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(uint64_t index) const {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::GeometryInfo> {
+          using T = std::decay_t<decltype(vocab)>;
+          if constexpr (ad_utility::isInstantiation<T, SplitVocabulary>) {
+            return vocab.getGeoInfo(index);
+          } else {
+            return std::nullopt;
+          }
+        },
+        vocab_);
+  };
 
   // Create a `WordWriter` that will create a vocabulary with the given `type`
   // at the given `filename`.

@@ -1,35 +1,27 @@
-// Copyright 2011 - 2024
+// Copyright 2011 - 2025
 // University of Freiburg
 // Chair of Algorithms and Data Structures
 //
 // Authors: Björn Buchhold <buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_VOCABULARY_H
 #define QLEVER_SRC_INDEX_VOCABULARY_H
 
 #include <cassert>
-#include <fstream>
-#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "global/Constants.h"
-#include "global/Id.h"
-#include "global/Pattern.h"
 #include "index/StringSortComparator.h"
-#include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/Log.h"
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -133,6 +125,12 @@ class Vocabulary {
   // not found, the lower bound for the word is stored in idx, otherwise the
   // index of the word.
   bool getId(std::string_view word, IndexType* idx) const;
+
+  // Retrieve a `GeometryInfo` object from the (possibly) underlying
+  // `GeoVocabulary`. The index parameter is expected to have the geo literal
+  // marker bit. If no `GeoVocabulary` is used or the marker bit is not set,
+  // `std::nullopt` is returned.
+  std::optional<ad_utility::GeometryInfo> getGeoInfo(IndexType idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.

@@ -1816,6 +1816,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:within ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:equals ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -2764,7 +2779,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
           {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
           {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
           {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
-          {"sfOverlaps", OVERLAPS}};
+          {"sfOverlaps", OVERLAPS},     {"sfWithin", WITHIN}};
 
   // Run basic query planner test for each of the geo relation functions
   for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {

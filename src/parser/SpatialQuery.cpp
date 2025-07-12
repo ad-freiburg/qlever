@@ -68,6 +68,8 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       joinType_ = SpatialJoinType::OVERLAPS;
     } else if (type == "equals") {
       joinType_ = SpatialJoinType::EQUALS;
+    } else if (type == "within") {
+      joinType_ = SpatialJoinType::WITHIN;
     } else if (type == "within-dist") {
       joinType_ = SpatialJoinType::WITHIN_DIST;
     } else {
@@ -75,7 +77,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "The IRI given for the parameter `<joinType>` does not refer to a "
           "supported join type. Currently supported are `<intersects>`, "
           "`<covers>`, `<contains>`, `<touches>`, `<crosses>`, `<overlaps>`, "
-          "`<equals>`, `<within-dist>`");
+          "`<equals>`, `<within>`, `<within-dist>`");
     }
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
