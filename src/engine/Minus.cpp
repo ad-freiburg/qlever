@@ -96,18 +96,24 @@ size_t Minus::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-auto Minus::makeUndefRangesChecker(bool left) const {
+auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
   std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges> findUndef;
   const auto& operation = left ? _left : _right;
-  for (const auto& cols : _matchedColumns) {
-    const auto& [_, info] =
-        operation->getVariableAndInfoByColumnIndex(cols[!left]);
-    // Use expensive operation if one of the columns might contain undef.
-    if (info.mightContainUndef_ !=
-        ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined) {
-      findUndef.emplace<1>();
-      break;
-    }
+  bool containsUndef = ql::ranges::any_of(
+      _matchedColumns, [&operation, left, &idTable](const auto& cols) {
+        size_t tableColumn = cols[static_cast<size_t>(!left)];
+        const auto& [_, info] =
+            operation->getVariableAndInfoByColumnIndex(tableColumn);
+        if (info.mightContainUndef_ !=
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined) {
+          return ql::ranges::any_of(idTable.getColumn(tableColumn),
+                                    &Id::isUndefined);
+        }
+        return false;
+      });
+  // Use expensive operation if one of the columns might contain undef.
+  if (containsUndef) {
+    findUndef.emplace<1>();
   }
   return findUndef;
 }
@@ -145,29 +151,31 @@ IdTable Minus::computeMinus(
     keepEntry.at(ql::ranges::distance(joinColumnsLeft.begin(), leftIt)) = false;
   };
 
+  auto handleCompatibleRow = [&markForRemoval](const auto& leftIt,
+                                               const auto& rightIt) {
+    const auto& leftRow = *leftIt;
+    const auto& rightRow = *rightIt;
+    bool onlyMatchesBecauseOfUndef = ql::ranges::all_of(
+        ::ranges::views::zip(leftRow, rightRow), [](const auto& tuple) {
+          const auto& [leftId, rightId] = tuple;
+          return leftId.isUndefined() || rightId.isUndefined();
+        });
+    if (!onlyMatchesBecauseOfUndef) {
+      markForRemoval(leftIt);
+    }
+  };
+
   std::visit(
-      [this, &joinColumnsLeft, &joinColumnsRight, &markForRemoval](
+      [this, &joinColumnsLeft, &joinColumnsRight,
+       handleCompatibleRow = std::move(handleCompatibleRow)](
           auto findUndefLeft, auto findUndefRight) {
         [[maybe_unused]] auto outOfOrder = ad_utility::zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight,
-            ql::ranges::lexicographical_compare,
-            [&markForRemoval](const auto& leftIt, const auto& rightIt) {
-              const auto& leftRow = *leftIt;
-              const auto& rightRow = *rightIt;
-              bool onlyMatchesBecauseOfUndef = ql::ranges::all_of(
-                  ::ranges::views::zip(leftRow, rightRow),
-                  [](const auto& tuple) {
-                    const auto& [leftId, rightId] = tuple;
-                    return leftId.isUndefined() || rightId.isUndefined();
-                  });
-              if (!onlyMatchesBecauseOfUndef) {
-                markForRemoval(leftIt);
-              }
-            },
+            ql::ranges::lexicographical_compare, handleCompatibleRow,
             std::move(findUndefLeft), std::move(findUndefRight), {},
             [this]() { checkCancellation(); });
       },
-      makeUndefRangesChecker(true), makeUndefRangesChecker(false));
+      makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
 
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
