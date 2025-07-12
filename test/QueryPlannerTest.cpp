@@ -4163,6 +4163,13 @@ TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));
+
+  // Regression test for issue https://github.com/ad-freiburg/qlever/issues/2034
+  h::expect("SELECT * { ?a <a> [] . { SELECT * { ?a <a> [] }}}",
+            h::Join(h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_0"),
+                    h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_1")));
 }
 
 // _____________________________________________________________________________
