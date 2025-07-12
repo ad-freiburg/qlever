@@ -163,7 +163,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-[[nodiscard]] string
+[[nodiscard]] std::string
 AggregateExpression<AggregateOperation, FinalOperation>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return std::string(typeid(*this).name()) + std::to_string(_distinct) + "(" +

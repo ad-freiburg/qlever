@@ -452,7 +452,7 @@ qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

@@ -21,7 +21,7 @@ class TextIndexScanForWord : public Operation {
                        TextIndexScanForWordConfiguration config);
 
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
-                       string word);
+                       std::string word);
 
   ~TextIndexScanForWord() override = default;
 
@@ -29,9 +29,9 @@ class TextIndexScanForWord : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

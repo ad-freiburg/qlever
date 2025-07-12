@@ -58,7 +58,7 @@ float Bind::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-string Bind::getDescriptor() const { return _bind.getDescriptor(); }
+std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 
 // _____________________________________________________________________________
 [[nodiscard]] vector<ColumnIndex> Bind::resultSortedOn() const {
@@ -72,7 +72,7 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::getCacheKeyImpl() const {
+std::string Bind::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "BIND ";
   os << _bind._expression.getCacheKey(_subtree->getVariableColumns());

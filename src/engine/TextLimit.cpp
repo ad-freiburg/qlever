@@ -167,14 +167,14 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 vector<ColumnIndex> TextLimit::resultSortedOn() const { return entityColumns_; }
 
 // _____________________________________________________________________________
-string TextLimit::getDescriptor() const {
+std::string TextLimit::getDescriptor() const {
   std::ostringstream os;
   os << "TextLimit with limit: " << limit_;
   return os.str();
 }
 
 // _____________________________________________________________________________
-string TextLimit::getCacheKeyImpl() const {
+std::string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
      << " with n: " << limit_ << ", with child: " << child_->getCacheKey()

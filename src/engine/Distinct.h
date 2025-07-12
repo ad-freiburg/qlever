@@ -24,7 +24,7 @@ class Distinct : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
 
   [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
     return subtree_->resultSortedOn();
@@ -56,7 +56,7 @@ class Distinct : public Operation {
   }
 
  protected:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

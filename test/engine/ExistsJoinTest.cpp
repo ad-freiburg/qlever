@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -282,7 +283,7 @@ TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, "<something>",
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
   // Only add ?a to see if ?b remains hidden.
   query.selectClause().addVisibleVariable(Variable{"?a"});
@@ -314,7 +315,7 @@ TEST(Exists, cacheKeyDiffersForDifferentJoinColumns) {
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, "<something>",
+          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
                         TripleComponent{Variable{"?b"}}}}});
 
   query.selectClause().addVisibleVariable(Variable{"?a"});

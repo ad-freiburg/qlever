@@ -12,23 +12,23 @@
 
 // _____________________________________________________________________________
 WordsAndDocsFileParser::WordsAndDocsFileParser(
-    const string& wordsOrDocsFile, const LocaleManager& localeManager)
+    const std::string& wordsOrDocsFile, const LocaleManager& localeManager)
     : in_(wordsOrDocsFile), localeManager_(localeManager) {}
 
 // _____________________________________________________________________________
 ad_utility::InputRangeFromGet<WordsFileLine>::Storage WordsFileParser::get() {
   WordsFileLine line;
-  string l;
+  std::string l;
   if (!std::getline(getInputStream(), l)) {
     return std::nullopt;
   }
   std::string_view lineView(l);
   size_t i = lineView.find('\t');
-  assert(i != string::npos);
+  assert(i != std::string::npos);
   size_t j = i + 2;
   assert(j + 3 < lineView.size());
   size_t k = lineView.find('\t', j + 2);
-  assert(k != string::npos);
+  assert(k != std::string::npos);
   line.isEntity_ = (lineView[i + 1] == '1');
   line.word_ =
       (line.isEntity_
@@ -48,13 +48,13 @@ ad_utility::InputRangeFromGet<WordsFileLine>::Storage WordsFileParser::get() {
 
 // _____________________________________________________________________________
 ad_utility::InputRangeFromGet<DocsFileLine>::Storage DocsFileParser::get() {
-  string l;
+  std::string l;
   if (!std::getline(getInputStream(), l)) {
     return std::nullopt;
   }
   DocsFileLine line;
   size_t i = l.find('\t');
-  assert(i != string::npos);
+  assert(i != std::string::npos);
   line.docId_ = DocumentIndex::make(atol(l.substr(0, i).c_str()));
   line.docContent_ = l.substr(i + 1);
   return line;

@@ -48,7 +48,7 @@ VocabularyInternalExternal::WordWriter::~WordWriter() {
 }
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::open(const string& filename) {
+void VocabularyInternalExternal::open(const std::string& filename) {
   AD_LOG_INFO << "Reading vocabulary from file " << filename << " ..."
               << std::endl;
   internalVocab_.open(filename + ".internal");

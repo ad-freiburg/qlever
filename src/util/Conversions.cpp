@@ -4,25 +4,17 @@
 
 #include "util/Conversions.h"
 
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <absl/strings/str_cat.h>
 
 #include <ctre-unicode.hpp>
 
-#include "../global/Constants.h"
-#include "../parser/TokenizerCtre.h"
-#include "./Exception.h"
-#include "./StringUtils.h"
+#include "global/Constants.h"
+#include "parser/NormalizedString.h"
 
 namespace ad_utility {
 
 // _________________________________________________________
-triple_component::Iri convertLangtagToEntityUri(const string& tag) {
+triple_component::Iri convertLangtagToEntityUri(const std::string& tag) {
   return triple_component::Iri::fromIriref(makeQleverInternalIri("@", tag));
 }
 
