@@ -47,10 +47,8 @@ TEST(ExecuteUpdate, executeUpdate) {
           const auto qet = qp.createExecutionTree(pq);
           index.deltaTriplesManager().modify<void>(
               [&index, &pq, &qet, &sharedHandle](DeltaTriples& deltaTriples) {
-                ad_utility::timer::TimeTracer tracer(
-                    "ExecuteUpdate::executeUpdate tracer");
                 ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples,
-                                             sharedHandle, tracer);
+                                             sharedHandle);
               });
           qec.updateLocatedTriplesSnapshot();
         }
@@ -225,15 +223,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       const auto qet = qp.createExecutionTree(pq);
       UpdateMetadata metadata;
       auto result = qet.getResult(false);
-      ad_utility::timer::TimeTracer tracer1(
-          "ExecuteUpdate::computeGraphUpdateQuads tracer");
       results.push_back(ExecuteUpdate::computeGraphUpdateQuads(
-          index, pq, *result, qet.getVariableColumns(), sharedHandle, metadata,
-          tracer1));
-      ad_utility::timer::TimeTracer tracer2(
-          "ExecuteUpdate::executeUpdate tracer");
-      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle,
-                                   tracer2);
+          index, pq, *result, qet.getVariableColumns(), sharedHandle,
+          metadata));
+      ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
     }
     return results;
   };

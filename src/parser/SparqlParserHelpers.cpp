@@ -1,6 +1,6 @@
-//
-// Created by johannes on 16.05.21.
-//
+//  Copyright 2022-2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "SparqlParserHelpers.h"
 
@@ -19,16 +19,9 @@ ParserAndVisitor::ParserAndVisitor(
     std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : input_{unescapeUnicodeSequences(std::move(input))},
-      visitor_{{}, std::move(datasetClauses), disableSomeChecks} {
-  // The default in ANTLR is to log all errors to the console and to continue
-  // the parsing. We need to turn parse errors into exceptions instead to
-  // propagate them to the user.
-  parser_.removeErrorListeners();
-  parser_.addErrorListener(&errorListener_);
-  lexer_.removeErrorListeners();
-  lexer_.addErrorListener(&errorListener_);
-}
+    : Base{unescapeUnicodeSequences(std::move(input)),
+           SparqlQleverVisitor{
+               {}, std::move(datasetClauses), disableSomeChecks}} {}
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(

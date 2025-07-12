@@ -122,7 +122,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  void readFromFile(const string& filename);
 
   // Get the word with the given `idx`. Throw if the `idx` is not contained
   // in the vocabulary.
@@ -131,8 +131,10 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
-  //! Get an Id from the vocabulary for some "normal" word.
-  //! Return value signals if something was found at all.
+  // Get an Id from the vocabulary for some full word (not prefix of a word).
+  // Return a boolean value that signals if the word was found. If the word was
+  // not found, the lower bound for the word is stored in idx, otherwise the
+  // index of the word.
   bool getId(std::string_view word, IndexType* idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
@@ -208,6 +210,12 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
                         SortLevel level = SortLevel::QUARTERNARY) const;
+
+  // The position where a word is stored or would be stored if it does not
+  // exist. Unlike `lower_bound` and `upper_bound`, this function works with
+  // full words, not prefixes. Currently used for `LocalVocabEntry`.
+  std::pair<IndexType, IndexType> getPositionOfWord(
+      std::string_view word) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in

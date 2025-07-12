@@ -9,8 +9,9 @@
 #include "engine/Server.h"
 
 #include <absl/functional/bind_front.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
-#include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -717,7 +718,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
-    MediaType Server::determineMediaType(
+    std::vector<ad_utility::MediaType> Server::determineMediaTypes(
         const ad_utility::url_parser::ParamValueMap& params,
         const RequestT& request) {
   using namespace ad_utility::url_parser;
@@ -745,12 +746,11 @@ CPP_template_def(typename RequestT)(
 
   std::string_view acceptHeader = request.base()[http::field::accept];
 
-  if (!mediaType.has_value()) {
-    mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  if (mediaType.has_value()) {
+    return {mediaType.value()};
+  } else {
+    return ad_utility::getMediaTypesFromAcceptHeader(acceptHeader);
   }
-  AD_CORRECTNESS_CHECK(mediaType.has_value());
-
-  return mediaType.value();
 }
 
 // ____________________________________________________________________________
@@ -766,6 +766,38 @@ CPP_template_def(typename RequestT)(
   return messageSender;
 }
 
+// _____________________________________________________________________________
+ad_utility::MediaType Server::chooseBestFittingMediaType(
+    const std::vector<ad_utility::MediaType>& candidates,
+    const ParsedQuery& parsedQuery) {
+  if (!candidates.empty()) {
+    auto it = ql::ranges::find_if(candidates, [&parsedQuery](
+                                                  MediaType mediaType) {
+      if (parsedQuery.hasAskClause()) {
+        std::array supportedMediaTypes{
+            MediaType::sparqlXml, MediaType::sparqlJson, MediaType::qleverJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      if (parsedQuery.hasSelectClause()) {
+        std::array supportedMediaTypes{
+            MediaType::octetStream, MediaType::csv,
+            MediaType::tsv,         MediaType::qleverJson,
+            MediaType::sparqlXml,   MediaType::sparqlJson};
+        return ad_utility::contains(supportedMediaTypes, mediaType);
+      }
+      std::array supportedMediaTypes{MediaType::csv, MediaType::tsv,
+                                     MediaType::qleverJson, MediaType::turtle};
+      return ad_utility::contains(supportedMediaTypes, mediaType);
+    });
+    if (it != candidates.end()) {
+      return *it;
+    }
+  }
+
+  return parsedQuery.hasConstructClause() ? MediaType::turtle
+                                          : MediaType::sparqlJson;
+}
+
 // ____________________________________________________________________________
 CPP_template_def(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
@@ -777,9 +809,15 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedQuery) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
-  MediaType mediaType = determineMediaType(params, request);
-  LOG(INFO) << "Requested media type of result is \""
-            << ad_utility::toString(mediaType) << "\"" << std::endl;
+  auto mediaTypes = determineMediaTypes(params, request);
+  AD_LOG_INFO << "Requested media types of the result are: "
+              << absl::StrJoin(
+                     mediaTypes | ql::views::transform([](MediaType mediaType) {
+                       return absl::StrCat(
+                           "\"", ad_utility::toString(mediaType), "\"");
+                     }),
+                     ", ")
+              << std::endl;
 
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -798,6 +836,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
       cancellationHandle);
   plannedQuery = co_await std::move(coroutine);
   auto qet = plannedQuery.value().queryExecutionTree_;
+
+  MediaType mediaType =
+      chooseBestFittingMediaType(mediaTypes, plannedQuery.value().parsedQuery_);
 
   // Update the `PlannedQuery` with the export limit when the response
   // content-type is `application/qlever-results+json` and ensure that the
@@ -880,7 +921,7 @@ ordered_json Server::createResponseMetadataForUpdate(
 UpdateMetadata Server::processUpdateImpl(
     const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracerOpt tracer) {
   const auto& qet = plannedUpdate.queryExecutionTree_;
   AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery_.hasUpdateClause());
 
@@ -918,8 +959,9 @@ CPP_template_def(typename RequestT, typename ResponseT)(
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit, std::optional<PlannedQuery>& plannedUpdate) {
-  ad_utility::timer::TimeTracer tracer =
+  ad_utility::timer::TimeTracer tracerInner =
       ad_utility::timer::TimeTracer("update");
+  ad_utility::timer::TimeTracerOpt tracer(tracerInner);
   tracer.beginTrace("waitingForUpdateThread");
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
@@ -934,21 +976,25 @@ CPP_template_def(typename RequestT, typename ResponseT)(
        &plannedUpdate, &tracer]() {
         tracer.endTrace("waitingForUpdateThread");
         std::vector<UpdateMetadata> results;
-        std::vector<DeltaTriplesModifyTimings> timings;
+        // TODO<qup42> We currently create a new snapshot after each update in
+        // the chain, which is expensive. Instead, the updates could operate
+        // directly on the `DeltaTriples` (we have an exclusive lock on them
+        // anyway).
         for (ParsedQuery& update : updates) {
+          // Make the snapshot before the query planning. Otherwise, it could
+          // happen that the query planner "knows" that a result is empty, when
+          // actually it is not due to a preceding update in the chain. Also,
+          // this improves the size estimates and hence the query plan.
+          tracer.beginTrace("snapshot");
+          qec.updateLocatedTriplesSnapshot();
+          tracer.endTrace("snapshot");
           tracer.beginTrace("planning");
           plannedUpdate = planQuery(std::move(update), requestTimer, timeLimit,
                                     qec, cancellationHandle);
           tracer.endTrace("planning");
           tracer.beginTrace("execution");
-          // TODO<qup42>: optimize the case of chained updates
-          // As we have an exclusive lock on the DeltaTriples we the
-          // execution could happen directly against the DeltaTriples
-          // instead of the snapshot that has to be refreshed after each
-          // step.
-          qec.updateLocatedTriplesSnapshot();
           // Update the delta triples.
-          auto [updateMetadata, updateTiming] =
+          auto updateMetadata =
               index_.deltaTriplesManager().modify<UpdateMetadata>(
                   [this, &requestTimer, &cancellationHandle, &plannedUpdate,
                    &tracer](auto& deltaTriples) {
@@ -963,15 +1009,14 @@ CPP_template_def(typename RequestT, typename ResponseT)(
                   },
                   true, tracer);
           results.push_back(updateMetadata);
-          timings.push_back(updateTiming);
           tracer.endTrace("execution");
         }
-        return std::make_pair(results, timings);
+        return results;
       },
       cancellationHandle);
-  auto [updateMetadata, timings] = co_await std::move(coroutine);
+  auto updateMetadata = co_await std::move(coroutine);
   tracer.endTrace("update");
-  AD_LOG(INFO) << "TimeTracer output: " << tracer.getJSONShort().dump()
+  AD_LOG(INFO) << "TimeTracer output: " << tracer.get().getJSONShort().dump()
                << std::endl;
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
@@ -979,7 +1024,7 @@ CPP_template_def(typename RequestT, typename ResponseT)(
   // TODO: display timings for all operations
   auto response = createResponseMetadataForUpdate(
       index_, index_.deltaTriplesManager().getCurrentSnapshot(), *plannedUpdate,
-      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer);
+      plannedUpdate->queryExecutionTree_, updateMetadata[0], tracer.get());
   co_await send(
       ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;

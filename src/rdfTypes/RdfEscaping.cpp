@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "parser/RdfEscaping.h"
+#include "rdfTypes/RdfEscaping.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>

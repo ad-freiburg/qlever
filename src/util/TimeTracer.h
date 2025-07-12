@@ -66,8 +66,8 @@ class TimeTracer {
       : timer_(Timer::Started),
         rootTrace_{std::move(name), std::chrono::milliseconds::zero()},
         activeTraces_({rootTrace_}){};
-  TimeTracer(const TimeTracer&) = delete;
-  TimeTracer& operator=(const TimeTracer&) = delete;
+  // TimeTracer(const TimeTracer&) = delete;
+  // TimeTracer& operator=(const TimeTracer&) = delete;
 
   void beginTrace(std::string name) {
     if (activeTraces_.empty()) {
@@ -98,6 +98,31 @@ class TimeTracer {
     nlohmann::ordered_json j;
     to_json_short(j, rootTrace_);
     return j;
+  }
+};
+
+class TimeTracerOpt {
+  std::optional<std::reference_wrapper<TimeTracer>> tracer_;
+
+ public:
+  TimeTracerOpt() : tracer_(std::nullopt){};
+  explicit TimeTracerOpt(TimeTracer& tracer) : tracer_(tracer){};
+
+  void beginTrace(std::string name) {
+    if (tracer_) {
+      tracer_->get().beginTrace(std::move(name));
+    }
+  }
+
+  void endTrace(std::string_view name) {
+    if (tracer_) {
+      tracer_->get().endTrace(name);
+    }
+  }
+
+  TimeTracer& get() {
+    AD_CONTRACT_CHECK(tracer_);
+    return tracer_->get();
   }
 };
 

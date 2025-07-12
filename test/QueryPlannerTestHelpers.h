@@ -39,8 +39,12 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Iri.h"
+#include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -379,7 +383,8 @@ inline auto ValuesClause = [](string cacheKey) {
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
-struct SpatialJoin {
+template <bool Substitute = false>
+struct SpatialJoinMatcher {
   template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
@@ -387,21 +392,23 @@ struct SpatialJoin {
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::SpatialJoin>(
-        AllOf(children(childMatchers...),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
-                          Eq(std::pair(maxDist, maxResults))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
-                          Eq(std::pair(left, right))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
-                          Eq(distanceVariable)),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
-                          Eq(payloadVariables)),
-              AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
-              AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType))));
+    return RootOperation<::SpatialJoin>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
+                    Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables)),
+        AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
+        AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };
-constexpr inline SpatialJoin spatialJoin;
+constexpr inline SpatialJoinMatcher spatialJoin;
+constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =
@@ -486,14 +493,60 @@ inline QetMatcher QetWithWarnings(
                actualMatcher);
 }
 
+// A query planner class mocking the filter substitute generation for testing
+// the substitution behavior.
+class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
+  using QueryPlanner::QueryPlanner;
+
+  FiltersAndOptionalSubstitutes seedFilterSubstitutes(
+      const std::vector<SparqlFilter>& filters) const override {
+    FiltersAndOptionalSubstitutes plans;
+    plans.reserve(filters.size());
+
+    const auto equalTo =
+        ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+            "equal-to");
+
+    for (const auto& [i, filterExpression] :
+         ::ranges::views::enumerate(filters)) {
+      using namespace sparqlExpression;
+      auto eqExpr = dynamic_cast<const EqualExpression*>(
+          filterExpression.expression_.getPimpl());
+
+      // Substitute `?a = ?b` with `?a <equal-to> ?b`
+      if (eqExpr != nullptr) {
+        auto vars = eqExpr->containedVariables();
+        AD_CORRECTNESS_CHECK(vars.size() == 2);
+
+        // Construct index scan
+        SparqlTripleSimple triple{{*vars[0]}, {equalTo}, {*vars[1]}};
+        SubtreePlan plan{getQec(),
+                         std::make_shared<::IndexScan>(
+                             getQec(), Permutation::Enum::PSO, triple)};
+
+        // Set marker for included filter
+        plan._idsOfIncludedFilters |= 1ull << i;
+        plan.containsFilterSubstitute_ = true;
+
+        plans.emplace_back(filterExpression, plan);
+      } else {
+        plans.emplace_back(filterExpression, std::nullopt);
+      }
+    }
+    return plans;
+  };
+};
+
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
+template <typename QueryPlannerClass = QueryPlanner>
 inline QueryExecutionTree parseAndPlan(std::string query,
                                        QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock
   // a queryExecutionContext.
-  return QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
+  return QueryPlannerClass{qec,
+                           std::make_shared<ad_utility::CancellationHandle<>>()}
       .createExecutionTree(pq);
 }
 
@@ -502,6 +555,7 @@ inline QueryExecutionTree parseAndPlan(std::string query,
 // be controlled to choose between the greedy and the dynamic programming
 // planner. This function only serves as a common implementation, for the
 // actual tests the three functions below should be used.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudget(std::string query, auto matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
@@ -514,47 +568,54 @@ void expectWithGivenBudget(std::string query, auto matcher,
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
   QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
-  auto qet = parseAndPlan(std::move(query), qec);
+  auto qet = parseAndPlan<QueryPlannerClass>(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());
   EXPECT_THAT(qet, matcher);
 }
 
 // Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectWithGivenBudgets(std::string query, auto matcher,
                             std::optional<QueryExecutionContext*> optQec,
                             std::vector<size_t> queryPlanningBudgets,
                             source_location l = source_location::current()) {
   for (size_t budget : queryPlanningBudgets) {
-    expectWithGivenBudget(query, matcher, optQec, budget, l);
+    expectWithGivenBudget<QueryPlannerClass>(query, matcher, optQec, budget, l);
   }
 }
 
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectGreedy(std::string query, auto matcher,
                   std::optional<QueryExecutionContext*> optQec = std::nullopt,
                   source_location l = source_location::current()) {
-  expectWithGivenBudget(std::move(query), std::move(matcher), optQec, 0, l);
+  expectWithGivenBudget<QueryPlannerClass>(std::move(query), std::move(matcher),
+                                           optQec, 0, l);
 }
 // Same as `expectWithGivenBudget` above, but always use the dynamic
 // programming query planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expectDynamicProgramming(
     std::string query, auto matcher,
     std::optional<QueryExecutionContext*> optQec = std::nullopt,
     source_location l = source_location::current()) {
-  expectWithGivenBudget(std::move(query), std::move(matcher), optQec,
-                        std::numeric_limits<size_t>::max(), l);
+  expectWithGivenBudget<QueryPlannerClass>(
+      std::move(query), std::move(matcher), optQec,
+      std::numeric_limits<size_t>::max(), l);
 }
 
 // Same as `expectWithGivenBudget` above, but run the test for different
 // query planning budgets. This is guaranteed to run with both the greedy
 // query planner and the dynamic-programming based query planner.
+template <typename QueryPlannerClass = QueryPlanner>
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = source_location::current()) {
-  expectWithGivenBudgets(std::move(query), std::move(matcher),
-                         std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
+  expectWithGivenBudgets<QueryPlannerClass>(
+      std::move(query), std::move(matcher), std::move(optQec),
+      {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
 

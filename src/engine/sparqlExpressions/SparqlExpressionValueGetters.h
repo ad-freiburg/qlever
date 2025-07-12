@@ -14,7 +14,8 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
 #include "util/LruCache.h"
 #include "util/TypeTraits.h"
@@ -357,6 +358,13 @@ struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
   UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
   UnitOfMeasurement operator()(const LiteralOrIri& s,
                                const EvaluationContext*) const;
+
+  // The actual implementation for a given `LiteralOrIri` which is guaranteed
+  // not to use the `EvaluationContext`. This method can be used to convert
+  // `LiteralOrIri` objects holding a unit of measurement, even when no
+  // `EvaluationContext` is available. Currently used for `geof:distance` filter
+  // substitution during query planning.
+  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
 };
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
@@ -391,6 +399,28 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
   IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
                               const EvaluationContext* context) const;
+};
+
+// Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
+// holding a `VocabIndex` is given and QLever's index is built using the
+// `GeoVocabulary`, the `GeometryInfo` is fetched from the precomputed file
+// and the `RequestedInfo` is extracted from it. If no precomputed
+// `GeometryInfo` is available, the WKT literal is parsed and only the
+// `RequestedInfo` is computed ad hoc (for example the bounding box is not
+// calculated, when requesting the centroid).
+template <typename RequestedInfo = ad_utility::GeometryInfo>
+requires ad_utility::RequestedInfoT<RequestedInfo>
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
+  std::optional<RequestedInfo> operator()(
+      ValueId id, const EvaluationContext* context) const;
+  std::optional<RequestedInfo> operator()(
+      const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
+
+  // Helper: This function returns a `GeometryInfo` object if it can be fetched
+  // from a precomputation result. Otherwise `std::nullopt` is returned.
+  static std::optional<ad_utility::GeometryInfo> getPrecomputedGeometryInfo(
+      ValueId id, const EvaluationContext* context);
 };
 
 // Defines the return type for value-getter `StringOrDateGetter`.

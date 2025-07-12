@@ -10,7 +10,7 @@
 UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
-    ad_utility::timer::TimeTracer& tracer) {
+    ad_utility::timer::TimeTracerOpt tracer) {
   UpdateMetadata metadata{};
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
@@ -141,7 +141,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const Result& result,
     const VariableToColumnMap& variableColumns,
     const CancellationHandle& cancellationHandle, UpdateMetadata& metadata,
-    ad_utility::timer::TimeTracer& tracer) {
+    ad_utility::timer::TimeTracerOpt tracer) {
   // Evaluate the WHERE clause.
   tracer.beginTrace("where");
   AD_CONTRACT_CHECK(query.hasUpdateClause());

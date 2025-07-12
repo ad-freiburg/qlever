@@ -284,9 +284,8 @@ TEST_F(LoadTest, Integration) {
       getResultFunctionFactory("<a> <b> <c> . <d> <e> <f>",
                                boost::beast::http::status::ok, "text/turtle"));
   DeltaTriples deltaTriples{qec->getIndex()};
-  ad_utility::timer::TimeTracer tracer("ExecuteUpdate::executeUpdate tracer");
   ExecuteUpdate::executeUpdate(qec->getIndex(), parsedUpdate[0], executionTree,
-                               deltaTriples, cancellationHandle, tracer);
+                               deltaTriples, cancellationHandle);
   EXPECT_THAT(deltaTriples, deltaTriplesTestHelpers::NumTriples(2, 0, 2));
 }
 

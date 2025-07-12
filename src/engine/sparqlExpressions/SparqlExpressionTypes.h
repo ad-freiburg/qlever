@@ -13,7 +13,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
 #include "util/TypeTraits.h"

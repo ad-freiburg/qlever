@@ -187,6 +187,7 @@ inline auto IsDeepCopy(const Operation& other) {
       Address(SameTypeId(&other)),
       AD_PROPERTY(Operation, getChildren, Pointwise(Ne(), other.getChildren())),
       AD_PROPERTY(Operation, getCacheKey, Eq(other.getCacheKey())),
+      AD_PROPERTY(Operation, getLimitOffset, Eq(other.getLimitOffset())),
       AD_PROPERTY(Operation, getExternallyVisibleVariableColumns,
                   Eq(other.getExternallyVisibleVariableColumns())));
 }
