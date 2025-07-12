@@ -530,7 +530,7 @@ class SparqlQleverVisitor {
   Variable getNewInternalVariable();
 
   // Helper function to return the next internal variable as a lambda.
-  auto internalVariableGenerator();
+  auto makeInternalVariableGenerator();
 
   // Create a new generated blank node.
   BlankNode newBlankNode();

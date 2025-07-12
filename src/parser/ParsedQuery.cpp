@@ -48,7 +48,7 @@ string SparqlTriple::asString() const {
 // ________________________________________________________________________
 Variable ParsedQuery::addInternalBind(
     sparqlExpression::SparqlExpressionPimpl expression,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
   auto targetVariable = internalVariableGenerator();
@@ -65,7 +65,7 @@ Variable ParsedQuery::addInternalBind(
 // ________________________________________________________________________
 Variable ParsedQuery::addInternalAlias(
     sparqlExpression::SparqlExpressionPimpl expression,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
   auto targetVariable = internalVariableGenerator();
@@ -88,7 +88,7 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(
     SolutionModifiers modifiers,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   // Process groupClause
   addGroupByClause(std::move(modifiers.groupByVariables_),
                    internalVariableGenerator);
@@ -389,7 +389,7 @@ void ParsedQuery::checkUsedVariablesAreVisible(
 // ____________________________________________________________________________
 void ParsedQuery::addGroupByClause(
     std::vector<GroupKey> groupKeys,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   // Deduplicate the group by variables to support e.g. `GROUP BY ?x ?x ?x`.
   // Note: The `GroupBy` class expects the grouped variables to be unique.
   ad_utility::HashSet<Variable> deduplicatedGroupByVars;
@@ -440,7 +440,7 @@ void ParsedQuery::addGroupByClause(
 // ____________________________________________________________________________
 void ParsedQuery::addHavingClause(
     std::vector<SparqlFilter> havingClauses, bool isGroupBy,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   if (!isGroupBy && !havingClauses.empty()) {
     throw InvalidSparqlQueryException(
         "A HAVING clause is only supported in queries with GROUP BY");
@@ -468,7 +468,7 @@ void ParsedQuery::addHavingClause(
 void ParsedQuery::addOrderByClause(
     OrderClause orderClause, bool isGroupBy,
     std::string_view noteForImplicitGroupBy,
-    const std::function<Variable()>& internalVariableGenerator) {
+    InternalVariableGenerator internalVariableGenerator) {
   // The variables that are used in the ORDER BY can also come from aliases in
   // the SELECT clause
   ad_utility::HashSet<Variable> variablesFromAliases;

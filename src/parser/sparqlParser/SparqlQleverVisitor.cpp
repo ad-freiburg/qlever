@@ -77,7 +77,7 @@ Variable Visitor::getNewInternalVariable() {
 }
 
 // _____________________________________________________________________________
-auto Visitor::internalVariableGenerator() {
+auto Visitor::makeInternalVariableGenerator() {
   return [this]() { return getNewInternalVariable(); };
 }
 
@@ -448,7 +448,7 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
         toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             internalVariableGenerator());
+                             makeInternalVariableGenerator());
 
   return query;
 }
@@ -504,7 +504,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // described).
   parsedQuery_ = ParsedQuery{};
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    internalVariableGenerator());
+                                    makeInternalVariableGenerator());
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -538,7 +538,7 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     return solutionModifiers;
   };
   parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
-                                    internalVariableGenerator());
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1539,7 +1539,7 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
-                                    internalVariableGenerator());
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1549,7 +1549,7 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
   query.addSolutionModifiers(visit(ctx->solutionModifier()),
-                             internalVariableGenerator());
+                             makeInternalVariableGenerator());
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
