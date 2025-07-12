@@ -16,8 +16,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
-#include "parser/RdfEscaping.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "rdfTypes/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
@@ -34,7 +34,14 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << s_ << ", p: " << p_ << ", o: " << o_ << "}";
+  os << "{s: " << s_ << ", p: "
+     << std::visit(ad_utility::OverloadCallOperator{
+                       [](const Variable& var) { return var.name(); },
+                       [](const PropertyPath& propertyPath) {
+                         return propertyPath.asString();
+                       }},
+                   p_)
+     << ", o: " << o_ << "}";
   return std::move(os).str();
 }
 
@@ -277,17 +284,16 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple.o_ == variable &&
-          (triple.p_.operation_ == PropertyPath::Operation::IRI &&
-           !isVariable(triple.p_)) &&
-          !triple.p_.iri_.starts_with(
+      auto predicate = triple.getSimplePredicate();
+      if (triple.o_ == variable && predicate.has_value() &&
+          !predicate.value().starts_with(
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
       // TODO<RobinTF> There might be more cases where the variable is matched
       // against a pattern.
       if (triple.s_ == variable || triple.o_ == variable ||
-          (isVariable(triple.p_) && triple.p_.iri_ == variable.name())) {
+          triple.predicateIs(variable)) {
         // If at some point we find a triple using the variable, we know that it
         // is safe to join it with an index scan to filter out non-matching
         // language tags.
@@ -298,8 +304,12 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_.iri_ = ad_utility::convertToLanguageTaggedPredicate(
-        triplePtr->p_.iri_, langTag);
+    AD_CORRECTNESS_CHECK(std::holds_alternative<PropertyPath>(triplePtr->p_));
+    auto& predicate = std::get<PropertyPath>(triplePtr->p_);
+    AD_CORRECTNESS_CHECK(predicate.isIri());
+    predicate =
+        PropertyPath::fromIri(ad_utility::convertToLanguageTaggedPredicate(
+            predicate.getIri(), langTag));
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
@@ -327,9 +337,11 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple(variable,
-                        PropertyPath::fromIri(std::string{LANGUAGE_PREDICATE}),
-                        langEntity);
+    SparqlTriple triple{
+        variable,
+        PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)),
+        langEntity};
     t.push_back(std::move(triple));
   }
   return true;

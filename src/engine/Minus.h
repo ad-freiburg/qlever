@@ -30,10 +30,10 @@ class Minus : public Operation {
   explicit Minus(OnlyForTestingTag) {}
 
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -52,6 +52,9 @@ class Minus : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins a and b using the column defined int joinColumns, storing the

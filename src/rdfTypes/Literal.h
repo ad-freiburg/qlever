@@ -9,8 +9,8 @@
 #include <variant>
 
 #include "backports/concepts.h"
-#include "parser/Iri.h"
 #include "parser/NormalizedString.h"
+#include "rdfTypes/Iri.h"
 
 namespace ad_utility::triple_component {
 // A class to hold literal values.
@@ -93,6 +93,9 @@ class Literal {
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Returns true if the literal has no language tag or datatype suffix
+  bool isPlain() const;
 
   // Erase everything but the substring in the range ['start', 'start'+'length')
   // from the inner content. Note that the start position does not count the

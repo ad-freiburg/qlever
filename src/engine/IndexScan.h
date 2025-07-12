@@ -26,11 +26,17 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
+  // TODO @realHannes:
+  // Remove `PrefilterIndexPair` as a member and set instead a member of type
+  // `ScanSpecAndBlocks` (see CompressedRelation.h) with optionally prefiltered
+  // `BlockMetadataRanges`. This `ScanSpecAndBlocks` member can be passed
+  // to the scan and size-estimate functions in the future making those
+  // evaluations simpler.
   PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
-  vector<float> multiplicity_;
+  std::vector<float> multiplicity_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
   // the "ordinary" subjects, predicates, or objects, as well as the variables
@@ -39,9 +45,6 @@ class IndexScan final : public Operation {
   std::vector<Variable> additionalVariables_;
 
  public:
-  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
@@ -72,7 +75,7 @@ class IndexScan final : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
@@ -161,7 +164,7 @@ class IndexScan final : public Operation {
   }
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimitOffset() const override { return true; }
 
   Permutation::Enum permutation() const { return permutation_; }
 
@@ -177,12 +180,15 @@ class IndexScan final : public Operation {
   void updateRuntimeInfoForLazyScan(
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
   Result computeResult(bool requestLaziness) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
   // `IndexScan`.

@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
 #include <gmock/gmock.h>
 
 #include <optional>
@@ -50,17 +51,39 @@ void expectRtiHasDimensions(
 
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
-  NeutralElementOperation n{getQec()};
-  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
   LimitOffsetClause l;
-  l._limit = 20;
-  n.setLimit(l);
-  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
-  EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+  {
+    NeutralElementOperation n{getQec()};
+    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
+    l._limit = 20;
+    n.applyLimitOffset(l);
+    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
+    EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
+  }
 
-  l._offset = 34;
-  n.setLimit(l);
-  EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+  {
+    NeutralElementOperation n{getQec()};
+    l._offset = 34;
+    n.applyLimitOffset(l);
+    EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
+  }
+}
+
+// ________________________________________________
+TEST(OperationTest, limitAndOffsetAreStacked) {
+  NeutralElementOperation n{getQec()};
+
+  n.applyLimitOffset({std::nullopt, 1});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(std::nullopt, 1));
+
+  n.applyLimitOffset({20, 2});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
+
+  n.applyLimitOffset({std::nullopt, 4});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 7));
+
+  n.applyLimitOffset({10, 8});
+  EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(10, 15));
 }
 
 // ________________________________________________
@@ -113,6 +136,36 @@ TEST(OperationTest, getResultOnlyCached) {
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
   qec->getQueryTreeCache().clearAll();
+}
+
+// _____________________________________________________________________________
+TEST(OperationTest, getLazyResultIsCachedWhenPinned) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  absl::Cleanup restorePinResult{[qec]() { qec->_pinResult = false; }};
+  qec->_pinResult = true;
+  ValuesForTesting operation{qec, makeIdTableFromVector({{1}}), {std::nullopt}};
+
+  {
+    auto result = operation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
+
+  {
+    auto result =
+        operation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
+    EXPECT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(operation.runtimeInfo().cacheStatus_, CacheStatus::computed);
+    EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+    EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+    qec->getQueryTreeCache().clearAll();
+  }
 }
 
 // _____________________________________________________________________________
@@ -273,7 +326,7 @@ TEST(OperationTest, estimatesForCachedResults) {
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
   NeutralElementOperation operation{getQec()};
-  operation.setLimit({12, 3});
+  operation.applyLimitOffset({12, 3});
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
@@ -395,7 +448,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   EXPECT_GE(rti.originalOperationTime_, timeout);
 
   expectAtEachStageOfGenerator(
-      std::move(result.idTables()),
+      result.idTables(),
       {[&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 1);
@@ -471,7 +524,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 
   EXPECT_EQ(updateCallCounter, 1);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
                                    [&]() { EXPECT_EQ(updateCallCounter, 2); },
@@ -503,7 +556,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
         operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
 
     EXPECT_EQ(updateCallCounter, 1);
-    auto& idTables = result.idTables();
+    auto idTables = result.idTables();
     // Only consume partially
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
@@ -523,7 +576,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
 
-  valuesForTesting.setLimit({._limit = 1, ._offset = 1});
+  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1});
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
@@ -536,7 +589,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   expectRtiHasDimensions(rti, 0, 0);
   expectRtiHasDimensions(childRti, 0, 0);
 
-  expectAtEachStageOfGenerator(std::move(result.idTables()),
+  expectAtEachStageOfGenerator(result.idTables(),
                                {[&]() {
                                   expectRtiHasDimensions(rti, 2, 0);
                                   expectRtiHasDimensions(childRti, 2, 1);

@@ -214,12 +214,14 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
-  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+  bool supportsLimit() const {
+    return getRootOperation()->supportsLimitOffset();
+  }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    getRootOperation()->setLimit(limitOffsetClause);
+  void applyLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->applyLimitOffset(limitOffsetClause);
     // Setting the limit invalidates the `cacheKey` as well as the
     // `sizeEstimate`.
     cacheKey_ = getRootOperation()->getCacheKey();

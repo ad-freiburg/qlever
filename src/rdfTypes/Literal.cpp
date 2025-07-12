@@ -2,16 +2,21 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
 
-#include "parser/Literal.h"
+#include "rdfTypes/Literal.h"
 
 #include <utility>
 #include <variant>
 
-#include "parser/LiteralOrIri.h"
+#include "backports/shift.h"
+#include "rdfTypes/RdfEscaping.h"
+#include "util/Exception.h"
+#include "util/OverloadCallOperator.h"
 
 static constexpr char quote{'"'};
 static constexpr char at{'@'};
 static constexpr char hat{'^'};
+using std::string;
+using namespace std::string_view_literals;
 
 namespace ad_utility::triple_component {
 // __________________________________________
@@ -69,7 +74,7 @@ Literal Literal::fromEscapedRdfLiteral(
 // __________________________________________
 Literal Literal::literalWithoutQuotes(
     std::string_view rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
 
@@ -136,12 +141,15 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // __________________________________________
+bool Literal::isPlain() const { return beginOfSuffix_ == content_.size(); }
+
+// __________________________________________
 void Literal::setSubstr(std::size_t start, std::size_t length) {
   std::size_t contentLength =
       beginOfSuffix_ - 2;  // Ignore the two quotation marks
   AD_CONTRACT_CHECK(start <= contentLength && start + length <= contentLength);
   auto contentBegin = content_.begin() + 1;  // Ignore the leading quote
-  std::shift_left(contentBegin, contentBegin + start + length, start);
+  ql::shift_left(contentBegin, contentBegin + start + length, start);
   content_.erase(length + 1, contentLength - length);
   beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
 }

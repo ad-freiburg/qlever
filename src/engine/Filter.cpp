@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/RuntimeParameters.h"
 
 using std::endl;
 using std::string;
@@ -32,7 +33,9 @@ Filter::Filter(QueryExecutionContext* qec,
   _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
-  setPrefilterExpressionForChildren();
+  if (RuntimeParameters().get<"enable-prefilter-on-index-scans">()) {
+    setPrefilterExpressionForChildren();
+  }
 }
 
 // _____________________________________________________________________________
@@ -93,8 +96,8 @@ Result Filter::computeResult(bool requestLaziness) {
   IdTable result{width, getExecutionContext()->getAllocator()};
 
   LocalVocab resultLocalVocab{};
-  ad_utility::callFixedSize(
-      width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
+  ad_utility::callFixedSizeVi(
+      width, [this, &subRes, &result, &resultLocalVocab](auto WIDTH) {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
           computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
                                    pair.localVocab_, subRes->sortedBy());
@@ -115,11 +118,11 @@ CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
-  auto impl = [this, &result, &idTable, &localVocab, &sortedBy]<int WIDTH> {
+  auto impl = [this, &result, &idTable, &localVocab, &sortedBy](auto WIDTH) {
     return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable), localVocab,
                                           std::move(sortedBy));
   };
-  ad_utility::callFixedSize(width, impl);
+  ad_utility::callFixedSizeVi(width, impl);
   return result;
 }
 

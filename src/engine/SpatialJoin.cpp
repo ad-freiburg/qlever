@@ -36,8 +36,11 @@
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SpatialJoinConfiguration config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-    std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec), config_{std::move(config)} {
+    std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
+    bool substitutesFilterOp)
+    : Operation(qec),
+      config_{std::move(config)},
+      substitutesFilterOp_{substitutesFilterOp} {
   if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }
@@ -53,10 +56,12 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
   std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
     sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       std::move(child), childRight_);
+                                       std::move(child), childRight_,
+                                       substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
     sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                       childLeft_, std::move(child));
+                                       childLeft_, std::move(child),
+                                       substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -75,8 +80,8 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
 bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 
 // ____________________________________________________________________________
-std::optional<size_t> SpatialJoin::getMaxDist() const {
-  auto visitor = [](const auto& config) -> std::optional<size_t> {
+std::optional<double> SpatialJoin::getMaxDist() const {
+  auto visitor = [](const auto& config) -> std::optional<double> {
     return config.maxDist_;
   };
   return std::visit(visitor, config_.task_);
@@ -112,7 +117,7 @@ std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getCacheKeyImpl() const {
+std::string SpatialJoin::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
     std::ostringstream os;
     // This includes all attributes that change the result
@@ -166,7 +171,7 @@ string SpatialJoin::getCacheKeyImpl() const {
 }
 
 // ____________________________________________________________________________
-string SpatialJoin::getDescriptor() const {
+std::string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
   auto visitor = [this](const auto& config) -> std::string {
     using T = std::decay_t<decltype(config)>;
@@ -179,8 +184,9 @@ string SpatialJoin::getDescriptor() const {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
     } else if constexpr (std::is_same_v<T, SpatialJoinConfig>) {
-      return absl::StrCat("Spatial Join ", left, " to ", right, " of type ",
-                          config.joinType_);
+      return absl::StrCat(
+          "Spatial Join of ", left, " and ", right, " using ",
+          SpatialJoinTypeString.at(static_cast<int>(config.joinType_)));
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -396,13 +402,21 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
+  // Swap sides for within spatial join type computed using contains
+  auto swapSides = config_.joinType_.has_value() &&
+                   config_.joinType_.value() == SpatialJoinType::WITHIN;
+  auto childLeft = swapSides ? childRight_ : childLeft_;
+  auto childRight = swapSides ? childLeft_ : childRight_;
+
   // Input tables
-  auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
-  auto [idTableRight, resultRight] = getIdTable(childRight_);
+  auto [idTableLeft, resultLeft] = getIdTable(childLeft);
+  auto [idTableRight, resultRight] = getIdTable(childRight);
 
   // Input table columns for the join
-  ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
-  ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
+  ColumnIndex leftJoinCol =
+      childLeft->getVariableColumn(swapSides ? config_.right_ : config_.left_);
+  ColumnIndex rightJoinCol =
+      childRight->getVariableColumn(swapSides ? config_.left_ : config_.right_);
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());

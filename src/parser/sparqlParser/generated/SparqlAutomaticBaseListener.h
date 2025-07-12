@@ -14,11 +14,6 @@
  */
 class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
  public:
-  virtual void enterQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* /*ctx*/) override {}
-  virtual void exitQueryOrUpdate(
-      SparqlAutomaticParser::QueryOrUpdateContext* /*ctx*/) override {}
-
   virtual void enterQuery(
       SparqlAutomaticParser::QueryContext* /*ctx*/) override {}
   virtual void exitQuery(

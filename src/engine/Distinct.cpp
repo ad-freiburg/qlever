@@ -2,7 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Distinct.h"
+#include "engine/Distinct.h"
+
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
@@ -77,9 +80,8 @@ Result Distinct::computeResult(bool requestLaziness) {
             subRes->getSharedLocalVocab()};
   }
 
-  auto generator =
-      CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
-                      std::move(subRes->idTables()), !requestLaziness);
+  auto generator = CALL_FIXED_SIZE(width, &Distinct::lazyDistinct, this,
+                                   subRes->idTables(), !requestLaziness);
   return requestLaziness
              ? Result{std::move(generator), resultSortedOn()}
              : Result{cppcoro::getSingleElement(std::move(generator)),

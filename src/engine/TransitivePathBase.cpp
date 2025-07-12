@@ -14,12 +14,15 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/Distinct.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -33,7 +36,8 @@ TransitivePathBase::TransitivePathBase(
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
-      maxDist_(maxDist) {
+      maxDist_(maxDist),
+      activeGraphs_{std::move(activeGraphs)} {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   AD_CORRECTNESS_CHECK(subtree_);
   if (lhs_.isVariable()) {
@@ -54,12 +58,10 @@ TransitivePathBase::TransitivePathBase(
       minDist_ = 1;
     } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
       boundVariableIsForEmptyPath_ = true;
-      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, std::move(activeGraphs)),
-                               0);
+      lhs_.treeAndCol_.emplace(makeEmptyPathSide(qec, activeGraphs_), 0);
     } else if (!startingSide.isVariable()) {
       startingSide.treeAndCol_.emplace(
-          joinWithIndexScan(qec, std::move(activeGraphs), startingSide.value_),
-          0);
+          joinWithIndexScan(qec, activeGraphs_, startingSide.value_), 0);
     }
   }
 
@@ -101,13 +103,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
       qec,
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs))),
       joinWithValues(selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs))));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});
@@ -115,9 +115,10 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::joinWithIndexScan(
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
-    QueryExecutionContext* qec, Graphs activeGraphs) {
+    QueryExecutionContext* qec, Graphs activeGraphs,
+    std::optional<Variable> variable) {
   // Dummy variables to get a full scan of the index.
-  auto x = makeInternalVariable("x");
+  auto x = std::move(variable).value_or(makeInternalVariable("x"));
   auto y = makeInternalVariable("y");
   auto z = makeInternalVariable("z");
   // TODO<RobinTF> Ideally we could tell the `IndexScan` to not materialize ?y
@@ -132,13 +133,11 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeEmptyPathSide(
       qec,
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::SPO,
-          SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
-                       TripleComponent{z}},
+          SparqlTripleSimple{TripleComponent{x}, y, TripleComponent{z}},
           activeGraphs)),
       selectXVariable(ad_utility::makeExecutionTree<IndexScan>(
           qec, Permutation::Enum::OPS,
-          SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
-                       TripleComponent{x}},
+          SparqlTripleSimple{TripleComponent{z}, y, TripleComponent{x}},
           activeGraphs)));
   return ad_utility::makeExecutionTree<Distinct>(qec, std::move(allValues),
                                                  std::vector<ColumnIndex>{0});
@@ -164,12 +163,12 @@ TransitivePathBase::decideDirection() {
 // _____________________________________________________________________________
 Result::Generator TransitivePathBase::fillTableWithHull(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    size_t skipCol, bool yieldOnce, size_t inputWidth) const {
-  return ad_utility::callFixedSize(
+    bool yieldOnce, size_t inputWidth) const {
+  return ad_utility::callFixedSizeVi(
       std::array{inputWidth, getResultWidth()},
-      [&]<size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>() {
+      [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
         return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
-            std::move(hull), startSideCol, targetSideCol, yieldOnce, skipCol);
+            std::move(hull), startSideCol, targetSideCol, yieldOnce);
       });
 }
 
@@ -178,7 +177,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
                                                         size_t startSideCol,
                                                         size_t targetSideCol,
                                                         bool yieldOnce) const {
-  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
+  return ad_utility::callFixedSizeVi(getResultWidth(), [&](auto WIDTH) {
     return fillTableWithHullImpl<0, WIDTH>(std::move(hull), startSideCol,
                                            targetSideCol, yieldOnce);
   });
@@ -188,7 +187,7 @@ Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::Generator TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-    bool yieldOnce, size_t skipCol) const {
+    bool yieldOnce) const {
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
@@ -202,7 +201,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       table.reserve(linkedNodes.size());
     }
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
-    if (idTable != nullptr) {
+    if (idTable.has_value()) {
       inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
     for (Id linkedNode : linkedNodes) {
@@ -212,7 +211,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 
       if (inputView.has_value()) {
         copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
-                                               inputRow, outputRow, skipCol);
+                                               inputRow, outputRow);
       }
 
       outputRow++;
@@ -305,7 +304,12 @@ VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 bool TransitivePathBase::knownEmptyResult() {
-  return subtree_->knownEmptyResult();
+  auto sideHasKnownEmptyResult = [this]() {
+    auto tree = decideDirection().first.treeAndCol_;
+    return tree.has_value() && tree.value().first->knownEmptyResult();
+  };
+  return (subtree_->knownEmptyResult() && minDist_ > 0) ||
+         sideHasKnownEmptyResult();
 }
 
 // _____________________________________________________________________________
@@ -416,11 +420,49 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindRightSide(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
+    size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
+  auto [originalVar, info] =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol);
+
+  // If we're not explicitly handling the empty path, the first step will
+  // already filter out non-matching values.
+  if (minDist_ > 0) {
+    return leftOrRightOp;
+  }
+
+  // Remove undef values, these are definitely not in the graph, and are
+  // problematic when joining.
+  if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
+    using namespace sparqlExpression;
+    SparqlExpressionPimpl pimpl{
+        makeBoundExpression(std::make_unique<VariableExpression>(originalVar)),
+        absl::StrCat("BOUND(", originalVar.name(), ")")};
+    leftOrRightOp = ad_utility::makeExecutionTree<Filter>(
+        getExecutionContext(), std::move(leftOrRightOp), std::move(pimpl));
+    AD_CORRECTNESS_CHECK(
+        inputCol == leftOrRightOp->getVariableColumn(originalVar),
+        "The column index should not change when applying a filter.");
+  }
+
+  // If we cannot guarantee the values are part of the graph, we have to join
+  // with it first.
+  if (!leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+          originalVar)) {
+    leftOrRightOp = ad_utility::makeExecutionTree<Join>(
+        getExecutionContext(), std::move(leftOrRightOp),
+        makeEmptyPathSide(getExecutionContext(), activeGraphs_, originalVar),
+        inputCol, 0);
+    inputCol = leftOrRightOp->getVariableColumn(originalVar);
+  }
+  return leftOrRightOp;
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
-  // TODO<RobinTF> Join tree with makeEmptyPathSide if minDist_ == 0 and we
-  // can't verify the column originates from an actual triple in the index.
+  leftOrRightOp = matchWithKnowledgeGraph(inputCol, std::move(leftOrRightOp));
   // Enforce required sorting of `leftOrRightOp`.
   leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
                                                        {inputCol});
@@ -495,18 +537,11 @@ bool TransitivePathBase::isBoundOrId() const {
 template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
-                                     size_t inputRow, size_t outputRow,
-                                     size_t skipCol) {
+                                     size_t inputRow, size_t outputRow) {
   size_t inCol = 0;
   size_t outCol = 2;
-  AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 2 == outputTable.numColumns());
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
-    if (skipCol == inCol) {
-      inCol++;
-      continue;
-    }
-
     outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;
@@ -514,7 +549,8 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-void TransitivePathBase::insertIntoMap(Map& map, Id key, Id value) const {
-  auto [it, success] = map.try_emplace(key, allocator());
-  it->second.insert(value);
+bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  return variable == lhs_.value_ || variable == rhs_.value_;
 }

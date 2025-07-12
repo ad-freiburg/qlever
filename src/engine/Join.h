@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_ENGINE_JOIN_H
 #define QLEVER_SRC_ENGINE_JOIN_H
 
+#include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
@@ -37,7 +38,7 @@ class Join : public Operation {
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
@@ -66,6 +67,9 @@ class Join : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
+
+  bool columnOriginatesFromGraphOrUndef(
+      const Variable& variable) const override;
 
   /**
    * @brief Joins IdTables a and b on join column jc2, returning
@@ -96,7 +100,7 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  CPP_template_2(typename ActionT)(
+  CPP_template(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>>) Result
@@ -126,7 +130,7 @@ class Join : public Operation {
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

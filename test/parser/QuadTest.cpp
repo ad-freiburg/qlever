@@ -21,7 +21,7 @@ TEST(QuadTest, getQuads) {
              ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.toTriplesWithGraph(),
+        EXPECT_THAT(quads.toTriplesWithGraph(std::monostate{}),
                     testing::UnorderedElementsAreArray(expected));
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
@@ -65,7 +65,7 @@ TEST(QuadTest, getOperations) {
     return {t, t, t};
   };
   auto SparqlTriple = [](const TripleComponent& t) -> ::SparqlTriple {
-    return {t, t.toString(), t};
+    return {t, t.getIri(), t};
   };
   auto GraphTriples =
       [](const vector<::SparqlTriple>& triples,

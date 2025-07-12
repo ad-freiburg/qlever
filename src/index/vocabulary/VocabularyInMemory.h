@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
@@ -43,10 +42,10 @@ class VocabularyInMemory
 
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
-  void open(const string& fileName);
+  void open(const std::string& fileName);
 
   /// Write the vocabulary to a file.
-  void writeToFile(const string& fileName) const;
+  void writeToFile(const std::string& fileName) const;
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
@@ -67,20 +66,27 @@ class VocabularyInMemory
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the
   /// documentation of `CompactVectorOfStrings` for details.
-  struct WordWriter {
+  struct WordWriter : public WordWriterBase {
     typename Words::Writer writer_;
     uint64_t index_ = 0;
-    std::string readableName_ = "";
 
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
     uint64_t operator()(std::string_view str,
-                        [[maybe_unused]] bool isExternalDummy = false) {
+                        [[maybe_unused]] bool isExternalDummy) override {
       writer_.push(str.data(), str.size());
       return index_++;
     }
 
-    void finish() { writer_.finish(); }
-    std::string& readableName() { return readableName_; }
+    ~WordWriter() override {
+      if (!finishWasCalled()) {
+        ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                      "Calling `finish` from the destructor of "
+                                      "`VocabularyInMemory::WordWriter`");
+      }
+    }
+
+   private:
+    void finishImpl() override { writer_.finish(); }
   };
 
   // Return a `unique_ptr<WordWriter>` that directly writes the words to the
