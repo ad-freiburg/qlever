@@ -14,7 +14,6 @@
 #include <utility>
 
 #include "backports/algorithm.h"
-#include "index/FTSAlgorithms.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
 #include "util/MmapVector.h"
@@ -103,63 +102,6 @@ IdTable IndexImpl::getEntityMentionsForWord(
   AD_CORRECTNESS_CHECK(!tbmds.empty());
   return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl, tbmds,
                                allocator, TextScanMode::EntityScan);
-}
-
-// _____________________________________________________________________________
-CPP_template(typename Reader)(requires ad_utility::InvocableWithExactReturnType<
-                              Reader, IdTable, const TextBlockMetaData&,
-                              const ad_utility::AllocatorWithLimit<Id>&,
-                              const ad_utility::File&, TextScoringMetric>)
-    IdTable IndexImpl::mergeTextBlockResults(
-        const Reader& reader,
-        const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
-        const ad_utility::AllocatorWithLimit<Id>& allocator,
-        TextScanMode textScanMode) const {
-  AD_CONTRACT_CHECK(tbmds.size() > 0);
-  // Collect all blocks as IdTables
-  vector<IdTable> partialResults;
-  for (const auto& tbmd : tbmds) {
-    IdTable partialResult{allocator};
-    partialResult =
-        reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
-    if (textScanMode == TextScanMode::WordScan && tbmd.hasToBeFiltered_) {
-      AD_CORRECTNESS_CHECK(tbmd.optIdRange_.has_value());
-      partialResult =
-          FTSAlgorithms::filterByRange(tbmd.optIdRange_.value(), partialResult);
-    }
-    partialResults.push_back(std::move(partialResult));
-  }
-  // If only one block was requested return the IdTable
-  if (partialResults.size() == 1) {
-    return std::move(partialResults.at(0));
-  }
-  // Combine the partial results to one IdTable
-  IdTable result{3, allocator};
-  result.reserve(std::accumulate(partialResults.begin(), partialResults.end(),
-                                 size_t{0},
-                                 [](size_t acc, const IdTable& partialResult) {
-                                   return acc + partialResult.numRows();
-                                 }));
-  for (const auto& partialResult : partialResults) {
-    result.insertAtEnd(partialResult);
-  }
-  auto toSort = std::move(result).toStatic<3>();
-  // Sort the table
-  ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
-    return ql::ranges::lexicographical_compare(
-        std::begin(a), std::end(a), std::begin(b), std::end(b),
-        [](const Id& x, const Id& y) {
-          return x.compareWithoutLocalVocab(y) < 0;
-        });
-  });
-  // If not entitySearch don't filter duplicates
-  if (textScanMode == TextScanMode::WordScan) {
-    return std::move(toSort).toDynamic<>();
-  }
-  // Filter duplicates
-  auto [newEnd, _] = std::ranges::unique(toSort);
-  toSort.erase(newEnd, toSort.end());
-  return std::move(toSort).toDynamic<>();
 }
 
 // _____________________________________________________________________________
