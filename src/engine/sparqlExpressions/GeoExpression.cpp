@@ -51,6 +51,11 @@ NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
+NARY_EXPRESSION(GeometryNExpression, 2,
+                FV<ad_utility::WktGeometryN,
+                   // TODO use GeoPointOrWktValueGetter
+                   LiteralValueGetterWithoutStrFunction, IntValueGetter>);
+
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(
     GeoRelationExpression, 2,
@@ -115,6 +120,13 @@ SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child) {
 // _____________________________________________________________________________
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child) {
   return std::make_unique<GeometryTypeExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2) {
+  return std::make_unique<GeometryNExpression>(std::move(child1),
+                                               std::move(child2));
 }
 
 // _____________________________________________________________________________
