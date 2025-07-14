@@ -196,7 +196,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   boost::url url = urlResult.value();
   // `http-graph-store` is the (currently fixed) prefix for the Graph Store
   // Protocol with direct graph identification.
-  if (url.segments().front() == "http-graph-store") {
+  if (!url.segments().empty() && url.segments().front() == "http-graph-store") {
     return parseGraphStoreProtocolIndirect(request);
   }
 
