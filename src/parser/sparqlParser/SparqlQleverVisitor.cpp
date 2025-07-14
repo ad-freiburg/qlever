@@ -41,6 +41,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
@@ -184,13 +185,19 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
+  using enum ad_utility::BoundingCoordinate;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
+      {"geometryType", &makeGeometryTypeExpression},
+      {"minX", &makeBoundingCoordinateExpression<MIN_X>},
+      {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
+      {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>},
       {"metricLength", &makeMetricLengthExpression},
-      {"geometryType", &makeGeometryTypeExpression}};
+  };
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
@@ -202,7 +209,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
       {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
       {"sfEquals", &makeGeoRelationExpression<EQUALS>},
-      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);

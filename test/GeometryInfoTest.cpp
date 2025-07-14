@@ -36,9 +36,8 @@ constexpr std::string_view litCollection =
     "\"GEOMETRYCOLLECTION(POLYGON((2 4,8 4,8 6,2 6,2 4)), LINESTRING(2 2, 4 4),"
     "POINT(3 4))\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
-// TODO<#1951>
-// constexpr std::string_view litInvalid =
-//     "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalid =
+    "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
@@ -106,9 +105,8 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   GeometryInfo exp7{7, {{2, 2}, {6, 8}}, {5, 5}, {2090456}};
   checkGeoInfo(g7, exp7);
 
-  // TODO<#1951>
-  // auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
-  // checkGeoInfo(g8, std::nullopt);
+  auto g8 = GeometryInfo::fromWktLiteral(litInvalid);
+  checkGeoInfo(g8, std::nullopt);
 }
 
 // ____________________________________________________________________________
@@ -148,6 +146,23 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
   ASSERT_EQ(bb3.asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
+  using enum ad_utility::BoundingCoordinate;
+
+  BoundingBox bb1{{2, 1}, {4, 3}};
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_X>(), 1, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MIN_Y>(), 2, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_X>(), 3, 0.0001);
+  EXPECT_NEAR(bb1.getBoundingCoordinate<MAX_Y>(), 4, 0.0001);
+
+  BoundingBox bb2{{-20, -5}, {-4, -3}};
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_X>(), -5, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MIN_Y>(), -20, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_X>(), -3, 0.0001);
+  EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_Y>(), -4, 0.0001);
 }
 
 // ____________________________________________________________________________

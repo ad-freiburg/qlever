@@ -16,6 +16,7 @@
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Constants.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 
 // Factory functions for all kinds of expressions that only have other
@@ -72,6 +73,10 @@ SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
+
+template <ad_utility::BoundingCoordinate RequestedCoordinate>
+SparqlExpression::Ptr makeBoundingCoordinateExpression(
+    SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);

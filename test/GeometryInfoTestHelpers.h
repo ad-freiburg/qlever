@@ -74,8 +74,11 @@ inline void checkGeoInfo(std::optional<GeometryInfo> actual,
 }
 
 // ____________________________________________________________________________
-inline void checkRequestedInfoForInstance(GeometryInfo gi,
-                                          Loc sourceLocation = Loc::current()) {
+inline void checkRequestedInfoForInstance(
+    std::optional<GeometryInfo> optGeoInfo,
+    Loc sourceLocation = Loc::current()) {
+  ASSERT_TRUE(optGeoInfo.has_value());
+  auto gi = optGeoInfo.value();
   auto l = generateLocationTrace(sourceLocation);
   checkGeoInfo(gi, gi.getRequestedInfo<GeometryInfo>());
   checkBoundingBox(gi.getBoundingBox(), gi.getRequestedInfo<BoundingBox>(),
@@ -91,7 +94,9 @@ inline void checkRequestedInfoForInstance(GeometryInfo gi,
 inline void checkRequestedInfoForWktLiteral(
     const std::string_view& wkt, Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  auto gi = GeometryInfo::fromWktLiteral(wkt);
+  auto optGeoInfo = GeometryInfo::fromWktLiteral(wkt);
+  ASSERT_TRUE(optGeoInfo.has_value());
+  auto gi = optGeoInfo.value();
   checkGeoInfo(gi, GeometryInfo::getRequestedInfo<GeometryInfo>(wkt));
   checkBoundingBox(gi.getBoundingBox(),
                    GeometryInfo::getRequestedInfo<BoundingBox>(wkt));
