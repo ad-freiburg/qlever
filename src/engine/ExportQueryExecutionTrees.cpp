@@ -1095,25 +1095,25 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   result->logResultSize();
   AD_LOG_DEBUG << "Starting binary export..." << std::endl;
 
+  // Magic bytes
   co_yield "QLEVER.EXPORT";
   // Export format version
   co_yield raw(static_cast<uint16_t>(0));
-
-  auto vars = selectClause.getSelectedVariablesAsStrings();
-
-  // Export number of columns as a 16 bit unsigned int.
-  co_yield raw(static_cast<uint16_t>(vars.size()));
-
-  // Export actual variable names
-  for (const std::string& variableName : vars) {
-    co_yield raw(variableName.size());
-    co_yield variableName;
-  }
 
   // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
+
+  // Export number of columns as a 16 bit unsigned int.
+  co_yield raw(static_cast<uint16_t>(columns.size()));
+
+  // Export actual variable names
+  for (const auto& optional : columns) {
+    const auto& variableName = optional.value().variable_;
+    co_yield raw(variableName.size());
+    co_yield variableName;
+  }
 
   // Use special undefined value that's not actually used as a real value.
   Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
@@ -1156,7 +1156,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   }
 
   // If there are no variables, just export the total number of rows
-  if (vars.empty()) {
+  if (columns.empty()) {
     co_yield raw(resultSize);
   }
 }
