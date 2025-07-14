@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -41,7 +41,8 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/TypeIdentity.h"
@@ -65,8 +66,9 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 namespace {
-constexpr std::string_view a =
-    "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+const ad_utility::triple_component::Iri a =
+    ad_utility::triple_component::Iri::fromIriref(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
 }  // namespace
 
 // _____________________________________________________________________________
@@ -183,11 +185,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
+  using enum ad_utility::BoundingCoordinate;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
       {"centroid", &makeCentroidExpression},
-      {"envelope", &makeEnvelopeExpression}};
+      {"envelope", &makeEnvelopeExpression},
+      {"geometryType", &makeGeometryTypeExpression},
+      {"minX", &makeBoundingCoordinateExpression<MIN_X>},
+      {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
+      {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
@@ -198,7 +206,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
       {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
       {"sfEquals", &makeGeoRelationExpression<EQUALS>},
-      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
@@ -378,7 +387,9 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return item;
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return PropertyPath::fromIri(item.toSparql());
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              item.toSparql()));
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
@@ -1397,14 +1408,15 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  string langtag =
+  std::string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   return TripleComponent::Iri::fromIriref(
-      langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName()));
+      langtag +
+      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IrirefContext* ctx) const {
+std::string Visitor::visit(Parser::IrirefContext* ctx) const {
   if (baseIri_.empty()) {
     return ctx->getText();
   }
@@ -1417,13 +1429,13 @@ string Visitor::visit(Parser::IrirefContext* ctx) const {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PrefixedNameContext* ctx) {
+std::string Visitor::visit(Parser::PrefixedNameContext* ctx) {
   return visitAlternative<std::string>(ctx->pnameLn(), ctx->pnameNs());
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameLnContext* ctx) {
-  string text = ctx->getText();
+std::string Visitor::visit(Parser::PnameLnContext* ctx) {
+  std::string text = ctx->getText();
   auto pos = text.find(':');
   auto pnameNS = text.substr(0, pos);
   auto pnLocal = text.substr(pos + 1);
@@ -1439,7 +1451,7 @@ string Visitor::visit(Parser::PnameLnContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameNsContext* ctx) {
+std::string Visitor::visit(Parser::PnameNsContext* ctx) {
   auto text = ctx->getText();
   auto prefix = text.substr(0, text.length() - 1);
   if (!prefixMap_.contains(prefix)) {
@@ -1828,7 +1840,7 @@ GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   } else {
     // Special keyword 'a'
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
-    return GraphTerm{Iri{std::string{a}}};
+    return GraphTerm{Iri{a.toStringRepresentation()}};
   }
 }
 
@@ -1870,7 +1882,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
   }
 
   if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-    string name = object.toSparql();
+    std::string name = object.toSparql();
     if (!((name.starts_with('"') && name.ends_with('"')) ||
           (name.starts_with('\'') && name.ends_with('\'')))) {
       reportError(ctx,
@@ -1996,10 +2008,7 @@ PathObjectPairsAndTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::VerbPathContext* ctx) {
-  PropertyPath p = visit(ctx->path());
-  // TODO move computeCanBeNull into PropertyPath constructor.
-  p.computeCanBeNull();
-  return p;
+  return visit(ctx->path());
 }
 
 // ____________________________________________________________________________________
@@ -2017,7 +2026,9 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(term)) {
       return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(term.toSparql());
+      return PropertyPath::fromIri(
+          ad_utility::triple_component::Iri::fromStringRepresentation(
+              term.toSparql()));
     }
   };
   for (auto& triple : objectList.second) {
@@ -2070,12 +2081,20 @@ PropertyPath Visitor::visit(Parser::PathContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathAlternativeContext* ctx) {
-  return PropertyPath::makeAlternative(visitVector(ctx->pathSequence()));
+  auto alternatives = visitVector(ctx->pathSequence());
+  if (alternatives.size() == 1) {
+    return std::move(alternatives.at(0));
+  }
+  return PropertyPath::makeAlternative(std::move(alternatives));
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
-  return PropertyPath::makeSequence(visitVector(ctx->pathEltOrInverse()));
+  auto sequence = visitVector(ctx->pathEltOrInverse());
+  if (sequence.size() == 1) {
+    return std::move(sequence.at(0));
+  }
+  return PropertyPath::makeSequence(std::move(sequence));
 }
 
 // ____________________________________________________________________________________
@@ -2083,8 +2102,8 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
-    std::string modifier = ctx->pathMod()->getText();
-    p = PropertyPath::makeModified(p, modifier);
+    auto [min, max] = visit(ctx->pathMod());
+    p = PropertyPath::makeWithLength(std::move(p), min, max);
   }
   return p;
 }
@@ -2101,20 +2120,22 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::PathModContext*) {
-  // This rule is only used by the `PathElt` rule which should have handled the
-  // content of this rule.
-  AD_FAIL();
+std::pair<size_t, size_t> Visitor::visit(Parser::PathModContext* ctx) {
+  std::string mod = ctx->getText();
+  if (mod == "*") {
+    return {0, std::numeric_limits<size_t>::max()};
+  } else if (mod == "+") {
+    return {1, std::numeric_limits<size_t>::max()};
+  } else {
+    AD_CORRECTNESS_CHECK(mod == "?");
+    return {0, 1};
+  }
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
-  // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
-  //  simple `return visit(...)`. Then the three cases which are not the
-  //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
-    return PropertyPath::fromIri(
-        std::string{visit(ctx->iri()).toStringRepresentation()});
+    return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -2122,7 +2143,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
-    return PropertyPath::fromIri(std::string{a});
+    return PropertyPath::fromIri(a);
   }
 }
 
@@ -2133,9 +2154,7 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
-  std::string iri = ctx->iri()
-                        ? std::move(visit(ctx->iri()).toStringRepresentation())
-                        : std::string{a};
+  auto iri = ctx->iri() ? visit(ctx->iri()) : a;
   const std::string& text = ctx->getText();
   AD_CORRECTNESS_CHECK((iri == a) == (text == "a" || text == "^a"));
   auto propertyPath = PropertyPath::fromIri(std::move(iri));
@@ -2232,8 +2251,10 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::CollectionPathContext* ctx) {
   return toRdfCollection(
-      visitVector(ctx->graphNodePath()),
-      [](std::string iri) { return PropertyPath::fromIri(std::move(iri)); });
+      visitVector(ctx->graphNodePath()), [](std::string_view iri) {
+        return PropertyPath::fromIri(
+            ad_utility::triple_component::Iri::fromIriref(iri));
+      });
 }
 
 // ____________________________________________________________________________________
@@ -2886,7 +2907,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  string ret = ctx->string()->getText();
+  std::string ret = ctx->string()->getText();
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
@@ -2954,7 +2975,8 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     if (isInsideConstructTriples_) {
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
+      const std::string label =
+          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
       return BlankNode{false, label};

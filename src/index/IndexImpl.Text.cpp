@@ -46,7 +46,7 @@ void IndexImpl::addTextFromOnDiskIndex() {
   std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
     f.close();
-    docsDB_.init(string(onDiskBase_ + ".text.docsDB"));
+    docsDB_.init(std::string(onDiskBase_ + ".text.docsDB"));
     LOG(INFO) << "Registered text records: #records = " << docsDB_._size
               << std::endl;
   } else {
@@ -66,7 +66,7 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
-  textIndexFile_.open(string(onDiskBase_ + ".text.index").c_str(), "r");
+  textIndexFile_.open(std::string(onDiskBase_ + ".text.index").c_str(), "r");
 }
 
 // _____________________________________________________________________________
@@ -76,7 +76,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 
 // _____________________________________________________________________________
 IdTable IndexImpl::getWordPostingsForTerm(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
@@ -99,7 +99,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
 
 // _____________________________________________________________________________
 IdTable IndexImpl::getEntityMentionsForWord(
-    const string& term,
+    const std::string& term,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optTbmd.has_value()) {
@@ -112,7 +112,7 @@ IdTable IndexImpl::getEntityMentionsForWord(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
-    const vector<string>& terms) const {
+    const vector<std::string>& terms) const {
   // It is beneficial to choose a term where no filtering by regular word id
   // is needed. Then the entity lists can be read directly from disk.
   // For others it is always necessary to reach wordlist and filter them
@@ -146,7 +146,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
+size_t IndexImpl::getSizeOfTextBlockForEntities(const std::string& word) const {
   if (word.empty()) {
     return 0;
   }
@@ -158,7 +158,7 @@ size_t IndexImpl::getSizeOfTextBlockForEntities(const string& word) const {
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
+size_t IndexImpl::getSizeOfTextBlockForWord(const std::string& word) const {
   if (word.empty()) {
     return 0;
   }
@@ -170,7 +170,7 @@ size_t IndexImpl::getSizeOfTextBlockForWord(const string& word) const {
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getSizeEstimate(const string& words) const {
+size_t IndexImpl::getSizeEstimate(const std::string& words) const {
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
   std::vector<std::string> terms = absl::StrSplit(words, ' ');
@@ -189,7 +189,9 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
+void IndexImpl::setTextName(const std::string& name) {
+  textMeta_.setName(name);
+}
 
 // _____________________________________________________________________________
 auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)

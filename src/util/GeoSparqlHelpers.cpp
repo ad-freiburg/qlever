@@ -17,7 +17,7 @@
 #include <string_view>
 
 #include "global/Constants.h"
-#include "parser/GeoPoint.h"
+#include "rdfTypes/GeoPoint.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -73,6 +73,12 @@ double kilometerToUnit(double kilometers,
     }
   }
   return multiplicator * kilometers;
+}
+
+// ____________________________________________________________________________
+double valueInUnitToKilometer(double valueInUnit,
+                              std::optional<UnitOfMeasurement> unit) {
+  return valueInUnit / kilometerToUnit(1.0, unit);
 }
 
 // ____________________________________________________________________________

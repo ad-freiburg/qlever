@@ -42,8 +42,8 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
-#include "parser/Iri.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/Iri.h"
 #include "util/Exception.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TypeTraits.h"
@@ -153,7 +153,7 @@ constexpr auto NeutralElement = []() -> QetMatcher {
 };
 
 constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
-                                         string word) -> QetMatcher {
+                                         std::string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(2 + word.ends_with('*'))),
@@ -183,7 +183,7 @@ constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
 
 inline auto TextIndexScanForEntity =
     [](Variable textRecordVar, std::variant<Variable, std::string> entity,
-       string word) -> QetMatcher {
+       std::string word) -> QetMatcher {
   // TODO: Implement AD_THROWING_PROPERTY(..., Exception matcher) and use it
   // here to test the contract-checks in entityVariable() and fixedEntity().
   if (std::holds_alternative<Variable>(entity)) {
@@ -377,13 +377,14 @@ struct PathSearch {
 };
 constexpr inline PathSearch pathSearch;
 
-inline auto ValuesClause = [](string cacheKey) {
+inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
       AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
-struct SpatialJoin {
+template <bool Substitute = false>
+struct SpatialJoinMatcher {
   template <QL_CONCEPT_OR_TYPENAME(std::same_as<QetMatcher>)... ChildArgs>
   auto operator()(double maxDist, size_t maxResults, Variable left,
                   Variable right, std::optional<Variable> distanceVariable,
@@ -391,21 +392,23 @@ struct SpatialJoin {
                   SpatialJoinAlgorithm algorithm,
                   std::optional<SpatialJoinType> joinType,
                   const ChildArgs&... childMatchers) const {
-    return RootOperation<::SpatialJoin>(
-        AllOf(children(childMatchers...),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
-                          Eq(std::pair(maxDist, maxResults))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
-                          Eq(std::pair(left, right))),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
-                          Eq(distanceVariable)),
-              AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
-                          Eq(payloadVariables)),
-              AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
-              AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType))));
+    return RootOperation<::SpatialJoin>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetTask,
+                    Pair(DoubleNear(maxDist, 0.01), Eq(maxResults))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetDistanceVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::SpatialJoin, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables)),
+        AD_PROPERTY(::SpatialJoin, getAlgorithm, Eq(algorithm)),
+        AD_PROPERTY(::SpatialJoin, getJoinType, Eq(joinType)),
+        AD_PROPERTY(::SpatialJoin, getSubstitutesFilterOp, Eq(Substitute))));
   }
 };
-constexpr inline SpatialJoin spatialJoin;
+constexpr inline SpatialJoinMatcher spatialJoin;
+constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =
