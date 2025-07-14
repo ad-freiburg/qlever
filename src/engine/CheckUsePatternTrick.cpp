@@ -118,9 +118,10 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   } else {
     // We could not find a suitable triple to append the additional column, we
     // therefore add an explicit triple `?s ql:has_pattern ?p`
-    triples.emplace_back(subAndPred.subject_,
-                         std::string{HAS_PATTERN_PREDICATE},
-                         subAndPred.predicate_);
+    triples.emplace_back(
+        subAndPred.subject_,
+        TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE),
+        subAndPred.predicate_);
   }
 }
 

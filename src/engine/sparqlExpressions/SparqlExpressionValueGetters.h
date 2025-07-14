@@ -139,12 +139,13 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
-  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
   // TODO<joka921> use a `NormalizedStringView` inside the expressions.
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
@@ -271,10 +272,10 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
 // the input of which the `STR()` function was not used in a query.
 struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   using Mixin<LiteralFromIdGetter>::operator();
-  std::optional<string> operator()(ValueId id,
-                                   const EvaluationContext* context) const;
-  std::optional<string> operator()(const LiteralOrIri& s,
-                                   const EvaluationContext*) const {
+  std::optional<std::string> operator()(ValueId id,
+                                        const EvaluationContext* context) const;
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const {
     if (s.isIri()) {
       return std::nullopt;
     }

@@ -73,7 +73,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
 }
 
 // __________________________________________________________________________
-string sparqlExpression::GroupConcatExpression::getCacheKey(
+std::string sparqlExpression::GroupConcatExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return absl::StrCat("[ GROUP_CONCAT", distinct_ ? " DISTINCT " : "",
                       separator_, "]", child_->getCacheKey(varColMap));

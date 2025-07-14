@@ -14,8 +14,6 @@
 #include "util/Log.h"
 
 using std::array;
-using std::string;
-using std::vector;
 
 namespace ad_utility::detail {
 
@@ -117,7 +115,7 @@ class ParallelParseBuffer {
   // If the buffer is exhausted blocks
   // until the (asynchronous) call to parseBatch has finished. A nullopt
   // the parser has completely parsed the file.
-  std::optional<std::array<string, 3>> getTriple() {
+  std::optional<std::array<std::string, 3>> getTriple() {
     // Return our triple in the order the parser handles them to us.
     // Makes debugging easier.
     if (_buffer.size() == _bufferPosition && _isParserValid) {
@@ -149,25 +147,25 @@ class ParallelParseBuffer {
   // becomes false when the parser is done. In this case we still have to
   // empty our buffer
   bool _isParserValid = true;
-  std::vector<array<string, 3>> _buffer;
+  std::vector<array<std::string, 3>> _buffer;
   // this future handles the asynchronous parser calls
-  std::future<std::pair<bool, std::vector<array<string, 3>>>> _fut;
+  std::future<std::pair<bool, std::vector<array<std::string, 3>>>> _fut;
 
   // this function extracts bufferSize_ many triples from the parser.
   // If the bool argument is false, the parser is exhausted and further calls
   // to parseBatch are useless. In this case we probably still have some triples
   // that were parsed before the parser was done, so we still have to consider
   // these.
-  std::pair<bool, std::vector<array<string, 3>>> parseBatch() {
+  std::pair<bool, std::vector<array<std::string, 3>>> parseBatch() {
     LOG(TRACE) << "Parsing next batch in parallel" << std::endl;
-    std::vector<array<string, 3>> buf;
+    std::vector<array<std::string, 3>> buf;
     // for small knowledge bases on small systems that fit in one
     // batch (e.g. during tests) the reserve may fail which is not bad in this
     // case
     try {
       buf.reserve(_bufferSize);
-    } catch (const std::bad_alloc& b) {
-      buf = std::vector<array<string, 3>>();
+    } catch (const std::bad_alloc&) {
+      buf = std::vector<array<std::string, 3>>();
     }
     while (buf.size() < _bufferSize) {
       buf.emplace_back();

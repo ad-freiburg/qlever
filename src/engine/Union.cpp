@@ -87,7 +87,7 @@ Union::Union(QueryExecutionContext* qec,
   }
 }
 
-string Union::getCacheKeyImpl() const {
+std::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
@@ -106,7 +106,7 @@ string Union::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-string Union::getDescriptor() const { return "Union"; }
+std::string Union::getDescriptor() const { return "Union"; }
 
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of

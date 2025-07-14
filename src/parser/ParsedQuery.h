@@ -6,51 +6,37 @@
 #ifndef QLEVER_SRC_PARSER_PARSEDQUERY_H
 #define QLEVER_SRC_PARSER_PARSEDQUERY_H
 
-#include <initializer_list>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
-#include "parser/TripleComponent.h"
 #include "parser/UpdateClause.h"
 #include "parser/data/GroupKey.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
-#include "parser/data/Types.h"
-#include "util/Algorithm.h"
-#include "util/Exception.h"
-#include "util/Generator.h"
-#include "util/HashMap.h"
-#include "util/OverloadCallOperator.h"
-#include "util/ParseException.h"
-#include "util/StringUtils.h"
 
-using std::string;
 using std::vector;
 
 // Data container for prefixes
 class SparqlPrefix {
  public:
-  SparqlPrefix(string prefix, string uri)
+  SparqlPrefix(std::string prefix, std::string uri)
       : _prefix(std::move(prefix)), _uri(std::move(uri)) {}
 
-  string _prefix;
-  string _uri;
+  std::string _prefix;
+  std::string _uri;
 
-  [[nodiscard]] string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   bool operator==(const SparqlPrefix&) const = default;
 };
@@ -88,7 +74,7 @@ class ParsedQuery {
   IsInternalSort _isInternalSort = IsInternalSort::False;
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
-  string _originalString;
+  std::string _originalString;
   std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL

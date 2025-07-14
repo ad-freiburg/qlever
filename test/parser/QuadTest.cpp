@@ -99,7 +99,7 @@ TEST(QuadTest, getOperations) {
     return {t, t, t};
   };
   auto SparqlTriple = [](const TripleComponent& t) -> ::SparqlTriple {
-    return {t, t.toString(), t};
+    return {t, t.getIri(), t};
   };
   auto GraphTriples =
       [](const vector<::SparqlTriple>& triples,

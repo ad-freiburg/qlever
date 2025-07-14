@@ -35,8 +35,8 @@ class Describe : public Operation {
 
   // The following functions override those from the base class `Operation`.
   std::vector<QueryExecutionTree*> getChildren() override;
-  string getCacheKeyImpl() const override;
-  string getDescriptor() const override;
+  std::string getCacheKeyImpl() const override;
+  std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
 

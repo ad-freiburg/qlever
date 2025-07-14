@@ -17,7 +17,7 @@
 #include "util/Timer.h"
 
 // _____________________________________________________________________________
-string Result::asDebugString() const {
+std::string Result::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
