@@ -212,5 +212,7 @@ template BoundingBox GeometryInfo::getRequestedInfo<BoundingBox>(
     std::string_view wkt);
 template GeometryType GeometryInfo::getRequestedInfo<GeometryType>(
     std::string_view wkt);
+template MetricLength GeometryInfo::getRequestedInfo<MetricLength>(
+    std::string_view wkt);
 
 }  // namespace ad_utility
