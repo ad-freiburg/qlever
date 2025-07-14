@@ -327,31 +327,43 @@ IdTable Union::transformToCorrectColumnFormat(
 }
 
 // _____________________________________________________________________________
-Result::Generator Union::computeResultLazily(
+Result::LazyResult Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
-  std::vector<ColumnIndex> permutation = computePermutation<true>();
-  if (result1->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result1->idTable().clone(), permutation),
-        result1->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result1->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
+  auto transform = [this](IdTable&& idTable, LocalVocab&& vocab,
+                          const std::vector<ColumnIndex>& permutation) {
+    return Result::IdTableVocabPair{
+        this->transformToCorrectColumnFormat(idTable, permutation),
+        std::move(vocab)};
+  };
+
+  auto rangeBuilder = [transform = std::move(transform)](
+                          std::shared_ptr<const Result> result,
+                          std::vector<ColumnIndex> permutation) {
+    using namespace ad_utility;
+    if (result->isFullyMaterialized()) {
+      return InputRangeTypeErased(InputRangeFromLoopControlGet(
+          [transform = std::move(transform),
+           permutation = std::move(permutation), result = std::move(result)]() {
+            return LoopControl<Result::IdTableVocabPair>::breakWithValue(
+                transform(result->idTable().clone(),
+                          result->getCopyOfLocalVocab(), permutation));
+          }));
     }
-  }
-  permutation = computePermutation<false>();
-  if (result2->isFullyMaterialized()) {
-    co_yield {
-        transformToCorrectColumnFormat(result2->idTable().clone(), permutation),
-        result2->getCopyOfLocalVocab()};
-  } else {
-    for (auto& [idTable, localVocab] : result2->idTables()) {
-      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
-                std::move(localVocab)};
-    }
-  }
+    return InputRangeTypeErased(CachingContinuableTransformInputRange(
+        std::move(result->idTables()),
+        [transform = std::move(transform),
+         permutation = std::move(permutation)](
+            Result::IdTableVocabPair& idTableAndVocab) {
+          return LoopControl<Result::IdTableVocabPair>::yieldValue(
+              transform(std::move(idTableAndVocab.idTable_),
+                        std::move(idTableAndVocab.localVocab_), permutation));
+        }));
+  };
+
+  return Result::LazyResult{ql::ranges::concat_view(
+      rangeBuilder(std::move(result1), computePermutation<true>()),
+      rangeBuilder(std::move(result2), computePermutation<false>()))};
 }
 
 // _____________________________________________________________________________
