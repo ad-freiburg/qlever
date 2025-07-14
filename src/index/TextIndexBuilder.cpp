@@ -18,7 +18,8 @@ void TextIndexBuilder::buildTextIndexFile(TextIndexConfig textIndexConfig) {
   // text record or both (but at least one of them, otherwise this function is
   // not called)
   if (config.addWordsFromFiles()) {
-    LOG(INFO) << "Using specified docs- and/or wordsfile to build text index.";
+    LOG(INFO) << "Using specified docs- and/or wordsfile to build text index."
+              << std::endl;
   }
   if (config.getAddWordsFromLiterals()) {
     LOG(INFO) << (!config.addWordsFromFiles() ? "C" : "Additionally c")
@@ -42,8 +43,10 @@ void TextIndexBuilder::buildTextIndexFile(TextIndexConfig textIndexConfig) {
                 bAndKParamForTextScoring_};
 
   // Build the text vocabulary (first scan over the text records).
+  LOG(INFO) << "Building the text vocabulary ..." << std::endl;
   processWordsForVocabulary(config);
   // Calculate the score data for the words
+  LOG(INFO) << "Calculating Score Data ..." << std::endl;
   scoreData_.calculateScoreData(docsFile, config.getAddWordsFromLiterals(),
                                 textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).

@@ -186,11 +186,12 @@ int main(int argc, char** argv) {
   // Options for the text index.
   add("text-docs-input-file,d", po::value(&docsfile),
       "The full text of the text records from which to build the text index.");
-  add("text-words-from-docsfile,D", po::value(&useWordsFromDocsfile),
+  add("text-words-from-docsfile,D", po::bool_switch(&useWordsFromDocsfile),
       "Use the words in the documents from the docsfile to build the text "
       "index. Can be used together with a wordsfile to add the co-occuring "
       "entities from the wordsfile.");
-  add("text-entities-from-wordsfile,E", po::value(&addEntitiesFromWordsfile),
+  add("text-entities-from-wordsfile,E",
+      po::bool_switch(&addEntitiesFromWordsfile),
       "Used together with the text-words-from-docsfile option to add entities "
       "to the text index using the wordsfile.");
   add("text-words-input-file,w", po::value(&wordsfile),
