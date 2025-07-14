@@ -106,6 +106,12 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 }
 
 // ____________________________________________________________________________
+inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
+  return {geoPointToUtilPoint(boundingBox.lowerLeft_),
+          geoPointToUtilPoint(boundingBox.upperRight_)};
+}
+
+// ____________________________________________________________________________
 template <detail::constexpr_str_cat_impl::ConstexprString suffix>
 inline constexpr std::string_view addSfPrefix() {
   return constexprStrCat<SF_PREFIX, suffix>();

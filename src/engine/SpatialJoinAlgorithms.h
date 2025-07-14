@@ -206,11 +206,10 @@ class SpatialJoinAlgorithms {
   // spatial join). The Boolean `leftOrRightSide` specifies whether these
   // geometries are from the left or right side of the spatial join. The parsing
   // is multithreaded, using up to `numThreads` threads.
-  util::geo::I32Box libspatialjoinParse(bool leftOrRightSide,
-                                        const IdTable* idTable,
-                                        ColumnIndex column,
-                                        sj::Sweeper& sweeper,
-                                        size_t numThreads) const;
+  util::geo::I32Box libspatialjoinParse(
+      bool leftOrRightSide, const IdTable* idTable, ColumnIndex column,
+      sj::Sweeper& sweeper, size_t numThreads,
+      std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Calls the `cancellationWrapper` which throws if the query has been
   // cancelled.
