@@ -828,7 +828,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto sortedTriplesG{fromInputRange(AD_FWD(sortedTriples))};
+  auto sortedTriplesG{AD_FWD(sortedTriples)};
   auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
