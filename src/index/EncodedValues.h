@@ -1,6 +1,6 @@
-//
-// Created by kalmbacj on 7/1/25.
-//
+// Copyright 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SRC_INDEX_ENCODEDVALUES_H
 #define QLEVER_SRC_INDEX_ENCODEDVALUES_H
@@ -9,6 +9,7 @@
 #include "parser/LiteralOrIri.h"
 #include "util/BitUtils.h"
 #include "util/CtreHelpers.h"
+#include "util/Log.h"
 
 struct EncodedValues {
   static constexpr std::tuple prefixes{
@@ -39,19 +40,56 @@ struct EncodedValues {
   };
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
+  template <uint64_t N>
+  static constexpr uint64_t encodeDecimalToNBit(std::string_view numberStr) {
+    constexpr uint64_t maxDigits = N / 4;  // 4 bits per digits.
+    auto len = numberStr.size();
+    AD_CORRECTNESS_CHECK(len <= maxDigits);
+
+    uint64_t result = 0;
+
+    // Compute the starting shift (for the first digit)
+    uint64_t shift = N - 4;
+
+    for (uint64_t i = 0; i < len; ++i) {
+      // Deliberately encode "0" through "9" as '1' through 'A' to make the
+      // padding nibble `0`.
+      uint8_t digit = numberStr[i] - '0' + 1;
+      result |= static_cast<uint64_t>(digit) << shift;
+      shift -= 4;
+    }
+    return result;
+  }
+
+  template <uint64_t N>
+  static void decodeDecimalFrom64Bit(std::string& result, uint64_t encoded) {
+    // AD_LOG_WARN << "encoding is " << std::hex << encoded << std::endl;
+    size_t shift = N - 4;
+    size_t len = (N - std::countr_zero(encoded)) / 4;
+    // AD_LOG_WARN << "len of encoded is " << len << std::endl;
+    for (size_t i = 0; i < len; ++i) {
+      result.push_back(static_cast<char>(((encoded >> shift) & 0xF) + '0' - 1));
+      shift -= 4;
+    }
+  }
+
   template <size_t I>
   static std::optional<Id> encodeSingle(std::string_view repr) {
+    static constexpr size_t numBitsEncoding = 48;
+    // Note: The `12` in the following regex is `48/4` and has to be adjusted
+    // should we ever change the characteristics.
     static constexpr auto regex =
-        std::get<I>(prefixes) + "(?<digits>[0-9]{1,15})>";
+        std::get<I>(prefixes) + "(?<digits>[0-9]{1,12})>";
     auto match = ctre::match<regex>(repr);
     if (!match) {
       return std::nullopt;
     }
-    auto idx = match.template get<"digits">().template to_number<uint64_t>();
-    // TODO<joka921> The numbers are a little arbitrary here currently, test and
-    // document the behavior.
-    static_assert(I < 255);
-    return Id::makeFromEncodedVal(idx | (I << 50));
+    const auto& numString = match.template get<"digits">().to_view();
+    // TODO<joka921> Compute this constant.
+    static_assert(I < (2ull << 10));
+    return Id::makeFromEncodedVal(
+        encodeDecimalToNBit<numBitsEncoding>(numString) |
+        (I << numBitsEncoding));
   }
 
   static std::optional<Id> encode(std::string_view repr) {
@@ -79,8 +117,14 @@ struct EncodedValues {
   }
   template <size_t I>
   static auto toLiteralOrIriSingle(uint64_t idx) {
-    return LiteralOrIri::fromStringRepresentation(
-        absl::StrCat(std::get<I>(prefixesRt), idx, ">"));
+    std::string repr;
+    const auto& prefix = std::get<I>(prefixesRt);
+    // TODO<joka921> Magic constant.
+    repr.reserve(prefix.size() + 13);
+    repr = prefix;
+    decodeDecimalFrom64Bit<48>(repr, idx);
+    repr.push_back('>');
+    return LiteralOrIri::fromStringRepresentation(std::move(repr));
   }
 
   static auto toLiteralOrIri(Id id) {
