@@ -1341,12 +1341,6 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkEnvelope = testUnaryExpression<&makeEnvelopeExpression>;
   auto checkGeometryType = testUnaryExpression<&makeGeometryTypeExpression>;
 
-  // auto checkLength = std::bind_front(testNaryExpression,
-  // &makeLengthExpression);
-
-  // auto checkMetricLength =
-  // testUnaryExpression<&makeMetricLengthExpression>;
-
   auto p = GeoPoint(26.8, 24.3);
   auto v = ValueId::makeFromGeoPoint(p);
 
@@ -1420,13 +1414,34 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       // TODO<ullingerc> Handle invalid geo literals gracefully. Then add
       // geoLit("BLABLIBLU(1 1, 2 2)")
   };
-  using IdVec = std::vector<ValueId>;
-  checkMinX(boundingCoordInputs, IdVec{U, U, D(24.3), D(2), D(2), U});
-  checkMinY(boundingCoordInputs, IdVec{U, U, D(26.8), D(6), D(2), U});
-  checkMaxX(boundingCoordInputs, IdVec{U, U, D(24.3), D(4), D(4), U});
-  checkMaxY(boundingCoordInputs, IdVec{U, U, D(26.8), D(8), D(4), U});
+  checkMinX(boundingCoordInputs, Ids{U, U, D(24.3), D(2), D(2), U});
+  checkMinY(boundingCoordInputs, Ids{U, U, D(26.8), D(6), D(2), U});
+  checkMaxX(boundingCoordInputs, Ids{U, U, D(24.3), D(4), D(4), U});
+  checkMaxY(boundingCoordInputs, Ids{U, U, D(26.8), D(8), D(4), U});
 
-  // TODO tests length
+  // auto checkLength = std::bind_front(testNaryExpression,
+  // &makeLengthExpression); auto checkMetricLength =
+  // testUnaryExpression<&makeMetricLengthExpression>; const auto kilometer =
+  // lit("http://qudt.org/vocab/unit/KiloM",
+  //                            "^^<http://www.w3.org/2001/XMLSchema#anyURI>");
+  // const IdOrLiteralOrIriVec lengthInputs{
+  //     U,
+  //     D(5),
+  //     v,
+  //     geoLit("LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946)"),
+  //     geoLit("POLYGON((7.8412948 47.9977308, 7.8450491 47.9946, 7.852918 "
+  //            "47.995562, 7.8412948 47.9977308))"),
+  //     geoLit("GEOMETRYCOLLECTION(LINESTRING(7.8412948 47.9977308, 7.8450491 "
+  //            "47.9946), LINESTRING(7.8412948 47.9977308, 7.852918 "
+  //            "47.995562))"),
+  //     lit("BLABLIBLU()")};
+  // checkLength(Ids{U, U, D(0.0), D(0.446856), D(1.93946), D(1.34423), U},
+  //             lengthInputs,
+  //             IdOrLiteralOrIriVec{kilometer, kilometer, kilometer, kilometer,
+  //                                 kilometer, kilometer, kilometer});
+  // checkMetricLength(lengthInputs,
+  //                   Ids{U, U, D(0.0), D(446.856), D(1939.46), D(1344.23),
+  //                   U});
 }
 
 // ________________________________________________________________________________________
