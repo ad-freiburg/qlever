@@ -28,6 +28,8 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
                                      std::monostate{}};
   triples.push_back(triple);
 
+  // Check that the `UpdateTriples tr` consist of exactly the single `triple` as
+  // specified above and that the local vocab was also correctly porpagated.
   auto testTriples = [&](auto&& tr,
                          ad_utility::source_location loc =
                              ad_utility::source_location::current()) {
@@ -40,12 +42,23 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
 
   UpdateTriples tr{triples, std::move(l)};
   testTriples(tr);
+  // Self-assignment
+  tr = tr;
+  testTriples(tr);
+
+  // Copy constructor
   testTriples(UpdateTriples{tr});
+
+  // Move constructor
   UpdateTriples tr2{std::move(tr)};
   testTriples(tr2);
   EXPECT_TRUE(tr.triples_.empty());
+
+  // Copy assignment
   tr = tr2;
   testTriples(tr);
+
+  // Move assignment
   UpdateTriples tr3;
   tr3 = std::move(tr);
   testTriples(tr3);

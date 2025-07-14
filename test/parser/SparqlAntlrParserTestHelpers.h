@@ -951,7 +951,7 @@ inline auto VisibleVariables =
 using namespace updateClause;
 
 // Match a `updateClause::GraphUpdate` clause.
-inline auto GraphUpdate(
+inline auto MatchGraphUpdate(
     const Matcher<const updateClause::GraphUpdate::Triples&>& toDelete,
     const Matcher<const updateClause::GraphUpdate::Triples&>& toInsert)
     -> Matcher<const updateClause::GraphUpdate&> {
@@ -970,8 +970,9 @@ inline auto GraphUpdate(
     return tr.triples_;
   };
   using namespace testing;
-  return matchers::GraphUpdate(ResultOf(getVec, ElementsAreArray(toDelete)),
-                               ResultOf(getVec, ElementsAreArray(toInsert)));
+  return matchers::MatchGraphUpdate(
+      ResultOf(getVec, ElementsAreArray(toDelete)),
+      ResultOf(getVec, ElementsAreArray(toInsert)));
 }
 
 inline auto EmptyDatasets = [] {

@@ -142,10 +142,6 @@ class SparqlQleverVisitor {
                              Func iriStringToPredicate);
 
  public:
-  SparqlQleverVisitor(ad_utility::BlankNodeManager* bnodeManager)
-      : blankNodeManager_{bnodeManager} {
-    AD_CORRECTNESS_CHECK(blankNodeManager_ != nullptr);
-  }
   // If `datasetOverride` contains datasets, then the datasets in
   // the operation itself are ignored. This is used for the datasets from the
   // url parameters which override those in the operation.

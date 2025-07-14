@@ -375,16 +375,17 @@ TEST(SparqlParser, BlankNodesInUpdate) {
 
   // Simple check that the duplicate usage of blank node label `_:b` is
   // consistently mapped to the same ID.
-  expectUpdate("INSERT DATA { _:b <p> _:b}",
-               ElementsAre(m::UpdateClause(m::GraphUpdate(empty, matchBpB()),
-                                           ::m::GraphPattern())));
+  expectUpdate(
+      "INSERT DATA { _:b <p> _:b}",
+      ElementsAre(m::UpdateClause(m::MatchGraphUpdate(empty, matchBpB()),
+                                  ::m::GraphPattern())));
 
   // Blank nodes in the pattern remain blank nodes, but in the where clause they
   // become internal variables.
   Var internalVar{"?_QLever_internal_variable_bn_b"};
   expectUpdate("INSERT { _:b <p> _:b} WHERE { _:b <p> _:b}",
                ElementsAre(m::UpdateClause(
-                   m::GraphUpdate(empty, matchBpB()),
+                   m::MatchGraphUpdate(empty, matchBpB()),
                    m::GraphPattern(m::OrderedTriples(
                        {{internalVar, iri("<p>"), internalVar}})))));
 
@@ -394,7 +395,8 @@ TEST(SparqlParser, BlankNodesInUpdate) {
       "INSERT DATA { GRAPH <g1>  { _:b <p> <o>. _:b <p2> <o2> }"
       "GRAPH <g2>  { _:b <p> <o> } }",
       ElementsAre(m::UpdateClause(
-          m::GraphUpdate(empty, ResultOf(getVec, allSubjectsTheSameAndBlank())),
+          m::MatchGraphUpdate(empty,
+                              ResultOf(getVec, allSubjectsTheSameAndBlank())),
           ::m::GraphPattern())));
 
   // Test that different blank node labels lead to different IDs.
@@ -402,8 +404,8 @@ TEST(SparqlParser, BlankNodesInUpdate) {
       "INSERT DATA { GRAPH <g1>  { _:b <p> <o>. _:c <p2> <o2> }"
       "GRAPH <g2>  { _:d <p> <o> } }",
       ElementsAre(m::UpdateClause(
-          m::GraphUpdate(empty,
-                         ResultOf(getVec, allSubjectsDifferentAndBlank())),
+          m::MatchGraphUpdate(empty,
+                              ResultOf(getVec, allSubjectsDifferentAndBlank())),
           ::m::GraphPattern())));
 
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
