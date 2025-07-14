@@ -163,8 +163,9 @@ inline double computeMetricLengthAnyGeom(const AnyGeometry<CoordType>& geom) {
       return computeMetricLengthMulti<AnyGeometry<CoordType>>(
           geom.getCollection(), computeMetricLengthAnyGeom);
     case 6:  // MultiPoint
-    default:
       return 0.0;
+    default:
+      AD_FAIL();
   }
 }
 
