@@ -15,10 +15,7 @@ class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  // Optional pair containing a `PrefilterExpression` with `ColumnIndex` (eval.
-  // index)
-  using PrefilterIndexPair = std::optional<std::pair<
-      std::unique_ptr<prefilterExpressions::PrefilterExpression>, ColumnIndex>>;
+  using ScanSpecAndBlocks = Permutation::ScanSpecAndBlocks;
 
  private:
   Permutation::Enum permutation_;
@@ -26,13 +23,8 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  // TODO @realHannes:
-  // Remove `PrefilterIndexPair` as a member and set instead a member of type
-  // `ScanSpecAndBlocks` (see CompressedRelation.h) with optionally prefiltered
-  // `BlockMetadataRanges`. This `ScanSpecAndBlocks` member can be passed
-  // to the scan and size-estimate functions in the future making those
-  // evaluations simpler.
-  PrefilterIndexPair prefilter_;
+  ScanSpecAndBlocks scanSpecAndBlocks_;
+  bool scanSpecAndBlocksIsPrefiltered_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -48,14 +40,15 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPair prefilter = std::nullopt);
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks = std::nullopt);
   // Constructor to simplify copy creation of an `IndexScan`.
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
             std::vector<Variable> additionalVariables, Graphs graphsToFilter,
-            PrefilterIndexPair prefilter);
+            ScanSpecAndBlocks scanSpecAndBlocks,
+            bool scanSpecAndBlocksIsPrefiltered);
 
   ~IndexScan() override = default;
 
@@ -202,14 +195,19 @@ class IndexScan final : public Operation {
 
   std::string getCacheKeyImpl() const override;
 
+  // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
+  // result of this `IndexScan` shouldn't be cached. Thus, this method returns
+  // `false` if prefilterd `BlockMetadataRanges` are contained.
+  bool canResultBeCachedImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Return an updated QueryExecutionTree containing the new IndexScan which is
   // a copy of this (`IndexScan`), but with added corresponding
   // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
   // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
-  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
-      PrefilterIndexPair prefilter) const;
+  std::shared_ptr<QueryExecutionTree> makeCopyWithPrefilteredScanSpecAndBlocks(
+      ScanSpecAndBlocks scanSpecAndBlocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
@@ -223,25 +221,15 @@ class IndexScan final : public Operation {
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
-  // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
-  // applying any additional pre-filter procedure.
-  std::optional<ql::span<const CompressedBlockMetadata>> getBlockMetadata()
-      const;
-
-  // This method retrieves all relevant `CompressedBlockMetadata` and performs
-  // the pre-filtering procedure given a `PrefilterIndexPair` is available.
-  std::optional<std::vector<CompressedBlockMetadata>>
-  getBlockMetadataOptionallyPrefiltered() const;
-
-  // Apply the `prefilter_` to the `blocks`. May only be called if the limit is
-  // unconstrained, and a `prefilter_` exists.
-  std::vector<CompressedBlockMetadata> applyPrefilter(
-      ql::span<const CompressedBlockMetadata> blocks) const;
+  // Access the `ScanSpecAndBlocks` associated with this `IndexScan` via the
+  // `Permutation` class.
+  ScanSpecAndBlocks getScanSpecAndBlocks() const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata> blocks) const;
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };
 
