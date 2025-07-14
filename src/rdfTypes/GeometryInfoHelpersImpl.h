@@ -7,7 +7,8 @@
 
 #include <util/geo/Geo.h>
 
-#include "range/v3/numeric/accumulate.hpp"
+#include <range/v3/numeric/accumulate.hpp>
+
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"

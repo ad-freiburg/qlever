@@ -51,12 +51,12 @@ NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
 
-NARY_EXPRESSION(LengthExpression, 2,
-                FV<NumericIdWrapper<ad_utility::WktLength, true>,
-                   GeometryInfoValueGetter<ad_utility::MetricLength>,
-                   UnitOfMeasurementValueGetter>);
+NARY_EXPRESSION(
+    LengthExpression, 2,
+    FV<ad_utility::WktLength, GeometryInfoValueGetter<ad_utility::MetricLength>,
+       UnitOfMeasurementValueGetter>);
 NARY_EXPRESSION(MetricLengthExpression, 1,
-                FV<NumericIdWrapper<ad_utility::WktMetricLength, true>,
+                FV<ad_utility::WktMetricLength,
                    GeometryInfoValueGetter<ad_utility::MetricLength>>);
 
 template <SpatialJoinType Relation>

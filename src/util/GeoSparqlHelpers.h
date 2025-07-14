@@ -109,21 +109,21 @@ class WktMetricDistGeoPoints {
 // Compute the length of a WKT geometry.
 class WktLength {
  public:
-  double operator()(
+  ValueId operator()(
       const std::optional<MetricLength>& len,
       const std::optional<UnitOfMeasurement>& unit = std::nullopt) const {
     if (!len.has_value()) {
-      return std::numeric_limits<double>::quiet_NaN();
+      return ValueId::makeUndefined();
     }
-    return detail::kilometerToUnit(
-        static_cast<double>(len.value().length()) / 1000.0, unit);
+    return ValueId::makeFromDouble(detail::kilometerToUnit(
+        static_cast<double>(len.value().length()) / 1000.0, unit));
   }
 };
 
 // Compute the length of a WKT geometry in meters.
 class WktMetricLength {
  public:
-  double operator()(const std::optional<MetricLength>& len) const {
+  ValueId operator()(const std::optional<MetricLength>& len) const {
     return WktLength{}(len, UnitOfMeasurement::METERS);
   }
 };
