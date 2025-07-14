@@ -27,6 +27,9 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {};
 };
 
+// The individual coordinates describing the bounding box.
+enum class BoundingCoordinate { MIN_X, MIN_Y, MAX_X, MAX_Y };
+
 // Represents the bounding box of a geometry by two `GeoPoint`s for lower left
 // corner and upper right corner.
 struct BoundingBox {
@@ -34,6 +37,10 @@ struct BoundingBox {
   GeoPoint upperRight_;
 
   std::string asWkt() const;
+
+  // Extract the minimum or maximum coordinates
+  template <BoundingCoordinate RequestedCoordinate>
+  double getBoundingCoordinate() const;
 };
 
 // The encoded bounding box is a pair of the bit encodings of the

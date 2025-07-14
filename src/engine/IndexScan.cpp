@@ -19,7 +19,7 @@ using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 
 // _____________________________________________________________________________
 // Return the number of `Variables` given the `TripleComponent` values for
-// `subject_`, `prediate` and `object`.
+// `subject_`, `predicate` and `object`.
 static size_t getNumberOfVariables(const TripleComponent& subject,
                                    const TripleComponent& predicate,
                                    const TripleComponent& object) {
@@ -31,14 +31,16 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     PrefilterIndexPair prefilter)
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
-      prefilter_{std::move(prefilter)},
+      scanSpecAndBlocks_{
+          std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
+      scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)) {
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
@@ -68,14 +70,16 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, PrefilterIndexPair prefilter)
+                     Graphs graphsToFilter, ScanSpecAndBlocks scanSpecAndBlocks,
+                     bool scanSpecAndBlocksIsPrefiltered)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
       predicate_(p),
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
-      prefilter_(std::move(prefilter)),
+      scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
+      scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
       numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)) {
@@ -117,14 +121,13 @@ string IndexScan::getCacheKeyImpl() const {
     os << "\nFiltered by Graphs:";
     os << absl::StrJoin(graphIdVec, " ");
   }
-  if (prefilter_.has_value()) {
-    auto& [prefilterExpr, columnIdx] = prefilter_.value();
-    os << "Added PrefiterExpression: \n";
-    os << *prefilterExpr;
-    os << "\nApplied on column: " << columnIdx << ".";
-  }
   return std::move(os).str();
 }
+
+// _____________________________________________________________________________
+bool IndexScan::canResultBeCachedImpl() const {
+  return !scanSpecAndBlocksIsPrefiltered_;
+};
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
@@ -155,17 +158,34 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+
   auto optSortedVarColIdxPair =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!optSortedVarColIdxPair.has_value()) {
     return std::nullopt;
   }
+
   const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    return makeCopyWithAddedPrefilters(
-        std::make_pair(it->first->clone(), colIdx));
+    const auto& vocab = getIndex().getVocab();
+    // If the `BlockMetadataRanges` were previously prefiltered, AND-merge
+    // the previous `BlockMetadataRanges` with the `BlockMetadataRanges`
+    // retrieved via the newly passed prefilter. This corresponds logically to a
+    // conjunction over the prefilters applied for this `IndexScan`.
+    const auto& blockMetadataRanges =
+        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+            it->first->evaluate(
+                vocab, getScanSpecAndBlocks().getBlockMetadataSpan(), colIdx),
+            scanSpecAndBlocks_.blockMetadata_);
+
+    return makeCopyWithPrefilteredScanSpecAndBlocks(
+        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
   }
   return std::nullopt;
 }
@@ -190,25 +210,18 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 //______________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
-    PrefilterIndexPair prefilter) const {
+std::shared_ptr<QueryExecutionTree>
+IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
+    ScanSpecAndBlocks scanSpecAndBlocks) const {
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
       additionalColumns_, additionalVariables_, graphsToFilter_,
-      std::move(prefilter));
+      std::move(scanSpecAndBlocks), true);
 }
 
 // _____________________________________________________________________________
 Result::Generator IndexScan::chunkedIndexScan() const {
-  auto optBlockMetadata = getBlockMetadata();
-  if (!optBlockMetadata.has_value()) {
-    co_return;
-  }
-  const auto& blockMetadata = optBlockMetadata.value();
-  // Note: Given a `PrefilterIndexPair` is available, the corresponding
-  // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable :
-       getLazyScan({blockMetadata.begin(), blockMetadata.end()})) {
+  for (IdTable& idTable : getLazyScan()) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
@@ -216,9 +229,8 @@ Result::Generator IndexScan::chunkedIndexScan() const {
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = getScanPermutation().scan(
-      getScanSpecification(), additionalColumns(), cancellationHandle_,
-      locatedTriplesSnapshot(), getLimitOffset(),
-      getBlockMetadataOptionallyPrefiltered());
+      scanSpecAndBlocks_, additionalColumns(), cancellationHandle_,
+      locatedTriplesSnapshot(), getLimitOffset());
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
@@ -243,17 +255,15 @@ const Permutation& IndexScan::getScanPermutation() const {
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   auto [lower, upper] = getScanPermutation().getSizeEstimateForScan(
-      getScanSpecification(), locatedTriplesSnapshot(),
-      getBlockMetadataOptionallyPrefiltered());
+      scanSpecAndBlocks_, locatedTriplesSnapshot());
   return {lower == upper, std::midpoint(lower, upper)};
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return getScanPermutation().getResultSizeOfScan(
-      getScanSpecification(), locatedTriplesSnapshot(),
-      getBlockMetadataOptionallyPrefiltered());
+  return getScanPermutation().getResultSizeOfScan(scanSpecAndBlocks_,
+                                                  locatedTriplesSnapshot());
 }
 
 // _____________________________________________________________________________
@@ -323,68 +333,30 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   return std::make_pair(tripleComp->getVariable(), colIdx);
 }
 
-// _____________________________________________________________________________
-std::optional<ql::span<const CompressedBlockMetadata>>
-IndexScan::getBlockMetadata() const {
-  const auto& metadata = getMetadataForScan();
-  if (metadata.has_value()) {
-    return metadata.value().getBlockMetadataSpan();
-  }
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<std::vector<CompressedBlockMetadata>>
-IndexScan::getBlockMetadataOptionallyPrefiltered() const {
-  // The code after this is expensive because it always copies the complete
-  // block metadata, so we do an early return of `nullopt` (which means "use all
-  // the blocks") if no prefilter is specified.
-  if (!prefilter_.has_value()) {
-    return std::nullopt;
-  }
-  auto optBlockSpan = getBlockMetadata();
-  if (!optBlockSpan.has_value()) {
-    return std::nullopt;
-  }
-  return applyPrefilter(optBlockSpan.value());
-}
-
-// _____________________________________________________________________________
-std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
-    ql::span<const CompressedBlockMetadata> blocks) const {
-  AD_CORRECTNESS_CHECK(prefilter_.has_value() &&
-                       getLimitOffset().isUnconstrained());
-  // Apply the prefilter on given blocks.
-  auto& [prefilterExpr, columnIndex] = prefilter_.value();
-  return prefilterExpr->evaluate(getIndex().getVocab(), blocks, columnIndex);
+// ___________________________________________________________________________
+Permutation::ScanSpecAndBlocks IndexScan::getScanSpecAndBlocks() const {
+  return getScanPermutation().getScanSpecAndBlocks(getScanSpecification(),
+                                                   locatedTriplesSnapshot());
 }
 
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
-    std::vector<CompressedBlockMetadata> blocks) const {
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto filteredBlocks = getLimitOffset().isUnconstrained()
-                            ? std::optional(std::move(blocks))
-                            : std::nullopt;
-  if (filteredBlocks.has_value() && prefilter_.has_value()) {
-    // Note: The prefilter expression applied with applyPrefilterIfPossible()
-    // is not related to the prefilter procedure mentioned in the comment above.
-    // If this IndexScan owns a <PrefilterExpression, ColumnIdx> pair, it can
-    // be applied.
-    filteredBlocks = applyPrefilter(filteredBlocks.value());
-  }
+  auto filteredBlocks =
+      getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
   return getScanPermutation().lazyScan(
-      getScanSpecification(), filteredBlocks, additionalColumns(),
+      scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
       cancellationHandle_, locatedTriplesSnapshot(), getLimitOffset());
 };
 
 // _____________________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
-  return getScanPermutation().getMetadataAndBlocks(getScanSpecification(),
+  return getScanPermutation().getMetadataAndBlocks(scanSpecAndBlocks_,
                                                    locatedTriplesSnapshot());
 };
 
@@ -656,15 +628,10 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
-  auto prefilter =
-      prefilter_.has_value()
-          ? std::optional{std::pair{prefilter_.value().first->clone(),
-                                    prefilter_.value().second}}
-          : std::nullopt;
-  return std::make_unique<IndexScan>(_executionContext, permutation_, subject_,
-                                     predicate_, object_, additionalColumns_,
-                                     additionalVariables_, graphsToFilter_,
-                                     std::move(prefilter));
+  return std::make_unique<IndexScan>(
+      _executionContext, permutation_, subject_, predicate_, object_,
+      additionalColumns_, additionalVariables_, graphsToFilter_,
+      scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_);
 }
 
 // _____________________________________________________________________________

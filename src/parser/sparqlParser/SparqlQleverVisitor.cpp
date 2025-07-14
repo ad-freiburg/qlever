@@ -41,6 +41,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
@@ -184,12 +185,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
+  using enum ad_utility::BoundingCoordinate;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
-      {"geometryType", &makeGeometryTypeExpression}};
+      {"geometryType", &makeGeometryTypeExpression},
+      {"minX", &makeBoundingCoordinateExpression<MIN_X>},
+      {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
+      {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
