@@ -1471,8 +1471,9 @@ TEST(ParserTest, parseWithDatasets) {
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseUpdate(&bnm,
-                                "WITH <g> DELETE { ?x <b> <c> } WHERE { ?x ?y "
-                                "?z FILTER EXISTS {?a ?b ?c} }",
+                                "WITH <g> DELETE { ?x <b> <c> } WHERE { "
+                                "?x ?y ?z "
+                                "FILTER EXISTS {?a ?b ?c} }",
                                 {{{Iri("<h>"), false}}}),
       ::testing::HasSubstr("`WITH` is disallowed"));
   EXPECT_THAT(
@@ -1485,8 +1486,8 @@ TEST(ParserTest, parseWithDatasets) {
                   "ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
                   {{{Iri("<h>"), false}}}),
               m::AskQuery(filterGraphPattern, datasets, noGraphs));
-  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { ?x "
-                                       "?y ?z FILTER EXISTS {?a ?b?c}}",
+  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { "
+                                       "?x ?y ?z FILTER EXISTS {?a ?b?c}}",
                                        {{{Iri("<h>"), false}}}),
               m::ConstructQuery({std::array<GraphTerm, 3>{
                                     ::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},

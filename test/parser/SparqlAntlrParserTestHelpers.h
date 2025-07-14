@@ -679,13 +679,17 @@ inline auto SolutionModifier =
       AD_FIELD(SolutionModifiers, limitOffset_, testing::Eq(limitOffset)));
 };
 
-inline auto Triples = [](const vector<SparqlTriple>& triples)
+inline auto Triples = [](const std::vector<SparqlTriple>& triples)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::BasicGraphPattern>(
       AD_FIELD(p::BasicGraphPattern, _triples,
                testing::UnorderedElementsAreArray(triples)));
 };
-inline auto OrderedTriples = [](const vector<SparqlTriple>& triples)
+
+// Same as above, but the triples have to be in the same order as specified.
+// In particular, this also makes the GTest output more readable in case of a
+// test failure.
+inline auto OrderedTriples = [](const std::vector<SparqlTriple>& triples)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::BasicGraphPattern>(AD_FIELD(
       p::BasicGraphPattern, _triples, testing::ElementsAreArray(triples)));

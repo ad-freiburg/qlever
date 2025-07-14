@@ -30,6 +30,10 @@ struct UpdateTriples {
 
   UpdateTriples(UpdateTriples&& rhs) = default;
   UpdateTriples& operator=(UpdateTriples&& rhs) = default;
+
+  // We have custom copy operations, so Sonarcloud insists on an explicitly
+  // defined destructor.
+  ~UpdateTriples() {}
 };
 }  // namespace updateClause
 

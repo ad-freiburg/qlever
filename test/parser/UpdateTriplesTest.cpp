@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "parser/UpdateTriples.h"
+#include "util/CompilerWarnings.h"
 
 using namespace updateClause;
 using V = Variable;
@@ -43,7 +44,9 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
   UpdateTriples tr{triples, std::move(l)};
   testTriples(tr);
   // Self-assignment
+  DISABLE_CLANG_SELF_ASSIGN_WARNING
   tr = tr;
+  ENABLE_CLANG_WARNINGS
   testTriples(tr);
 
   // Copy constructor

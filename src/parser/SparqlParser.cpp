@@ -16,7 +16,7 @@ namespace {
 // then they are fixed during the parsing and cannot be changed by the SPARQL.
 template <typename ContextType>
 auto parseOperation(BnodeMgr bnodeMgr,
-                    ContextType* (SparqlAutomaticParser::*F)(void),
+                    ContextType* (SparqlAutomaticParser::*f)(void),
                     std::string operation,
                     const std::vector<DatasetClause>& datasets) {
   using S = std::string;
@@ -30,7 +30,7 @@ auto parseOperation(BnodeMgr bnodeMgr,
       datasets.empty()
           ? std::nullopt
           : std::optional(parsedQuery::DatasetClauses::fromClauses(datasets))};
-  auto resultOfParseAndRemainingText = p.parseTypesafe(F);
+  auto resultOfParseAndRemainingText = p.parseTypesafe(f);
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.

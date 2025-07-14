@@ -947,8 +947,13 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   // {}` clauses.
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
   visitTemplateClause(ctx->insertClause(), &op.toInsert_, withGraph);
-  treatBlankNodesAs_ = TreatBlankNodesAs::Illegal;
-  visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
+  // We use an explicit scope s.t. the restoration of the original
+  // blank node treatment via the `cleanup`s works correctly.
+  {
+    auto innerCleanup =
+        setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
+    visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
+  }
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
   return parsedQuery_;

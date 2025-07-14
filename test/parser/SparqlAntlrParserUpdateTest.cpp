@@ -299,11 +299,9 @@ MATCHER(SpNotEqual,
 // Assert that a triple component stores an ID with datatype `BlankNodeIndex`.
 auto isBlank = []() -> testing::Matcher<const TripleComponent&> {
   using namespace testing;
-  auto getType = [](const TripleComponent& tc) {
-    return tc.getId().getDatatype();
-  };
-  return AllOf(AD_PROPERTY(TripleComponent, isId, Eq(true)),
-               ResultOf(getType, Eq(Datatype::BlankNodeIndex)));
+  return AD_PROPERTY(TripleComponent, getVariant,
+                     VariantWith<Id>(AD_PROPERTY(
+                         Id, getDatatype, Eq(Datatype::BlankNodeIndex))));
 };
 
 // Assert that the subject and the object of a triple are blank nodes.
@@ -353,7 +351,8 @@ TEST(SparqlParser, BlankNodesInUpdate) {
   auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
 
   // In the following tests we only check the triples, not the `LocalVocab` of
-  // the `UpdateTriples` (This is tested in isolation in `UpdateTriplesTest.cpp`
+  // the `UpdateTriples` (This is tested in isolation in
+  // `UpdateTriplesTest.cpp`).
   static constexpr auto getVec =
       [](const updateClause::UpdateTriples& tr) -> decltype(auto) {
     // Note: we have to use a lambda and can't use a function-to-member pointer
