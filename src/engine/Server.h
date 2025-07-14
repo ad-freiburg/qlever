@@ -29,8 +29,6 @@
 #include "util/json.h"
 
 using nlohmann::json;
-using std::string;
-using std::vector;
 
 template <typename Operation>
 CPP_concept QueryOrUpdate =
@@ -53,15 +51,16 @@ class Server {
 
  private:
   //! Initialize the server.
-  void initialize(const string& indexBaseName, bool useText,
+  void initialize(const std::string& indexBaseName, bool useText,
                   bool usePatterns = true, bool loadAllPermutations = true,
                   bool persistUpdates = false);
 
  public:
   // First initialize the server. Then loop, wait for requests and trigger
   // processing. This method never returns except when throwing an exception.
-  void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool loadAllPermutations = true, bool persistUpdates = false);
+  void run(const std::string& indexBaseName, bool useText,
+           bool usePatterns = true, bool loadAllPermutations = true,
+           bool persistUpdates = false);
 
   Index& index() { return index_; }
   const Index& index() const { return index_; }
@@ -229,7 +228,7 @@ class Server {
       DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
-      const string& query, const std::string& errorMsg,
+      const std::string& query, const std::string& errorMsg,
       const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 

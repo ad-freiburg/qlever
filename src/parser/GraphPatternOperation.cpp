@@ -12,7 +12,6 @@
 #include <string_view>
 #include <vector>
 
-#include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
@@ -78,7 +77,7 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-[[nodiscard]] string Bind::getDescriptor() const {
+[[nodiscard]] std::string Bind::getDescriptor() const {
   auto inner = _expression.getDescriptor();
   return "BIND (" + inner + " AS " + _target.name() + ")";
 }

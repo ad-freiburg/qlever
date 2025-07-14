@@ -53,10 +53,10 @@ class ExistsJoin : public Operation {
   // All following functions are inherited from `Operation`, see there for
   // comments.
  protected:
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -85,6 +85,8 @@ class ExistsJoin : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  FRIEND_TEST(Exists, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H

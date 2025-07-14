@@ -33,7 +33,7 @@
 #include "global/Constants.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
-#include "parser/data/Variable.h"
+#include "rdfTypes/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -389,7 +389,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -402,7 +402,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
@@ -461,7 +461,7 @@ class SpatialJoinVarColParamTest
                                   .value()
                                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                   qec->getIndex(), tableEntry, {})
@@ -474,7 +474,7 @@ class SpatialJoinVarColParamTest
                                    .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
-                      string::npos);
+                      std::string::npos);
         }
       }
     }
@@ -804,6 +804,24 @@ TEST(SpatialJoin, getDescriptor) {
   ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
 
+// _____________________________________________________________________________
+TEST(SpatialJoin, getDescriptorLibSJWithJoinType) {
+  // The `SpatialJoin`'s descriptor should contain a readable representation of
+  // the join type
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          getQec(),
+          SpatialJoinConfiguration{
+              SpatialJoinConfig{SpatialJoinType::INTERSECTS},
+              Variable{"?subject"}, Variable{"?object"}},
+          std::nullopt, std::nullopt);
+  auto description = spatialJoinOperation->getRootOperation()->getDescriptor();
+  ASSERT_THAT(description, ::testing::HasSubstr("?subject"));
+  ASSERT_THAT(description, ::testing::HasSubstr("?object"));
+  ASSERT_THAT(description, ::testing::HasSubstr("intersects"));
+}
+
+// _____________________________________________________________________________
 TEST(SpatialJoin, getCacheKeyImpl) {
   auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;

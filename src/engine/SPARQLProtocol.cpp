@@ -219,7 +219,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   throw HttpError(
       boost::beast::http::status::method_not_allowed,
       absl::StrCat(
-          "Request method \"", string_view{request.method_string()},
+          "Request method \"", std::string_view{request.method_string()},
           "\" not supported (GET, POST, TSOP, PUT and DELETE are supported; "
           "HEAD and PATCH for graph store protocol are not yet supported)"));
 }

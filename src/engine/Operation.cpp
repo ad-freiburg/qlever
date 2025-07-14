@@ -67,8 +67,8 @@ void Operation::forAllDescendants(F f) const {
 }
 
 // _____________________________________________________________________________
-vector<string> Operation::collectWarnings() const {
-  vector<string> res{*getWarnings().rlock()};
+vector<std::string> Operation::collectWarnings() const {
+  vector<std::string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -169,9 +169,12 @@ Result Operation::runComputation(const ad_utility::Timer& timer,
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
-    AD_CORRECTNESS_CHECK(result.idTable().empty() || !knownEmptyResult(),
-                         "Operation returned non-empty result, but "
-                         "knownEmptyResult() returned true");
+    AD_CORRECTNESS_CHECK(
+        result.idTable().empty() || !knownEmptyResult(), [&]() {
+          return absl::StrCat("Operation ", getDescriptor(),
+                              "returned non-empty result, but "
+                              "knownEmptyResult() returned true");
+        });
   } else {
     auto& rti = runtimeInfo();
     rti.status_ = RuntimeInformation::lazilyMaterialized;
@@ -307,6 +310,11 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+
+  // If pinned there's no point in computing the result lazily.
+  if (pinResult && computationMode == ComputationMode::LAZY_IF_SUPPORTED) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
@@ -572,25 +580,6 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
   return variableToColumnMap_.value();
 }
 
-// _____________________________________________________________________________
-absl::Cleanup<absl::cleanup_internal::Tag, std::function<void()>>
-Operation::resetChildLimitsAndOffsetOnDestruction() {
-  // We estimate that most operations will have 3 or fewer children.
-  absl::InlinedVector<std::pair<QueryExecutionTree*, LimitOffsetClause>, 3>
-      childrenClauses;
-  const auto& children = getChildren();
-  childrenClauses.reserve(children.size());
-  for (QueryExecutionTree* qet : children) {
-    childrenClauses.emplace_back(qet,
-                                 qet->getRootOperation()->getLimitOffset());
-  }
-  return absl::Cleanup{std::function{[original = std::move(childrenClauses)]() {
-    for (auto& [qet, originalLimit] : original) {
-      qet->getRootOperation()->limitOffset_ = originalLimit;
-    }
-  }}};
-}
-
 // ___________________________________________________________________________
 const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
     const {
@@ -687,6 +676,7 @@ std::unique_ptr<Operation> Operation::clone() const {
                      std::back_inserter(visibleVariables));
     result->setSelectedVariablesForSubquery(visibleVariables);
   }
+  result->limitOffset_ = limitOffset_;
 
   auto compareTypes = [this, &result]() {
     const auto& reference = *result;
