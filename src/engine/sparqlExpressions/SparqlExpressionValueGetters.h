@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
@@ -445,6 +446,23 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
                              const EvaluationContext* context) const {
     return LiteralFromIdGetter{}(litOrIri, context);
   }
+};
+
+// Value getter that returns only integer values (unlike `NumericValueGetter`
+// which returns double or int)
+struct IntValueGetter : Mixin<IntValueGetter> {
+  using Mixin<IntValueGetter>::operator();
+  std::optional<int64_t> operator()(const LiteralOrIri&,
+                                    const EvaluationContext*) const {
+    return std::nullopt;
+  }
+  std::optional<int64_t> operator()(ValueId id,
+                                    const EvaluationContext*) const {
+    if (id.getDatatype() == Datatype::Int) {
+      return id.getInt();
+    }
+    return std::nullopt;
+  };
 };
 
 }  // namespace sparqlExpression::detail

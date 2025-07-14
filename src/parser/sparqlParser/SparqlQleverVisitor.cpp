@@ -199,6 +199,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
+      {"geometryN", &makeGeometryNExpression},
       // Geometric relation functions
       {"sfIntersects", &makeGeoRelationExpression<INTERSECTS>},
       {"sfContains", &makeGeoRelationExpression<CONTAINS>},

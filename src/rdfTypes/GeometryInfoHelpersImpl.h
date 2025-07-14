@@ -7,9 +7,12 @@
 
 #include <util/geo/Geo.h>
 
+#include <type_traits>
+
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "util/TypeTraits.h"
 
 // This file contains functions used for parsing and processing WKT geometries
 // using `pb_util`. To avoid unnecessarily compiling expensive modules, this
@@ -127,6 +130,64 @@ inline std::optional<std::string_view> wktTypeToIri(uint8_t type) {
     return SF_WKT_TYPE_IRI[type];
   }
   return std::nullopt;
+}
+
+// ____________________________________________________________________________
+inline std::string getWktAnyGeometry(const AnyGeometry<CoordType>& geom) {
+  switch (geom.getType()) {
+    case 0:
+      return getWKT(geom.getPoint());
+    case 1:
+      return getWKT(geom.getLine());
+    case 2:
+      return getWKT(geom.getPolygon());
+    case 3:
+      return getWKT(geom.getMultiLine());
+    case 4:
+      return getWKT(geom.getMultiPolygon());
+    case 5:
+      return getWKT(geom.getCollection());
+    case 6:
+      return getWKT(geom.getMultiPoint());
+    default:
+      AD_FAIL();
+  }
+}
+
+// ____________________________________________________________________________
+inline std::optional<std::string> getGeometryN(std::string_view wkt,
+                                               int64_t n) {
+  if (n < 0) {
+    return std::nullopt;
+  }
+
+  auto [type, parsed] = parseWkt(wkt);
+  if (!parsed.has_value()) {
+    return std::nullopt;
+  }
+
+  // A linestring is represented as a vector but is not a collection type.
+  if (type == WKTType::LINESTRING) {
+    return std::nullopt;
+  }
+
+  return std::visit(
+      [n](const auto& geom) -> std::optional<std::string> {
+        using T = std::decay_t<decltype(geom)>;
+        if constexpr (isVector<T>) {
+          if (static_cast<uint64_t>(n) >= geom.size()) {
+            return std::nullopt;
+          }
+          if constexpr (std::is_same_v<T, Collection<CoordType>>) {
+            return getWktAnyGeometry(geom[n]);
+          } else {
+            return getWKT(geom[n]);
+          }
+        } else {
+          return std::nullopt;
+        }
+      },
+      parsed.value());
 }
 
 }  // namespace ad_utility::detail
