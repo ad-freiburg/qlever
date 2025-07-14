@@ -219,17 +219,17 @@ IndexImpl::buildOspWithPatterns(
 
   // Set up a generator that yields blocks with the following columns:
   // S P O PatternOfS PatternOfO, sorted by OPS.
-  auto blockGenerator =
-      [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
-    // If an exception occurs in the block that is consuming the blocks yielded
-    // from this generator, we have to explicitly finish the `queue`, otherwise
-    // there will be a deadlock because the threads involved in the queue can
-    // never join.
-    absl::Cleanup cl{[&queue]() { queue.finish(); }};
-    while (auto block = queue.pop()) {
-      co_yield fixBlockAfterPatternJoin(std::move(block));
+auto blockGenerator = Result::LazyResult<IdTableStatic<0>>{
+    // The generator function:
+    [&queue]() mutable -> std::optional<IdTableStatic<0>> {
+      auto block = queue.pop();
+      if (!block) {
+        queue.finish(); // Ensure no deadlock if consumer stops early.
+        return std::nullopt;
+      }
+      return fixBlockAfterPatternJoin(std::move(block));
     }
-  }(queue);
+};
 
   // Actually create the permutations.
   auto thirdSorter =
