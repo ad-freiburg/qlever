@@ -13,7 +13,6 @@
 #include <string>
 #include <vector>
 
-#include "TextIndexReadWrite.h"
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -24,7 +23,6 @@
 #include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/ExternalSortFunctors.h"
-#include "index/FTSAlgorithms.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/IndexMetaData.h"
