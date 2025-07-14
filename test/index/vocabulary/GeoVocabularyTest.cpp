@@ -172,7 +172,7 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
 
   // Create a `GeoVocabulary::WordWriter` and destruct it without a call to
   // `finish()`.
-  GeoVocabulary<VocabularyInternalExternal> sv1;
+  AnyGeoVocab sv1;
   auto wordWriter1 =
       sv1.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor1.dat");
   (*wordWriter1)(lit, true);
@@ -181,7 +181,7 @@ TEST(GeoVocabularyTest, WordWriterDestructor) {
 
   // Create a `GeoVocabulary::WordWriter` and destruct it after an explicit
   // call to `finish()`.
-  GeoVocabulary<VocabularyInternalExternal> sv2;
+  AnyGeoVocab sv2;
   auto wordWriter2 =
       sv2.makeDiskWriterPtr("GeoVocabularyWordWriterDestructor2.dat");
   (*wordWriter2)(lit, true);
