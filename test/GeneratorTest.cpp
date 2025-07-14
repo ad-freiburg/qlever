@@ -4,11 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <optional>
-
 #include "util/Generator.h"
-#include "util/GeneratorConverters.h"
-#include "util/Iterators.h"
+
 struct Details {
   bool begin_ = false;
   bool end_ = false;
@@ -100,35 +97,4 @@ TEST(Generator, getSingleElement) {
     co_yield 3;
   }();
   EXPECT_ANY_THROW(cppcoro::getSingleElement(std::move(gen3)));
-}
-
-TEST(Generator, fromIterator) {
-  struct Generator : public ad_utility::InputRangeFromGet<int> {
-    Generator(const int max) : max{max} {}
-
-    std::optional<int> get() override {
-      if (i < max) {
-        return i++;
-      }
-
-      return std::nullopt;
-    }
-
-    int i{0};
-    const int max;
-  };
-
-  auto range{ad_utility::InputRangeTypeErased<int>{Generator{10}}};
-
-  auto generator{fromInputRange(std::move(range))};
-  auto iterator{std::begin(generator)};
-
-  for (int i{0}; i < 10; ++i) {
-    auto value = *iterator;
-    EXPECT_EQ(i, value);
-
-    iterator++;
-  }
-
-  EXPECT_EQ(iterator, generator.end());
 }

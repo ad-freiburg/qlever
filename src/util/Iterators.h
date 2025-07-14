@@ -261,9 +261,8 @@ class InputRangeMixin {
   Sentinel end() const { return {}; }
 };
 
-// No details empty struct, the default for no details, taken from cppcoro to
-// facilitate the conversion
-using NoDetails = cppcoro::NoDetails;
+// No details empty struct, the default for no details
+struct NoDetails {};
 
 // A similar mixin to the above, with slightly different characteristics:
 // 1. It only requires a single function `std::optional<ValueType> get()

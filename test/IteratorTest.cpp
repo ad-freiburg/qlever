@@ -10,7 +10,6 @@
 #include <string>
 
 #include "backports/algorithm.h"
-#include "util/GeneratorConverters.h"
 #include "util/Iterators.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {

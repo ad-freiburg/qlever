@@ -52,37 +52,3 @@ TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
   ASSERT_TRUE(ql::ranges::equal(testData.begin(), testData.end(),
                                 generator.begin(), generator.end()));
 }
-
-using ad_utility::streams::runStreamAsyncV2;
-
-TEST(AsyncStream, EnsureMaximumBufferLimitWorksV2) {
-  std::atomic_size_t totalProcessed = 0;
-  size_t bufferLimit = 10;
-  auto stream = runStreamAsyncV2(
-      generateNChars(bufferLimit + 2, totalProcessed), bufferLimit);
-  auto iterator = stream.begin();
-
-  while (totalProcessed <= bufferLimit) {
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
-  }
-
-  // stream.begin() consumes a single element, and bufferLimit elements are
-  // stored in the queue inside of stream.
-  ASSERT_EQ(totalProcessed, bufferLimit + 1);
-
-  // One element has been retrieved, so another one may enter the buffer.
-  ++iterator;
-
-  while (totalProcessed == bufferLimit + 1) {
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
-  }
-  ASSERT_EQ(totalProcessed, bufferLimit + 2);
-}
-
-TEST(AsyncStream, EnsureBuffersArePassedCorrectlyV2) {
-  const std::vector<std::string> testData{"Abc", "Def", "Ghi"};
-  auto generator = runStreamAsyncV2(testData, 2);
-
-  ASSERT_TRUE(ql::ranges::equal(testData.begin(), testData.end(),
-                                generator.begin(), generator.end()));
-}
