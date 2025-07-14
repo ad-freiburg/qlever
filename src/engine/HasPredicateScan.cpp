@@ -268,10 +268,11 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
   auto hasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_,
-                    locatedTriplesSnapshot());
+      perm.lazyScan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple),
+                    std::nullopt, {}, cancellationHandle_, locatedTriple);
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -342,9 +343,11 @@ void HasPredicateScan::computeFreeO(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
           std::nullopt}
           .toScanSpecification(index);
-  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
-                        .scan(std::move(scanSpec), {}, cancellationHandle_,
-                              locatedTriplesSnapshot());
+  const auto& perm = index.getPermutation(Permutation::Enum::PSO);
+  const auto& locatedTriple = locatedTriplesSnapshot();
+  auto hasPattern =
+      perm.scan(perm.getScanSpecAndBlocks(scanSpec, locatedTriple), {},
+                cancellationHandle_, locatedTriple);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

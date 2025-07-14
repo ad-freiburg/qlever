@@ -10,12 +10,14 @@
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -327,6 +329,16 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(geof, "geometryType>(?x)"),
                      matchUnary(&makeGeometryTypeExpression));
 
+  using enum ad_utility::BoundingCoordinate;
+  expectFunctionCall(absl::StrCat(geof, "minX>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MIN_X>));
+  expectFunctionCall(absl::StrCat(geof, "minY>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MIN_Y>));
+  expectFunctionCall(absl::StrCat(geof, "maxX>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MAX_X>));
+  expectFunctionCall(absl::StrCat(geof, "maxY>(?x)"),
+                     matchUnary(&makeBoundingCoordinateExpression<MAX_Y>));
+
   // The different distance functions:
   expectFunctionCall(
       absl::StrCat(geof, "metricDistance>(?a, ?b)"),
@@ -441,43 +453,23 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c, ?d)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "metricDistance>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "centroid>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "envelope>(?a, ?b, ?c)"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b)"));
-  expectFunctionCallFails(absl::StrCat(geof, "geometryType>(?a, ?b, ?c)"));
 
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfIntersects>(?a, ?b, ?c)"));
+  const std::vector<std::string> unaryGeofFunctionNames = {
+      "centroid", "envelope", "geometryType", "minX", "minY", "maxX", "maxY"};
+  for (const auto& func : unaryGeofFunctionNames) {
+    expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b)"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b, ?c)"));
+  }
 
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfContains>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfCrosses>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfTouches>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfEquals>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfOverlaps>(?a, ?b, ?c)"));
-
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a)"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>()"));
-  expectFunctionCallFails(absl::StrCat(geof, "sfWithin>(?a, ?b, ?c)"));
+  const std::vector<std::string> binaryGeofFunctionNames = {
+      "sfIntersects", "sfContains", "sfCovers",   "sfCrosses",
+      "sfTouches",    "sfEquals",   "sfOverlaps", "sfWithin"};
+  for (const auto& func : binaryGeofFunctionNames) {
+    expectFunctionCallFails(absl::StrCat(geof, func, ">()"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a)"));
+    expectFunctionCallFails(absl::StrCat(geof, func, ">(?a, ?b, ?c)"));
+  }
 
   expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
   expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
