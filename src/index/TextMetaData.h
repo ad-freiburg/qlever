@@ -8,13 +8,10 @@
 #include <cstdio>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/TypeTraits.h"
-
-using std::vector;
+#include "global/Id.h"
+#include "util/File.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 class ContextListMetaData {
  public:
@@ -121,12 +118,12 @@ class TextMetaData {
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
-  vector<uint64_t> _blockUpperBoundWordIds;
+  std::vector<uint64_t> _blockUpperBoundWordIds;
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
   std::string _name;
-  vector<TextBlockMetaData> _blocks;
+  std::vector<TextBlockMetaData> _blocks;
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {

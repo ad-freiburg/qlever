@@ -45,7 +45,7 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
+      std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
@@ -53,7 +53,7 @@ class SparqlQleverVisitor {
   using SubQueryAndMaybeValues =
       std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
-      std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
+      std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
   using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
@@ -193,11 +193,11 @@ class SparqlQleverVisitor {
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  std::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
   GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  std::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
   SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
@@ -309,7 +309,7 @@ class SparqlQleverVisitor {
 
   parsedQuery::SparqlValues visit(Parser::InlineDataFullContext* ctx);
 
-  vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
+  std::vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
 
   TripleComponent visit(Parser::DataBlockValueContext* ctx);
 
@@ -323,7 +323,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
-  vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
+  std::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
   std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
@@ -345,7 +345,7 @@ class SparqlQleverVisitor {
 
   SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
 
-  vector<TripleWithPropertyPath> visit(
+  std::vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
   std::optional<PathObjectPairsAndTriples> visit(

@@ -100,7 +100,7 @@ uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
   return {ColumnIndex(0)};
 }
 

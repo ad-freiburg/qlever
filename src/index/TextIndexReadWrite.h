@@ -30,7 +30,7 @@ namespace textIndexReadWrite::detail {
 template <typename From>
 void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
                              const ad_utility::File& textIndexFile,
-                             vector<uint64_t>& frequencyEncodedVector,
+                             std::vector<uint64_t>& frequencyEncodedVector,
                              std::vector<From>& codebook) {
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
@@ -80,7 +80,7 @@ void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 template <typename From>
 void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
                             const ad_utility::File& textIndexFile,
-                            vector<From>& gapEncodedVector) {
+                            std::vector<From>& gapEncodedVector) {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -150,12 +150,12 @@ void compressAndWrite(ql::span<const T> src, ad_utility::File& out,
  *
  */
 ContextListMetaData writePostings(ad_utility::File& out,
-                                  const vector<Posting>& postings,
+                                  const std::vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
                                   off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>
-size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
+size_t writeCodebook(const std::vector<T>& codebook, ad_utility::File& file);
 
 /**
  * @brief Encodes a span of elements and writes the encoded list to file.
@@ -173,9 +173,9 @@ void encodeAndWriteSpanAndMoveOffset(ql::span<const T> spanToWrite,
 /// READING PART
 
 template <typename T>
-vector<T> readZstdComprList(size_t nofElements, off_t from,
-                            size_t nofBytesCompressed,
-                            const ad_utility::File& textIndexFile) {
+std::vector<T> readZstdComprList(size_t nofElements, off_t from,
+                                 size_t nofBytesCompressed,
+                                 const ad_utility::File& textIndexFile) {
   std::vector<char> compressed(nofBytesCompressed);
   size_t ret = textIndexFile.read(compressed.data(), nofBytesCompressed, from);
   AD_CONTRACT_CHECK(ret == nofBytesCompressed);
@@ -213,14 +213,15 @@ IdTable readWordEntityCl(const TextBlockMetaData& tbmd,
  */
 template <typename To, typename From,
           typename Transformer = decltype(ad_utility::staticCast<To>)>
-vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             const ad_utility::File& textIndexFile,
-                             Transformer transformer = {}) {
-  vector<uint64_t> frequencyEncodedVector;
-  vector<From> codebook;
+std::vector<To> readFreqComprList(size_t nofElements, off_t from,
+                                  size_t nofBytes,
+                                  const ad_utility::File& textIndexFile,
+                                  Transformer transformer = {}) {
+  std::vector<uint64_t> frequencyEncodedVector;
+  std::vector<From> codebook;
   detail::readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
                                   frequencyEncodedVector, codebook);
-  vector<To> result;
+  std::vector<To> result;
   result.reserve(frequencyEncodedVector.size());
   ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
     result.push_back(transformer(codebook.at(encoded)));
@@ -241,8 +242,8 @@ template <typename To, typename From, typename OutputIterator,
 void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
                        size_t nofBytes, const ad_utility::File& textIndexFile,
                        Transformer transformer = {}) {
-  vector<uint64_t> frequencyEncodedVector;
-  vector<From> codebook;
+  std::vector<uint64_t> frequencyEncodedVector;
+  std::vector<From> codebook;
   detail::readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
                                   frequencyEncodedVector, codebook);
   ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
@@ -267,15 +268,16 @@ void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
  */
 template <typename To, typename From,
           typename Transformer = decltype(ad_utility::staticCast<To>)>
-vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                            const ad_utility::File& textIndexFile,
-                            Transformer transformer = {}) {
-  vector<From> gapEncodedVector;
+std::vector<To> readGapComprList(size_t nofElements, off_t from,
+                                 size_t nofBytes,
+                                 const ad_utility::File& textIndexFile,
+                                 Transformer transformer = {}) {
+  std::vector<From> gapEncodedVector;
   detail::readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
                                  gapEncodedVector);
 
   // Undo gapEncoding
-  vector<To> result;
+  std::vector<To> result;
   result.reserve(nofElements);
   From previous = 0;
   for (auto gap : gapEncodedVector) {
@@ -298,7 +300,7 @@ template <typename To, typename From, typename OutputIterator,
 void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
                       size_t nofBytes, const ad_utility::File& textIndexFile,
                       Transformer transformer = {}) {
-  vector<From> gapEncodedVector;
+  std::vector<From> gapEncodedVector;
   detail::readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
                                  gapEncodedVector);
 

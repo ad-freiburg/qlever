@@ -16,7 +16,7 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
@@ -33,7 +33,7 @@ class Minus : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -57,7 +57,7 @@ class Minus : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 
@@ -72,7 +72,7 @@ class Minus : public Operation {
    **/
   IdTable computeMinus(
       const IdTable& a, const IdTable& b,
-      const vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
+      const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) const;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

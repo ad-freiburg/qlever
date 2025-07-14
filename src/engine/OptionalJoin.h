@@ -44,7 +44,7 @@ class OptionalJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<ColumnIndex> resultSortedOn() const override;
+  std::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -56,7 +56,7 @@ class OptionalJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
   }
 

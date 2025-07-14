@@ -6,7 +6,7 @@
 
 // ____________________________________________________________________________________
 // Transform the triples and sets the graph on all triples.
-vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
+std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
     const SparqlTripleSimpleWithGraph::Graph& graph) {
   auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)

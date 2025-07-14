@@ -29,7 +29,7 @@ class Sort : public Operation {
  public:
   virtual std::string getDescriptor() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override {
+  virtual std::vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -61,12 +61,12 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {subtree_.get()};
   }
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const vector<ColumnIndex>& sortColumns) const override;
+      const std::vector<ColumnIndex>& sortColumns) const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

@@ -112,7 +112,7 @@ IdTable IndexImpl::getEntityMentionsForWord(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
-    const vector<std::string>& terms) const {
+    const std::vector<std::string>& terms) const {
   // It is beneficial to choose a term where no filtering by regular word id
   // is needed. Then the entity lists can be read directly from disk.
   // For others it is always necessary to reach wordlist and filter them
