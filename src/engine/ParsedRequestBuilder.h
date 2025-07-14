@@ -50,11 +50,11 @@ struct ParsedRequestBuilder {
 
   // Returns whether the request is a Graph Store operation.
   bool isGraphStoreOperation() const;
-  bool isGraphStoreOperationIndirect() const;
+  bool isGraphStoreOperationDirect() const;
 
   // Set the operation to the parsed Graph Store operation.
   void extractGraphStoreOperation();
-  void extractGraphStoreOperationIndirect();
+  void extractGraphStoreOperationDirect();
 
   // Returns whether the parameters contain a parameter with the given key.
   bool parametersContain(std::string_view param) const;

@@ -146,6 +146,34 @@ TEST(ParsedRequestBuilderTest, isGraphStoreOperation) {
 }
 
 // _____________________________________________________________________________________________
+TEST(ParsedRequestBuilderTest, isGraphStoreOperationDirect) {
+  auto isGraphStoreOperationDirect =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    const auto builder = ParsedRequestBuilder(request);
+    return builder.isGraphStoreOperationDirect();
+  };
+  EXPECT_THAT(isGraphStoreOperationDirect(makeGetRequest("/")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationDirect(
+                  makeGetRequest("/?query=foo&access-token=bar")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationDirect(makeGetRequest("/?default")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationDirect(makeGetRequest("/?graph=foo")),
+              testing::IsFalse());
+  EXPECT_THAT(isGraphStoreOperationDirect(
+                  makeGetRequest("/default?query=foo&access-token=bar")),
+              testing::IsFalse());
+  EXPECT_THAT(
+      isGraphStoreOperationDirect(makeGetRequest("/http-graph-store/foo.ttl")),
+      testing::IsTrue());
+  EXPECT_THAT(isGraphStoreOperationDirect(
+                  makeGetRequest("/foo/http-graph-store/foo.ttl")),
+              testing::IsFalse());
+}
+
+// _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractGraphStoreOperation) {
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto expect = [](const auto& request, const GraphOrDefault& graph,

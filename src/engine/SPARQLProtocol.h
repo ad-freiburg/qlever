@@ -50,7 +50,7 @@ class SPARQLProtocol {
   // identification.
   static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocol(
       const RequestType& request);
-  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolIndirect(
+  static ad_utility::url_parser::ParsedRequest parseGraphStoreProtocolDirect(
       const RequestType& request);
 
  public:

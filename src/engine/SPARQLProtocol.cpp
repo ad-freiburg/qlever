@@ -161,8 +161,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
   parsedRequestBuilder.extractAccessToken(request);
   if (!parsedRequestBuilder.isGraphStoreOperation()) {
     throw std::runtime_error(
-        "Expecting a Graph Store Protocol request, but missing query "
-        "parameters \"graph\" or \"default\" in request");
+        R"(Expecting a Graph Store Protocol request, but missing query parameters "graph" or "default" in request)");
   }
   parsedRequestBuilder.extractGraphStoreOperation();
   return std::move(parsedRequestBuilder).build();
@@ -170,11 +169,10 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseGraphStoreProtocol(
 
 // ____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest
-SPARQLProtocol::parseGraphStoreProtocolIndirect(const RequestType& request) {
+SPARQLProtocol::parseGraphStoreProtocolDirect(const RequestType& request) {
   auto parsedRequestBuilder = ParsedRequestBuilder(request);
   parsedRequestBuilder.extractAccessToken(request);
-  AD_CORRECTNESS_CHECK(parsedRequestBuilder.isGraphStoreOperationIndirect());
-  parsedRequestBuilder.extractGraphStoreOperationIndirect();
+  parsedRequestBuilder.extractGraphStoreOperationDirect();
   return std::move(parsedRequestBuilder).build();
 }
 
@@ -197,7 +195,7 @@ ad_utility::url_parser::ParsedRequest SPARQLProtocol::parseHttpRequest(
   // `http-graph-store` is the (currently fixed) prefix for the Graph Store
   // Protocol with direct graph identification.
   if (!url.segments().empty() && url.segments().front() == "http-graph-store") {
-    return parseGraphStoreProtocolIndirect(request);
+    return parseGraphStoreProtocolDirect(request);
   }
 
   // SPARQL Query or Graph Store Protocol with indirect graph identification
