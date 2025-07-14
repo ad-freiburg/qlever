@@ -1942,6 +1942,29 @@ TEST(SparqlParser, Datasets) {
           datasets, noGraphs));
 }
 
+MATCHER(SoEqual, "Check if subject and object of a triple are equal") {
+  return arg.s_ == arg.o_;
+}
+MATCHER(SpNotEqual, "Check if subject and object of a triple are equal") {
+  return arg.s_ != arg.p_;
+}
+
+auto isBlank = []() -> testing::Matcher<const TripleComponent&> {
+  using namespace testing;
+  auto getType = [](const TripleComponent& tc) {
+    return tc.getId().getDatatype();
+  };
+  return AllOf(AD_PROPERTY(TripleComponent, isId, Eq(true)),
+               ResultOf(getType, Eq(Datatype::BlankNodeIndex)));
+};
+
+auto bnodeTriple =
+    []() -> testing::Matcher<const SparqlTripleSimpleWithGraph&> {
+  using namespace testing;
+  using Tr = SparqlTripleSimpleWithGraph;
+  return AllOf(AD_FIELD(Tr, s_, isBlank()), AD_FIELD(Tr, o_, isBlank()),
+               Not(AD_FIELD(Tr, p_, isBlank())));
+};
 TEST(SparqlParser, BlankNodesInUpdate) {
   // TODO<joka921> Use a proper test...
   auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
@@ -1957,7 +1980,23 @@ TEST(SparqlParser, BlankNodesInUpdate) {
   auto filterGraphPattern = m::Filters(m::ExistsFilter(
       m::GraphPattern(m::Triples({{Var("?a"), Var{"?b"}, Var("?c")}})),
       {}));
+m::UpdateClause(
+    m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}),
+    m::GraphPattern()));
 */
+
+  using namespace testing;
+  auto matchBaB = []() -> Matcher<const updateClause::UpdateTriples&> {
+    auto getVec = [](const updateClause::UpdateTriples& tr) -> decltype(auto) {
+      return tr.triples_;
+    };
+    return ResultOf(getVec,
+                    ElementsAre(AllOf(SoEqual(), SpNotEqual(), bnodeTriple())));
+  };
+  expectUpdate(
+      "INSERT DATA { _:b <p> _:b}",
+      ElementsAre(m::UpdateClause(m::GraphUpdate(::testing::_, matchBaB()),
+                                  ::m::GraphPattern())));
   expectUpdate(
       "INSERT DATA { GRAPH <g1>  { _:b <p> <o> }"
       "GRAPH <g2>  { _:b <p> <o> } }",

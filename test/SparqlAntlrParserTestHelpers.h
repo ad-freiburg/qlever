@@ -945,21 +945,29 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto GraphUpdate =
-    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+// Match a `updateClause::GraphUpdate` clause.
+inline auto GraphUpdate(
+    const Matcher<const updateClause::GraphUpdate::Triples&>& toDelete,
+    const Matcher<const updateClause::GraphUpdate::Triples&>& toInsert)
     -> Matcher<const updateClause::GraphUpdate&> {
-  // This matcher currently doesn't test the local vocab of `toInsert_` and
-  // `toDelete_`.
+  using namespace testing;
+  return AllOf(AD_FIELD(GraphUpdate, toInsert_, toInsert),
+               AD_FIELD(GraphUpdate, toDelete_, toDelete));
+}
+
+// Same as above, but only match the triples exactly (without checking for blank
+// nodes, local vocab, etc.)
+inline auto GraphUpdate(
+    const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
+    const std::vector<SparqlTripleSimpleWithGraph>& toInsert)
+    -> Matcher<const updateClause::GraphUpdate&> {
   auto getVec = [](const GraphUpdate::Triples& tr) -> decltype(auto) {
     return tr.triples_;
   };
   using namespace testing;
-  return AllOf(AD_FIELD(GraphUpdate, toInsert_,
-                        ResultOf(getVec, ElementsAreArray(toInsert))),
-               AD_FIELD(GraphUpdate, toDelete_,
-                        ResultOf(getVec, ElementsAreArray(toDelete))));
-};
+  return matchers::GraphUpdate(ResultOf(getVec, ElementsAreArray(toDelete)),
+                               ResultOf(getVec, ElementsAreArray(toInsert)));
+}
 
 inline auto EmptyDatasets = [] {
   return AllOf(AD_PROPERTY(ParsedQuery::DatasetClauses, activeDefaultGraphs,
