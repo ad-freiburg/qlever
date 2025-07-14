@@ -54,7 +54,7 @@ NARY_EXPRESSION(GeometryTypeExpression, 1,
 NARY_EXPRESSION(GeometryNExpression, 2,
                 FV<ad_utility::WktGeometryN,
                    // TODO use GeoPointOrWktValueGetter
-                   LiteralValueGetterWithoutStrFunction, IntValueGetter>);
+                   LiteralFromIdGetter, IntValueGetter>);
 
 template <SpatialJoinType Relation>
 NARY_EXPRESSION(

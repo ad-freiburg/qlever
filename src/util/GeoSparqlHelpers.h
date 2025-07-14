@@ -176,21 +176,26 @@ class WktGeometryType {
 class WktGeometryN {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<triple_component::Literal>& wkt,
+      const std::optional<std::string>& wkt,
       const std::optional<int64_t>& n) const {
+    using namespace triple_component;
     if (!wkt.has_value() || !n.has_value()) {
       return ValueId::makeUndefined();
     }
 
-    auto inputContent = wkt.value().getContent();
+    auto inputContent = wkt.value();
+
+    // TODO change this
+    auto litInput = Literal::literalWithoutQuotes(inputContent);
+    litInput.addDatatype(detail::wktLiteralIri);
+
     auto resultWkt =
-        detail::wktGetGeometryN(asStringViewUnsafe(inputContent), n.value());
+        detail::wktGetGeometryN(litInput.toStringRepresentation(), n.value());
 
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
     }
 
-    using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{lit}};
