@@ -962,8 +962,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
-  auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
@@ -1016,6 +1014,153 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_return;
 }
 
+namespace {
+// Return
+std::string_view raw(const std::integral auto& value) {
+  return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
+}
+
+auto isTrivial(Id id) {
+  auto datatype = id.getDatatype();
+  return datatype == Datatype::Undefined || datatype == Datatype::Bool ||
+         datatype == Datatype::Int || datatype == Datatype::Double ||
+         datatype == Datatype::Date || datatype == Datatype::GeoPoint;
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::string ExportQueryExecutionTrees::StringMapping::flush() {
+  numProcessedRows_ = 0;
+  std::vector<std::string> sortedStrings;
+  sortedStrings.resize(stringMapping_.size());
+  for (auto& [string, index] : stringMapping_) {
+    sortedStrings[index] = string;
+  }
+  stringMapping_.clear();
+
+  std::string result;
+  // Rough estimate
+  result.reserve(sortedStrings.size() * 100);
+
+  for (const std::string& string : sortedStrings) {
+    absl::StrAppend(&result, raw(string.size()), string);
+  }
+
+  return result;
+}
+
+// _____________________________________________________________________________
+Id ExportQueryExecutionTrees::StringMapping::stringToId(
+    std::pair<std::string, const char*> optionalStringAndType) {
+  auto& [stringValue, xsdType] = optionalStringAndType;
+  if (xsdType != nullptr) {
+    absl::StrAppend(&stringValue, "^^", xsdType);
+  }
+  size_t distinctIndex = 0;
+  if (stringMapping_.contains(stringValue)) {
+    distinctIndex = stringMapping_.at(stringValue);
+  } else {
+    distinctIndex = stringMapping_[std::move(stringValue)] =
+        stringMapping_.size();
+  }
+  return Id::makeFromLocalVocabIndex(
+      reinterpret_cast<LocalVocabIndex>(distinctIndex));
+}
+
+// _____________________________________________________________________________
+Id ExportQueryExecutionTrees::toExportableId(Id originalId,
+                                             const QueryExecutionTree& qet,
+                                             const LocalVocab& localVocab,
+                                             StringMapping& stringMapping) {
+  if (isTrivial(originalId)) {
+    return originalId;
+  }
+  auto optionalStringAndType =
+      idToStringAndType(qet.getQec()->getIndex(), originalId, localVocab);
+  if (optionalStringAndType.has_value()) [[likely]] {
+    return stringMapping.stringToId(std::move(optionalStringAndType.value()));
+  }
+  return Id::makeUndefined();
+}
+
+// _____________________________________________________________________________
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    selectQueryResultToStream<ad_utility::MediaType::binaryQleverExport>(
+        const QueryExecutionTree& qet,
+        const parsedQuery::SelectClause& selectClause,
+        LimitOffsetClause limitAndOffset,
+        CancellationHandle cancellationHandle) {
+  std::shared_ptr<const Result> result = qet.getResult(true);
+  result->logResultSize();
+  AD_LOG_DEBUG << "Starting binary export..." << std::endl;
+
+  co_yield "QLEVER.EXPORT";
+  // Export format version
+  co_yield raw(static_cast<uint16_t>(0));
+
+  auto vars = selectClause.getSelectedVariablesAsStrings();
+
+  // Export number of columns as a 16 bit unsigned int.
+  co_yield raw(static_cast<uint16_t>(vars.size()));
+
+  // Export actual variable names
+  for (const std::string& variableName : vars) {
+    co_yield raw(variableName.size());
+    co_yield variableName;
+  }
+
+  // Get all columns with defined variables.
+  QueryExecutionTree::ColumnIndicesAndTypes columns =
+      qet.selectedVariablesToColumnIndices(selectClause, false);
+  std::erase(columns, std::nullopt);
+
+  // Use special undefined value that's not actually used as a real value.
+  Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
+  AD_CORRECTNESS_CHECK(Id::fromBits(vocabMarker).getDatatype() ==
+                       Datatype::Undefined);
+
+  // Maps strings to re-usable ids.
+  StringMapping stringMapping;
+
+  // Iterate over the result and yield the bindings.
+  bool isFirstRow = true;
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
+    for (uint64_t i : range) {
+      if (!isFirstRow) [[likely]] {
+        co_yield ",";
+      }
+      for (const auto& column : columns) {
+        Id id = pair.idTable_(i, column->columnIndex_);
+        co_yield raw(
+            toExportableId(id, qet, pair.localVocab_, stringMapping).getBits());
+      }
+      if (stringMapping.needsFlush()) {
+        co_yield raw(vocabMarker);
+        co_yield stringMapping.flush();
+        co_yield raw(static_cast<size_t>(0));
+      }
+      cancellationHandle->throwIfCancelled();
+      isFirstRow = false;
+      stringMapping.nextRow();
+    }
+  }
+
+  std::string trailingVocab = stringMapping.flush();
+  if (!trailingVocab.empty()) {
+    co_yield raw(vocabMarker);
+    co_yield trailingVocab;
+    co_yield raw(static_cast<size_t>(0));
+  }
+
+  // If there are no variables, just export the total number of rows
+  if (vars.empty()) {
+    co_yield raw(resultSize);
+  }
+}
+
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
@@ -1027,8 +1172,10 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml ||
                 format == MediaType::sparqlJson ||
-                format == MediaType::qleverJson);
-  if constexpr (format == MediaType::octetStream) {
+                format == MediaType::qleverJson ||
+                format == MediaType::binaryQleverExport);
+  if constexpr (format == MediaType::octetStream ||
+                format == MediaType::binaryQleverExport) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
   } else if constexpr (format == MediaType::sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
@@ -1128,12 +1275,14 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
   using enum MediaType;
 
   static constexpr std::array supportedTypes{
-      csv, tsv, octetStream, turtle, sparqlXml, sparqlJson, qleverJson};
+      csv,       tsv,        octetStream, turtle,
+      sparqlXml, sparqlJson, qleverJson,  binaryQleverExport};
   AD_CORRECTNESS_CHECK(ad_utility::contains(supportedTypes, mediaType));
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>{}(compute, mediaType);
+                                  sparqlJson, qleverJson, binaryQleverExport>{}(
+          compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 
