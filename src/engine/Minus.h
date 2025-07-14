@@ -43,11 +43,15 @@ class Minus : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
 
   // Create a variant of functions that find undefined values in a range. In
-  // case the selected operation (via `left`) might contain static values all
-  // values are checked for undef values. If undef values are found an instance
-  // of `ad_utility::FindSmallerUndefRanges` will be returned, otherwise the
-  // function will be replaced with `ad_utility::Noop`, each wrapped in a
-  // `std::variant` respectively.
+  // case the selected operation (via `left`) might conceptually contain
+  // undefined values all values are checked for undef values. If undef values
+  // are found an instance of `ad_utility::FindSmallerUndefRanges` will be
+  // returned, otherwise the function will be replaced with `ad_utility::Noop`,
+  // each wrapped in a `std::variant` respectively.
+  // `auto` is used instead of
+  // `std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>` to
+  // avoid including expensive headers that are only relevant for the
+  // implementation of this function.
   auto makeUndefRangesChecker(bool left, const IdTable& idTable) const;
 
  public:

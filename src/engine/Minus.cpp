@@ -97,25 +97,23 @@ size_t Minus::getCostEstimate() {
 
 // _____________________________________________________________________________
 auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
-  std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges> findUndef;
   const auto& operation = left ? _left : _right;
-  bool containsUndef = ql::ranges::any_of(
+  bool alwaysDefined = ql::ranges::all_of(
       _matchedColumns, [&operation, left, &idTable](const auto& cols) {
         size_t tableColumn = cols[static_cast<size_t>(!left)];
         const auto& [_, info] =
             operation->getVariableAndInfoByColumnIndex(tableColumn);
-        if (info.mightContainUndef_ !=
-            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined) {
-          return ql::ranges::any_of(idTable.getColumn(tableColumn),
-                                    &Id::isUndefined);
-        }
-        return false;
+        bool colAlwaysDefined =
+            info.mightContainUndef_ ==
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+        return colAlwaysDefined ||
+               ql::ranges::none_of(idTable.getColumn(tableColumn),
+                                   &Id::isUndefined);
       });
   // Use expensive operation if one of the columns might contain undef.
-  if (containsUndef) {
-    findUndef.emplace<1>();
-  }
-  return findUndef;
+  using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;
+  return alwaysDefined ? RT{ad_utility::Noop{}}
+                       : RT{ad_utility::FindSmallerUndefRanges{}};
 }
 
 // _____________________________________________________________________________
