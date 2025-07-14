@@ -27,7 +27,7 @@ TextMetaData::getBlockInfoByWordRange(const uint64_t lower,
   auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
                                   _blockUpperBoundWordIds.end(), upper);
   // Same as for normal it. This has to be done since the range is [lower,
-  // upper] sd opposed to `[lower, upper)`.
+  // upper] as opposed to `[lower, upper)`.
   // TODO<joka921, flixtastic> fix this inconsistency with the usual C++
   // conventions.
   if (upperIt == _blockUpperBoundWordIds.end()) {

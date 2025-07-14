@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "TextIndexReadWrite.h"
 #include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -354,9 +355,8 @@ class IndexImpl {
         const TextBlockMetaData& tbmd,
         const IdRange<WordVocabIndex>& includingIdRange)
         : tbmd_{tbmd},
-          hasToBeFiltered_{hasToBeFiltered(includingIdRange)},
           optIdRange_{
-              hasToBeFiltered_
+              computeHasToBeFiltered(includingIdRange)
                   ? std::optional<IdRange<WordVocabIndex>>{includingIdRange}
                   : std::nullopt} {}
     // The TextBlockMetaData has the information on where the blocks boundaries
@@ -364,12 +364,12 @@ class IndexImpl {
     // context list or entity list of a text block.
     const TextBlockMetaData tbmd_;
 
-    // Is set to true if the text block contains entries outside of the
-    // requested range
-    const bool hasToBeFiltered_;
+    // Returns true if the text block contains entries outside of the requested
+    // range
+    bool hasToBeFiltered() const { return optIdRange_.has_value(); };
 
     // The id range of the prefix or word used to retrieve the text block(s). It
-    // is only set if hasToBeFiltered_ was determined to be true during
+    // is only set if computeHasToBeFiltered was determined to be true during
     // construction.
     // Note: This range is inclusive so it is [lowerId, upperId],
     // NOT [lowerId, upperId)
@@ -377,7 +377,7 @@ class IndexImpl {
 
     // Returns true if the text block contains entries outside of the requested
     // range
-    bool hasToBeFiltered(
+    bool computeHasToBeFiltered(
         const IdRange<WordVocabIndex>& includingIdRange) const {
       return !(tbmd_._firstWordId >= includingIdRange.first().get() &&
                tbmd_._lastWordId <= includingIdRange.last().get());
@@ -617,10 +617,11 @@ class IndexImpl {
   // "astro*". Returns `nullopt` if no suitable block was found because no
   // matching word is contained in the text index. Some additional information
   // is also returned that is often required by the calling functions:
-  // `hasToBeFiltered_` is true iff `word` is NOT the only word in the text
-  // block, and additional filtering is thus required. `idRange_` is the range
-  // `[first, last]` of the `WordVocabIndex`es that correspond to the word
-  // (which might also be a prefix, thus it is a range).
+  // `hasToBeFiltered()` is true iff TextBlockMetadataAndWordInfo contains
+  // entries outside of the idRange. `optIdRange_` is the range
+  // `[first, last]` of the `WordVocabIndex`es that correspond to the word. It
+  // is only set iff hasToBeFiltered() is true since no IdRange is needed else.
+  // (`word` might also be a prefix, thus it is a range).
   std::vector<TextBlockMetadataAndWordInfo> getTextBlockMetadataForWordOrPrefix(
       const std::string& word) const;
 
@@ -651,62 +652,14 @@ class IndexImpl {
    *              but when combining multiple blocks they have to be accounted
    *              for.
    */
-  CPP_template(typename Reader)(
-      requires ad_utility::InvocableWithExactReturnType<
-          Reader, IdTable, const TextBlockMetaData&,
-          const ad_utility::AllocatorWithLimit<Id>&, const ad_utility::File&,
-          TextScoringMetric>) IdTable
-      mergeTextBlockResults(
-          const Reader& reader,
-          const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
-          const ad_utility::AllocatorWithLimit<Id>& allocator,
-          TextScanMode textScanMode) const {
-    AD_CONTRACT_CHECK(tbmds.size() > 0);
-    // Collect all blocks as IdTables
-    vector<IdTable> partialResults;
-    for (const auto& tbmd : tbmds) {
-      IdTable partialResult{allocator};
-      partialResult =
-          reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
-      if (textScanMode == TextScanMode::WordScan && tbmd.hasToBeFiltered_) {
-        AD_CORRECTNESS_CHECK(tbmd.optIdRange_.has_value());
-        partialResult = FTSAlgorithms::filterByRange(tbmd.optIdRange_.value(),
-                                                     partialResult);
-      }
-      partialResults.push_back(std::move(partialResult));
-    }
-    // If only one block was requested return the IdTable
-    if (partialResults.size() == 1) {
-      return std::move(partialResults.at(0));
-    }
-    // Combine the partial results to one IdTable
-    IdTable result{3, allocator};
-    result.reserve(
-        std::accumulate(partialResults.begin(), partialResults.end(), size_t{0},
-                        [](size_t acc, const IdTable& partialResult) {
-                          return acc + partialResult.numRows();
-                        }));
-    for (const auto& partialResult : partialResults) {
-      result.insertAtEnd(partialResult);
-    }
-    auto toSort = std::move(result).toStatic<3>();
-    // Sort the table
-    ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
-      return ql::ranges::lexicographical_compare(
-          std::begin(a), std::end(a), std::begin(b), std::end(b),
-          [](const Id& x, const Id& y) {
-            return x.compareWithoutLocalVocab(y) < 0;
-          });
-    });
-    // If not entitySearch don't filter duplicates
-    if (textScanMode == TextScanMode::WordScan) {
-      return std::move(toSort).toDynamic<>();
-    }
-    // Filter duplicates
-    auto [newEnd, _] = std::ranges::unique(toSort);
-    toSort.erase(newEnd, toSort.end());
-    return std::move(toSort).toDynamic<>();
-  }
+  IdTable mergeTextBlockResults(
+      absl::FunctionRef<IdTable(const TextBlockMetaData&,
+                                const ad_utility::AllocatorWithLimit<ValueId>&,
+                                const ad_utility::File&, TextScoringMetric)>
+          reader,
+      const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      TextScanMode textScanMode) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
