@@ -1120,7 +1120,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   AD_CORRECTNESS_CHECK(Id::fromBits(vocabMarker).getDatatype() ==
                        Datatype::Undefined);
 
-  // Maps strings to re-usable ids.
+  // Maps strings to reusable ids.
   StringMapping stringMapping;
 
   // Iterate over the result and yield the bindings.
