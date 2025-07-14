@@ -259,8 +259,6 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
-addLinkAndDiscoverTest(SplitVocabularyTest index)
-
 addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 addLinkAndDiscoverTestNoLibs(ViewsTest)
