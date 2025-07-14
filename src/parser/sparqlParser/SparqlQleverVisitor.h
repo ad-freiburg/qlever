@@ -114,9 +114,13 @@ class SparqlQleverVisitor {
 
   // Set the blank node treatment (see above) the `newValue` and return a
   // cleanup object that in its destructor restores the original blank node
-  // treatment. If before calling this function blank nodes were already
-  // illegal, then they remain illegal (because "blank nodes forbidden" from an
-  // outer scope is more important than a local rule).
+  // treatment. If blank nodes were already illegal before calling this
+  // function, then they remain illegal (because "blank nodes forbidden" from an
+  // outer scope is more important than a local rule). This behavior is used
+  // when parsing DELETE requests, which don't support updates, but recursively
+  // use the same parser rules as INSERT requests which do support updates, but
+  // under some circumstances require them to be treated as blank nodes instead
+  // of internal variables.
   [[nodiscard]] auto setBlankNodeTreatmentForScope(TreatBlankNodesAs newValue) {
     bool wasIllegal = treatBlankNodesAs_ == TreatBlankNodesAs::Illegal;
     auto previous = wasIllegal ? treatBlankNodesAs_

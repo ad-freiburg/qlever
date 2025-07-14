@@ -9,7 +9,6 @@ add_library(parser
         RdfParser.cpp
         Tokenizer.cpp
         WordsAndDocsFileParser.cpp
-        TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
@@ -28,7 +27,6 @@ add_library(parser
         TextSearchQuery.cpp
         Quads.cpp
         UpdateTriples.cpp
-        UpdateTriples.h
 )
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index rdfTypes)
 

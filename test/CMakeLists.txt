@@ -39,8 +39,7 @@ endfunction()
 
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
-    add_executable(QLeverAllUnitTestsMain
-            parser/UpdateTriplesTest.cpp)
+    add_executable(QLeverAllUnitTestsMain)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     # The following line (as opposed to using `gtest_discover_tests`) has the effect that `ctest` will treat all the
     # unit tests as a single test case and will simply run the executable (using the main function from `gtest_main`.
@@ -220,10 +219,6 @@ addLinkAndDiscoverTest(MinusTest engine)
 # change the following two lines.
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
-
-addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
-
-addLinkAndDiscoverTestSerial(SparqlAntlrParserExpressionTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames

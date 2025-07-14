@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../SparqlAntlrParserTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
 
 namespace tc {

@@ -9,8 +9,8 @@
 #include <utility>
 #include <variant>
 
+#include "./parser/SparqlAntlrParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
-#include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/Conversions.h"

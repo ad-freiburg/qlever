@@ -5,3 +5,7 @@ addLinkAndDiscoverTest(QuadTest engine)
 addLinkAndDiscoverTest(BlankNodeExpressionTest engine)
 addLinkAndDiscoverTest(PropertyPathTest parser)
 addLinkAndDiscoverTest(UpdateTriplesTest parser)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserUpdateTest parser engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserExpressionTest parser sparqlExpressions engine)
+

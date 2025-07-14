@@ -16,6 +16,8 @@
 #include <typeindex>
 #include <vector>
 
+#include "../util/GTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -26,9 +28,7 @@
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
-#include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
-#include "util/TripleComponentTestHelpers.h"
 #include "util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
@@ -684,6 +684,11 @@ inline auto Triples = [](const vector<SparqlTriple>& triples)
   return detail::GraphPatternOperation<p::BasicGraphPattern>(
       AD_FIELD(p::BasicGraphPattern, _triples,
                testing::UnorderedElementsAreArray(triples)));
+};
+inline auto OrderedTriples = [](const vector<SparqlTriple>& triples)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::BasicGraphPattern>(AD_FIELD(
+      p::BasicGraphPattern, _triples, testing::ElementsAreArray(triples)));
 };
 
 namespace detail {

@@ -43,7 +43,12 @@ class GraphTerm : public GraphTermBase,
 
   // ___________________________________________________________________________
   // Constructs a TripleComponent from the GraphTerm. Blank nodes are
-  // automatically turned into internal variables.
+  // automatically turned into internal variables. This function is used by the
+  // SPARQL parser,when the same group graph pattern is used as the template as
+  // well as the where clause of a request, e.g. in `CONSTRUCT WHERE { ...}` or
+  // `DELETE WHERE{...}`. It is necessary, because the parser internally
+  // represents the templates of UPDATE requests and CONSTRUCT queries
+  // differently than The "normal" WHERE clauses.
   [[nodiscard]] TripleComponent toTripleComponent() const {
     return visit([](const auto& element) -> TripleComponent {
       using T = std::decay_t<decltype(element)>;
