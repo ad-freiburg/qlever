@@ -140,8 +140,8 @@ Result Bind::computeResult(bool requestLaziness) {
         return Result::IdTableVocabPair{std::move(idTable),
                                         std::move(outVocab)};
       };
-      return {Result::LazyResult(
-                  ad_utility::CachingTransformInputRange(chunks, std::move(f))),
+      return {Result::LazyResult(ad_utility::CachingTransformInputRange(
+                  std::move(chunks), std::move(f))),
               resultSortedOn()};
     }
     // Make a copy of the local vocab from`subRes`and then add to it (in case
