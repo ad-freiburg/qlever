@@ -7,6 +7,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/Service.h"
 #include "util/Exception.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
@@ -42,9 +43,6 @@ Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
                                    _right->getRootOperation(), true,
                                    requestLaziness);
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
-
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
@@ -54,11 +52,8 @@ Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
              << leftResult->idTable().size() << " and "
              << rightResult->idTable().size() << endl;
 
-  int leftWidth = leftResult->idTable().numColumns();
-  int rightWidth = rightResult->idTable().numColumns();
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
-                  this, leftResult->idTable(), rightResult->idTable(),
-                  _matchedColumns, &idTable);
+  IdTable idTable = computeMinus(leftResult->idTable(), rightResult->idTable(),
+                                 _matchedColumns);
 
   LOG(DEBUG) << "Minus result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -101,124 +96,104 @@ size_t Minus::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-template <int A_WIDTH, int B_WIDTH>
-void Minus::computeMinus(
-    const IdTable& dynA, const IdTable& dynB,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* dynResult) const {
-  // Subtract dynB from dynA. The result should be all result mappings mu
-  // for which all result mappings mu' in dynB are not compatible (one value
-  // for a variable defined in both differs) or the domain of mu and mu' are
-  // disjoint (mu' defines no solution for any variables for which mu defines a
-  // solution).
-
-  // The output is always the same size as the left input
-  constexpr int OUT_WIDTH = A_WIDTH;
-
-  // check for trivial cases
-  if (dynA.size() == 0) {
-    return;
-  }
-
-  if (dynB.size() == 0 || joinColumns.empty()) {
-    // B is the empty set of solution mappings, so the result is A
-    // Copy a into the result, allowing for optimizations for small width by
-    // using the templated width types.
-    *dynResult = dynA.clone();
-    return;
-  }
-
-  IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
-
-  std::vector<size_t> rightToLeftCols(b.numColumns(),
-                                      std::numeric_limits<size_t>::max());
-  for (const auto& jc : joinColumns) {
-    rightToLeftCols[jc[1]] = jc[0];
-  }
-
-  /**
-   * @brief A function to copy a row from a to the end of result.
-   * @param ia The index of the row in a.
-   */
-  auto writeResult = [&result, &a](size_t ia) { result.push_back(a[ia]); };
-
-  size_t ia = 0, ib = 0;
-  while (ia < a.size() && ib < b.size()) {
-    // Join columns 0 are the primary sort columns
-    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
-      // Write a result
-      writeResult(ia);
-      ia++;
-      checkCancellation();
-      if (ia >= a.size()) {
-        goto finish;
-      }
-    }
-    while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
-      ib++;
-      checkCancellation();
-      if (ib >= b.size()) {
-        goto finish;
-      }
-    }
-
-    while (b(ib, joinColumns[0][1]) == a(ia, joinColumns[0][0])) {
-      // check if the rest of the join columns also match
-      RowComparison rowEq = isRowEqSkipFirst(a, b, ia, ib, joinColumns);
-      switch (rowEq) {
-        case RowComparison::EQUAL: {
-          ia++;
-          if (ia >= a.size()) {
-            goto finish;
-          }
-        } break;
-        case RowComparison::LEFT_SMALLER: {
-          // ib does not discard ia, and there can not be another ib that
-          // would discard ia.
-          writeResult(ia);
-          ia++;
-          if (ia >= a.size()) {
-            goto finish;
-          }
-        } break;
-        case RowComparison::RIGHT_SMALLER: {
-          ib++;
-          if (ib >= b.size()) {
-            goto finish;
-          }
-        } break;
-        default:
-          AD_FAIL();
-      }
-      checkCancellation();
-    }
-  }
-finish:
-  result.reserve(result.size() + (a.size() - ia));
-  while (ia < a.size()) {
-    writeResult(ia);
-    ia++;
-  }
-  *dynResult = std::move(result).toDynamic();
+auto Minus::makeUndefRangesChecker(bool left, const IdTable& idTable) const {
+  const auto& operation = left ? _left : _right;
+  bool alwaysDefined = ql::ranges::all_of(
+      _matchedColumns, [&operation, left, &idTable](const auto& cols) {
+        size_t tableColumn = cols[static_cast<size_t>(!left)];
+        const auto& [_, info] =
+            operation->getVariableAndInfoByColumnIndex(tableColumn);
+        bool colAlwaysDefined =
+            info.mightContainUndef_ ==
+            ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+        return colAlwaysDefined ||
+               ql::ranges::none_of(idTable.getColumn(tableColumn),
+                                   &Id::isUndefined);
+      });
+  // Use expensive operation if one of the columns might contain undef.
+  using RT = std::variant<ad_utility::Noop, ad_utility::FindSmallerUndefRanges>;
+  return alwaysDefined ? RT{ad_utility::Noop{}}
+                       : RT{ad_utility::FindSmallerUndefRanges{}};
 }
 
-template <int A_WIDTH, int B_WIDTH>
-Minus::RowComparison Minus::isRowEqSkipFirst(
-    const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-    size_t ib, const std::vector<std::array<ColumnIndex, 2>>& joinColumns) {
-  for (size_t i = 1; i < joinColumns.size(); ++i) {
-    Id va{a(ia, joinColumns[i][0])};
-    Id vb{b(ib, joinColumns[i][1])};
-    if (va < vb) {
-      return RowComparison::LEFT_SMALLER;
+// _____________________________________________________________________________
+IdTable Minus::computeMinus(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
+  if (left.empty()) {
+    return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  }
+
+  if (right.empty() || joinColumns.empty()) {
+    return left.clone();
+  }
+
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                               right.numColumns()};
+
+  IdTableView<0> joinColumnsLeft =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> joinColumnsRight =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
+
+  checkCancellation();
+
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
+
+  // Keep all entries by default, set to false when matching.
+  std::vector keepEntry(left.size(), true);
+
+  auto markForRemoval = [&keepEntry, &joinColumnsLeft](const auto& leftIt) {
+    keepEntry.at(ql::ranges::distance(joinColumnsLeft.begin(), leftIt)) = false;
+  };
+
+  auto handleCompatibleRow = [&markForRemoval](const auto& leftIt,
+                                               const auto& rightIt) {
+    const auto& leftRow = *leftIt;
+    const auto& rightRow = *rightIt;
+    bool onlyMatchesBecauseOfUndef = ql::ranges::all_of(
+        ::ranges::views::zip(leftRow, rightRow), [](const auto& tuple) {
+          const auto& [leftId, rightId] = tuple;
+          return leftId.isUndefined() || rightId.isUndefined();
+        });
+    if (!onlyMatchesBecauseOfUndef) {
+      markForRemoval(leftIt);
     }
-    if (va > vb) {
-      return RowComparison::RIGHT_SMALLER;
+  };
+
+  std::visit(
+      [this, &joinColumnsLeft, &joinColumnsRight,
+       handleCompatibleRow = std::move(handleCompatibleRow)](
+          auto findUndefLeft, auto findUndefRight) {
+        [[maybe_unused]] auto outOfOrder = ad_utility::zipperJoinWithUndef(
+            joinColumnsLeft, joinColumnsRight,
+            ql::ranges::lexicographical_compare, handleCompatibleRow,
+            std::move(findUndefLeft), std::move(findUndefRight), {},
+            [this]() { checkCancellation(); });
+      },
+      makeUndefRangesChecker(true, left), makeUndefRangesChecker(false, right));
+
+  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
+  AD_CORRECTNESS_CHECK(result.numColumns() == left.numColumns());
+
+  // Transform into dense vector of indices.
+  std::vector<size_t> nonMatchingIndices;
+  for (size_t row = 0; row < left.numRows(); ++row) {
+    if (keepEntry.at(row)) {
+      nonMatchingIndices.push_back(row);
     }
   }
-  return RowComparison::EQUAL;
+  result.resize(nonMatchingIndices.size());
+
+  for (ColumnIndex col = 0; col < result.numColumns(); col++) {
+    ql::ranges::transform(
+        nonMatchingIndices, result.getColumn(col).begin(),
+        [inputCol = left.getColumn(col)](size_t row) { return inputCol[row]; });
+  }
+
+  return result;
 }
 
 // _____________________________________________________________________________
