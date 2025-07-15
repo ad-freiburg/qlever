@@ -124,27 +124,26 @@ Result Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      return {Result::LazyResult(ad_utility::CachingTransformInputRange(
-                  ::ranges::views::chunk(
-                      ::ranges::views::iota(0ULL, subRes->idTable().size()),
-                      CHUNK_SIZE),
-                  [this, applyBind = std::move(applyBind),
-                   subRes = std::move(subRes)](auto& chunk) {
-                    LocalVocab outVocab = subRes->getCopyOfLocalVocab();
-                    auto start = chunk.front();
-                    auto end = start + (chunk.end() - chunk.begin());
-                    IdTable idTable = applyBind(
-                        this->cloneSubView(subRes->idTable(), {start, end}),
-                        &outVocab);
+      auto chunks = ad_utility::allView(::ranges::views::chunk(
+          ::ranges::views::iota(size_t{0}, subRes->idTable().size()),
+          CHUNK_SIZE));
+      auto f = [applyBind = std::move(applyBind),
+                subRes = std::move(subRes)](const auto& chunk) {
+        // Make a deep copy of the local vocab from `subRes` and then add to it
+        // (in case BIND adds a new word or words).
+        LocalVocab outVocab = subRes->getCopyOfLocalVocab();
+        auto start = chunk.front();
+        auto end = start + ::ranges::size(chunk);
+        IdTable idTable = applyBind(
+            Bind::cloneSubView(subRes->idTable(), {start, end}), &outVocab);
 
-                    return Result::IdTableVocabPair{std::move(idTable),
-                                                    std::move(outVocab)};
-                  })),
+        return Result::IdTableVocabPair{std::move(idTable),
+                                        std::move(outVocab)};
+      };
+      return {Result::LazyResult(
+                  ad_utility::CachingTransformInputRange(chunks, std::move(f))),
               resultSortedOn()};
     }
-    // Make a deep copy of the local vocab from `subRes` and then add to it (in
-    // case BIND adds a new word or words).
-    //
     // Make a copy of the local vocab from`subRes`and then add to it (in case
     // BIND adds new words). Note: The copy of the local vocab is shallow
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
