@@ -45,9 +45,9 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
   // Initialize the parser.
   sj::WKTParser parser(&sweeper, numThreads);
 
-  // Reverse projection applied by `sj::WKTParser`: from to web mercator int 32
-  // to normal lat-long double coordinates.
-  auto unProject = [](const util::geo::I32Point& p) {
+  // Reverse projection applied by `sj::WKTParser`: convert coordinates from web
+  // mercator int32 to normal lat-long double coordinates.
+  auto projection = [](const util::geo::I32Point& p) {
     return util::geo::webMercToLatLng<double>(
         static_cast<double>(p.getX()) / PREC,
         static_cast<double>(p.getY()) / PREC);
@@ -59,8 +59,8 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
   size_t prefilterCounter = 0;
   if (prefilterBox.has_value()) {
     prefilterLatLngBox =
-        util::geo::DBox{unProject(prefilterBox.value().getLowerLeft()),
-                        unProject(prefilterBox.value().getUpperRight())};
+        util::geo::DBox{projection(prefilterBox.value().getLowerLeft()),
+                        projection(prefilterBox.value().getUpperRight())};
   }
 
   // Iterate over all rows in `idTable` and parse the geometries from `column`.
@@ -85,18 +85,21 @@ util::geo::I32Box SpatialJoinAlgorithms::libspatialjoinParse(
         }
       }
 
-      //
+      // If we have not filtered out this geometry, read and parse the full
+      // string.
       const auto& wkt = qec_->getIndex().indexToString(id.getVocabIndex());
       parser.parseWKT(wkt.c_str(), row, leftOrRightSide);
     } else if (id.getDatatype() == Datatype::GeoPoint) {
       const auto& p = id.getGeoPoint();
       const util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+
       // If point is not contained in the prefilter box, we can skip it
       // immediately instead of feeding it to the parser.
       if (!util::geo::intersects(prefilterLatLngBox.value(), utilPoint)) {
         prefilterCounter++;
         continue;
       }
+
       parser.parsePoint(utilPoint, row, leftOrRightSide);
     } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
       // `LocalVocabEntry` has to be parsed in any case: we have no information
