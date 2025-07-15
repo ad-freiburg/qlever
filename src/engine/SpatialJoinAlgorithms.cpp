@@ -432,13 +432,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
                                    NUM_THREADS, std::nullopt);
     sweeper.setFilterBox(box);
     libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper, NUM_THREADS,
-                        box);
+                        sweeper.getPaddedBoundingBox(box));
   } else {
     auto box = libspatialjoinParse(true, idTableRight, rightJoinCol, sweeper,
                                    NUM_THREADS, std::nullopt);
     sweeper.setFilterBox(box);
     libspatialjoinParse(false, idTableLeft, leftJoinCol, sweeper, NUM_THREADS,
-                        box);
+                        sweeper.getPaddedBoundingBox(box));
   }
 
   // Flush the geometry caches and the sweepline event list cache to disk and
@@ -466,11 +466,13 @@ Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
       if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
         dist = resultDists[t][i];
       }
-      addResultTableEntry(&result, swapBack ? idTableRight : idTableLeft,
-                          swapBack ? idTableLeft : idTableRight,
-                          swapBack ? res.second : res.first,
-                          swapBack ? res.first : res.second,
-                          Id::makeFromDouble(dist));
+      if (swapBack) {
+        addResultTableEntry(&result, idTableRight, idTableLeft, res.second,
+                            res.first, Id::makeFromDouble(dist));
+      } else {
+        addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
+                            res.second, Id::makeFromDouble(dist));
+      }
     }
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
