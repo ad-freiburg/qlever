@@ -1010,11 +1010,12 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
                                           undefBlock.fullBlock());
           }
           const auto& subr = undefBlock.subrange();
+          // Yield all iterators to the elements within the stored undef blocks.
           return ad_utility::IteratorRange(subr.begin(), subr.end());
         });
 
     auto endCallback = [&, this]() {
-      // Reset back to original input
+      // Reset back to original input.
       begL = fullBlockLeft.get().begin();
       begR = fullBlockRight.get().begin();
       compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
@@ -1022,9 +1023,11 @@ CPP_template(typename LeftSide, typename RightSide, typename LessThan,
 
     // TODO<joka921> improve the `CachingTransformInputRange` to make it movable
     // without having to specify `makeAssignableLambda`.
+    // TODO<joka921> Down with `OwningView`.
     return ad_utility::CallbackOnEndView{
-        ql::views::join(ad_utility::CachingTransformInputRange(
-            undefBlocks, std::move(perBlockCallback))),
+        ql::views::join(
+            ad_utility::OwningView{ad_utility::CachingTransformInputRange(
+                undefBlocks, std::move(perBlockCallback))}),
         std::move(endCallback)};
   }
 
