@@ -67,7 +67,9 @@ class TextLimit : public Operation {
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
-  std::vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }
+  std::vector<QueryExecutionTree*> getChildren() override {
+    return {child_.get()};
+  }
 };
 
 #endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H

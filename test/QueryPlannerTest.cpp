@@ -3762,7 +3762,8 @@ TEST(QueryPlanner, TextLimit) {
               wordScan(Var{"?text"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
-          Var{"?text"}, std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          Var{"?text"},
+          std::vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
           std::vector<Variable>{
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
               Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
@@ -3789,7 +3790,8 @@ TEST(QueryPlanner, TextLimit) {
                   wordScan(Var{"?text2"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
                   entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-              Var{"?text2"}, std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              Var{"?text2"},
+              std::vector<Variable>{Var{"?author1"}, Var{"?author2"}},
               std::vector<Variable>{
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
                   Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),

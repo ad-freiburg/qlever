@@ -379,7 +379,8 @@ class IndexImpl {
       const std::string& term,
       const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
-  size_t getIndexOfBestSuitedElTerm(const std::vector<std::string>& terms) const;
+  size_t getIndexOfBestSuitedElTerm(
+      const std::vector<std::string>& terms) const;
 
   std::string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
