@@ -1,6 +1,8 @@
 #ifndef QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 #define QLEVER_TEST_ENGINE_SPATIALJOINTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
@@ -24,6 +26,11 @@ constexpr inline auto makePointLiteral = [](std::string_view c1,
 constexpr inline auto makeAreaLiteral = [](std::string_view coordinateList) {
   return absl::StrCat("\"POLYGON((", coordinateList, "))\"^^<", GEO_WKT_LITERAL,
                       ">");
+};
+
+constexpr inline auto makeLineLiteral = [](std::string_view coordinateList) {
+  return absl::StrCat("\"LINESTRING(", coordinateList, ")\"^^<",
+                      GEO_WKT_LITERAL, ">");
 };
 
 const std::string pointUniFreiburg = makePointLiteral("7.83505", "48.01267");
@@ -193,6 +200,13 @@ const std::string areaEiffelTower = makeAreaLiteral(
     "48.8583695,2.2937145 48.8583599,2.2936514 48.8583593,2.2936122 "
     "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
     "48.8583929,2.293536 48.8584028,2.2933119 48.858248");
+
+const std::string lineSegmentGeorgesKoehlerAllee = makeLineLiteral(
+    "7.8319663 48.0160027,7.8316588 48.0162235,7.8316005 48.0162654,7.8311307 "
+    "48.0165944,7.8304624 48.0170669,7.8303975 48.0171113,7.8302123 "
+    "48.0172493,7.8301693 48.0172828,7.8299157 48.0174643,7.8298043 "
+    "48.0175414,7.8297512 48.0175792,7.8296852 48.017627,7.8293452 "
+    "48.0178818,7.8279814 48.0189432");
 
 // compared to the other areas, this one is not real, because it would be way
 // too large. Here the borders of germany get approximated by just a few points
