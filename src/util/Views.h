@@ -117,14 +117,11 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 template <typename SortedBlockView,
           typename ValueType = ql::ranges::range_value_t<
               ql::ranges::range_value_t<SortedBlockView>>>
-// depends on changed in IndexImpl, change after merge
-// uniqueBlockViewFromGet<SortedBlockView> uniqueBlockView(
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
   for (auto& elem : uniqueBlockViewFromGet{std::move(view)}) {
     co_yield elem;
   }
-  // return uniqueBlockViewFromGet{std::move(view)};
 }
 
 // A view that owns its underlying storage. It is a replacement for
