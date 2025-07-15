@@ -53,20 +53,20 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0,
-                     SparqlTriple(Var{"?x"}, "<http://rdf.myprefix.com/myrel>",
-                                  Var{"?y"})),
+                     0, SparqlTriple(Var{"?x"},
+                                     iri("<http://rdf.myprefix.com/myrel>"),
+                                     Var{"?y"})),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      1, SparqlTriple(Var{"?y"},
-                                     "<http://rdf.myprefix.com/ns/myrel>",
+                                     iri("<http://rdf.myprefix.com/ns/myrel>"),
                                      Var{"?z"})),
                  {0, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(Var{"?y"},
-                                     "<http://rdf.myprefix.com/xxx/rel2>",
+                                     iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
                  {0, 1})}));
 
@@ -106,11 +106,11 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    0, SparqlTriple(Var{"?x"}, "<is-a>", iri("<Book>"))),
+                    0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
                 {1}),
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    1, SparqlTriple(Var{"?x"}, "<Author>",
+                    1, SparqlTriple(Var{"?x"}, iri("<Author>"),
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
         }));
@@ -1816,6 +1816,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:within ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
       "spatialSearch:joinType spatialSearch:equals ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -2764,7 +2779,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
           {"sfIntersects", INTERSECTS}, {"sfContains", CONTAINS},
           {"sfCovers", COVERS},         {"sfCrosses", CROSSES},
           {"sfTouches", TOUCHES},       {"sfEquals", EQUALS},
-          {"sfOverlaps", OVERLAPS}};
+          {"sfOverlaps", OVERLAPS},     {"sfWithin", WITHIN}};
 
   // Run basic query planner test for each of the geo relation functions
   for (const auto& [funcName, sjType] : geofFunctionNameAndSJType) {
@@ -3043,12 +3058,13 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
     TripleComponent object{Variable{"?object"}};
     if (shouldThrow) {
       ASSERT_ANY_THROW((parsedQuery::SpatialQuery{
-                            SparqlTriple{subject, distanceIRI, object}})
+                            SparqlTriple{subject, iri(distanceIRI), object}})
                            .toSpatialJoinConfiguration());
     } else {
-      auto config =
-          parsedQuery::SpatialQuery{SparqlTriple{subject, distanceIRI, object}}
-              .toSpatialJoinConfiguration();
+      auto config = parsedQuery::SpatialQuery{
+          SparqlTriple{
+              subject, iri(distanceIRI),
+              object}}.toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);
@@ -4147,6 +4163,13 @@ TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
                        h::Bind(h::IndexScanFromStrings(
                                    "?s", "<a>", "?_QLever_internal_variable_0"),
                                "RAND()", Var{"?_QLever_internal_variable_1"})));
+
+  // Regression test for issue https://github.com/ad-freiburg/qlever/issues/2034
+  h::expect("SELECT * { ?a <a> [] . { SELECT * { ?a <a> [] }}}",
+            h::Join(h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_0"),
+                    h::IndexScanFromStrings("?a", "<a>",
+                                            "?_QLever_internal_variable_1")));
 }
 
 // _____________________________________________________________________________

@@ -132,6 +132,19 @@ class WktEnvelope {
   }
 };
 
+// Get a single coordinate of the bounding box.
+template <BoundingCoordinate RequestedCoordinate>
+class WktBoundingCoordinate {
+ public:
+  ValueId operator()(const std::optional<BoundingBox>& boundingBox) const {
+    if (!boundingBox.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    return ValueId::makeFromDouble(
+        boundingBox.value().getBoundingCoordinate<RequestedCoordinate>());
+  }
+};
+
 // Compute the distance between two WKT points in meters.
 class WktGeometryType {
  public:

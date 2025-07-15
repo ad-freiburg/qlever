@@ -32,9 +32,9 @@ class TextLimit : public Operation {
 
   ~TextLimit() override = default;
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 

@@ -38,7 +38,7 @@ class Join : public Operation {
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
-  virtual string getDescriptor() const override;
+  virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
@@ -130,7 +130,7 @@ class Join : public Operation {
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
  protected:
-  virtual string getCacheKeyImpl() const override;
+  virtual std::string getCacheKeyImpl() const override;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

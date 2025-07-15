@@ -279,7 +279,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
 
 // _____________________________________________________________________________
 template <Comparison Comp>
-string RelationalExpression<Comp>::getCacheKey(
+std::string RelationalExpression<Comp>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   static_assert(std::tuple_size_v<decltype(children_)> == 2);
   return absl::StrCat(typeid(*this).name(),
@@ -508,7 +508,8 @@ ql::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
 }
 
 // _____________________________________________________________________________
-string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
+std::string InExpression::getCacheKey(
+    const VariableToColumnMap& varColMap) const {
   std::stringstream result;
   result << "IN Expression with (";
   for (const auto& child : children_) {

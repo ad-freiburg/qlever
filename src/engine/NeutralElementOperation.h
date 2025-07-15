@@ -18,12 +18,12 @@ class NeutralElementOperation : public Operation {
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] string getCacheKeyImpl() const override {
+  [[nodiscard]] std::string getCacheKeyImpl() const override {
     return "Neutral Element";
   };
 
  public:
-  [[nodiscard]] string getDescriptor() const override {
+  [[nodiscard]] std::string getDescriptor() const override {
     return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
@@ -41,7 +41,7 @@ class NeutralElementOperation : public Operation {
   }
 
  protected:
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
     return {};
   };
 

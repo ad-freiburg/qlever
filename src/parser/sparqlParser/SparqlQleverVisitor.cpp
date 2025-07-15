@@ -41,6 +41,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
+#include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
@@ -71,6 +72,17 @@ const ad_utility::triple_component::Iri a =
 }  // namespace
 
 // _____________________________________________________________________________
+Variable Visitor::getNewInternalVariable() {
+  return Variable{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_++)};
+}
+
+// _____________________________________________________________________________
+auto Visitor::makeInternalVariableGenerator() {
+  return [this]() { return getNewInternalVariable(); };
+}
+
+// _____________________________________________________________________________
 BlankNode Visitor::newBlankNode() {
   std::string label = std::to_string(_blankNodeCounter);
   _blankNodeCounter++;
@@ -83,8 +95,15 @@ GraphTerm Visitor::newBlankNodeOrVariable() {
   if (isInsideConstructTriples_) {
     return GraphTerm{newBlankNode()};
   } else {
-    return parsedQuery_.getNewInternalVariable();
+    return getNewInternalVariable();
   }
+}
+
+// _____________________________________________________________________________
+Variable Visitor::blankNodeToInternalVariable(std::string_view blankNode) {
+  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                               blankNode.substr(2))};
 }
 
 // _____________________________________________________________________________
@@ -184,12 +203,17 @@ ExpressionPtr Visitor::processIriFunctionCall(
       std::unordered_map<std::string_view, absl::FunctionRef<Ptr(Ptr, Ptr)>>;
 
   // Geo functions.
+  using enum ad_utility::BoundingCoordinate;
   static const UnaryFuncTable geoUnaryFuncs{
       {"longitude", &makeLongitudeExpression},
       {"latitude", &makeLatitudeExpression},
       {"centroid", &makeCentroidExpression},
       {"envelope", &makeEnvelopeExpression},
-      {"geometryType", &makeGeometryTypeExpression}};
+      {"geometryType", &makeGeometryTypeExpression},
+      {"minX", &makeBoundingCoordinateExpression<MIN_X>},
+      {"minY", &makeBoundingCoordinateExpression<MIN_Y>},
+      {"maxX", &makeBoundingCoordinateExpression<MAX_X>},
+      {"maxY", &makeBoundingCoordinateExpression<MAX_Y>}};
   using enum SpatialJoinType;
   static const BinaryFuncTable geoBinaryFuncs{
       {"metricDistance", &makeMetricDistExpression},
@@ -200,7 +224,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sfCrosses", &makeGeoRelationExpression<CROSSES>},
       {"sfTouches", &makeGeoRelationExpression<TOUCHES>},
       {"sfEquals", &makeGeoRelationExpression<EQUALS>},
-      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>}};
+      {"sfOverlaps", &makeGeoRelationExpression<OVERLAPS>},
+      {"sfWithin", &makeGeoRelationExpression<WITHIN>}};
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
       return createBinaryOrTernary(&makeDistWithUnitExpression);
@@ -367,8 +392,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
       // Blank Nodes in the pattern are to be treated as internal variables
       // inside WHERE.
-      return TripleComponent{
-          ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
+      return TripleComponent{blankNodeToInternalVariable(item.toSparql())};
     } else {
       static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
       return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
@@ -429,7 +453,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
     query._rootGraphPattern._graphPatterns.emplace_back(
         toGraphPattern(query.constructClause().triples_));
   }
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
 
   return query;
 }
@@ -484,7 +509,8 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // (which pertains to the SELECT query that computes the resources to be
   // described).
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -517,7 +543,8 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;
   };
-  parsedQuery_.addSolutionModifiers(getSolutionModifiers());
+  parsedQuery_.addSolutionModifiers(getSolutionModifiers(),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1401,14 +1428,15 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 
 // ____________________________________________________________________________________
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
-  string langtag =
+  std::string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   return TripleComponent::Iri::fromIriref(
-      langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName()));
+      langtag +
+      visitAlternative<std::string>(ctx->iriref(), ctx->prefixedName()));
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IrirefContext* ctx) const {
+std::string Visitor::visit(Parser::IrirefContext* ctx) const {
   if (baseIri_.empty()) {
     return ctx->getText();
   }
@@ -1421,13 +1449,13 @@ string Visitor::visit(Parser::IrirefContext* ctx) const {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PrefixedNameContext* ctx) {
+std::string Visitor::visit(Parser::PrefixedNameContext* ctx) {
   return visitAlternative<std::string>(ctx->pnameLn(), ctx->pnameNs());
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameLnContext* ctx) {
-  string text = ctx->getText();
+std::string Visitor::visit(Parser::PnameLnContext* ctx) {
+  std::string text = ctx->getText();
   auto pos = text.find(':');
   auto pnameNS = text.substr(0, pos);
   auto pnLocal = text.substr(pos + 1);
@@ -1443,7 +1471,7 @@ string Visitor::visit(Parser::PnameLnContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::PnameNsContext* ctx) {
+std::string Visitor::visit(Parser::PnameNsContext* ctx) {
   auto text = ctx->getText();
   auto prefix = text.substr(0, text.length() - 1);
   if (!prefixMap_.contains(prefix)) {
@@ -1516,7 +1544,8 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()),
+                                    makeInternalVariableGenerator());
   return parsedQuery_;
 }
 
@@ -1525,7 +1554,8 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
+  query.addSolutionModifiers(visit(ctx->solutionModifier()),
+                             makeInternalVariableGenerator());
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
@@ -1874,7 +1904,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
   }
 
   if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-    string name = object.toSparql();
+    std::string name = object.toSparql();
     if (!((name.starts_with('"') && name.ends_with('"')) ||
           (name.starts_with('\'') && name.ends_with('\'')))) {
       reportError(ctx,
@@ -2200,7 +2230,7 @@ SubjectOrObjectAndPathTriples Visitor::visit(
 // ____________________________________________________________________________________
 SubjectOrObjectAndPathTriples Visitor::visit(
     Parser::BlankNodePropertyListPathContext* ctx) {
-  auto subject = parsedQuery_.getNewInternalVariable();
+  auto subject = getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
     triples.emplace_back(subject, std::move(predicate), std::move(object));
@@ -2899,7 +2929,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  string ret = ctx->string()->getText();
+  std::string ret = ctx->string()->getText();
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
@@ -2967,13 +2997,13 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
     if (isInsideConstructTriples_) {
       // Strip `_:` prefix from string.
       constexpr size_t length = std::string_view{"_:"}.length();
-      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
+      const std::string label =
+          ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // `False` means the blank node is not automatically generated, but
       // explicitly specified in the query.
       return BlankNode{false, label};
     } else {
-      return ParsedQuery::blankNodeToInternalVariable(
-          ctx->BLANK_NODE_LABEL()->getText());
+      return blankNodeToInternalVariable(ctx->BLANK_NODE_LABEL()->getText());
     }
   }
 }

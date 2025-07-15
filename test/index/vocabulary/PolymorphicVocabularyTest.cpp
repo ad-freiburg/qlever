@@ -37,6 +37,16 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 
   wI = vocab.upper_bound("gamma", ql::ranges::less{});
   EXPECT_TRUE(wI.isEnd());
+
+  EXPECT_EQ(std::visit([](auto& u) { return static_cast<uint64_t>(u.size()); },
+                       vocab.getUnderlyingVocabulary()),
+            3);
+
+  const auto& vocabConst = vocab;
+  EXPECT_EQ(
+      std::visit([](const auto& u) { return static_cast<uint64_t>(u.size()); },
+                 vocabConst.getUnderlyingVocabulary()),
+      3);
 }
 }  // namespace
 

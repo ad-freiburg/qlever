@@ -94,7 +94,7 @@ class TextMetaData {
 
   size_t getBlockCount() const;
 
-  string statistics() const;
+  std::string statistics() const;
 
   void addBlock(const TextBlockMetaData& md);
 
@@ -114,9 +114,9 @@ class TextMetaData {
 
   void setNofEntityPostings(size_t n) { _nofEntityPostings = n; }
 
-  const string& getName() const { return _name; }
+  const std::string& getName() const { return _name; }
 
-  void setName(const string& name) { _name = name; }
+  void setName(const std::string& name) { _name = name; }
 
   float getAverageNofEntityContexts() const { return 1.0f; };
 
@@ -125,7 +125,7 @@ class TextMetaData {
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
-  string _name;
+  std::string _name;
   vector<TextBlockMetaData> _blocks;
 
   // ___________________________________________________________________________

@@ -199,6 +199,13 @@ TEST(Vocabulary, SplitVocabularyCustomWithTwoVocabs) {
   const auto& svConstRef = sv;
   EXPECT_ANY_THROW(svConstRef.getUnderlyingVocabulary(2));
 
+  // There is not GeoInfo because none of the underlying vocabularies is a
+  // `GeoVocabulary`
+  ASSERT_FALSE(sv.getGeoInfo(0).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1).has_value());
+  ASSERT_FALSE(sv.getGeoInfo(1ULL << 59).has_value());
+  ASSERT_FALSE(sv.getGeoInfo((1ULL << 59) | 1).has_value());
+
   sv.close();
 }
 
@@ -263,7 +270,7 @@ TEST(Vocabulary, SplitVocabularyCustomWithThreeVocabs) {
 
 // _____________________________________________________________________________
 TEST(Vocabulary, SplitVocabularyItemAt) {
-  HashSet<string> s;
+  HashSet<std::string> s;
   s.insert("a");
   s.insert("ab");
   s.insert(

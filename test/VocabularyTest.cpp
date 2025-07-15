@@ -43,6 +43,11 @@ TEST(VocabularyTest, getIdForWordTest) {
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &idx));
   ad_utility::deleteFile(filename);
+
+  // A TextVocabulary does not return anything for getGeoInfo
+  ASSERT_EQ(voc.getGeoInfo(WordVocabIndex::make(0)), std::nullopt);
+  ASSERT_EQ(voc.getGeoInfo(WordVocabIndex::make(1)), std::nullopt);
+  ASSERT_EQ(voc.getGeoInfo(WordVocabIndex::make(2)), std::nullopt);
 }
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {

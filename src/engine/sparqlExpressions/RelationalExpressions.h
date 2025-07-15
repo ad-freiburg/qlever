@@ -34,7 +34,7 @@ class RelationalExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   // Check if this expression has the form `LANG(?var) = "literal"` and return
@@ -77,7 +77,7 @@ class InExpression : public SparqlExpression {
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  [[nodiscard]] string getCacheKey(
+  [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
