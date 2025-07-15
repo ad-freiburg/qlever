@@ -59,12 +59,17 @@ inline void checkBoundingBox(std::optional<BoundingBox> a,
 }
 
 // ____________________________________________________________________________
-inline void checkMetricLength(MetricLength a, MetricLength b,
+inline void checkMetricLength(std::optional<MetricLength> a,
+                              std::optional<MetricLength> b,
                               Loc sourceLocation = Loc::current()) {
   auto l = generateLocationTrace(sourceLocation);
-  ASSERT_NEAR(a.length(), b.length(),
+  ASSERT_EQ(a.has_value(), b.has_value());
+  if (!a.has_value()) {
+    return;
+  }
+  ASSERT_NEAR(a.value().length(), b.value().length(),
               // The metric length may be off by up to 1%
-              0.01 * a.length());
+              0.01 * a.value().length());
 }
 
 // ____________________________________________________________________________
